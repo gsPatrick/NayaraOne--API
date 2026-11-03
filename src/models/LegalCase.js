@@ -81,6 +81,34 @@ module.exports = (sequelize) => {
         defaultValue: 0,
         field: 'lock_version',
       },
+      // Legal hold (auditoria Nayara 14/10/2026, §16/JUR-010/011): enquanto true, bloqueia
+      // mudança de status/fase do processo (ver assertNotOnLegalHold em legalCases.service.js).
+      legalHold: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'legal_hold',
+      },
+      legalHoldReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'legal_hold_reason',
+      },
+      legalHoldSetBy: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'legal_hold_set_by',
+      },
+      legalHoldSetAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'legal_hold_set_at',
+      },
+      // M45 (Caderno M5 §14): órgão, classe, valor ESTIMADO (nunca recebível) e risco.
+      court: { type: DataTypes.STRING(160), allowNull: true, field: 'court' },
+      caseClass: { type: DataTypes.STRING(120), allowNull: true, field: 'case_class' },
+      estimatedAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'estimated_amount' },
+      riskLevel: { type: DataTypes.STRING(16), allowNull: true, field: 'risk_level' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

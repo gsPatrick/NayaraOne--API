@@ -3,6 +3,7 @@
 const catchAsync = require('../../utils/catchAsync');
 const { success } = require('../../utils/httpResponse');
 const propertiesService = require('./properties.service');
+const propertyDedupService = require('./propertyDedup.service');
 const ownersService = require('./propertyOwners.service');
 const offersService = require('./propertyOffers.service');
 const occurrencesService = require('./propertyInternalOccurrences.service');
@@ -13,12 +14,22 @@ const publishService = require('./publish.service');
 
 // --- Properties ---
 
+// CRMX-010 ("imóvel semelhante exige revisão"): a checagem de endereço parecido NÃO bloqueia
+// a criação (diferente de CRMX-003/matrícula exata, que bloqueia em properties.service.js) —
+// só avisa. Por isso fica fora da transação de escrita e entra em `meta`, não em `data`: o
+// front decide se confirma mesmo assim ou revisa antes.
 const create = catchAsync(async (req, res) => {
   const payload = { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
-  const property = await req.withTenantTransaction((transaction) =>
-    propertiesService.createProperty(payload, req.auth.userId, transaction)
-  );
-  return success(res, { statusCode: 201, data: property });
+  const { property, similarPropertyWarnings } = await req.withTenantTransaction(async (transaction) => {
+    const addressInput = payload.address || { addressLine: payload.addressLine, city: payload.city };
+    const warnings = await propertyDedupService.findSimilarProperties(
+      { groupId: payload.groupId, ...addressInput },
+      transaction
+    );
+    const createdProperty = await propertiesService.createProperty(payload, req.auth.userId, transaction);
+    return { property: createdProperty, similarPropertyWarnings: warnings };
+  });
+  return success(res, { statusCode: 201, data: property, meta: { similarPropertyWarnings } });
 });
 
 const list = catchAsync(async (req, res) => {

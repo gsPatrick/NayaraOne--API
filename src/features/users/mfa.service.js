@@ -337,7 +337,13 @@ async function disableMfa(userId, code, actorContext, transaction) {
     throw AppError.unauthorized('Código TOTP inválido — não é possível desabilitar o MFA.', 'MFA_INVALID_CODE');
   }
 
-  await credential.destroy({ transaction });
+  // force: true — hard delete. `MfaCredential.userId` tem UNIQUE constraint física na coluna
+  // (não um unique parcial que ignore deleted_at); um soft delete (paranoid) deixa a linha
+  // "fantasma" ocupando o user_id, e QUALQUER setupMfa futuro desse usuário quebra pra sempre
+  // com SequelizeUniqueConstraintError cru (em vez do 409 amigável esperado) — achado real do
+  // ciclo 15 de auditoria E2E do Marco 6, reproduzido com o usuário admin@nayaraone.dev
+  // (ficou com MFA irreconfigurável depois de um disable de um ciclo anterior).
+  await credential.destroy({ transaction, force: true });
   await MfaStepUp.destroy({ where: { userId }, transaction });
   await User.update(
     { mfaEnabled: false, mfaMethod: null, updatedBy: userId },

@@ -36,6 +36,18 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'name',
       },
+      // M6-02 (fechado 30/09/2026): identificador curto da etapa (ex.: "FUND-01") e custo
+      // planejado — ambos opcionais, a spec não detalha um formato fixo.
+      stageCode: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+        field: 'stage_code',
+      },
+      plannedCost: {
+        type: DataTypes.DECIMAL(18, 2),
+        allowNull: true,
+        field: 'planned_cost',
+      },
       sequence: {
         type: DataTypes.INTEGER,
         allowNull: false,

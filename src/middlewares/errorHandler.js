@@ -13,9 +13,24 @@ const logger = require('../utils/logger');
  * erro (esperado ou não) vira um log estruturado com correlationId + rota, sempre — em
  * produção também, porque é exatamente lá que se precisa investigar um incidente depois.
  */
+const MISSING_CONFIG_RESPONSES = {
+  FILES_CRYPTO_CONFIG_MISSING: { code: 'FILES_STORAGE_NOT_CONFIGURED', message: 'O armazenamento de arquivos não está configurado neste ambiente. Avise o administrador.' },
+  MFA_CRYPTO_CONFIG_MISSING: { code: 'MFA_NOT_CONFIGURED', message: 'A verificação em duas etapas não está configurada neste ambiente. Avise o administrador.' },
+  JWT_CONFIG_MISSING: { code: 'SERVER_NOT_CONFIGURED', message: 'O servidor não está configurado corretamente neste ambiente. Avise o administrador.' },
+  PII_HASH_CONFIG_MISSING: { code: 'SERVER_NOT_CONFIGURED', message: 'O servidor não está configurado corretamente neste ambiente. Avise o administrador.' },
+};
+
 function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-vars
   const isProduction = process.env.NODE_ENV === 'production';
   const context = { correlationId: req.correlationId, method: req.method, path: req.originalUrl };
+
+  // F-01 (conferência ao vivo 20/10/2026): variável de ambiente ausente é problema do servidor, não
+  // do usuário. A tela não pode mostrar o nome da variável: o detalhe vai só para o log.
+  if (err instanceof AppError && MISSING_CONFIG_RESPONSES[err.code]) {
+    const mapped = MISSING_CONFIG_RESPONSES[err.code];
+    logger.error({ ...context, code: err.code, statusCode: 503 }, `[AppError] ${err.code}: ${err.message}`);
+    return failure(res, { statusCode: 503, code: mapped.code, message: mapped.message });
+  }
 
   if (err instanceof AppError) {
     logger.warn({ ...context, code: err.code, statusCode: err.statusCode }, `[AppError] ${err.code}: ${err.message}`);
@@ -42,6 +57,59 @@ function errorHandler(err, req, res, next) { // eslint-disable-line no-unused-va
       code: 'UNIQUE_CONSTRAINT_VIOLATION',
       message: 'Violação de restrição de unicidade.',
       details: err.errors ? err.errors.map((e) => e.message) : undefined,
+    });
+  }
+
+  // FIX (auditoria E2E de browser, 01/10/2026): um id de rota com formato inválido (ex.:
+  // /construction/projects/id-que-nao-existe-123, resultado comum de favoritos velhos ou link
+  // direto digitado errado) batia direto no Postgres como SequelizeDatabaseError ("invalid
+  // input syntax for type uuid: ..."), caía no catch-all abaixo e virava 500 com a mensagem
+  // crua do Postgres em INGLÊS exibida ao usuário — um 404/400 amigável é o esperado aqui, não
+  // um erro interno (não é uma falha do servidor, é um identificador que o usuário passou).
+  if (err && err.name === 'SequelizeDatabaseError' && /invalid input syntax for type uuid/i.test(err.message || '')) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'INVALID_ID_FORMAT',
+      message: 'O identificador informado não é válido.',
+    });
+  }
+
+  // BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 2): quantidade/valor acima da precisão da
+  // coluna DECIMAL (ex.: "999999" num campo DECIMAL(9,6), que só comporta 3 dígitos inteiros)
+  // batia no Postgres como "numeric field overflow" e vazava cru pro usuário — mesma classe de
+  // vazamento de erro de infraestrutura já corrigida acima pra UUID inválido.
+  if (err && err.name === 'SequelizeDatabaseError' && /numeric field overflow/i.test(err.message || '')) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'VALUE_TOO_LARGE',
+      message: 'O valor informado é grande demais para este campo.',
+    });
+  }
+
+  // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): upload de arquivo
+  // acima do limite do body parser (`express.json({ limit: '28mb' })` em app.js) é interceptado
+  // ANTES de chegar no check limpo de MAX_BYTES em files.service.js, batendo como
+  // PayloadTooLargeError cru e vazando "request entity too large" com 500 INTERNAL_ERROR em vez
+  // de um 400 amigável — mesma classe de vazamento de erro de infraestrutura já corrigida acima.
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'FILE_UPLOAD_TOO_LARGE',
+      message: 'O arquivo enviado é grande demais.',
+    });
+  }
+
+  // BUG REAL CORRIGIDO (auditoria adversarial pós-DoD do Marco 8, Frente 8 — Validação/Casos
+  // extremos): um corpo JSON malformado (ex.: JSON.stringify quebrado, corpo truncado, cliente
+  // bugado) é rejeitado pelo `express.json()` ANTES de chegar em qualquer controller, como
+  // SyntaxError com `err.type === 'entity.parse.failed'` — caía no catch-all abaixo e virava 500
+  // INTERNAL_ERROR em vez de um 400 amigável. Mesma classe de vazamento de erro de
+  // infraestrutura já corrigida acima para UUID inválido / overflow numérico / payload grande.
+  if (err && (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && 'body' in (err || {})))) {
+    return failure(res, {
+      statusCode: 400,
+      code: 'INVALID_JSON_BODY',
+      message: 'O corpo da requisição não é um JSON válido.',
     });
   }
 

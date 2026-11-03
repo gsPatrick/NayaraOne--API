@@ -6,8 +6,10 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
-const { PropertyPriceHistory, PropertyMedia } = require('../src/models');
+const { PropertyPriceHistory, PropertyMedia, PropertyDocument } = require('../src/models');
 
+// seedVideo também satisfaz REG-IMO-PHOTO-MIN (3 fotos aprovadas) e REG-IMO-DOCS-001
+// (matrícula + IPTU) além do vídeo — os três gates de publish.service.js/properties.service.js.
 async function seedVideo(property, tenant, transaction) {
   await PropertyMedia.create(
     {
@@ -20,6 +22,30 @@ async function seedVideo(property, tenant, transaction) {
       createdBy: tenant.userId,
       updatedBy: tenant.userId,
     },
+    { transaction }
+  );
+  for (let i = 0; i < 3; i += 1) {
+    await PropertyMedia.create(
+      {
+        groupId: property.groupId,
+        companyId: property.companyId,
+        propertyId: property.id,
+        mediaType: 'PHOTO',
+        qualityStatus: 'APPROVED',
+        storageKey: `offers-test-photo-${property.id}-${i}.jpg`,
+        originalName: `foto-${i}.jpg`,
+        createdBy: tenant.userId,
+        updatedBy: tenant.userId,
+      },
+      { transaction }
+    );
+  }
+  await PropertyDocument.create(
+    { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'REGISTRY', valueNumber: `MAT-${property.id}`, createdBy: tenant.userId, updatedBy: tenant.userId },
+    { transaction }
+  );
+  await PropertyDocument.create(
+    { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'IPTU', valueNumber: `IPTU-${property.id}`, createdBy: tenant.userId, updatedBy: tenant.userId },
     { transaction }
   );
 }
@@ -187,7 +213,7 @@ test('offers: publicar um imóvel que ainda tem outra offer ACTIVE do mesmo tipo
     );
 
     const offer1 = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 400000 }, tenant.userId, transaction);
-    const offer2 = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
+    await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
     // offer1 já virou SUPERSEDED automaticamente aqui (offer2 é a ACTIVE atual).
 
     await seedVideo(property, tenant, transaction);

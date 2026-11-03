@@ -1,0 +1,337 @@
+'use strict';
+
+// GAPS REAIS CORRIGIDOS (auditoria Marco 7, 2026-10-08) — regras de negócio de patrimônio que
+// faltavam, no mesmo padrão de guarda já usado por assets.service.js#disposeAsset:
+//   Item 7  — transferAsset bloqueia ferramenta LOANED (com InventoryToolLoan OPEN/OVERDUE).
+//   Item 8  — decideLossCase (asset aprovado) gera um AssetMovement real documentando a perda.
+//   Item 9  — openLossCase bloqueia asset com InventoryMaintenanceOrder OPEN.
+//   Item 10 — toolLoans.service.js#loanTool bloqueia asset com InventoryLossCase OPEN.
+//   Item 11 — getAssetByTag devolve a ficha agregada (Caderno §8: último movimento, manutenção
+//             aberta e empréstimo ativo), não só a linha crua do Asset.
+//   Item 12 — depreciação linear informativa (Caderno §9) cai conforme o tempo desde a aquisição,
+//             e um asset sem configuração específica não quebra (usa default documentado).
+
+const { test, before, after } = require('node:test');
+const assert = require('node:assert/strict');
+
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { AssetMovement, User } = require('../src/models');
+const assetsService = require('../src/features/inventory/assets.service');
+const toolLoansService = require('../src/features/inventory/toolLoans.service');
+const maintenanceService = require('../src/features/inventory/maintenance.service');
+const lossCasesService = require('../src/features/inventory/lossCases.service');
+const itemsService = require('../src/features/inventory/items.service');
+const filesService = require('../src/features/files/files.service');
+const AppError = require('../src/utils/AppError');
+
+let tenant;
+
+before(async () => {
+  tenant = await getSeedTenant();
+});
+
+after(async () => {
+  await sequelize.close();
+});
+
+async function createSecondUser(suffix) {
+  const [user] = await User.findOrCreate({
+    where: { email: `homo-qa-patrimoniogaps-${suffix}@nayaraone.dev` },
+    defaults: { name: `HOMO QA — PatrimonioGaps ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+  });
+  return user.id;
+}
+
+function withTenant(fields) {
+  return { groupId: tenant.groupId, companyId: tenant.companyId, ...fields };
+}
+
+function expectCode(code) {
+  return (err) => {
+    assert.ok(err instanceof AppError, `esperava AppError ${code}, veio: ${err?.message}`);
+    assert.equal(err.code, code);
+    return true;
+  };
+}
+
+async function createAsset(transaction, extra = {}) {
+  const suffix = uniqueSuffix();
+  return assetsService.createAsset(withTenant({ name: `Patrimônio Gaps ${suffix}`, assetTag: `PATGAP-${suffix}`, ...extra }), tenant.userId, transaction);
+}
+
+async function createEvidence(transaction) {
+  return filesService.uploadFile(
+    withTenant({ fileName: 'evidencia-gaps.pdf', mimeType: 'application/pdf', contentBase64: Buffer.from('EVIDENCIA GAPS').toString('base64'), category: 'generic' }),
+    tenant.userId,
+    transaction
+  );
+}
+
+async function loanDestination(transaction) {
+  return itemsService.createLocation(withTenant({ name: `Destino Gaps ${uniqueSuffix()}`, locationType: 'WAREHOUSE' }), tenant.userId, transaction);
+}
+
+// Item 7 ---------------------------------------------------------------------------------------
+
+test('Item 7: transferAsset recusa transferir uma ferramenta emprestada (LOANED)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const destination = await loanDestination(transaction);
+    await toolLoansService.loanTool(
+      asset.id,
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+    await asset.reload({ transaction });
+    assert.equal(asset.status, 'LOANED');
+
+    const otherLocation = await loanDestination(transaction);
+    await assert.rejects(
+      () => assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: otherLocation.id }, tenant.userId, transaction),
+      expectCode('ASSET_TRANSFER_ASSET_LOANED')
+    );
+  });
+});
+
+// Item 8 ---------------------------------------------------------------------------------------
+
+test('Item 8: aprovar um caso de perda de Asset gera um AssetMovement real documentando a perda', async () => {
+  const suffix = uniqueSuffix();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const evidence = await createEvidence(transaction);
+    const lossCase = await lossCasesService.openLossCase(
+      withTenant({ assetId: asset.id, context: 'Perda formalizada (item 8).', evidenceFileIds: [evidence.id] }),
+      tenant.userId,
+      transaction
+    );
+
+    const beforeCount = await AssetMovement.count({ where: { assetId: asset.id }, transaction });
+    assert.equal(beforeCount, 0, 'nenhum movimento antes da decisão');
+
+    // Achado real (auditoria Marco 7, maker-checker de Perdas): quem abre o caso não pode mais
+    // decidir o mesmo caso — precisa de um segundo aprovador.
+    const otherUserId = await createSecondUser(suffix);
+    const secondApprover = { userId: otherUserId, canApprove: true };
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', secondApprover, transaction);
+
+    await asset.reload({ transaction });
+    assert.equal(asset.status, 'LOST');
+
+    const movements = await assetsService.listAssetMovements(asset.id, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(movements.length, 1, 'a perda aprovada precisa gerar exatamente um AssetMovement');
+    assert.equal(movements[0].destinationLocationId, null, 'perda não tem destino — saiu de circulação');
+  });
+});
+
+// Item 9 ---------------------------------------------------------------------------------------
+
+test('Item 9: openLossCase recusa abrir caso de perda sobre asset com OS de manutenção OPEN', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    await maintenanceService.openMaintenanceOrder(withTenant({ assetId: asset.id, description: 'Revisão em andamento.' }), tenant.userId, transaction);
+
+    const evidence = await createEvidence(transaction);
+    await assert.rejects(
+      () =>
+        lossCasesService.openLossCase(
+          withTenant({ assetId: asset.id, context: 'Tentativa de perda com OS aberta.', evidenceFileIds: [evidence.id] }),
+          tenant.userId,
+          transaction
+        ),
+      expectCode('LOSS_CASE_MAINTENANCE_OPEN')
+    );
+  });
+});
+
+// Item 10 --------------------------------------------------------------------------------------
+
+test('Item 10: loanTool recusa emprestar asset com caso de perda OPEN', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const evidence = await createEvidence(transaction);
+    await lossCasesService.openLossCase(
+      withTenant({ assetId: asset.id, context: 'Apuração em andamento (item 10).', evidenceFileIds: [evidence.id] }),
+      tenant.userId,
+      transaction
+    );
+
+    const destination = await loanDestination(transaction);
+    await assert.rejects(
+      () =>
+        toolLoansService.loanTool(
+          asset.id,
+          { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
+          tenant.userId,
+          tenant.groupId,
+          tenant.companyId,
+          transaction
+        ),
+      expectCode('TOOL_LOAN_LOSS_CASE_OPEN')
+    );
+  });
+});
+
+// Item 11 --------------------------------------------------------------------------------------
+
+test('Item 11: getAssetByTag devolve ficha vazia (lastMovement/openMaintenance/activeLoan null) quando não há nada', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+
+    const ficha = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+
+    assert.equal(ficha.asset.id, asset.id);
+    assert.equal(ficha.lastMovement, null);
+    assert.equal(ficha.openMaintenance, null);
+    assert.equal(ficha.activeLoan, null);
+  });
+});
+
+test('Item 11: getAssetByTag devolve ficha preenchida com último movimento, manutenção aberta e empréstimo ativo', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const destination = await loanDestination(transaction);
+
+    // Gera um AssetMovement real (transferência).
+    const movement = await assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: destination.id }, tenant.userId, transaction);
+
+    const ficha = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(ficha.lastMovement.id, movement.id);
+    assert.equal(ficha.openMaintenance, null);
+    assert.equal(ficha.activeLoan, null);
+  });
+});
+
+// ACHADO REAL (auditoria Marco 7, rodada "check", 15/10/2026, achado 3): lastMovement devolvia a
+// linha crua de AssetMovement, sem "movementType" (só calculado em listAssetMovements) — o card
+// de busca por QR no front mostrava "Último movimento: undefined". Prova que getAssetByTag agora
+// devolve o mesmo formato unificado de listAssetMovements (com movementType já calculado).
+test('Item 11 (achado "check" #3): getAssetByTag devolve lastMovement com movementType preenchido (nunca undefined)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const destination = await loanDestination(transaction);
+    await assetsService.transferAsset(asset.id, tenant.groupId, tenant.companyId, { destinationLocationId: destination.id }, tenant.userId, transaction);
+
+    const ficha = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(ficha.lastMovement.movementType, 'TRANSFER', 'front lê lastMovement.movementType pra montar o rótulo — não pode ficar undefined');
+  });
+});
+
+// ACHADO REAL (auditoria Marco 7, rodada "check", 15/10/2026, achado 3): "Último movimento" nunca
+// refletia empréstimo/devolução (só transferência/baixa) — mesmo gap que listAssetMovements já
+// tinha corrigido (achado F11), mas que getAssetByTag não herdava. Empresta e devolve (sem
+// nenhuma transferência) e confere que o card mostra a devolução como último movimento.
+test('Item 11 (achado "check" #3): getAssetByTag mostra empréstimo/devolução como lastMovement, não só transferência/baixa', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const destination = await loanDestination(transaction);
+    const loan = await toolLoansService.loanTool(
+      asset.id,
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+
+    const afterLoan = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(afterLoan.lastMovement.movementType, 'LOAN', 'logo após emprestar, o último movimento deveria ser o empréstimo, não "nenhum registrado"');
+
+    await toolLoansService.returnTool(loan.id, { conditionCode: 'OK' }, tenant.userId, tenant.groupId, tenant.companyId, transaction);
+
+    const afterReturn = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(afterReturn.lastMovement.movementType, 'RETURN', 'após devolver, o último movimento deveria ser a devolução');
+  });
+});
+
+test('Item 11: getAssetByTag mostra a OS de manutenção aberta mais recente', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const order = await maintenanceService.openMaintenanceOrder(withTenant({ assetId: asset.id, description: 'Revisão (item 11).' }), tenant.userId, transaction);
+
+    const ficha = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.ok(ficha.openMaintenance, 'esperava manutenção aberta na ficha');
+    assert.equal(ficha.openMaintenance.id, order.id);
+    assert.equal(ficha.activeLoan, null);
+  });
+});
+
+test('Item 11: getAssetByTag mostra o empréstimo ativo (ferramenta emprestada)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    const destination = await loanDestination(transaction);
+    const loan = await toolLoansService.loanTool(
+      asset.id,
+      { conditionOutCode: 'OK', personUserId: tenant.userId, destinationLocationId: destination.id, dueAt: new Date(Date.now() + 7 * 86400000).toISOString() },
+      tenant.userId,
+      tenant.groupId,
+      tenant.companyId,
+      transaction
+    );
+
+    const ficha = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.ok(ficha.activeLoan, 'esperava empréstimo ativo na ficha');
+    assert.equal(ficha.activeLoan.id, loan.id);
+    assert.equal(ficha.openMaintenance, null);
+  });
+});
+
+// Item 12 --------------------------------------------------------------------------------------
+
+test('Item 12: depreciação informativa cai de forma linear com o tempo desde a aquisição', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const usefulLifeMonths = 60;
+    const halfLifeAgo = new Date();
+    halfLifeAgo.setMonth(halfLifeAgo.getMonth() - usefulLifeMonths / 2);
+
+    const asset = await createAsset(transaction, { acquisitionValue: 10000, acquiredAt: halfLifeAgo });
+
+    const estimated = assetsService.computeEstimatedCurrentValue(asset, usefulLifeMonths);
+    assert.ok(estimated > 4900 && estimated < 5100, `esperava ~50% do valor original (R$ 5000), veio R$ ${estimated}`);
+
+    const ficha = await assetsService.getAssetByTag(asset.assetTag, tenant.groupId, tenant.companyId, transaction);
+    assert.equal(ficha.estimatedCurrentValue, computeEstimatedCurrentValueExpected(asset));
+  });
+});
+
+test('Item 12: depreciação informativa zera quando o tempo decorrido já passou da vida útil (não fica negativa)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const longAgo = new Date();
+    longAgo.setFullYear(longAgo.getFullYear() - 20);
+    const asset = await createAsset(transaction, { acquisitionValue: 10000, acquiredAt: longAgo });
+
+    const estimated = assetsService.computeEstimatedCurrentValue(asset, 60);
+    assert.equal(estimated, 0);
+  });
+});
+
+test('Item 12: asset sem acquisitionValue/acquiredAt configurado não quebra — retorna null', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction);
+    assert.equal(asset.acquisitionValue, null);
+    assert.equal(asset.acquiredAt, null);
+
+    const estimated = assetsService.computeEstimatedCurrentValue(asset);
+    assert.equal(estimated, null, 'sem base de cálculo, não deve lançar erro — só retorna null');
+
+    const list = await assetsService.listAssets(tenant.groupId, tenant.companyId, transaction);
+    const found = list.find((a) => a.id === asset.id);
+    assert.ok(found, 'asset precisa aparecer na listagem');
+    assert.equal(found.estimatedCurrentValue, null);
+  });
+});
+
+test('Item 12: asset com acquisitionValue mas sem usefulLifeMonths explícito usa o default documentado (não quebra)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const asset = await createAsset(transaction, { acquisitionValue: 1000, acquiredAt: new Date() });
+    const estimated = assetsService.computeEstimatedCurrentValue(asset);
+    assert.equal(estimated, 1000, 'recém adquirido: ~100% do valor, usando o default de vida útil');
+  });
+});
+
+function computeEstimatedCurrentValueExpected(asset) {
+  return assetsService.computeEstimatedCurrentValue(asset, 60);
+}

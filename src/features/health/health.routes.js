@@ -5,6 +5,7 @@ const healthController = require('./health.controller');
 
 const healthRouter = Router();
 healthRouter.get('/health', healthController.getHealth);
+healthRouter.get('/version', healthController.getVersion);
 
 const pingRouter = Router();
 pingRouter.get('/ping', healthController.getPing);

@@ -21,6 +21,11 @@ module.exports = (sequelize) => {
       category: { type: DataTypes.STRING(32), allowNull: false, field: 'category' },
       versionNumber: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, field: 'version_number' },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' },
+      // F01: condição declarativa da versão (ver src/features/legal/clauseConditions.js).
+      conditionJson: { type: DataTypes.JSONB, allowNull: true, field: 'condition_json' },
+      conditionStatus: { type: DataTypes.STRING(32), allowNull: true, field: 'condition_status' },
+      conditionApprovedBy: { type: DataTypes.UUID, allowNull: true, field: 'condition_approved_by' },
+      conditionApprovedAt: { type: DataTypes.DATE, allowNull: true, field: 'condition_approved_at' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
     },
     {

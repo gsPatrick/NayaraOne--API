@@ -10,15 +10,26 @@ const addressesService = require('./personAddresses.service');
 const consentsService = require('./personConsents.service');
 const mergeService = require('./personMerge.service');
 const dedupService = require('./personDedup.service');
+const documentIngestionService = require('./documentIngestion.service');
 
 // --- Persons ---
 
+// CRMX-010/seção 4 do Caderno ("match fraco... abre revisão; não mescla automaticamente"): a
+// checagem de nome+data de nascimento/endereço parecidos NÃO bloqueia a criação (diferente do
+// match forte/médio em createPerson, que bloqueia por padrão) — só avisa, mesmo padrão já usado
+// em properties.controller.js para CRMX-010 de imóvel (similarPropertyWarnings em `meta`, não
+// em `data`).
 const create = catchAsync(async (req, res) => {
   const payload = { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
-  const person = await req.withTenantTransaction((transaction) =>
-    peopleService.createPerson(payload, req.auth.userId, transaction)
-  );
-  return success(res, { statusCode: 201, data: person });
+  const { person, similarPersonWarnings } = await req.withTenantTransaction(async (transaction) => {
+    const createdPerson = await peopleService.createPerson(payload, req.auth.userId, transaction);
+    const warnings = await dedupService.findWeakDuplicateCandidates(
+      { legalName: payload.legalName, birthOrFoundationDate: payload.birthOrFoundationDate, addresses: payload.addresses, excludePersonId: createdPerson.id },
+      transaction
+    );
+    return { person: createdPerson, similarPersonWarnings: warnings };
+  });
+  return success(res, { statusCode: 201, data: person, meta: { similarPersonWarnings } });
 });
 
 const list = catchAsync(async (req, res) => {
@@ -92,6 +103,20 @@ const createDocument = catchAsync(async (req, res) => {
     documentsService.createDocument(req.params.id, req.body, req.auth.userId, transaction)
   );
   return success(res, { statusCode: 201, data: document });
+});
+
+const ingestDocument = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((transaction) =>
+    documentIngestionService.ingestPersonDocument(
+      { ...req.body, personId: req.params.id, groupId: req.auth.groupId, companyId: req.auth.companyId },
+      req.auth.userId,
+      transaction
+    )
+  );
+  return success(res, {
+    statusCode: 201,
+    data: { document: result.personDocument, fileId: result.file.id, pendingTask: result.pendingTask },
+  });
 });
 
 const listDocuments = catchAsync(async (req, res) => {
@@ -190,6 +215,7 @@ module.exports = {
   updateContact,
   removeContact,
   createDocument,
+  ingestDocument,
   listDocuments,
   updateDocument,
   removeDocument,

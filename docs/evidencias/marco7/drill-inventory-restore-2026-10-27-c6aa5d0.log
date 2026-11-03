@@ -1,0 +1,65 @@
+# Drill de restore — Estoque / Compras / Seguros / Patrimônio (Marco 7)
+Data: 2026-10-27T12:00:39.787Z
+Commit da API: c6aa5d0d4987a347affb8260d0dbd3ac0acda627 (com alterações locais não commitadas)
+PostgreSQL: postgres (PostgreSQL) 17.11 (Homebrew)
+
+### 1. Cluster de ORIGEM descartável (porta 5452)
+  role nayara_runtime NOSUPERUSER/NOBYPASSRLS; 323 migrations; seeds base; GRANT em 14 schemas.
+
+### 2. Fixtures pelos serviços reais (role de runtime, RLS real)
+  fixtures: 2 itens, 2 locais, 5 movimentos manuais + requisição entregue, pedido 1cacd812 com 2 recebimentos (divergências: OVER_RECEIPT, PRICE_MISMATCH), apólice ACTIVE, 2 ativos.
+
+### 3. Backup com o script real (npm run backup → pg_dump -Fc)
+  Backup gerado com sucesso: <tmp>/backup/drill_source_2026-10-27T12-00-48-510Z.dump (1.02 MB)
+
+### 4. Cluster de DESTINO novo (porta 5453) + restore pelo runbook
+  Restore concluído em "drill_target" a partir de <tmp>/backup/drill_source_2026-10-27T12-00-48-510Z.dump
+
+### 5. Verificação pós-restore (scripts/verifyRestoreInventoryProcurementData.js)
+[A] Invariantes — origem
+  ✅ origem: saldo por item/local = soma dos movimentos do ledger — 3 saldos (soma 291.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0
+  ✅ origem: nenhum saldo negativo — 0 negativo(s)
+  ✅ origem: sem duplicidade (idempotência de movimento/recebimento, NF por empresa) — movimentos 0, recebimentos 0, NF 0
+  ✅ origem: recebido por item de pedido = soma dos itens de recebimento (excedente só depois de aceito) — 2 itens de pedido, 0 divergente(s)
+  ✅ origem: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro — 2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0
+  ✅ origem: divergências ligadas a itens de recebimento existentes — 2 divergência(s), 2 aberta(s), 0 órfã(s)
+  ✅ origem: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor — 1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0
+  ✅ origem: ativos de patrimônio com local/item existentes — 2 ativo(s), valor de aquisição total 5680.40
+
+[A] Invariantes — destino
+  ✅ destino: saldo por item/local = soma dos movimentos do ledger — 3 saldos (soma 291.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0
+  ✅ destino: nenhum saldo negativo — 0 negativo(s)
+  ✅ destino: sem duplicidade (idempotência de movimento/recebimento, NF por empresa) — movimentos 0, recebimentos 0, NF 0
+  ✅ destino: recebido por item de pedido = soma dos itens de recebimento (excedente só depois de aceito) — 2 itens de pedido, 0 divergente(s)
+  ✅ destino: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro — 2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0
+  ✅ destino: divergências ligadas a itens de recebimento existentes — 2 divergência(s), 2 aberta(s), 0 órfã(s)
+  ✅ destino: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor — 1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0
+  ✅ destino: ativos de patrimônio com local/item existentes — 2 ativo(s), valor de aquisição total 5680.40
+
+[B] Origem × destino (contagem + SHA-256 do conteúdo, tabelas inventory.* e procurement.*)
+  ✅ 36 tabelas idênticas na origem e no destino — 47 linhas no total
+
+[C] RLS no destino com a role de runtime
+  ✅ role de runtime sem SUPERUSER/BYPASSRLS — superuser=false bypassrls=false
+  ✅ sem contexto de tenant a role de runtime não vê nenhum saldo — 0 linha(s) visíveis
+  ✅ com o SET LOCAL do tenant vê os saldos restaurados — 3 de 3
+
+[D] Fixtures do drill no destino
+  ✅ pedido de compra restaurado — status OPEN
+  ✅ 2 recebimentos confirmados com payable — 2 recebimentos, 2 payables
+  ✅ divergências do recebimento restauradas — OVER_RECEIPT, PRICE_MISMATCH
+  ✅ requisição de material restaurada — status ISSUED
+  ✅ apólice e parcelas restauradas — ACTIVE, 1 parcela(s)
+  ✅ ativos de patrimônio restaurados — 2/2
+
+Resultado: 26/26 checagens OK.
+
+### 6. Prova negativa: adultera 1 saldo no destino (+1 unidade) e roda a verificação de novo
+  ❌ destino: saldo por item/local = soma dos movimentos do ledger — 3 saldos (soma 292.250000); divergentes 1, ledger sem saldo 0, saldo sem ledger 0
+  ❌ 36 tabelas idênticas na origem e no destino — diferentes: inventory.stock_balances
+  → adulteração DETECTADA ✅ (verificação saiu com erro)
+
+Resultado do drill: APROVADO
+
+### 7. Teardown
+  relatório salvo em docs/evidencias/marco7/drill-inventory-restore-2026-10-27-c6aa5d0.{log,json}

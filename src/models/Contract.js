@@ -40,7 +40,15 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(32),
         allowNull: false,
         field: 'contract_type',
-        comment: "SALE|LEASE|SERVICE",
+        comment: "SALE|LEASE|SERVICE|CONSTRUCTION",
+      },
+      // M6-104: vínculo do contrato de empreitada (contractType === 'CONSTRUCTION') com a obra
+      // correspondente em construction.projects. Obrigatório em código quando contractType for
+      // CONSTRUCTION (ver contracts.service.js:createContract).
+      constructionProjectId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'construction_project_id',
       },
       contractNumber: {
         type: DataTypes.STRING(64),

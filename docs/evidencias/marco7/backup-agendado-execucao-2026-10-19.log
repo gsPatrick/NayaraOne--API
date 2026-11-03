@@ -1,0 +1,13 @@
+[withDisposableDb] cluster descartável 127.0.0.1:5462/drill_app pronto (296 migrations, GRANT em 14 schemas) em 7.6 s
+Backup gerado com sucesso: <tmp-privado>/drill_app_2026-10-19T17-36-52-757Z.dump (0.94 MB)
+[2026-10-19T17:36:52.977Z] dump ok: drill_app_2026-10-19T17-36-52-757Z.dump (0.94 MB, 2200 objetos no catálogo)
+[2026-10-19T17:36:53.011Z] cifrado ok: drill_app_2026-10-19T17-36-52-757Z.dump.enc (sha256 9bcfda60b7f0f64e…); decifrado confere com o original e pg_restore lê 2200 objetos
+[2026-10-19T17:36:53.012Z] AVISO: BACKUP_OFFSITE_CMD não definido — o backup ficou só neste servidor.
+[2026-10-19T17:36:53.012Z] retenção (14 dias, mínimo 1): 1 mantido(s), 1 removido(s): velho_2026.dump.enc
+[2026-10-19T17:36:53.012Z] backup agendado concluído em 0.3 s
+Decifrado: <BACKUP_DIR>/x.dump (sha256 ea5a5cfb68169065106488a13ba86816b1a037b291bca6066698643c37ef864b)
+decifragem falhou (chave errada ou arquivo adulterado): Unsupported state or unable to authenticate data
+adulterado_exit=1
+[2026-10-19T17:36:53.191Z] FALHA no backup agendado: BACKUP_ENCRYPTION_KEY ausente ou inválida (precisa de 64 caracteres hex = 32 bytes). Gere com: openssl rand -hex 32
+semchave_exit=1
+[withDisposableDb] cluster parado e diretório temporário apagado.

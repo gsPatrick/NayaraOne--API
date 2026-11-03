@@ -70,9 +70,26 @@ async function publishPropertyPriceChanged(priceHistory, transaction) {
   );
 }
 
+// Caderno (seção 17, "Eventos mínimos"): property.updated — faltava.
+async function publishPropertyUpdated(property, transaction) {
+  return publishDomainEvent(
+    {
+      groupId: property.groupId,
+      companyId: property.companyId,
+      aggregateType: 'Property',
+      aggregateId: property.id,
+      eventType: 'property.updated',
+      payload: { id: property.id, internalCode: property.internalCode, propertyType: property.propertyType },
+      idempotencyKey: `property.updated:${property.id}:${Date.now()}`,
+    },
+    transaction
+  );
+}
+
 module.exports = {
   publishPropertyCreated,
   publishPropertyOfferCreated,
   publishPropertyPublished,
   publishPropertyPriceChanged,
+  publishPropertyUpdated,
 };

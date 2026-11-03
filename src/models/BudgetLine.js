@@ -19,6 +19,7 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       projectId: { type: DataTypes.UUID, allowNull: false, field: 'project_id' },
+      budgetId: { type: DataTypes.UUID, allowNull: true, field: 'budget_id' },
       costCenterId: { type: DataTypes.UUID, allowNull: true, field: 'cost_center_id' },
       category: { type: DataTypes.STRING(128), allowNull: false, field: 'category' },
       description: { type: DataTypes.STRING(255), allowNull: true, field: 'description' },

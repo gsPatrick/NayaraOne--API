@@ -1,10 +1,28 @@
 'use strict';
 
-const { RentAdvance, Contract } = require('../../models');
+const { RentAdvance, Contract, FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { createFinancialEntry } = require('../finance/financialEntries.service');
+const {
+  createFinancialEntry,
+  settleFinancialEntry,
+  settleFinancialEntryPartial,
+  computeRemainingAmount,
+} = require('../finance/financialEntries.service');
+const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
+// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter/getOrCreateDefaultResultCenter.
+const RENT_ADVANCE_COST_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
+const RENT_ADVANCE_RESULT_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const { publishAdvanceCompleted } = require('./billingEvents.service');
+const { isLeaseLikeContractType } = require('../legal/contracts.service');
+
+// M45: descrição do lançamento mostra o NÚMERO do contrato (visível ao usuário), nunca o UUID.
+async function contractRef(contractId, transaction) {
+  const c = contractId ? await Contract.findByPk(contractId, { attributes: ['contractNumber'], transaction }) : null;
+  return c && c.contractNumber ? `contrato ${c.contractNumber}` : 'contrato sem número';
+}
 
 // PRODUTO SEPARADO de guaranteed_rent_contracts (ver guaranteedRent.service.js) — tabela e
 // fluxo próprios (eligibility -> proposal -> acceptance -> payment -> recovery), nunca
@@ -38,7 +56,10 @@ async function requestRentAdvance(payload, actorUserId, transaction) {
   }
   const contract = await Contract.findByPk(contractId, { transaction });
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'RENT_ADVANCE_CONTRACT_NOT_FOUND');
-  if (contract.contractType !== 'LEASE' || contract.status !== 'ACTIVE') {
+  // FIX AUD-015 (11/10/2026): LEASE deixou de ser o único código de locação (ver
+  // contracts.service.js, subtipos LEASE_RESIDENTIAL/LEASE_COMMERCIAL/LEASE_SEASONAL/
+  // PROPERTY_ADMIN) — comparar com o literal 'LEASE' passou a rejeitar locação de verdade.
+  if (!isLeaseLikeContractType(contract.contractType) || contract.status !== 'ACTIVE') {
     throw AppError.unprocessable(
       'Antecipação de aluguel só é elegível para contratos de locação (LEASE) com status ACTIVE.',
       'RENT_ADVANCE_NOT_ELIGIBLE'
@@ -162,6 +183,13 @@ async function payRentAdvance(id, actorUserId, transaction) {
   }
   const beforeJson = rentAdvance.toJSON();
 
+  const principalCostCenter = await getOrCreateDefaultCostCenter(
+    rentAdvance.groupId,
+    rentAdvance.companyId,
+    RENT_ADVANCE_COST_CENTER_CODE,
+    'Locação — antecipação de aluguel',
+    transaction
+  );
   const principalEntry = await createFinancialEntry(
     {
       groupId: rentAdvance.groupId,
@@ -170,9 +198,10 @@ async function payRentAdvance(id, actorUserId, transaction) {
       entryType: 'DEBIT',
       nature: 'PAYABLE',
       amount: rentAdvance.principalAmount,
-      description: `Antecipação de aluguel — principal, contrato ${rentAdvance.contractId}.`,
+      description: `Antecipação de aluguel — principal, ${await contractRef(rentAdvance.contractId, transaction)}.`,
       dueAt: new Date(),
       idempotencyKey: `rent_advance.principal:${rentAdvance.id}`,
+      costCenterId: principalCostCenter.id,
     },
     actorUserId,
     transaction
@@ -180,6 +209,13 @@ async function payRentAdvance(id, actorUserId, transaction) {
 
   let costEntry = null;
   if (Number(rentAdvance.costAmount) > 0) {
+    const costResultCenter = await getOrCreateDefaultResultCenter(
+      rentAdvance.groupId,
+      rentAdvance.companyId,
+      RENT_ADVANCE_RESULT_CENTER_CODE,
+      'Locação — antecipação de aluguel',
+      transaction
+    );
     costEntry = await createFinancialEntry(
       {
         groupId: rentAdvance.groupId,
@@ -188,9 +224,10 @@ async function payRentAdvance(id, actorUserId, transaction) {
         entryType: 'CREDIT',
         nature: 'RECEIVABLE',
         amount: rentAdvance.costAmount,
-        description: `Antecipação de aluguel — custo/juros, contrato ${rentAdvance.contractId}.`,
+        description: `Antecipação de aluguel — custo/juros, ${await contractRef(rentAdvance.contractId, transaction)}.`,
         dueAt: new Date(),
         idempotencyKey: `rent_advance.cost:${rentAdvance.id}`,
+        resultCenterId: costResultCenter.id,
       },
       actorUserId,
       transaction
@@ -222,21 +259,130 @@ async function payRentAdvance(id, actorUserId, transaction) {
   return rentAdvance;
 }
 
+const RENT_ADVANCE_RECOVERY_RESULT_CENTER_CODE = 'LOCACAO-ANTECIPACAO-RECUPERACAO';
+
+function toCents(value) {
+  return Math.round(Number(value) * 100);
+}
+
+function fromCents(cents) {
+  return (cents / 100).toFixed(2);
+}
+
+function formatBRL(cents) {
+  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
 /**
  * recoverRentAdvance — registra a recuperação (do locatário) do valor antecipado, parcial ou
- * total. Marca RECOVERED quando o valor recuperado atinge principal + custo.
+ * total, e lança o dinheiro recuperado no Financeiro. Marca RECOVERED quando o valor recuperado
+ * atinge principal + custo.
+ *
+ * Imputação do valor recuperado (Código Civil, art. 354 — "havendo capital e juros, o pagamento
+ * imputar-se-á primeiro nos juros"): primeiro quita o CUSTO, depois o PRINCIPAL.
+ *  - Parte do custo: o custo já foi reconhecido no pagamento da antecipação como RECEIVABLE
+ *    próprio (`costEntryId`). A recuperação dá BAIXA (parcial ou total) nesse mesmo lançamento —
+ *    nunca cria um segundo recebível de custo (isso contaria o custo duas vezes).
+ *  - Parte do principal: o principal saiu do caixa como PAYABLE ao proprietário; a recuperação
+ *    é a volta desse capital, lançada como RECEIVABLE próprio já liquidado, num centro de
+ *    resultado SEPARADO do custo (LOCACAO-ANTECIPACAO-RECUPERACAO), para não ser lido como
+ *    receita da antecipação. Também é separado do aluguel garantido (que usa os centros e as
+ *    chaves `guaranteed_rent:*`).
+ *
+ * Validação: valor > 0 e ≤ saldo a recuperar (principal + custo − já recuperado), tudo em
+ * centavos inteiros. A trava FOR UPDATE na antecipação serializa recuperações concorrentes: a
+ * segunda só lê o saldo depois da primeira commitar.
  */
 async function recoverRentAdvance(id, amountRecovered, actorUserId, transaction) {
   const rentAdvance = await getRentAdvance(id, transaction, { lock: transaction.LOCK.UPDATE });
   if (!['PAID', 'RECOVERING'].includes(rentAdvance.status)) {
     throw AppError.conflict('Só é possível recuperar uma antecipação PAID/RECOVERING.', 'RENT_ADVANCE_INVALID_STATUS');
   }
-  const beforeJson = rentAdvance.toJSON();
-  const newRecovered = Number(rentAdvance.recoveredAmount) + Number(amountRecovered);
-  const totalDue = Number(rentAdvance.principalAmount) + Number(rentAdvance.costAmount);
 
-  rentAdvance.recoveredAmount = newRecovered;
-  rentAdvance.status = newRecovered >= totalDue ? 'RECOVERED' : 'RECOVERING';
+  const amountNumber = Number(amountRecovered);
+  if (amountRecovered === null || amountRecovered === undefined || amountRecovered === '' || !Number.isFinite(amountNumber) || amountNumber <= 0) {
+    throw AppError.badRequest('O valor recuperado precisa ser um número maior que zero.', 'RENT_ADVANCE_RECOVERY_INVALID_AMOUNT');
+  }
+  const amountCents = toCents(amountNumber);
+  if (amountCents <= 0) {
+    throw AppError.badRequest('O valor recuperado precisa ser de pelo menos R$ 0,01.', 'RENT_ADVANCE_RECOVERY_INVALID_AMOUNT');
+  }
+
+  const principalCents = toCents(rentAdvance.principalAmount);
+  const costCents = toCents(rentAdvance.costAmount);
+  const recoveredBeforeCents = toCents(rentAdvance.recoveredAmount);
+  const totalDueCents = principalCents + costCents;
+  const outstandingCents = totalDueCents - recoveredBeforeCents;
+
+  if (amountCents > outstandingCents) {
+    throw AppError.conflict(
+      `O valor recuperado (${formatBRL(amountCents)}) é maior que o saldo a recuperar desta antecipação (${formatBRL(outstandingCents)}).`,
+      'RENT_ADVANCE_RECOVERY_EXCEEDS_BALANCE'
+    );
+  }
+
+  const costRecoveredBeforeCents = Math.min(recoveredBeforeCents, costCents);
+  const costPortionCents = Math.min(amountCents, costCents - costRecoveredBeforeCents);
+  const principalPortionCents = amountCents - costPortionCents;
+
+  const beforeJson = rentAdvance.toJSON();
+
+  let costSettlementEntryId = null;
+  if (costPortionCents > 0) {
+    if (!rentAdvance.costEntryId) {
+      throw AppError.conflict(
+        'Esta antecipação tem custo a recuperar, mas não tem o lançamento de custo no Financeiro.',
+        'RENT_ADVANCE_RECOVERY_COST_ENTRY_MISSING'
+      );
+    }
+    const costEntry = await FinancialEntry.findByPk(rentAdvance.costEntryId, { transaction });
+    const costRemainingCents =
+      costEntry && ['PENDING', 'PARTIALLY_SETTLED'].includes(costEntry.status)
+        ? toCents(await computeRemainingAmount(costEntry, transaction))
+        : 0;
+    if (costPortionCents > costRemainingCents) {
+      throw AppError.conflict(
+        `O lançamento de custo desta antecipação tem só ${formatBRL(costRemainingCents)} em aberto no Financeiro (já foi baixado por outro caminho) — a recuperação de ${formatBRL(costPortionCents)} de custo não fecha.`,
+        'RENT_ADVANCE_RECOVERY_COST_ENTRY_DIVERGENT'
+      );
+    }
+    const costResult = await settleFinancialEntryPartial(rentAdvance.costEntryId, fromCents(costPortionCents), actorUserId, transaction);
+    costSettlementEntryId = costResult && costResult.settlement ? costResult.settlement.id : null;
+  }
+
+  let principalRecoveryEntry = null;
+  if (principalPortionCents > 0) {
+    const recoveryResultCenter = await getOrCreateDefaultResultCenter(
+      rentAdvance.groupId,
+      rentAdvance.companyId,
+      RENT_ADVANCE_RECOVERY_RESULT_CENTER_CODE,
+      'Locação — recuperação de antecipação (volta do principal)',
+      transaction
+    );
+    principalRecoveryEntry = await createFinancialEntry(
+      {
+        groupId: rentAdvance.groupId,
+        companyId: rentAdvance.companyId,
+        contractId: rentAdvance.contractId,
+        entryType: 'CREDIT',
+        nature: 'RECEIVABLE',
+        amount: fromCents(principalPortionCents),
+        description: `Antecipação de aluguel — recuperação do principal (${formatBRL(principalPortionCents)}), ${await contractRef(rentAdvance.contractId, transaction)}.`,
+        dueAt: new Date(),
+        // Saldo recuperado antes desta recuperação é estritamente crescente: a chave é única
+        // por recuperação e reenviar a MESMA recuperação (mesmo saldo anterior) não duplica.
+        idempotencyKey: `rent_advance.recovery_principal:${rentAdvance.id}:${recoveredBeforeCents}`,
+        resultCenterId: recoveryResultCenter.id,
+      },
+      actorUserId,
+      transaction
+    );
+    principalRecoveryEntry = await settleFinancialEntry(principalRecoveryEntry.id, actorUserId, transaction);
+  }
+
+  const recoveredAfterCents = recoveredBeforeCents + amountCents;
+  rentAdvance.recoveredAmount = fromCents(recoveredAfterCents);
+  rentAdvance.status = recoveredAfterCents >= totalDueCents ? 'RECOVERED' : 'RECOVERING';
   rentAdvance.updatedBy = actorUserId || null;
   await rentAdvance.save({ transaction });
 
@@ -253,8 +399,19 @@ async function recoverRentAdvance(id, amountRecovered, actorUserId, transaction)
       entityType: 'RentAdvance',
       entityId: rentAdvance.id,
       beforeJson,
-      afterJson: rentAdvance.toJSON(),
-      reason: `Recuperação de ${amountRecovered} registrada (total recuperado: ${newRecovered} de ${totalDue}).`,
+      afterJson: {
+        ...rentAdvance.toJSON(),
+        recovery: {
+          amount: fromCents(amountCents),
+          costPortion: fromCents(costPortionCents),
+          principalPortion: fromCents(principalPortionCents),
+          costSettlementEntryId,
+          principalRecoveryEntryId: principalRecoveryEntry ? principalRecoveryEntry.id : null,
+        },
+      },
+      reason:
+        `Recuperação de ${formatBRL(amountCents)} registrada (custo ${formatBRL(costPortionCents)}, principal ${formatBRL(principalPortionCents)}); ` +
+        `total recuperado ${formatBRL(recoveredAfterCents)} de ${formatBRL(totalDueCents)}.`,
     },
     transaction
   );

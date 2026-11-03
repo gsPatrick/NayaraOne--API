@@ -1,0 +1,35 @@
+[withDisposableDb] cluster descartável 127.0.0.1:5462/drill_app pronto (296 migrations, GRANT em 14 schemas) em 7.7 s
+# Carga Estoque/Compras — COMPLETA; concorrência 16; pool 24
+--- SETUP (serviços reais, commitado) ---
+  30 itens (4 quentes com saldo 40), 3 depósitos, 30 pedidos abertos.
+--- CARGA: 3650 tarefas, 16 em paralelo ---
+
+3950 operações em 8.8 s (449 op/s)
+
+| Operação | n | ok | recusas de negócio | inesperados | p50 ms | p95 ms | p99 ms | máx ms |
+|---|---:|---:|---|---|---:|---:|---:|---:|
+| leitura: histórico de movimentos | 400 | 400 | — | — | 15.0 | 21.4 | 26.9 | 28.1 |
+| leitura: saldos do item | 400 | 400 | — | — | 11.4 | 17.6 | 22.1 | 25.0 |
+| movimento IN | 385 | 385 | — | — | 39.0 | 67.3 | 92.0 | 125.7 |
+| movimento OUT | 1208 | 434 | INVENTORY_INSUFFICIENT_BALANCE: 774 | — | 29.7 | 77.3 | 140.5 | 196.4 |
+| movimento TRANSFER | 807 | 421 | INVENTORY_INSUFFICIENT_BALANCE: 386 | — | 36.0 | 82.2 | 152.2 | 173.6 |
+| recebimento de compra | 150 | 150 | — | — | 111.4 | 185.4 | 229.2 | 244.7 |
+| replay de movimento | 120 | 7 | INVENTORY_INSUFFICIENT_BALANCE: 113 | — | 25.4 | 41.8 | 79.6 | 102.5 |
+| replay de recebimento | 30 | 30 | — | — | 23.7 | 143.9 | 149.8 | 149.8 |
+| requisição: aprovar | 150 | 150 | — | — | 13.0 | 20.8 | 24.8 | 26.4 |
+| requisição: criar | 150 | 150 | — | — | 24.2 | 67.4 | 129.9 | 150.2 |
+| requisição: entregar | 150 | 150 | — | — | 49.4 | 88.4 | 150.9 | 193.0 |
+
+--- GATES ---
+  ✅ zero saldo negativo — 0
+  ✅ saldo = soma do ledger em todo item/local — 0 divergente(s)
+  ✅ zero movimento duplicado (idempotencyKey) — 0
+  ✅ zero recebimento duplicado (chave e NF) — chave 0, NF 0
+  ✅ zero payable duplicado / recebimento sem payable — duplicado 0, sem payable 0
+  ✅ recebimentos gravados = 150 (replays não somam) — 150
+  ✅ recebido por item de pedido = soma dos recebimentos — 0
+  ✅ zero erro inesperado — 0
+  ✅ p95 < 300 ms em todas as operações com n >= 50 — maior p95 (n >= 50): 185.4 ms
+
+1571 movimentos no ledger ao final. Duração total 9.8 s.
+[withDisposableDb] cluster parado e diretório temporário apagado.

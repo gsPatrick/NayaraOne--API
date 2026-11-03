@@ -1,10 +1,10 @@
 'use strict';
 
 const crypto = require('crypto');
-const { EvidencePackage, EvidencePackageAccessLog } = require('../../models');
+const { EvidencePackage, EvidencePackageAccessLog, ContractVersion, Signature, ContractRequirement, Inspection, InspectionItem, FileLink, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishEvidencePackageCreated } = require('./legalEvents.service');
+const { publishEvidencePackageCreated, publishCadernoEvent } = require('./legalEvents.service');
 const { getLegalCase } = require('./legalCases.service');
 
 /**
@@ -79,6 +79,8 @@ async function createEvidencePackage(legalCaseId, manifestItems, actorUserId, tr
   );
 
   await publishEvidencePackageCreated(evidencePackage, transaction);
+  // M45 (Caderno M5 §18): nome literal do evento mínimo, além do interno.
+  await publishCadernoEvent('evidence.package.created', 'EvidencePackage', evidencePackage, { id: evidencePackage.id, legalCaseId: evidencePackage.legalCaseId }, 'v1', transaction);
 
   await registrarAuditoria(
     {
@@ -95,6 +97,92 @@ async function createEvidencePackage(legalCaseId, manifestItems, actorUserId, tr
   );
 
   return evidencePackage;
+}
+
+/**
+ * assembleManifestFromContractAttachments — FIX AUD-016 (auditoria externa Nayara,
+ * 11/10/2026, JUR-010 "Cadeia de custódia completa de documentos"): "Hash contratual existe;
+ * custódia de TODOS os anexos não demonstrada." `createEvidencePackage` sempre dependeu de
+ * `manifestItems` montado manualmente pelo chamador — nada garantia que um dossiê incluísse
+ * TODO anexo do processo/contrato (só o que a pessoa lembrasse de listar). Esta função varre,
+ * a partir do contrato vinculado ao processo jurídico, TODAS as fontes reais de anexo do
+ * sistema (seção 16 do Caderno, "Manifesto do dossiê lista arquivos, hashes, origem, datas,
+ * relações e versão"):
+ *   - ContractVersion.documentFileId (todas as versões, não só a atual) + a lista de
+ *     assinaturas registradas sobre cada versão (mesmo documento — legal.signatures não tem
+ *     arquivo próprio, a assinatura eletrônica recai sobre o documento da versão).
+ *   - ContractRequirement.satisfiedByFileId (todo documento do checklist já satisfeito).
+ *   - InspectionItem (via FileLink) de toda vistoria vinculada ao contrato.
+ * e monta o manifesto com o hash REAL do arquivo (File.checksumSha256, calculado no upload —
+ * nunca um hash informado pelo chamador), fechando a lacuna "custódia de todos os anexos".
+ */
+async function assembleManifestFromContractAttachments(contractId, transaction) {
+  const manifest = [];
+  const seenFileIds = new Set();
+
+  function pushFile(file, type, description, relatedId) {
+    if (!file || seenFileIds.has(file.id)) return;
+    seenFileIds.add(file.id);
+    manifest.push({ type, description, referenceId: relatedId || file.id, hash: file.checksumSha256 || null });
+  }
+
+  const versions = await ContractVersion.findAll({ where: { contractId }, include: [{ model: File, as: 'documentFile' }], transaction });
+  for (const version of versions) {
+    if (version.documentFile) {
+      const signatures = await Signature.findAll({ where: { contractVersionId: version.id }, transaction });
+      const signedBy = signatures.filter((s) => s.status === 'SIGNED').length;
+      pushFile(
+        version.documentFile,
+        'CONTRACT_VERSION_DOCUMENT',
+        `Documento da versão ${version.versionNumber} do contrato${signedBy ? ` (assinado por ${signedBy} parte(s))` : ''}`,
+        version.id
+      );
+    }
+  }
+
+  const requirements = await ContractRequirement.findAll({ where: { contractId }, include: [{ model: File, as: 'satisfiedByFile' }], transaction });
+  for (const requirement of requirements) {
+    if (requirement.satisfiedByFile) pushFile(requirement.satisfiedByFile, 'REQUIREMENT_DOCUMENT', `Checklist "${requirement.requirementCode}" satisfeito`, requirement.id);
+  }
+
+  const inspections = await Inspection.findAll({ where: { contractId }, transaction });
+  for (const inspection of inspections) {
+    const items = await InspectionItem.findAll({ where: { inspectionId: inspection.id }, transaction });
+    for (const item of items) {
+      const links = await FileLink.findAll({ where: { relatedEntityType: 'InspectionItem', relatedEntityId: item.id }, include: [{ model: File, as: 'file' }], transaction });
+      for (const link of links) {
+        if (link.file) pushFile(link.file, 'INSPECTION_MEDIA', `${link.purpose === 'VIDEO' ? 'Vídeo' : 'Foto'} do item "${item.itemName}" (vistoria ${inspection.inspectionType})`, link.id);
+      }
+    }
+  }
+
+  return manifest;
+}
+
+/**
+ * createEvidencePackageFromContractAttachments — monta o manifesto automaticamente (ver
+ * assembleManifestFromContractAttachments acima) e cria o pacote — garante que o dossiê cobre
+ * TODO anexo conhecido do contrato, não só o que o usuário lembrou de incluir manualmente.
+ * `extraManifestItems` permite acrescentar itens que não são um File do sistema (ex.: uma nota
+ * de auditoria com hash calculado fora daqui), seguindo o mesmo formato de `manifestItems`.
+ */
+async function createEvidencePackageFromContractAttachments(legalCaseId, actorUserId, transaction, { extraManifestItems = [] } = {}) {
+  const legalCase = await getLegalCase(legalCaseId, transaction);
+  if (!legalCase.contractId) {
+    throw AppError.badRequest(
+      'Este processo jurídico não está vinculado a um contrato — não há anexos para montar automaticamente.',
+      'LEGAL_EVIDENCE_PACKAGE_NO_CONTRACT'
+    );
+  }
+  const autoManifest = await assembleManifestFromContractAttachments(legalCase.contractId, transaction);
+  const manifestItems = [...autoManifest, ...extraManifestItems];
+  if (manifestItems.length === 0) {
+    throw AppError.conflict(
+      'Nenhum anexo encontrado para o contrato deste processo — nada para incluir no dossiê.',
+      'LEGAL_EVIDENCE_PACKAGE_NO_ATTACHMENTS'
+    );
+  }
+  return createEvidencePackage(legalCaseId, manifestItems, actorUserId, transaction);
 }
 
 async function listEvidencePackages(legalCaseId, transaction) {
@@ -193,10 +281,21 @@ async function listEvidenceAccessLog(evidencePackageId, transaction) {
  */
 async function exportEvidencePackage(id, actorUserId, transaction) {
   const evidencePackage = await getEvidencePackage(id, transaction);
-  await logEvidenceAccess(evidencePackage.id, actorUserId, 'EXPORTED', transaction);
+  const accessEntry = await logEvidenceAccess(evidencePackage.id, actorUserId, 'EXPORTED', transaction);
+  const exportedAt = new Date().toISOString();
+  // M45 (Caderno M5 §16 "Exportação gera novo package_id e hash do manifesto"): cada exportação
+  // ganha um id próprio (o da linha EXPORTED da cadeia de custódia, append-only) e o hash do
+  // manifesto exportado (que referencia o dossiê de origem e o hash gravado no banco).
+  const exportPackageId = accessEntry && accessEntry.id ? accessEntry.id : crypto.randomUUID();
+  const exportManifestHash = crypto
+    .createHash('sha256')
+    .update(JSON.stringify({ exportPackageId, evidencePackageId: evidencePackage.id, packageHash: evidencePackage.packageHash, exportedAt, manifest: evidencePackage.manifestJson }))
+    .digest('hex');
 
   return {
     formatVersion: 1,
+    exportPackageId,
+    exportManifestHash,
     evidencePackageId: evidencePackage.id,
     legalCaseId: evidencePackage.legalCaseId,
     groupId: evidencePackage.groupId,
@@ -206,7 +305,7 @@ async function exportEvidencePackage(id, actorUserId, transaction) {
     itemCount: evidencePackage.manifestJson.length,
     manifest: evidencePackage.manifestJson,
     packageHash: evidencePackage.packageHash,
-    exportedAt: new Date().toISOString(),
+    exportedAt,
     exportedByUserId: actorUserId || null,
   };
 }
@@ -226,6 +325,8 @@ function verifyEvidencePackageIntegrity(exportedJson, expectedHash = null) {
 
 module.exports = {
   createEvidencePackage,
+  assembleManifestFromContractAttachments,
+  createEvidencePackageFromContractAttachments,
   listEvidencePackages,
   getEvidencePackage,
   viewEvidencePackage,

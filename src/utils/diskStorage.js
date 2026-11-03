@@ -22,7 +22,12 @@ const crypto = require('crypto');
  * resolve sozinho — sem o volume, todo arquivo enviado sobrevive só até o próximo deploy.
  */
 
-const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'uploads');
+// UPLOADS_DIR permite apontar o storage para outro diretório (ex.: volume persistente do
+// container, ou a cópia restaurada usada pelo drill de restore em
+// scripts/restoreDrill/). Sem a variável, o comportamento é o de sempre: uploads/ na raiz.
+const UPLOADS_ROOT = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : path.join(__dirname, '..', '..', 'uploads');
 
 // Sanitize: remove qualquer coisa que não seja letra/número/ponto/hífen/underscore, e colapsa
 // tentativas de path traversal ("..", "/", "\") — o nome de arquivo do usuário NUNCA é usado

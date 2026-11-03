@@ -12,7 +12,19 @@
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "smoke:test": "node scripts/smokeTest.js",
     "seed": "node scripts/seed-dev.js",
-    "test": "node --test test/*.test.js"
+    "backup": "node scripts/backupDatabase.js",
+    "restore": "node scripts/restoreDatabase.js",
+    "verify-restore:construction": "node scripts/verifyRestoreConstructionData.js",
+    "verify-restore:finance-legal": "node scripts/verifyRestoreFinanceLegalData.js",
+    "restore-drill:legal-full": "node scripts/restoreDrill/legalFullDrill.js",
+    "verify-restore:inventory-procurement": "node scripts/verifyRestoreInventoryProcurementData.js",
+    "restore-drill:inventory-full": "node scripts/restoreDrill/inventoryFullDrill.js",
+    "load-test:inventory": "node scripts/withDisposableDb.js -- node scripts/loadTestInventoryProcurement.js",
+    "test:failure-drills:inventory": "node scripts/withDisposableDb.js -- node --test --test-concurrency=1 test/inventory.failureDrills.test.js",
+    "lint": "node scripts/lintRatchet.js",
+    "syntax-check": "find app.js src scripts migrations test -name '*.js' -not -path '*/node_modules/*' -print0 | xargs -0 -n1 -P 4 node --check",
+    "backup:scheduled": "node scripts/scheduledBackup.js",
+    "test": "node --test test/*.test.js test/marco8/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -27,11 +39,14 @@
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
     "prom-client": "^15.1.3",
-    "sequelize": "^6.37.3"
+    "sequelize": "^6.37.3",
+    "sequelize-cli": "^6.6.2"
   },
   "devDependencies": {
-    "nodemon": "^3.1.4",
-    "sequelize-cli": "^6.6.2"
+    "@eslint/js": "^9.39.1",
+    "eslint": "^9.39.1",
+    "globals": "^15.15.0",
+    "nodemon": "^3.1.4"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -1,0 +1,863 @@
+{
+ "commitAntes": "46b0ecb973ce3f97d252a33b9e49ddebb4f38fd1",
+ "metodo": "Worktree temporário do commit 46b0ecb (removido ao final). Os arquivos de teste das frentes F01 a F06 foram copiados do commit final para dentro dele e executados contra o código antigo, com migrations do zero em um Postgres 16 descartável.",
+ "resumo": {
+  "tests": 169,
+  "suites": 0,
+  "pass": 71,
+  "fail": 98,
+  "cancelled": 0,
+  "skipped": 0,
+  "todo": 0,
+  "duration_ms": 42193.211625
+ },
+ "shaLogSaneado": "2b840b363a38bea315bf78712ca53366b6f1f211b10360df494c70bd22cc6ec4",
+ "shaLogOriginal": "12880e9e958ba961925a8aa10ad29f6acfed7f2eb2ab86cdbcf87b528cbeb511",
+ "testes": [
+  {
+   "nome": "INSERT em audit.audit_log é permitido",
+   "status": "pass",
+   "duracaoMs": 37.500375
+  },
+  {
+   "nome": "UPDATE em audit.audit_log é recusado para o runtime",
+   "status": "fail",
+   "duracaoMs": 4.341833
+  },
+  {
+   "nome": "DELETE em audit.audit_log é recusado para o runtime",
+   "status": "fail",
+   "duracaoMs": 2.877917
+  },
+  {
+   "nome": "CI dois tenants (Financeiro): maker cria e pede aprovação, maker NÃO aprova (403), checker aprova",
+   "status": "fail",
+   "duracaoMs": 1484.077292
+  },
+  {
+   "nome": "CI dois tenants (Financeiro): checker com finance:approve NÃO aprova a solicitação que ele mesmo abriu",
+   "status": "fail",
+   "duracaoMs": 26.785875
+  },
+  {
+   "nome": "CI dois tenants (Financeiro): leitura recebe 403 ao criar lançamento e ao pedir aprovação, e consegue listar",
+   "status": "fail",
+   "duracaoMs": 38.332375
+  },
+  {
+   "nome": "CI dois tenants (Financeiro): tenant B não lê o lançamento de A nem decide a aprovação de A (404)",
+   "status": "fail",
+   "duracaoMs": 18.482208
+  },
+  {
+   "nome": "CI dois tenants (Jurídico): maker cria contrato; leitura recebe 403 ao criar e consegue ler",
+   "status": "fail",
+   "duracaoMs": 22.084709
+  },
+  {
+   "nome": "CI dois tenants (Jurídico): tenant B não lê nem altera o contrato de A (404), e o contrato segue intacto",
+   "status": "fail",
+   "duracaoMs": 21.347041
+  },
+  {
+   "nome": "CI dois tenants (Jurídico): condição de cláusula — maker não aprova, checker não aprova a própria, checker aprova a do maker, tenant B não aprova a de A",
+   "status": "fail",
+   "duracaoMs": 21.174209
+  },
+  {
+   "nome": "F06-PAY-01 pular a aprovação: submeter ao banco uma intenção ainda PENDING é recusado",
+   "status": "pass",
+   "duracaoMs": 526.196083
+  },
+  {
+   "nome": "F06-PAY-02 reaproveitar a aprovação de OUTRO lançamento numa intenção é recusado",
+   "status": "pass",
+   "duracaoMs": 17.140125
+  },
+  {
+   "nome": "F06-PAY-03 recuperação após falha DEFINITIVA: nova tentativa confirmada liquida uma vez; replays e confirmação tardia da tentativa rejeitada não duplicam",
+   "status": "pass",
+   "duracaoMs": 42.049
+  },
+  {
+   "nome": "F06-PAY-04 enquanto um pagamento está SUBMITTED (em trânsito no banco), abrir outra intenção para o mesmo lançamento é recusado",
+   "status": "pass",
+   "duracaoMs": 15.161375
+  },
+  {
+   "nome": "F06-PAY-05 resposta INCERTA do banco seguida da confirmação real: o pagamento é registrado no ledger exatamente uma vez",
+   "status": "pass",
+   "duracaoMs": 22.802
+  },
+  {
+   "nome": "F06-PAY-06 depois de uma resposta INCERTA, não se abre um segundo pagamento para o mesmo lançamento",
+   "status": "pass",
+   "duracaoMs": 17.204792
+  },
+  {
+   "nome": "F06-IDOR-01 outra empresa real com legal:read não exporta o dossiê de A pela rota (404) e não deixa rastro na cadeia de custódia",
+   "status": "pass",
+   "duracaoMs": 83.086625
+  },
+  {
+   "nome": "F06-IDOR-02 outra empresa real não lê o relatório de vistoria de A pela rota (404)",
+   "status": "pass",
+   "duracaoMs": 47.282625
+  },
+  {
+   "nome": "F06-IDOR-03 outra empresa real não baixa arquivo de A pela rota de conteúdo (404)",
+   "status": "pass",
+   "duracaoMs": 63.560166
+  },
+  {
+   "nome": "F06-IDOR-04 outra empresa real com finance:read não lê lançamento de A pela rota (404)",
+   "status": "pass",
+   "duracaoMs": 49.427
+  },
+  {
+   "nome": "F06-RBAC-01 perfil da própria empresa SEM a permissão de leitura é barrado (403) no dossiê, no relatório de vistoria e no lançamento",
+   "status": "pass",
+   "duracaoMs": 28.29075
+  },
+  {
+   "nome": "F06-RBAC-02 download de arquivo exige permissão de leitura do módulo dono do arquivo",
+   "status": "fail",
+   "duracaoMs": 99.890125
+  },
+  {
+   "nome": "F06-RBAC-02b arquivo do Estoque exige inventory:read; arquivo sem módulo dono só para uploader ou admin",
+   "status": "fail",
+   "duracaoMs": 65.035958
+  },
+  {
+   "nome": "I2/I3 (uuid): arquivo generic vinculado — só a permissão do módulo dono lê; o uploader deixa de ler",
+   "status": "fail",
+   "duracaoMs": 566.56375
+  },
+  {
+   "nome": "I2/I3 (uuid_array): arquivo generic vinculado — só a permissão do módulo dono lê; o uploader deixa de ler",
+   "status": "fail",
+   "duracaoMs": 102.7405
+  },
+  {
+   "nome": "I2/I3 (jsonb_array): arquivo generic vinculado — só a permissão do módulo dono lê; o uploader deixa de ler",
+   "status": "fail",
+   "duracaoMs": 96.915334
+  },
+  {
+   "nome": "I2/I3 (file_links): arquivo generic vinculado — só a permissão do módulo dono lê; o uploader deixa de ler",
+   "status": "fail",
+   "duracaoMs": 86.004
+  },
+  {
+   "nome": "I2: categoria enviada pelo cliente só vale enquanto o arquivo não tem dono",
+   "status": "fail",
+   "duracaoMs": 36.566084
+  },
+  {
+   "nome": "I1: anexar arquivo de outro módulo nas evidências de um RDO é recusado (sem virar leitura)",
+   "status": "fail",
+   "duracaoMs": 34.642083
+  },
+  {
+   "nome": "I1 (serviço): assertCanAttachFiles aceita quem já lê o arquivo e ignora id inexistente",
+   "status": "fail",
+   "duracaoMs": 8.898125
+  },
+  {
+   "nome": "admin: a role de SISTEMA ADMIN lê arquivo sem dono; uma role criada com o nome \"admin\" não",
+   "status": "fail",
+   "duracaoMs": 17.516833
+  },
+  {
+   "nome": "outra empresa (real, mesmo grupo): arquivo de A não existe para B, mesmo com a permissão do dono",
+   "status": "pass",
+   "duracaoMs": 39.129042
+  },
+  {
+   "nome": "I4: byte do conteúdo cifrado adulterado em disco — a API recusa e registra o incidente",
+   "status": "fail",
+   "duracaoMs": 183.751834
+  },
+  {
+   "nome": "I4: marcador de cifra removido (conteúdo trocado por texto puro) — recusado, não vira \"legado\"",
+   "status": "fail",
+   "duracaoMs": 39.703042
+  },
+  {
+   "nome": "I4: arquivo legado (anterior à cifra) continua legível se íntegro e é recusado se o conteúdo não bate com o checksum",
+   "status": "fail",
+   "duracaoMs": 144.05325
+  },
+  {
+   "nome": "I4: upload novo nasce marcado como cifrado em repouso",
+   "status": "fail",
+   "duracaoMs": 37.609875
+  },
+  {
+   "nome": "I2: cada entityType de file_links mapeado dá só a leitura do próprio módulo; tipo desconhecido fecha",
+   "status": "fail",
+   "duracaoMs": 3.791541
+  },
+  {
+   "nome": "I2: toda referência mapeada existe no banco com o tipo declarado",
+   "status": "pass",
+   "duracaoMs": 62.851542
+  },
+  {
+   "nome": "Financeiro E2E: lançamento -> intenção -> callback sandbox HMAC -> ledger -> extrato -> conciliação -> relatório",
+   "status": "fail",
+   "duracaoMs": 42.217959
+  },
+  {
+   "nome": "F01: condição verdadeira inclui, falsa exclui, sem condição inclui sempre",
+   "status": "pass",
+   "duracaoMs": 79.513875
+  },
+  {
+   "nome": "F01: combinação \"all\" exige todas as regras; \"any\" basta uma",
+   "status": "pass",
+   "duracaoMs": 22.291416
+  },
+  {
+   "nome": "F01: cada operador avalia como esperado (eq, neq, in, not_in, gt, gte, lt, lte, exists)",
+   "status": "pass",
+   "duracaoMs": 0.685666
+  },
+  {
+   "nome": "F01: variável desconhecida, operador desconhecido e valor fora da lista são recusados na gravação",
+   "status": "pass",
+   "duracaoMs": 2.403959
+  },
+  {
+   "nome": "F01: texto livre/executável é recusado — a regra só aceita dado estruturado",
+   "status": "pass",
+   "duracaoMs": 2.180166
+  },
+  {
+   "nome": "F01: ordem das cláusulas incluídas é preservada com cláusula excluída no meio",
+   "status": "pass",
+   "duracaoMs": 25.675167
+  },
+  {
+   "nome": "F01: variável usada pela regra e ausente no contexto é erro, não exclusão silenciosa",
+   "status": "pass",
+   "duracaoMs": 17.451375
+  },
+  {
+   "nome": "F01: condição não aprovada bloqueia a renderização; autor não aprova a própria condição",
+   "status": "pass",
+   "duracaoMs": 13.0875
+  },
+  {
+   "nome": "F01: mudar a condição cria nova versão; a versão anterior e o documento já emitido ficam intactos (hash igual)",
+   "status": "fail",
+   "duracaoMs": 37.027167
+  },
+  {
+   "nome": "F01-G1 (B1): cláusula com condição PENDENTE nunca entra no documento emitido — nem enviando o texto pronto",
+   "status": "fail",
+   "duracaoMs": 420.856667
+  },
+  {
+   "nome": "F01-G2 (B1/B2): a condição é avaliada com os dados do PRÓPRIO contrato — sem garantia exclui a fiança, com fiador ativo inclui",
+   "status": "fail",
+   "duracaoMs": 35.441958
+  },
+  {
+   "nome": "F01-G3 (B2): contexto informado pelo cliente não decide nada — recusado no corpo da geração",
+   "status": "fail",
+   "duracaoMs": 27.558625
+  },
+  {
+   "nome": "F01-G4 (B1): texto do cliente que inclui cláusula de condição falsa é recusado; o mesmo texto do servidor é aceito",
+   "status": "fail",
+   "duracaoMs": 32.47375
+  },
+  {
+   "nome": "F01-G5 (B2): variáveis derivadas do contrato — valor (DECIMAL), prazo, tipo de pessoa e finalidade",
+   "status": "fail",
+   "duracaoMs": 40.894834
+  },
+  {
+   "nome": "F01-G6 (B2): duas modalidades de garantia ativas — a cláusula que depende do tipo de garantia não é decidida às cegas",
+   "status": "fail",
+   "duracaoMs": 33.229083
+  },
+  {
+   "nome": "F01-G7: clauseVersionIds divergente é recusado; sem modelo, clauseVersionIds não pode ser informado",
+   "status": "fail",
+   "duracaoMs": 27.985792
+  },
+  {
+   "nome": "F01-G8 (I1): versão substituída bloqueia o modelo; o upgrade é deliberado e a nova regra só vale depois de aprovada; documento emitido não muda",
+   "status": "fail",
+   "duracaoMs": 32.120583
+  },
+  {
+   "nome": "F01-G9 (I1): cláusula retirada de circulação sai do documento e fica registrada com o motivo",
+   "status": "fail",
+   "duracaoMs": 24.885209
+  },
+  {
+   "nome": "F01-G10 (I3): no BANCO, texto, regra, reativação e autoaprovação são recusados; a aprovação legítima passa",
+   "status": "fail",
+   "duracaoMs": 3.350416
+  },
+  {
+   "nome": "F01-G11 (M1/M2): não aprova versão histórica, nem versão sem autor; segunda aprovação é recusada",
+   "status": "fail",
+   "duracaoMs": 6.01
+  },
+  {
+   "nome": "F01-H1 (HTTP): geração pela rota real monta o documento no servidor e grava contexto e excluídas; contexto no corpo dá 400",
+   "status": "fail",
+   "duracaoMs": 68.801958
+  },
+  {
+   "nome": "F01-H2 (HTTP): aprovação — 403 sem legal:approve, 200 por outro usuário com legal:approve, 404 de outra empresa",
+   "status": "pass",
+   "duracaoMs": 97.684875
+  },
+  {
+   "nome": "M45-F2 comprovante com mesmo SHA-256 (reenvio do arquivo) é recusado em outro lançamento",
+   "status": "fail",
+   "duracaoMs": 103.600917
+  },
+  {
+   "nome": "M45 detachSettlementEvidence: exige motivo, só em lançamento em aberto, audita e libera o comprovante",
+   "status": "fail",
+   "duracaoMs": 26.165375
+  },
+  {
+   "nome": "M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem por conta contábil",
+   "status": "pass",
+   "duracaoMs": 954.362208
+  },
+  {
+   "nome": "M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do snapshot (hash divergente)",
+   "status": "pass",
+   "duracaoMs": 181.356541
+  },
+  {
+   "nome": "M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida o lançamento",
+   "status": "fail",
+   "duracaoMs": 241.966542
+  },
+  {
+   "nome": "M4-16 dinheiro de terceiro exige referência e nunca entra na soma de receita própria",
+   "status": "pass",
+   "duracaoMs": 604.28975
+  },
+  {
+   "nome": "M4-18 createIntercompanyTransfer gera exatamente 2 lançamentos, um em cada empresa, com valores batendo",
+   "status": "fail",
+   "duracaoMs": 114.118042
+  },
+  {
+   "nome": "M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige motivo e libera de novo",
+   "status": "fail",
+   "duracaoMs": 107.8615
+  },
+  {
+   "nome": "M4-20 getWeeklyHealthReport bate com a soma manual dos lançamentos criados no teste",
+   "status": "fail",
+   "duracaoMs": 130.5765
+  },
+  {
+   "nome": "M4-25 replay do mesmo evento em transações distintas não duplica FinancialEntry (idempotencyKey)",
+   "status": "pass",
+   "duracaoMs": 103.221041
+  },
+  {
+   "nome": "M4-25 replay de liquidação não paga duas vezes o mesmo lançamento",
+   "status": "fail",
+   "duracaoMs": 25.213
+  },
+  {
+   "nome": "Marco 4 ponta a ponta via HTTP real: plano de contas -> centros -> lançamento -> listagem -> orçamento -> relatório",
+   "status": "pass",
+   "duracaoMs": 2624.201833
+  },
+  {
+   "nome": "FIN-TS-017 via HTTP: cancelar comissão exige motivo e gera ajuste auditável",
+   "status": "fail",
+   "duracaoMs": 9.31375
+  },
+  {
+   "nome": "Anomaly cases via HTTP: listar e resolver um caso real",
+   "status": "pass",
+   "duracaoMs": 181.211625
+  },
+  {
+   "nome": "FIN-TS-011: POST /finance/period-closures/reopen responde 403 para usuário sem finance:approve",
+   "status": "pass",
+   "duracaoMs": 39.024916
+  },
+  {
+   "nome": "GAP fechado via HTTP: fila de pendências de classificação é listável e resolvível pela rota",
+   "status": "pass",
+   "duracaoMs": 74.909041
+  },
+  {
+   "nome": "GAP fechado via HTTP: autoReconcileSuggestion concilia sozinho um match EXATO, pela rota",
+   "status": "pass",
+   "duracaoMs": 103.351459
+  },
+  {
+   "nome": "GAP fechado via HTTP: histórico de ajustes de comissão é consultável pela rota",
+   "status": "fail",
+   "duracaoMs": 2.823167
+  },
+  {
+   "nome": "GAP fechado via HTTP: composição do repasse de proprietário é consultável pela rota (Caderno §12)",
+   "status": "pass",
+   "duracaoMs": 57.736333
+  },
+  {
+   "nome": "G1: cada subtipo de contrato real (LEASE_RESIDENTIAL/COMMERCIAL/SEASONAL, PROPERTY_ADMIN, SALE_*) é criado via API e tratado como \"lease-like\"/\"sale-like\" corretamente",
+   "status": "pass",
+   "duracaoMs": 153.259958
+  },
+  {
+   "nome": "G1: CONSTRUCTION exige constructionProjectId (não pode nascer \"solto\")",
+   "status": "pass",
+   "duracaoMs": 3.060917
+  },
+  {
+   "nome": "G2: publicar nova versão de cláusula NÃO altera templates/versões de contrato que já usaram a versão anterior",
+   "status": "fail",
+   "duracaoMs": 139.304667
+  },
+  {
+   "nome": "G2: renderTemplate respeita sort_order e ignora cláusula desativada",
+   "status": "pass",
+   "duracaoMs": 132.719
+  },
+  {
+   "nome": "G2: cláusula condicional por regra declarativa entra ou sai do documento conforme o contrato",
+   "status": "pass",
+   "duracaoMs": 48.880625
+  },
+  {
+   "nome": "G3: content_hash é SEMPRE calculado pelo servidor a partir do content real — não existe caminho para o cliente informar um hash divergente",
+   "status": "pass",
+   "duracaoMs": 87.026
+  },
+  {
+   "nome": "G3: criar versão com content vazio/só espaço é rejeitado (não gera \"documento fantasma\" com hash técnico mas sem conteúdo real)",
+   "status": "pass",
+   "duracaoMs": 67.18525
+  },
+  {
+   "nome": "G3: webhook de assinatura (externalSignatureId) duplicado é idempotente — não republica evento nem reprocessa efeito",
+   "status": "pass",
+   "duracaoMs": 196.275666
+  },
+  {
+   "nome": "G3: callback forjado (externalSignatureId inexistente) é rejeitado, não cria nem altera nada",
+   "status": "pass",
+   "duracaoMs": 4.458166
+  },
+  {
+   "nome": "G4: contrato de locação sem requirements gerados manualmente é auto-gerado e cobrado no primeiro gate (fail-closed, não passa por omissão)",
+   "status": "pass",
+   "duracaoMs": 96.583709
+  },
+  {
+   "nome": "G4: satisfyRequirement exige satisfiedByFileId OU waivedReason — nunca aceita um requirement \"fechado\" sem nenhum dos dois",
+   "status": "pass",
+   "duracaoMs": 74.375291
+  },
+  {
+   "nome": "G4: documento REAL (File real, satisfiedByFileId) satisfaz o requirement e libera a transição; WAIVED exige motivo e fica rastreável separadamente de SATISFIED",
+   "status": "pass",
+   "duracaoMs": 148.686208
+  },
+  {
+   "nome": "G5: ciclo completo DRAFT -> DOCUMENTS_PENDING -> LEGAL_REVIEW -> APPROVED -> SIGNING -> SIGNED -> ACTIVE -> SUSPENDED -> ACTIVE -> TERMINATED -> CLOSED é persistido e auditado passo a passo",
+   "status": "pass",
+   "duracaoMs": 268.892291
+  },
+  {
+   "nome": "G5: saltos proibidos continuam bloqueados de ponta a ponta (DRAFT direto para ACTIVE/SIGNED)",
+   "status": "pass",
+   "duracaoMs": 44.634791
+  },
+  {
+   "nome": "G6: assinatura congela a vistoria — item/mídia não podem mais ser alterados depois de qualquer assinatura registrada",
+   "status": "pass",
+   "duracaoMs": 89.507667
+  },
+  {
+   "nome": "G6: duas partes não podem assinar o mesmo papel duas vezes; comparação entrada x saída usa os lados certos e aponta divergências reais",
+   "status": "pass",
+   "duracaoMs": 83.401291
+  },
+  {
+   "nome": "G7: notificação SENSÍVEL (rascunhada por IA) NÃO pode ser aprovada/enviada sem passar por PENDING_REVIEW humano; não sensível pode ir direto",
+   "status": "pass",
+   "duracaoMs": 60.338334
+  },
+  {
+   "nome": "G7: enviar notificação exige evidência de entrega real (deliveryEvidenceFileId) para virar DELIVERED — não aceita \"entregue\" sem comprovante",
+   "status": "pass",
+   "duracaoMs": 42.756542
+  },
+  {
+   "nome": "Marco 5 ponta a ponta via HTTP real: checklist de documentos (JUR-003/JUR-015) -> listar -> dispensar",
+   "status": "pass",
+   "duracaoMs": 558.586958
+  },
+  {
+   "nome": "Marco 5 ponta a ponta via HTTP real: biblioteca de cláusulas (JUR-002) -> criar -> listar -> versionar",
+   "status": "pass",
+   "duracaoMs": 124.706333
+  },
+  {
+   "nome": "F01 via HTTP real: cláusula condicional criada pendente, texto executável recusado, autor não aprova a própria condição",
+   "status": "pass",
+   "duracaoMs": 94.818709
+  },
+  {
+   "nome": "Marco 5 ponta a ponta via HTTP real: notificação formal (seção 13) -> rascunho -> revisão -> aprovar",
+   "status": "pass",
+   "duracaoMs": 156.271375
+  },
+  {
+   "nome": "F02-C1: assertCompetenceOpen recusa competência CLOSED e REVIEW, aceita OPEN e ignora vazios",
+   "status": "fail",
+   "duracaoMs": 1073.732042
+  },
+  {
+   "nome": "F02-C1b: mês fechado não recebe nem perde lançamento em nenhum caminho (criar, editar, baixar, baixa parcial, estornar)",
+   "status": "fail",
+   "duracaoMs": 56.269208
+  },
+  {
+   "nome": "F02-C2: conferência desatualizada em REVIEW — o aprovador devolve para OPEN com motivo, reconfere e o mês fecha",
+   "status": "fail",
+   "duracaoMs": 17.312791
+  },
+  {
+   "nome": "F02-C3: intenção de pagamento enviada ao banco e sem resposta bloqueia o fechamento da competência",
+   "status": "fail",
+   "duracaoMs": 41.315959
+  },
+  {
+   "nome": "F02-C3b: confirmação do banco que chega depois do fechamento liquida no período corrente com aviso POST_CLOSING_BANK_CONFIRMATION",
+   "status": "fail",
+   "duracaoMs": 39.565041
+  },
+  {
+   "nome": "F02-C4a: +500 de caução e −500 de devolução depois da conferência deixam a conferência desatualizada (líquido igual)",
+   "status": "fail",
+   "duracaoMs": 40.686083
+  },
+  {
+   "nome": "F02-C4b: baixa parcial de caução entra no caixa de terceiros e no saldo do fim do mês",
+   "status": "fail",
+   "duracaoMs": 71.89975
+  },
+  {
+   "nome": "F02-C5a: extrato que não cobre o mês inteiro não satisfaz \"extratos importados\"; cobrindo, satisfaz",
+   "status": "fail",
+   "duracaoMs": 43.16475
+  },
+  {
+   "nome": "F02-C5b: movimento de caixa bancário do mês sem conciliação bloqueia, mesmo sem linha de extrato pendente",
+   "status": "fail",
+   "duracaoMs": 63.54375
+  },
+  {
+   "nome": "F02-C6a: quem registrou uma conferência não aprova o fechamento",
+   "status": "fail",
+   "duracaoMs": 29.06675
+  },
+  {
+   "nome": "F02-C6b: limites do mês no fuso de São Paulo — 22h do dia 31 em Brasília é do próprio mês",
+   "status": "fail",
+   "duracaoMs": 0.861458
+  },
+  {
+   "nome": "F02-C6c: snapshot do fechamento recusa TRUNCATE (trigger de instrução no banco)",
+   "status": "fail",
+   "duracaoMs": 4.111083
+  },
+  {
+   "nome": "F02-C6d: aprovação trava a linha do período (FOR UPDATE) — uma segunda aprovação simultânea espera, sem commit",
+   "status": "fail",
+   "duracaoMs": 37.339875
+  },
+  {
+   "nome": "F02-C7 (HTTP): devolver para aberto exige finance:approve, MFA e motivo; o checklist mostra pagamentos em trânsito",
+   "status": "fail",
+   "duracaoMs": 66.081625
+  },
+  {
+   "nome": "F02-1: sem as conferências de caixa de terceiros e de comissões/repasses, o pedido de fechamento é bloqueado",
+   "status": "pass",
+   "duracaoMs": 433.539167
+  },
+  {
+   "nome": "F02-2: conta bancária movimentada no mês sem extrato importado bloqueia o fechamento",
+   "status": "fail",
+   "duracaoMs": 46.732375
+  },
+  {
+   "nome": "F02-3: transação de extrato do mês sem conciliação bloqueia o fechamento",
+   "status": "pass",
+   "duracaoMs": 25.984416
+  },
+  {
+   "nome": "F02-4: excedente aguardando classificação no mês bloqueia o fechamento",
+   "status": "pass",
+   "duracaoMs": 71.296917
+  },
+  {
+   "nome": "F02-5: conferência de caixa de terceiros fica desatualizada se o movimento de terceiros muda depois dela",
+   "status": "fail",
+   "duracaoMs": 69.040375
+  },
+  {
+   "nome": "F02-6: controle positivo — com tudo conferido o período vai a REVIEW, fecha em CLOSED e grava snapshot íntegro",
+   "status": "pass",
+   "duracaoMs": 71.881541
+  },
+  {
+   "nome": "F02-7: o snapshot do fechamento é imutável no banco (UPDATE e DELETE recusados)",
+   "status": "pass",
+   "duracaoMs": 33.758833
+  },
+  {
+   "nome": "F02-8 (HTTP): a rota de fechamento bloqueia sem pré-condições e expõe o checklist — sem gravar fechamento",
+   "status": "fail",
+   "duracaoMs": 75.217917
+  },
+  {
+   "nome": "F03-1: baixa direta de pagamento bancário aprovado, sem comprovante, é recusada e não liquida nada",
+   "status": "pass",
+   "duracaoMs": 91.544167
+  },
+  {
+   "nome": "F03-2: comprovante inexistente ou motivo vazio não servem como exceção",
+   "status": "fail",
+   "duracaoMs": 80.057708
+  },
+  {
+   "nome": "F03-3: exceção formal — baixa manual com comprovante, motivo e aprovação fica marcada como manual, nunca como confirmação bancária",
+   "status": "fail",
+   "duracaoMs": 16.732583
+  },
+  {
+   "nome": "F03-4: baixa manual continua exigindo a aprovação prévia — comprovante não substitui o maker-checker",
+   "status": "pass",
+   "duracaoMs": 15.525375
+  },
+  {
+   "nome": "F03-5: executar manualmente uma intenção aprovada sem passar pelo banco também exige comprovante",
+   "status": "fail",
+   "duracaoMs": 31.163334
+  },
+  {
+   "nome": "F03-6: caminho do banco — só a confirmação efetiva liquida, e fica marcada como BANK_CONFIRMED",
+   "status": "pass",
+   "duracaoMs": 35.182167
+  },
+  {
+   "nome": "F03-7: recebimento sem conta segue direto; pagamento sem conta exige aprovação e comprovante",
+   "status": "fail",
+   "duracaoMs": 18.381958
+  },
+  {
+   "nome": "F03-8 (HTTP): POST /finance/entries/:id/settle recusa sem comprovante e aceita a exceção formal com comprovante",
+   "status": "fail",
+   "duracaoMs": 70.299833
+  },
+  {
+   "nome": "F04-1: devolução e compensação ligadas à origem, contrato e titular, com saldo e trilha",
+   "status": "fail",
+   "duracaoMs": 29.261917
+  },
+  {
+   "nome": "F04-1b: o vínculo com a origem e o titular são imutáveis no BANCO — UPDATE cru é recusado pelo trigger",
+   "status": "pass",
+   "duracaoMs": 30.438417
+  },
+  {
+   "nome": "F04-2: negativos — sem origem, origem inexistente, contrato divergente, titular divergente e valor acima do saldo",
+   "status": "pass",
+   "duracaoMs": 21.323292
+  },
+  {
+   "nome": "F04-3: origem que não é caução recebida (não recebida, ou sem contrato/titular) não pode ser devolvida",
+   "status": "fail",
+   "duracaoMs": 21.05575
+  },
+  {
+   "nome": "F04-4: no recebimento, o titular precisa ser parte do contrato",
+   "status": "pass",
+   "duracaoMs": 6.53125
+  },
+  {
+   "nome": "F04-5 (HTTP): POST /finance/entries recusa devolução de caução sem origem e aceita a vinculada",
+   "status": "pass",
+   "duracaoMs": 50.83575
+  },
+  {
+   "nome": "A1: a conta bancária de um PAYABLE não pode ser removida (era o atalho para liquidar sem controle)",
+   "status": "fail",
+   "duracaoMs": 131.281875
+  },
+  {
+   "nome": "A1: PAYABLE SEM conta não é mais liquidado direto — exige aprovação e comprovante; com eles vira MANUAL_WITH_EVIDENCE",
+   "status": "fail",
+   "duracaoMs": 19.179625
+  },
+  {
+   "nome": "A2: baixa manual com intenção SUBMITTED no banco é recusada",
+   "status": "fail",
+   "duracaoMs": 33.375833
+  },
+  {
+   "nome": "A2: CONFIRMED do banco para lançamento já liquidado vira anomalia (pagamento em dobro), não erro em loop",
+   "status": "fail",
+   "duracaoMs": 25.684542
+  },
+  {
+   "nome": "A3: excedente classificado como PAYABLE vira obrigação PENDENTE (com centro de custo), nunca saída de caixa automática",
+   "status": "fail",
+   "duracaoMs": 40.87825
+  },
+  {
+   "nome": "C1: competência de mês fechado não recebe nem perde lançamento (criação, update atual/novo, classificação)",
+   "status": "fail",
+   "duracaoMs": 26.154584
+  },
+  {
+   "nome": "A4: comprovante informado só na baixa (sem anexar antes da aprovação) é recusado",
+   "status": "fail",
+   "duracaoMs": 34.490583
+  },
+  {
+   "nome": "A4: anexar o comprovante invalida a aprovação anterior — aprovação precisa vir depois",
+   "status": "fail",
+   "duracaoMs": 17.201042
+  },
+  {
+   "nome": "A4: o mesmo comprovante não serve para duas baixas; comprovante precisa ser PDF ou imagem",
+   "status": "fail",
+   "duracaoMs": 13.498708
+  },
+  {
+   "nome": "A4: quem anexou o comprovante não pode ser quem aprovou a baixa manual",
+   "status": "fail",
+   "duracaoMs": 8.32375
+  },
+  {
+   "nome": "A4: execução manual de intenção aprovada ANTES do comprovante é recusada",
+   "status": "fail",
+   "duracaoMs": 16.108375
+  },
+  {
+   "nome": "B1: erro/timeout na chamada ao banco deixa a intenção SUBMITTING (incerta) — nunca FAILED, nunca libera outra intenção",
+   "status": "fail",
+   "duracaoMs": 0.509416
+  },
+  {
+   "nome": "B1: o adapter real envia a chave de idempotência ao provedor",
+   "status": "fail",
+   "duracaoMs": 2.368875
+  },
+  {
+   "nome": "B2: ERROR é transitório (continua SUBMITTED); RETURNED depois de pago vira anomalia; resolver incerteza só com resposta final do banco",
+   "status": "fail",
+   "duracaoMs": 0.315667
+  },
+  {
+   "nome": "B4: CONFIRMED depois de FAILED abre anomalia (dinheiro pode ter saído duas vezes)",
+   "status": "fail",
+   "duracaoMs": 21.135709
+  },
+  {
+   "nome": "B5: confirmação via sandbox é SANDBOX_CONFIRMED; Santander incompleto falha fechado; sandbox proibido em produção",
+   "status": "fail",
+   "duracaoMs": 21.103375
+  },
+  {
+   "nome": "B5: webhook bancário exige assinatura HMAC também em sandbox (sem segredo configurado, falha fechado)",
+   "status": "fail",
+   "duracaoMs": 10.196667
+  },
+  {
+   "nome": "B6: confirmação do banco não é recusada por controle de pré-pagamento (revisão manual posterior) — liquida e abre anomalia",
+   "status": "fail",
+   "duracaoMs": 17.6905
+  },
+  {
+   "nome": "D1: estornar o recebimento da caução com devolução ativa é bloqueado",
+   "status": "fail",
+   "duracaoMs": 26.891
+  },
+  {
+   "nome": "D2: caução sem contrato/titular é recusada; titular precisa ser locatário/comprador/fiador",
+   "status": "fail",
+   "duracaoMs": 8.044208
+  },
+  {
+   "nome": "D3: baixa parcial da caução mantém a marca de terceiro; evento de saída só na liquidação",
+   "status": "fail",
+   "duracaoMs": 10.870708
+  },
+  {
+   "nome": "D3: compensação aponta a dívida do titular, exige aprovação, não move caixa e abate a dívida",
+   "status": "fail",
+   "duracaoMs": 16.66075
+  },
+  {
+   "nome": "E1: solicitação de aprovação recusa tipo inventado e entidade inexistente",
+   "status": "fail",
+   "duracaoMs": 4.124958
+  },
+  {
+   "nome": "B3: duas criações SIMULTÂNEAS de intenção para o mesmo lançamento — a 2ª espera o lock; o índice único barra a duplicata",
+   "status": "fail",
+   "duracaoMs": 13.862916
+  },
+  {
+   "nome": "D4: duas devoluções SIMULTÂNEAS da mesma caução — a 2ª espera o lock da origem; juntas não passam do saldo",
+   "status": "pass",
+   "duracaoMs": 1546.998458
+  },
+  {
+   "nome": "/private/tmp/wt-46b0ecb/test/nayaraConferencia1810.payments.test.js",
+   "status": "fail",
+   "duracaoMs": 0.244333
+  },
+  {
+   "nome": "Repasses §12: GAP CORRIGIDO — um segundo repasse NÃO pode reutilizar o saldo já consumido pelo primeiro repasse sobre o mesmo recebimento",
+   "status": "pass",
+   "duracaoMs": 81.557916
+  },
+  {
+   "nome": "Repasses §12: GAP CORRIGIDO — repasse parcial consome só a fração usada, deixando o restante disponível para um segundo repasse legítimo",
+   "status": "pass",
+   "duracaoMs": 31.866583
+  },
+  {
+   "nome": "Repasses §12: um repasse CANCELLED devolve o saldo do recebimento para um novo repasse legítimo",
+   "status": "pass",
+   "duracaoMs": 21.645584
+  },
+  {
+   "nome": "Caução §13: receber caução vinculada ao contrato, excluída do caixa livre, e devolver com referência rastreável ao mesmo contrato",
+   "status": "fail",
+   "duracaoMs": 26.393667
+  },
+  {
+   "nome": "Caução §13: devolução sem vínculo com a caução recebida, ou com contrato diferente, é recusada",
+   "status": "pass",
+   "duracaoMs": 13.782958
+  }
+ ]
+}

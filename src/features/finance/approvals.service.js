@@ -41,14 +41,71 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
     throw AppError.badRequest(`O campo "riskLevel" deve ser um de: ${RISK_LEVELS.join(', ')}.`, 'FINANCE_APPROVAL_VALIDATION');
   }
 
-  const existingPending = await ApprovalRequest.findOne({
+  // E1 (revisão independente, conferência 18/10/2026): a fila aceitava qualquer tipo e qualquer
+  // id — inclusive entidade de outra empresa ou inexistente — criando pedidos órfãos. Agora o
+  // tipo precisa ser um dos aprováveis e a entidade precisa existir NESTA empresa (a busca roda
+  // sob o RLS do tenant, então uma entidade de outra empresa simplesmente não é encontrada).
+  const RelatedModel = ENTITY_MODELS[relatedEntityType];
+  if (!RelatedModel) {
+    throw AppError.badRequest(
+      `O campo "relatedEntityType" deve ser um de: ${Object.keys(ENTITY_MODELS).join(', ')}.`,
+      'FINANCE_APPROVAL_VALIDATION'
+    );
+  }
+  const relatedEntityForCheck = await RelatedModel.findOne({ where: { id: relatedEntityId, companyId }, transaction });
+  if (!relatedEntityForCheck) {
+    throw AppError.notFound(
+      'A entidade a ser aprovada não foi encontrada nesta empresa.',
+      'FINANCE_APPROVAL_RELATED_ENTITY_NOT_FOUND'
+    );
+  }
+
+  let existingPending = await ApprovalRequest.findOne({
     where: { relatedEntityType, relatedEntityId, status: 'PENDING' },
     transaction,
   });
+  // R2 (reconferência 20/10/2026): um pedido pendente cujo lançamento mudou depois dele (versão
+  // diferente do retrato) não pode travar um novo pedido — vira STALE e libera o novo.
+  if (existingPending && existingPending.lockVersionAtRequest !== null && existingPending.lockVersionAtRequest !== undefined
+      && 'lockVersion' in relatedEntityForCheck.dataValues
+      && Number(existingPending.lockVersionAtRequest) !== Number(relatedEntityForCheck.lockVersion)) {
+    const before = existingPending.toJSON();
+    existingPending.status = 'STALE';
+    existingPending.updatedBy = actorUserId || null;
+    await existingPending.save({ transaction });
+    await registrarAuditoria(
+      {
+        groupId,
+        companyId,
+        actorUserId,
+        action: 'finance.approval_request.stale',
+        entityType: 'ApprovalRequest',
+        entityId: existingPending.id,
+        beforeJson: before,
+        afterJson: existingPending.toJSON(),
+        reason: 'Invalidada: o lançamento foi alterado depois do pedido.',
+      },
+      transaction
+    );
+    existingPending = null;
+  }
   if (existingPending) {
     throw AppError.conflict('Já existe uma solicitação de aprovação pendente para esta entidade.', 'FINANCE_APPROVAL_ALREADY_PENDING', {
       existingId: existingPending.id,
     });
+  }
+
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A10, 15/10/2026): o snapshot de
+  // versão precisa ser capturado AQUI, no servidor, no momento da solicitação — nunca confiado
+  // do que o decisor manda depois (um cliente mal-intencionado ou desatualizado podia omitir
+  // `expectedLockVersion` na decisão e pular a checagem de staleness inteira).
+  let lockVersionAtRequest = null;
+  const RequestModel = ENTITY_MODELS[relatedEntityType];
+  if (RequestModel) {
+    const relatedEntity = await RequestModel.findByPk(relatedEntityId, { transaction });
+    if (relatedEntity && 'lockVersion' in relatedEntity.dataValues) {
+      lockVersionAtRequest = Number(relatedEntity.lockVersion);
+    }
   }
 
   const approvalRequest = await ApprovalRequest.create(
@@ -60,6 +117,7 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
       requestedByUserId: actorUserId,
       status: 'PENDING',
       riskLevel: normalizedRisk,
+      lockVersionAtRequest,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -85,12 +143,96 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
   return approvalRequest;
 }
 
+// ACHADO REAL (auditoria Nayara, rodada 4, 14/10/2026, M4-R01): a tela de Aprovações só exibia
+// "Lançamento — <id curto>" (sem a descrição real) porque `approval_requests` é polimórfico e a
+// listagem nunca resolvia a entidade relacionada — isso também quebrava a busca por texto, que
+// filtrava sobre esse mesmo rótulo genérico. `relatedEntityLabel` resolve a descrição real da
+// entidade (quando existir um campo apropriado) para cada request da página atual, em lotes por
+// tipo (evita N+1 query por item).
+// ACHADO REAL #2 (verificação complementar Nayara, 14/10/2026): a correção acima ainda deixava
+// alguns itens só com o ID cru. Causa raiz: `FinancialEntry.description` é opcional
+// (`allowNull: true`) — um lançamento criado sem descrição tinha `row.description` null, e o
+// label virava null, caindo no fallback de ID cru no front (`lib/finance/labels.js`). O mesmo
+// acontecia pra qualquer entidade não encontrada (apagada) ou tipo fora de `ENTITY_MODELS`.
+// `buildFallbackLabel` garante que SEMPRE existe um texto legível em português — nunca null —
+// usando os campos que toda entidade conhecida tem (nature/amount/dueAt pra FinancialEntry,
+// criado-em pra qualquer coisa não mapeada).
+const NATURE_LABELS = {
+  PAYABLE: 'Despesa',
+  RECEIVABLE: 'Receita',
+  TRANSFER: 'Transferência',
+  ADJUSTMENT: 'Ajuste',
+  PENDING_CLASSIFICATION: 'A classificar',
+};
+
+function formatBrDate(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+}
+
+function formatBrAmount(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (Number.isNaN(n)) return null;
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function buildFallbackLabel(request) {
+  const createdAt = formatBrDate(request.createdAt || request.created_at);
+  return createdAt ? `Solicitação criada em ${createdAt}` : 'Solicitação de aprovação';
+}
+
+async function resolveRelatedEntityLabels(requests, transaction) {
+  const byType = {};
+  requests.forEach((r) => {
+    if (!byType[r.relatedEntityType]) byType[r.relatedEntityType] = new Set();
+    byType[r.relatedEntityType].add(r.relatedEntityId);
+  });
+
+  const labelsByTypeAndId = {};
+  await Promise.all(
+    Object.entries(byType).map(async ([type, idSet]) => {
+      const Model = ENTITY_MODELS[type];
+      if (!Model) return;
+      const ids = Array.from(idSet);
+      const rows = await Model.findAll({ where: { id: ids }, transaction });
+      labelsByTypeAndId[type] = {};
+      rows.forEach((row) => {
+        let label = null;
+        if (type === 'FinancialEntry') {
+          const natureLabel = NATURE_LABELS[row.nature] || row.nature || 'Lançamento';
+          const amountLabel = formatBrAmount(row.amount);
+          const dueLabel = formatBrDate(row.dueAt);
+          label =
+            row.description ||
+            [natureLabel, amountLabel ? `R$ ${amountLabel}` : null, dueLabel ? `venc. ${dueLabel}` : null]
+              .filter(Boolean)
+              .join(' · ');
+        } else if (type === 'BankAccount') label = row.pixKey ? `Chave PIX — ${row.pixKey}` : `${row.bankCode || 'Banco'} · Ag. ${row.agency || '—'} · Conta ${row.accountNumber || '—'}`;
+        else if (type === 'Commission') label = `Comissão — ${row.percentage}% sobre ${row.baseAmount}`;
+        else if (type === 'CommissionInstallment') label = `Parcela de comissão — ${row.amount || ''}`.trim();
+        else if (type === 'OwnerRepass') label = `Repasse — ${row.referenceMonth || ''} · R$ ${row.netAmount || ''}`.trim();
+        labelsByTypeAndId[type][row.id] = label || null;
+      });
+    })
+  );
+
+  return requests.map((r) => {
+    const label = labelsByTypeAndId[r.relatedEntityType]?.[r.relatedEntityId] || buildFallbackLabel(r);
+    const json = r.toJSON ? r.toJSON() : r;
+    return { ...json, relatedEntityLabel: label };
+  });
+}
+
 async function listApprovalRequests(transaction, filters = {}) {
   const where = {};
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.relatedEntityType) where.relatedEntityType = filters.relatedEntityType;
   if (filters.relatedEntityId) where.relatedEntityId = filters.relatedEntityId;
-  return ApprovalRequest.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  const requests = await ApprovalRequest.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return resolveRelatedEntityLabels(requests, transaction);
 }
 
 async function getApprovalRequest(id, transaction) {
@@ -113,6 +255,12 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
   }
 
   const approvalRequest = await getApprovalRequest(approvalRequestId, transaction);
+  if (approvalRequest.status === 'STALE') {
+    throw AppError.conflict(
+      'Invalidada: o lançamento foi alterado depois do pedido; peça a aprovação de novo.',
+      'FINANCE_APPROVAL_STALE'
+    );
+  }
   if (approvalRequest.status !== 'PENDING') {
     throw AppError.conflict(`Esta solicitação já foi decidida (status "${approvalRequest.status}").`, 'FINANCE_APPROVAL_ALREADY_DECIDED');
   }
@@ -135,15 +283,33 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
     await assertRecentMfa(approverUserId, transaction);
   }
 
-  if (expectedLockVersion !== undefined) {
-    const Model = ENTITY_MODELS[approvalRequest.relatedEntityType];
-    if (Model) {
-      const entity = await Model.findByPk(approvalRequest.relatedEntityId, { transaction });
-      if (entity && 'lockVersion' in entity.dataValues && Number(entity.lockVersion) !== Number(expectedLockVersion)) {
-        throw AppError.conflict(
-          'A entidade relacionada foi alterada desde que esta solicitação foi revisada — aprovação recusada por segurança (dado desatualizado).',
-          'FINANCE_APPROVAL_STALE'
-        );
+  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A10, 15/10/2026): a validação de
+  // staleness ERA condicional a `expectedLockVersion !== undefined` — um cliente que omitisse
+  // esse campo (de propósito ou não) pulava a checagem inteira, mesmo que a entidade tivesse
+  // mudado de verdade desde a solicitação. Agora a checagem usa o snapshot CAPTURADO NO
+  // SERVIDOR (`approvalRequest.lockVersionAtRequest`, gravado em createApprovalRequest) e roda
+  // SEMPRE que esse snapshot existir — fail closed, nunca dispensável pelo payload do decisor.
+  // `expectedLockVersion`, se enviado pelo cliente, ainda precisa bater com o valor ATUAL
+  // também (defesa em profundidade, mesmo UI que já viu uma versão mais recente que a
+  // solicitação original não pode aprovar sem recarregar).
+  const RelatedModel = ENTITY_MODELS[approvalRequest.relatedEntityType];
+  if (RelatedModel) {
+    const entity = await RelatedModel.findByPk(approvalRequest.relatedEntityId, { transaction });
+    if (entity && 'lockVersion' in entity.dataValues) {
+      const currentLockVersion = Number(entity.lockVersion);
+      const staleAgainstSnapshot =
+        approvalRequest.lockVersionAtRequest !== null &&
+        approvalRequest.lockVersionAtRequest !== undefined &&
+        Number(approvalRequest.lockVersionAtRequest) !== currentLockVersion;
+      const staleAgainstClientValue = expectedLockVersion !== undefined && Number(expectedLockVersion) !== currentLockVersion;
+      if (staleAgainstSnapshot || staleAgainstClientValue) {
+        // R2: rejeitar um pedido desatualizado é sempre permitido (nunca fica sem saída).
+        if (normalizedDecision !== 'REJECTED') {
+          throw AppError.conflict(
+            'O lançamento foi alterado depois do pedido de aprovação; peça a aprovação de novo.',
+            'FINANCE_APPROVAL_STALE'
+          );
+        }
       }
     }
   }
@@ -223,12 +389,74 @@ async function isApprovalRequestApproved(relatedEntityType, relatedEntityId, tra
   return Boolean(approvalRequest);
 }
 
+/**
+ * listApprovedDeciders — quem decidiu (APPROVED) as solicitações ainda válidas (não STALE) de
+ * uma entidade. Usado pela baixa manual com comprovante (F03/A4): quem anexou o comprovante não
+ * pode ser quem aprovou a exceção.
+ */
+async function listApprovedDeciders(relatedEntityType, relatedEntityId, transaction) {
+  const approved = await ApprovalRequest.findAll({
+    where: { relatedEntityType, relatedEntityId, status: 'APPROVED' },
+    transaction,
+  });
+  if (approved.length === 0) return [];
+  const steps = await ApprovalStep.findAll({
+    where: { approvalRequestId: approved.map((r) => r.id), decision: 'APPROVED' },
+    transaction,
+  });
+  return steps.map((s) => s.approverUserId).filter(Boolean);
+}
+
+/**
+ * markApprovalRequestsStale — BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 —
+ * variante do A10): a decisão já validava staleness (decideApprovalStep,
+ * FINANCE_APPROVAL_STALE), mas uma ApprovalRequest já APPROVED sobre a versão 1 do lançamento
+ * continuava valendo depois que ele mudava pra versão 2. "Alteração após aprovação deve
+ * invalidar efetivamente a decisão" (FIN-005).
+ *
+ * O ponto de invalidação é a EDIÇÃO do usuário (updateFinancialEntry), não uma comparação de
+ * lockVersion no consumo: a própria liquidação parcial incrementa o lockVersion do lançamento
+ * (optimistic locking do Sequelize) e uma comparação crua no consumo invalidaria a aprovação
+ * no meio de um fluxo de baixas parciais legítimo (provado por ADV-F21). Edição real do
+ * usuário → todas as aprovações APPROVED viram STALE (nunca mais contam em
+ * isApprovalRequestApproved); uma nova rodada de revisão sobre a versão atual volta a liberar.
+ */
+async function markApprovalRequestsStale(relatedEntityType, relatedEntityId, reason, actorUserId, transaction) {
+  const approvedRequests = await ApprovalRequest.findAll({
+    where: { relatedEntityType, relatedEntityId, status: ['APPROVED', 'PENDING'] },
+    transaction,
+  });
+  for (const request of approvedRequests) {
+    const beforeJson = request.toJSON();
+    request.status = 'STALE';
+    request.updatedBy = actorUserId || null;
+    await request.save({ transaction });
+    await registrarAuditoria(
+      {
+        groupId: request.groupId,
+        companyId: request.companyId,
+        actorUserId,
+        action: 'finance.approval_request.stale',
+        entityType: 'ApprovalRequest',
+        entityId: request.id,
+        beforeJson,
+        afterJson: request.toJSON(),
+        reason,
+      },
+      transaction
+    );
+  }
+  return approvedRequests.length;
+}
+
 module.exports = {
   createApprovalRequest,
   listApprovalRequests,
   getApprovalRequest,
   decideApprovalStep,
   isApprovalRequestApproved,
+  listApprovedDeciders,
+  markApprovalRequestsStale,
   RISK_LEVELS,
   REQUIRED_STEPS_BY_RISK,
 };

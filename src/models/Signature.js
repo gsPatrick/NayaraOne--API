@@ -59,6 +59,11 @@ module.exports = (sequelize) => {
         field: 'provider_envelope_id',
         comment: "ID do envelope/documento no provedor — compartilhado por todos os signatários da mesma versão de contrato, usado para consultar status/cancelar no provedor real.",
       },
+      // M45 (Caderno M5 §8): método, evidência da assinatura manual, quem coletou e o hash da versão.
+      signatureMethod: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'ELECTRONIC', field: 'signature_method' },
+      evidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_file_id' },
+      collectedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'collected_by_user_id' },
+      contentHash: { type: DataTypes.STRING(128), allowNull: true, field: 'content_hash' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

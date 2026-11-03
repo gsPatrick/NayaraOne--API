@@ -1,0 +1,116 @@
+# Drill de restore — Estoque / Compras / Seguros / Patrimônio (Marco 7)
+Data: 2026-10-28T15:56:50.247Z
+Commit da API: 4c5e50e79e69209376222c3a09fe769cce7c6911 (com alterações locais não commitadas)
+PostgreSQL: postgres (PostgreSQL) 17.11 (Homebrew)
+
+### 1. Cluster de ORIGEM descartável (porta 5560)
+  role nayara_runtime NOSUPERUSER/NOBYPASSRLS; 324 migrations; seeds base; GRANT em 14 schemas.
+
+### 2. Fixtures pelos serviços reais (role de runtime, RLS real)
+  fixtures: 2 itens, 2 locais, 5 movimentos manuais + requisição entregue, pedido 81b3c5c9 com 2 recebimentos (divergências: OVER_RECEIPT, PRICE_MISMATCH), apólice ACTIVE, 2 ativos; complemento: 3 empréstimos (1 aberto, 2 devolvidos), OS OPEN, perdas (OPEN + APPROVED), 2 contagens (COMPLETED com 2 divergência(s) + OPEN), proposta de ajuste PENDING, 3 sinistros (OPEN, SUBMITTED, SETTLED), 4 anexos.
+
+### 3. Backup com o script real (npm run backup → pg_dump -Fc)
+  Backup gerado com sucesso: <tmp>/backup/drill_source_2026-10-28T15-56-59-572Z.dump (1.03 MB)
+  Backup do storage gerado: 5 arquivo(s) em <tmp>/backup/storage (manifest.json com SHA-256 por arquivo).
+
+### 4. Cluster de DESTINO novo (porta 5561) + restore pelo runbook
+  Restore concluído em "drill_target" a partir de <tmp>/backup/drill_source_2026-10-28T15-56-59-572Z.dump
+  storage de anexos (scripts/restoreStorage.js, diretório novo): Restore do storage concluído: 5/5 arquivo(s) conferidos contra o manifesto em <tmp>/uploads-target.
+
+### 5. Verificação pós-restore (scripts/verifyRestoreInventoryProcurementData.js)
+[A] Invariantes — origem
+  ✅ origem: saldo por item/local = soma dos movimentos do ledger — 3 saldos (soma 289.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0
+  ✅ origem: nenhum saldo negativo — 0 negativo(s)
+  ✅ origem: sem duplicidade (idempotência de movimento/recebimento, NF por empresa) — movimentos 0, recebimentos 0, NF 0
+  ✅ origem: recebido por item de pedido = soma dos itens de recebimento (excedente só depois de aceito) — 2 itens de pedido, 0 divergente(s)
+  ✅ origem: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro — 2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0
+  ✅ origem: divergências ligadas a itens de recebimento existentes — 2 divergência(s), 2 aberta(s), 0 órfã(s)
+  ✅ origem: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor — 1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0
+  ✅ origem: ativos de patrimônio com local/item existentes — 5 ativo(s), valor de aquisição total 9281.60
+  ✅ origem: empréstimos — aberto tem responsável, destino e prazo e o ativo está emprestado; devolvido tem data e condição — 3 empréstimo(s), 1 aberto(s); sem responsável/prazo 0, ativo fora de empréstimo 0, devolvido incompleto 0, sem ativo 0
+  ✅ origem: ordens de manutenção — ligadas a ativo existente; aberta mantém o ativo em manutenção; origem = devolução danificada do mesmo ativo — 1 ordem(ns), 1 aberta(s); sem ativo 0, ativo fora de manutenção 0, origem inválida 0
+  ✅ origem: perdas — em análise não baixou saldo; aprovada tem o movimento LOSS da mesma quantidade; toda perda tem arquivo de evidência existente — 2 caso(s): 1 em análise, 1 aprovado(s); em análise que baixou saldo 0, aprovada sem movimento correto 0, evidência ausente 0
+  ✅ origem: contagens — fechada tem esperado/divergência coerentes e não alterou saldo sem ajuste aprovado; aberta não tem ajuste — 2 contagem(ns) (1 fechada(s), 1 aberta(s)), 3 item(ns), 2 com divergência; incoerentes 0, saldo alterado sem ajuste 0, aberta com ajuste 0
+  ✅ origem: propostas de ajuste — pendente não moveu saldo; aprovada tem o movimento — 1 proposta(s), 1 pendente(s); pendente que moveu saldo 0, aprovada sem movimento 0
+  ✅ origem: sinistros — liquidado tem lançamento no Financeiro do mesmo valor (a receber); submetido tem envio; todo sinistro tem evento de abertura — 3 sinistro(s): 1 aberto(s), 1 submetido(s), 1 liquidado(s); liquidado sem lançamento correto 0, lançamento sem liquidar 0, submetido sem envio 0, sem evento de abertura 0, liquidado sem evento 0
+
+[A] Invariantes — destino
+  ✅ destino: saldo por item/local = soma dos movimentos do ledger — 3 saldos (soma 289.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0
+  ✅ destino: nenhum saldo negativo — 0 negativo(s)
+  ✅ destino: sem duplicidade (idempotência de movimento/recebimento, NF por empresa) — movimentos 0, recebimentos 0, NF 0
+  ✅ destino: recebido por item de pedido = soma dos itens de recebimento (excedente só depois de aceito) — 2 itens de pedido, 0 divergente(s)
+  ✅ destino: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro — 2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0
+  ✅ destino: divergências ligadas a itens de recebimento existentes — 2 divergência(s), 2 aberta(s), 0 órfã(s)
+  ✅ destino: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor — 1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0
+  ✅ destino: ativos de patrimônio com local/item existentes — 5 ativo(s), valor de aquisição total 9281.60
+  ✅ destino: empréstimos — aberto tem responsável, destino e prazo e o ativo está emprestado; devolvido tem data e condição — 3 empréstimo(s), 1 aberto(s); sem responsável/prazo 0, ativo fora de empréstimo 0, devolvido incompleto 0, sem ativo 0
+  ✅ destino: ordens de manutenção — ligadas a ativo existente; aberta mantém o ativo em manutenção; origem = devolução danificada do mesmo ativo — 1 ordem(ns), 1 aberta(s); sem ativo 0, ativo fora de manutenção 0, origem inválida 0
+  ✅ destino: perdas — em análise não baixou saldo; aprovada tem o movimento LOSS da mesma quantidade; toda perda tem arquivo de evidência existente — 2 caso(s): 1 em análise, 1 aprovado(s); em análise que baixou saldo 0, aprovada sem movimento correto 0, evidência ausente 0
+  ✅ destino: contagens — fechada tem esperado/divergência coerentes e não alterou saldo sem ajuste aprovado; aberta não tem ajuste — 2 contagem(ns) (1 fechada(s), 1 aberta(s)), 3 item(ns), 2 com divergência; incoerentes 0, saldo alterado sem ajuste 0, aberta com ajuste 0
+  ✅ destino: propostas de ajuste — pendente não moveu saldo; aprovada tem o movimento — 1 proposta(s), 1 pendente(s); pendente que moveu saldo 0, aprovada sem movimento 0
+  ✅ destino: sinistros — liquidado tem lançamento no Financeiro do mesmo valor (a receber); submetido tem envio; todo sinistro tem evento de abertura — 3 sinistro(s): 1 aberto(s), 1 submetido(s), 1 liquidado(s); liquidado sem lançamento correto 0, lançamento sem liquidar 0, submetido sem envio 0, sem evento de abertura 0, liquidado sem evento 0
+
+[B] Origem × destino (contagem + SHA-256 do conteúdo, tabelas inventory.* e procurement.*)
+  ✅ 36 tabelas idênticas na origem e no destino — 74 linhas no total
+
+[E] Evidência complementar — origem × destino (contagem > 0 e SHA-256 do conteúdo)
+  ✅ inventory.tool_loans: 3 linha(s) na origem e no destino, conteúdo idêntico — origem 3 (48f49e68947a…), destino 3 (48f49e68947a…)
+  ✅ inventory.maintenance_orders: 1 linha(s) na origem e no destino, conteúdo idêntico — origem 1 (a7af95c6ae0f…), destino 1 (a7af95c6ae0f…)
+  ✅ inventory.loss_cases: 2 linha(s) na origem e no destino, conteúdo idêntico — origem 2 (af4c6432a8e0…), destino 2 (af4c6432a8e0…)
+  ✅ inventory.counts: 2 linha(s) na origem e no destino, conteúdo idêntico — origem 2 (ef6de444edc5…), destino 2 (ef6de444edc5…)
+  ✅ inventory.count_items: 3 linha(s) na origem e no destino, conteúdo idêntico — origem 3 (9d3c66005a64…), destino 3 (9d3c66005a64…)
+  ✅ inventory.adjustment_proposals: 1 linha(s) na origem e no destino, conteúdo idêntico — origem 1 (ed5d75620617…), destino 1 (ed5d75620617…)
+  ✅ procurement.insurance_claims: 3 linha(s) na origem e no destino, conteúdo idêntico — origem 3 (769169bb2c1f…), destino 3 (769169bb2c1f…)
+  ✅ procurement.insurance_claim_events: 6 linha(s) na origem e no destino, conteúdo idêntico — origem 6 (e8f44b5dd3d8…), destino 6 (e8f44b5dd3d8…)
+  ✅ procurement.insurance_provider_submissions (sinistros): 2 linha(s) na origem e no destino, conteúdo idêntico — origem 2 (76108899470c…), destino 2 (76108899470c…)
+  ✅ finance.financial_entries (indenizações de sinistro): 1 linha(s) na origem e no destino, conteúdo idêntico — origem 1 (64588b8a6591…), destino 1 (64588b8a6591…)
+  ✅ procurement.supplier_qualifications: 1 linha(s) na origem e no destino, conteúdo idêntico — origem 1 (9d1f07196836…), destino 1 (9d1f07196836…)
+  ✅ people.files (anexos do Marco 7): 5 linha(s) na origem e no destino, conteúdo idêntico — origem 5 (628ee284599c…), destino 5 (628ee284599c…)
+  ✅ people.file_links (anexos do Marco 7): 2 linha(s) na origem e no destino, conteúdo idêntico — origem 2 (174a14d16d95…), destino 2 (174a14d16d95…)
+
+[F] Anexos vinculados aos registros do Marco 7 (abertos no storage restaurado)
+  ✅ 5 anexo(s) vinculados (sinistro/apólice, qualificação de fornecedor, perda, movimento) abertos no storage restaurado, com SHA-256 e tamanho iguais ao cadastro — 5/5 conferem; vínculos: sinistro/apólice, qualificação de fornecedor, perda, movimento
+  ✅ cadastro dos anexos (people.files) idêntico na origem e no destino — 5 arquivo(s)
+  ✅ todo vínculo de anexo aponta para um arquivo existente — 6 vínculo(s), 0 órfão(s)
+  ✅ sem a chave, com chave errada e com blob adulterado o anexo NÃO abre — sem chave: FILES_CRYPTO_CONFIG_MISSING; chave errada: Error; adulterado: Error
+
+[C] RLS no destino com a role de runtime
+  ✅ role de runtime sem SUPERUSER/BYPASSRLS — superuser=false bypassrls=false
+  ✅ sem contexto de tenant a role de runtime não vê nenhum saldo — 0 linha(s) visíveis
+  ✅ com o SET LOCAL do tenant vê os saldos restaurados — 3 de 3
+
+[D] Fixtures do drill no destino
+  ✅ pedido de compra restaurado — status OPEN
+  ✅ 2 recebimentos confirmados com payable — 2 recebimentos, 2 payables
+  ✅ divergências do recebimento restauradas — OVER_RECEIPT, PRICE_MISMATCH
+  ✅ requisição de material restaurada — status ISSUED
+  ✅ apólice e parcelas restauradas — ACTIVE, 1 parcela(s)
+  ✅ ativos de patrimônio restaurados — 2/2
+  ✅ empréstimos restaurados: 1 aberto, 1 devolvido OK, 1 devolvido danificado — OPEN/-, RETURNED/OK, RETURNED/DAMAGED
+  ✅ ordem de manutenção aberta pela devolução danificada restaurada — OPEN, empréstimo de origem confere
+  ✅ casos de perda restaurados: 1 em análise sem movimento, 1 aprovado com o movimento LOSS — OPEN / APPROVED
+  ✅ contagens restauradas: 1 fechada com divergência, 1 aberta; proposta de ajuste pendente — 2 item(ns) divergente(s)
+  ✅ sinistros restaurados: aberto, submetido e liquidado com o lançamento do Financeiro — OPEN, SUBMITTED, SETTLED
+
+Resultado: 60/60 checagens OK.
+
+### 6. Prova negativa: adultera 1 saldo no destino (+1 unidade) e roda a verificação de novo
+  ❌ destino: saldo por item/local = soma dos movimentos do ledger — 3 saldos (soma 290.250000); divergentes 1, ledger sem saldo 0, saldo sem ledger 0
+  ❌ 36 tabelas idênticas na origem e no destino — diferentes: inventory.stock_balances
+  → adulteração DETECTADA ✅ (verificação saiu com erro)
+
+### 6b. Prova negativa da evidência complementar: adultera o valor liquidado do sinistro e a divergência de uma contagem no destino
+  ❌ destino: saldo por item/local = soma dos movimentos do ledger — 3 saldos (soma 290.250000); divergentes 1, ledger sem saldo 0, saldo sem ledger 0
+  ❌ destino: contagens — fechada tem esperado/divergência coerentes e não alterou saldo sem ajuste aprovado; aberta não tem ajuste — 2 contagem(ns) (1 fechada(s), 1 aberta(s)), 3 item(ns), 2 com divergência; incoerentes 1, saldo alterado sem ajuste 0, aberta com ajuste 0
+  ❌ destino: sinistros — liquidado tem lançamento no Financeiro do mesmo valor (a receber); submetido tem envio; todo sinistro tem evento de abertura — 3 sinistro(s): 1 aberto(s), 1 submetido(s), 1 liquidado(s); liquidado sem lançamento correto 1, lançamento sem liquidar 0, submetido sem envio 0, sem evento de abertura 0, liquidado sem evento 0
+  ❌ 36 tabelas idênticas na origem e no destino — diferentes: inventory.count_items, inventory.stock_balances, procurement.insurance_claims
+  ❌ inventory.count_items: 3 linha(s) na origem e no destino, conteúdo idêntico — origem 3 (9d3c66005a64…), destino 3 (27a6b83cdb79…)
+  ❌ procurement.insurance_claims: 3 linha(s) na origem e no destino, conteúdo idêntico — origem 3 (769169bb2c1f…), destino 3 (52aef5371c8d…)
+  ❌ sinistros restaurados: aberto, submetido e liquidado com o lançamento do Financeiro — OPEN, SUBMITTED, SETTLED
+  → adulteração DETECTADA ✅ (invariante e hash origem × destino acusaram)
+
+Resultado do drill: APROVADO
+
+### 7. Teardown
+  evidência de anexos salva em drill-storage-restore-2026-10-28-4c5e50e.json
+  relatório salvo em docs/evidencias/marco7/drill-inventory-restore-2026-10-28-4c5e50e.{log,json}

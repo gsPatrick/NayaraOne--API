@@ -3,10 +3,21 @@
 const { Guarantee } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { publishGuaranteeCreated } = require('./legalEvents.service');
+const { publishGuaranteeCreated, publishGuaranteeReplaced } = require('./legalEvents.service');
 const { getContract } = require('./contracts.service');
 
-const GUARANTEE_TYPES = ['GUARANTOR', 'INSURANCE', 'DEPOSIT', 'CAPITALIZATION_TITLE'];
+// FIX AUD-014 (auditoria externa Nayara, 11/10/2026, JUR-006 "Garantia rastreável com
+// vigência/status próprios"): o Caderno (seção 9, "Garantias locatícias") lista 5 tipos —
+// GUARANTOR, INSURANCE, SECURITY_DEPOSIT, CAPITALIZATION, OTHER ("outra homologada") — mas só
+// 4 existiam aqui, sem OTHER. Mantidos os nomes internos já em uso (DEPOSIT/CAPITALIZATION_TITLE
+// em vez de SECURITY_DEPOSIT/CAPITALIZATION) para não quebrar dados já gravados; adicionado só
+// o tipo que faltava de verdade.
+const GUARANTEE_TYPES = ['GUARANTOR', 'INSURANCE', 'DEPOSIT', 'CAPITALIZATION_TITLE', 'OTHER'];
+// A mesma seção 9 exige "vigência" explicitamente só para GUARANTOR/INSURANCE/
+// CAPITALIZATION_TITLE ("Pessoas, documentos, vigência, aceite" / "Provider/apólice, vigência,
+// parcelas, renovação" / "Documento/provider/vigência") — DEPOSIT (caução) e OTHER não listam
+// vigência como dado obrigatório, então continuam com endsAt opcional.
+const GUARANTEE_TYPES_REQUIRING_VALIDITY = ['GUARANTOR', 'INSURANCE', 'CAPITALIZATION_TITLE'];
 // FIX (homologação 22/09/2026 — auditoria proativa): `status` era gravado como string livre
 // (sem ENUM/CHECK no model nem validação aqui), apesar de contracts.service.js/
 // assertActivationGate depender literalmente da string 'ACTIVE' pra decidir se a garantia conta
@@ -42,6 +53,12 @@ async function createGuarantee(contractId, payload, actorUserId, transaction) {
   }
   if (guaranteeType === 'GUARANTOR' && !guarantorPersonId) {
     throw AppError.badRequest('"guarantorPersonId" é obrigatório quando "guaranteeType" é "GUARANTOR".', 'LEGAL_GUARANTEE_VALIDATION');
+  }
+  if (GUARANTEE_TYPES_REQUIRING_VALIDITY.includes(guaranteeType) && !endsAt) {
+    throw AppError.badRequest(
+      `O campo "endsAt" (vigência) é obrigatório para garantia do tipo "${guaranteeType}" (Caderno, seção 9).`,
+      'LEGAL_GUARANTEE_VALIDITY_REQUIRED'
+    );
   }
   if (status !== undefined && !GUARANTEE_STATUSES.includes(status)) {
     throw AppError.badRequest(`"status" deve ser um de: ${GUARANTEE_STATUSES.join(', ')}.`, 'LEGAL_GUARANTEE_VALIDATION');
@@ -155,6 +172,7 @@ async function deleteGuarantee(id, actorUserId, transaction) {
       entityType: 'Guarantee',
       entityId: guarantee.id,
       beforeJson,
+      afterJson: { ...beforeJson, deletedAt: new Date(), deletedBy: actorUserId || null, situacao: 'excluído (exclusão lógica — o registro continua no banco)' },
       reason: `Garantia ${guarantee.id} excluída (soft delete).`,
     },
     transaction
@@ -163,4 +181,58 @@ async function deleteGuarantee(id, actorUserId, transaction) {
   return { id };
 }
 
-module.exports = { createGuarantee, listGuarantees, getGuarantee, updateGuarantee, deleteGuarantee, GUARANTEE_TYPES };
+/**
+ * replaceGuarantee — Caderno Anexo I "9. Garantias locatícias": "contrato não perde histórico
+ * quando a garantia é substituída." Cria a NOVA Guarantee (mesmo contrato), marca a ANTIGA como
+ * RELEASED + replacedByGuaranteeId apontando para a nova — NUNCA apaga/edita o tipo/valor da
+ * garantia antiga (histórico íntegro, igual ao padrão de versão imutável usado no resto do
+ * módulo jurídico). Publica `legal.guarantee.replaced`.
+ */
+async function replaceGuarantee(oldGuaranteeId, newGuaranteePayload, actorUserId, transaction) {
+  const oldGuarantee = await getGuarantee(oldGuaranteeId, transaction);
+  if (oldGuarantee.replacedByGuaranteeId) {
+    throw AppError.conflict('Esta garantia já foi substituída anteriormente.', 'LEGAL_GUARANTEE_ALREADY_REPLACED');
+  }
+
+  const newGuarantee = await createGuarantee(oldGuarantee.contractId, newGuaranteePayload, actorUserId, transaction);
+
+  const beforeJson = oldGuarantee.toJSON();
+  oldGuarantee.status = 'RELEASED';
+  // FIX AUD-009 (ver comentário em src/models/Guarantee.js): a coluna física
+  // "replaced_by_guarantee_id" já existe neste banco e agora está declarada no model, então
+  // esta atribuição é persistida de fato pelo `save()` abaixo (antes ficava só na instância em
+  // memória). O vínculo completo também continua registrado em auditoria (afterJson abaixo).
+  oldGuarantee.replacedByGuaranteeId = newGuarantee.id;
+  oldGuarantee.updatedBy = actorUserId || null;
+  await oldGuarantee.save({ transaction });
+
+  await publishGuaranteeReplaced(oldGuarantee, newGuarantee, transaction);
+
+  await registrarAuditoria(
+    {
+      groupId: oldGuarantee.groupId,
+      companyId: oldGuarantee.companyId,
+      actorUserId,
+      action: 'legal.guarantee.replace',
+      entityType: 'Guarantee',
+      entityId: oldGuarantee.id,
+      beforeJson,
+      afterJson: oldGuarantee.toJSON(),
+      reason: `Garantia ${oldGuarantee.id} substituída pela garantia ${newGuarantee.id}.`,
+    },
+    transaction
+  );
+
+  return { oldGuarantee, newGuarantee };
+}
+
+module.exports = {
+  createGuarantee,
+  listGuarantees,
+  getGuarantee,
+  updateGuarantee,
+  deleteGuarantee,
+  replaceGuarantee,
+  GUARANTEE_TYPES,
+  GUARANTEE_STATUSES,
+};

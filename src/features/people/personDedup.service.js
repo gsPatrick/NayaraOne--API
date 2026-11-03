@@ -1,6 +1,7 @@
 'use strict';
 
-const { Person, PersonContact } = require('../../models');
+const { Op } = require('sequelize');
+const { Person, PersonContact, PersonAddress } = require('../../models');
 const { onlyDigits } = require('./personDocumentFormat.service');
 
 /**
@@ -20,9 +21,12 @@ const { onlyDigits } = require('./personDocumentFormat.service');
  *      primários existentes, no mesmo `contactType` — sinaliza/bloqueia criação por padrão
  *      (o service que chama esta função decide se bloqueia ou apenas avisa).
  *
- * Match fraco (nome semelhante + endereço/data de nascimento) fica para revisão manual futura —
- * não implementado aqui: exigiria um serviço de similaridade fonética/fuzzy fora do escopo
- * desta função de checagem de match forte/médio.
+ * Match fraco (nome semelhante + endereço/data de nascimento, CRMX-010/seção 4 do Caderno):
+ * "abre revisão; não mescla automaticamente" — diferente dos dois matches acima, NUNCA bloqueia
+ * a criação (não lança erro, nem é afetado por `allowDuplicate`), só retorna candidatos de
+ * revisão. Critério determinístico (não é fuzzy/fonético sofisticado): normaliza o nome
+ * (lowercase, sem acento, sem pontuação) e compara por IGUALDADE do primeiro + último token,
+ * combinado com (mesma data de nascimento/fundação OU mesmo endereço atual normalizado).
  *
  * Retorna a Person existente (instância Sequelize) ou `null` se nenhuma duplicata foi encontrada.
  */
@@ -52,6 +56,96 @@ async function findPotentialDuplicate(personData, transaction) {
   }
 
   return null;
+}
+
+function normalizeNameKey(name) {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * nameFirstLastTokens — "nome semelhante" (seção 4) é tratado, de forma determinística, como o
+ * mesmo PRIMEIRO + ÚLTIMO token do nome normalizado — cobre o caso comum (mesmo nome completo
+ * digitado com abreviação/acento diferente) sem exigir uma biblioteca de distância fonética.
+ */
+function nameFirstLastTokens(name) {
+  const tokens = normalizeNameKey(name).split(' ').filter(Boolean);
+  if (tokens.length === 0) return null;
+  return `${tokens[0]}|${tokens[tokens.length - 1]}`;
+}
+
+function normalizeAddressKeyForPerson(address) {
+  const normalize = (value) =>
+    String(value || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+  const street = normalize(address?.street);
+  const city = normalize(address?.city);
+  if (!street || !city) return null;
+  return `${street}|${normalize(address?.number)}|${city}`;
+}
+
+/**
+ * findWeakDuplicateCandidates — match fraco isolado: NÃO bloqueia, NÃO é chamado
+ * automaticamente por `createPerson` (que só usa forte/médio) — é oferecido como checagem de
+ * revisão explícita (ex.: UI de cadastro consulta antes de confirmar, ou listagem periódica).
+ * `personData` aceita `legalName`, `birthOrFoundationDate` e opcionalmente `addresses` (mesmo
+ * formato de payload de criação — primeiro item é usado).
+ */
+async function findWeakDuplicateCandidates(personData, transaction) {
+  const nameKey = nameFirstLastTokens(personData.legalName);
+  if (!nameKey) return [];
+
+  const birthDate = personData.birthOrFoundationDate || null;
+  const address = Array.isArray(personData.addresses) ? personData.addresses[0] : null;
+  const addressKey = address ? normalizeAddressKeyForPerson(address) : null;
+  if (!birthDate && !addressKey) return [];
+
+  const where = { status: { [Op.ne]: 'MERGED' } };
+  if (personData.excludePersonId) where.id = { [Op.ne]: personData.excludePersonId };
+  if (birthDate) where.birthOrFoundationDate = birthDate;
+
+  const candidates = [];
+
+  if (birthDate) {
+    const byBirthDate = await Person.findAll({ where, transaction });
+    for (const candidate of byBirthDate) {
+      if (nameFirstLastTokens(candidate.legalName) === nameKey) {
+        candidates.push({ personId: candidate.id, legalName: candidate.legalName, reason: 'NOME_E_DATA_NASCIMENTO_SEMELHANTES' });
+      }
+    }
+  }
+
+  if (addressKey) {
+    const addressWhere = { ...where };
+    delete addressWhere.birthOrFoundationDate;
+    const personAddresses = await PersonAddress.findAll({ where: { isCurrent: true }, transaction });
+    const matchingPersonIds = personAddresses
+      .filter((a) => normalizeAddressKeyForPerson(a) === addressKey)
+      .map((a) => a.personId);
+    if (matchingPersonIds.length > 0) {
+      const byAddress = await Person.findAll({
+        where: { ...addressWhere, id: matchingPersonIds },
+        transaction,
+      });
+      for (const candidate of byAddress) {
+        if (nameFirstLastTokens(candidate.legalName) === nameKey && !candidates.some((c) => c.personId === candidate.id)) {
+          candidates.push({ personId: candidate.id, legalName: candidate.legalName, reason: 'NOME_E_ENDERECO_SEMELHANTES' });
+        }
+      }
+    }
+  }
+
+  return candidates;
 }
 
 /**
@@ -98,4 +192,4 @@ async function listPotentialDuplicatePairs(transaction) {
   return pairs;
 }
 
-module.exports = { findPotentialDuplicate, listPotentialDuplicatePairs };
+module.exports = { findPotentialDuplicate, listPotentialDuplicatePairs, findWeakDuplicateCandidates };

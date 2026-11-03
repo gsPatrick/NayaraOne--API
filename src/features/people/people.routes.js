@@ -22,6 +22,7 @@ peopleRouter.get('/people/:id/contacts', requirePermission('people:read'), peopl
 peopleRouter.patch('/people/:id/contacts/:contactId', requirePermission('people:update'), peopleController.updateContact);
 peopleRouter.delete('/people/:id/contacts/:contactId', requirePermission('people:update'), peopleController.removeContact);
 
+peopleRouter.post('/people/:id/documents/ingest', requirePermission('people:update'), peopleController.ingestDocument);
 peopleRouter.post('/people/:id/documents', requirePermission('people:update'), peopleController.createDocument);
 peopleRouter.get('/people/:id/documents', requirePermission('people:read'), peopleController.listDocuments);
 peopleRouter.patch('/people/:id/documents/:documentId', requirePermission('people:update'), peopleController.updateDocument);

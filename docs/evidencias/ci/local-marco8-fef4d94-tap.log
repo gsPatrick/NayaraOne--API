@@ -1,0 +1,1471 @@
+TAP version 13
+# Subtest: FISCAL-NFSE-05: pedir NFS-e duas vezes pra mesma origem (sourceType+sourceId) retorna o MESMO InvoiceRequest, nunca cria um segundo
+ok 1 - FISCAL-NFSE-05: pedir NFS-e duas vezes pra mesma origem (sourceType+sourceId) retorna o MESMO InvoiceRequest, nunca cria um segundo
+  ---
+  duration_ms: 4098.043375
+  type: 'test'
+  ...
+# Subtest: FISCAL-NFSE-06: timeout do adapter vira UNKNOWN, nunca lança erro cru pro chamador
+ok 2 - FISCAL-NFSE-06: timeout do adapter vira UNKNOWN, nunca lança erro cru pro chamador
+  ---
+  duration_ms: 52.586041
+  type: 'test'
+  ...
+# Subtest: FISCAL-NFSE-07: requestInvoice real com adapter "travado" marca UNKNOWN e não lança erro cru pro chamador
+ok 3 - FISCAL-NFSE-07: requestInvoice real com adapter "travado" marca UNKNOWN e não lança erro cru pro chamador
+  ---
+  duration_ms: 1833.916959
+  type: 'test'
+  ...
+# Subtest: SEC-04: nenhum arquivo do módulo correspondent (incluindo fiscal) loga perto de onde um secret/webhook payload é lido
+ok 4 - SEC-04: nenhum arquivo do módulo correspondent (incluindo fiscal) loga perto de onde um secret/webhook payload é lido
+  ---
+  duration_ms: 17.832584
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-APR-01: solicita avaliação via adapter sandbox e persiste valor informativo
+ok 5 - CORRESPONDENT-APR-01: solicita avaliação via adapter sandbox e persiste valor informativo
+  ---
+  duration_ms: 5381.02275
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-APR-02: provider "manual" não suporta avaliação — bloqueia com erro de negócio claro
+ok 6 - CORRESPONDENT-APR-02: provider "manual" não suporta avaliação — bloqueia com erro de negócio claro
+  ---
+  duration_ms: 1900.934833
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-APR-03: invariante crítico — avaliação NUNCA altera o preço do imóvel/oferta
+ok 7 - CORRESPONDENT-APR-03: invariante crítico — avaliação NUNCA altera o preço do imóvel/oferta
+  ---
+  duration_ms: 3330.883625
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-APR-04: RLS — case de outra empresa não é encontrado (cross-company bloqueado)
+ok 8 - CORRESPONDENT-APR-04: RLS — case de outra empresa não é encontrado (cross-company bloqueado)
+  ---
+  duration_ms: 1897.893875
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-APR-05: evento appraisal.requested (e appraisal.completed) emitido no outbox
+ok 9 - CORRESPONDENT-APR-05: evento appraisal.requested (e appraisal.completed) emitido no outbox
+  ---
+  duration_ms: 2923.845667
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-APR-06: lista avaliações do case, mais recente primeiro
+ok 10 - CORRESPONDENT-APR-06: lista avaliações do case, mais recente primeiro
+  ---
+  duration_ms: 4043.476625
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WORKER-01: requestSubmission devolve PENDING sem chamar o adapter; o job processa e vira SUBMITTED
+ok 11 - CORRESPONDENT-WORKER-01: requestSubmission devolve PENDING sem chamar o adapter; o job processa e vira SUBMITTED
+  ---
+  duration_ms: 14032.198583
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WORKER-02: rodar o job 2x não processa a mesma submissão PENDING duas vezes
+ok 12 - CORRESPONDENT-WORKER-02: rodar o job 2x não processa a mesma submissão PENDING duas vezes
+  ---
+  duration_ms: 12868.712083
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WORKER-03: requestAppraisalRecord devolve REQUESTED sem chamar o adapter; o job completa a avaliação sem alterar preço de imóvel
+ok 13 - CORRESPONDENT-WORKER-03: requestAppraisalRecord devolve REQUESTED sem chamar o adapter; o job completa a avaliação sem alterar preço de imóvel
+  ---
+  duration_ms: 5425.404084
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOCEXP-01: documento vencido reabre o requirement automaticamente (EXPIRED + novo PENDING)
+ok 14 - CORRESPONDENT-DOCEXP-01: documento vencido reabre o requirement automaticamente (EXPIRED + novo PENDING)
+  ---
+  duration_ms: 7836.476916
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOCEXP-02: documento sem expiresAt nunca é candidato
+ok 15 - CORRESPONDENT-DOCEXP-02: documento sem expiresAt nunca é candidato
+  ---
+  duration_ms: 4463.022792
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOCEXP-03: documento com expiresAt no futuro não é candidato ainda
+ok 16 - CORRESPONDENT-DOCEXP-03: documento com expiresAt no futuro não é candidato ainda
+  ---
+  duration_ms: 4481.894708
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOCEXP-04: rodar o job duas vezes não cria um segundo requirement novo (idempotente)
+ok 17 - CORRESPONDENT-DOCEXP-04: rodar o job duas vezes não cria um segundo requirement novo (idempotente)
+  ---
+  duration_ms: 5351.915875
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOCEXP-05: versão superada (não vigente) nunca é candidata, só a vigente
+ok 18 - CORRESPONDENT-DOCEXP-05: versão superada (não vigente) nunca é candidata, só a vigente
+  ---
+  duration_ms: 5865.737125
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-01: cria requirement PENDING e lista no checklist do caso
+ok 19 - CORRESPONDENT-DOC-01: cria requirement PENDING e lista no checklist do caso
+  ---
+  duration_ms: 5686.223125
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-02: rejeita documentType inválido
+ok 20 - CORRESPONDENT-DOC-02: rejeita documentType inválido
+  ---
+  duration_ms: 1910.224667
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-03: enviar documento marca requirement como SUBMITTED e cria versão 1
+ok 21 - CORRESPONDENT-DOC-03: enviar documento marca requirement como SUBMITTED e cria versão 1
+  ---
+  duration_ms: 4206.924083
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-04: substituir documento preserva a versão anterior (nunca apaga/sobrescreve) e incrementa a versão
+ok 22 - CORRESPONDENT-DOC-04: substituir documento preserva a versão anterior (nunca apaga/sobrescreve) e incrementa a versão
+  ---
+  duration_ms: 5581.373833
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-05: rejeita arquivo de outra empresa
+ok 23 - CORRESPONDENT-DOC-05: rejeita arquivo de outra empresa
+  ---
+  duration_ms: 0.471459
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-06: sem canSeeDocuments, a listagem nunca inclui documents/fileId (permissão RESTRICTED)
+ok 24 - CORRESPONDENT-DOC-06: sem canSeeDocuments, a listagem nunca inclui documents/fileId (permissão RESTRICTED)
+  ---
+  duration_ms: 4581.779417
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-07: RLS — outra empresa não enxerga requirements/documents via SELECT direto
+ok 25 - CORRESPONDENT-DOC-07: RLS — outra empresa não enxerga requirements/documents via SELECT direto
+  ---
+  duration_ms: 4432.367417
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-08: requirementId obrigatório ao enviar documento
+ok 26 - CORRESPONDENT-DOC-08: requirementId obrigatório ao enviar documento
+  ---
+  duration_ms: 2042.475375
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-DOC-09: índice único garante no máximo uma versão vigente por requirement (nível de banco)
+ok 27 - CORRESPONDENT-DOC-09: índice único garante no máximo uma versão vigente por requirement (nível de banco)
+  ---
+  duration_ms: 4200.848375
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-01: cria direito a comissão EXPECTED com percentual do Motor de Regras
+ok 28 - CORRESPONDENT-COM-01: cria direito a comissão EXPECTED com percentual do Motor de Regras
+  ---
+  duration_ms: 5400.854292
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-02: provider "manual" usa defaultPercentage quando não tem percentual específico
+ok 29 - CORRESPONDENT-COM-02: provider "manual" usa defaultPercentage quando não tem percentual específico
+  ---
+  duration_ms: 2817.131917
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-03: baseAmount inválido é rejeitado
+ok 30 - CORRESPONDENT-COM-03: baseAmount inválido é rejeitado
+  ---
+  duration_ms: 1900.365792
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-04: confirmar cria RECEIVABLE real no Financeiro e transiciona pra RECEIVABLE
+ok 31 - CORRESPONDENT-COM-04: confirmar cria RECEIVABLE real no Financeiro e transiciona pra RECEIVABLE
+  ---
+  duration_ms: 4778.60225
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-05: confirmação idempotente — 2 chamadas com a mesma externalConfirmationId não duplicam o RECEIVABLE
+ok 32 - CORRESPONDENT-COM-05: confirmação idempotente — 2 chamadas com a mesma externalConfirmationId não duplicam o RECEIVABLE
+  ---
+  duration_ms: 4832.669709
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-06: confirmar com externalConfirmationId diferente de um já confirmado é rejeitado
+ok 33 - CORRESPONDENT-COM-06: confirmar com externalConfirmationId diferente de um já confirmado é rejeitado
+  ---
+  duration_ms: 4706.23775
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-07: chargeback cria ajuste e preserva o registro original (nunca apaga/edita o valor)
+ok 34 - CORRESPONDENT-COM-07: chargeback cria ajuste e preserva o registro original (nunca apaga/edita o valor)
+  ---
+  duration_ms: 7167.290041
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-08: chargeback sem motivo é rejeitado
+ok 35 - CORRESPONDENT-COM-08: chargeback sem motivo é rejeitado
+  ---
+  duration_ms: 2936.840833
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-09: RLS — entitlement de outra empresa não é encontrado (cross-company bloqueado)
+ok 36 - CORRESPONDENT-COM-09: RLS — entitlement de outra empresa não é encontrado (cross-company bloqueado)
+  ---
+  duration_ms: 1910.749333
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-10: eventos commission.entitlement.created e commission.confirmed emitidos no outbox
+ok 37 - CORRESPONDENT-COM-10: eventos commission.entitlement.created e commission.confirmed emitidos no outbox
+  ---
+  duration_ms: 4703.906208
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-11: lista entitlements do case, mais recente primeiro
+ok 38 - CORRESPONDENT-COM-11: lista entitlements do case, mais recente primeiro
+  ---
+  duration_ms: 4075.160959
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-12: percentual de comissão acima de 100% (erro de configuração) é rejeitado, nunca gera comissão maior que a base
+ok 39 - CORRESPONDENT-COM-12: percentual de comissão acima de 100% (erro de configuração) é rejeitado, nunca gera comissão maior que a base
+  ---
+  duration_ms: 3297.772125
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-13: chargeback de comissão com NFS-e já emitida abre reconciliação fiscal (nunca cancela a nota sozinho)
+ok 40 - CORRESPONDENT-COM-13: chargeback de comissão com NFS-e já emitida abre reconciliação fiscal (nunca cancela a nota sozinho)
+  ---
+  duration_ms: 8011.471167
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-COM-14: chargeback de comissão SEM NFS-e não abre reconciliação nenhuma
+ok 41 - CORRESPONDENT-COM-14: chargeback de comissão SEM NFS-e não abre reconciliação nenhuma
+  ---
+  duration_ms: 3428.24725
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-PIPE-01: re-upload com o MESMO hash de um arquivo já enviado pro requirement é sinalizado (duplicateOfDocumentId), nunca bloqueado
+ok 42 - CORRESPONDENT-PIPE-01: re-upload com o MESMO hash de um arquivo já enviado pro requirement é sinalizado (duplicateOfDocumentId), nunca bloqueado
+  ---
+  duration_ms: 8095.150375
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-PIPE-02: conteúdo diferente (hash diferente) nunca é marcado como duplicata
+ok 43 - CORRESPONDENT-PIPE-02: conteúdo diferente (hash diferente) nunca é marcado como duplicata
+  ---
+  duration_ms: 5627.751417
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-PIPE-03: documento tipo que espera PDF enviado como imagem recebe sugestão de alerta (nunca bloqueia)
+ok 44 - CORRESPONDENT-PIPE-03: documento tipo que espera PDF enviado como imagem recebe sugestão de alerta (nunca bloqueia)
+  ---
+  duration_ms: 4078.809625
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-PIPE-04: documento no tipo/formato esperado não recebe sugestão nenhuma
+ok 45 - CORRESPONDENT-PIPE-04: documento no tipo/formato esperado não recebe sugestão nenhuma
+  ---
+  duration_ms: 4087.528916
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-PIPE-05: arquivo minúsculo (<10KB) gera sugestão de "pode estar incompleto", mesmo em tipo que aceita foto (RG_CPF)
+ok 46 - CORRESPONDENT-PIPE-05: arquivo minúsculo (<10KB) gera sugestão de "pode estar incompleto", mesmo em tipo que aceita foto (RG_CPF)
+  ---
+  duration_ms: 4073.108208
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-PIPE-06: malware scan e hash do storage genérico já cobrem qualquer upload do Correspondente (reuso confirmado, não duplicado)
+ok 47 - CORRESPONDENT-PIPE-06: malware scan e hash do storage genérico já cobrem qualquer upload do Correspondente (reuso confirmado, não duplicado)
+  ---
+  duration_ms: 3.498375
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-01: criar um caso emite financing.case.created
+ok 48 - CORRESPONDENT-EVT-01: criar um caso emite financing.case.created
+  ---
+  duration_ms: 4392.492167
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-02: completar o checklist de documentos emite financing.documents.completed exatamente uma vez
+ok 49 - CORRESPONDENT-EVT-02: completar o checklist de documentos emite financing.documents.completed exatamente uma vez
+  ---
+  duration_ms: 7828.540458
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-03: payload de financing.documents.completed nunca inclui conteúdo/fileId do documento restrito
+ok 50 - CORRESPONDENT-EVT-03: payload de financing.documents.completed nunca inclui conteúdo/fileId do documento restrito
+  ---
+  duration_ms: 5980.746875
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-04: submissão com sucesso emite financing.submitted
+ok 51 - CORRESPONDENT-EVT-04: submissão com sucesso emite financing.submitted
+  ---
+  duration_ms: 8470.611083
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-05: webhook aplicando APPROVED emite financing.status.changed e financing.approved
+ok 52 - CORRESPONDENT-EVT-05: webhook aplicando APPROVED emite financing.status.changed e financing.approved
+  ---
+  duration_ms: 13110.468834
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-06: webhook fora de ordem (ignorado) NÃO emite financing.status.changed
+ok 53 - CORRESPONDENT-EVT-06: webhook fora de ordem (ignorado) NÃO emite financing.status.changed
+  ---
+  duration_ms: 14266.336083
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-07: status aplicado com opportunityId vinculado atualiza a oportunidade via audit log, nunca escrita direta
+ok 54 - CORRESPONDENT-EVT-07: status aplicado com opportunityId vinculado atualiza a oportunidade via audit log, nunca escrita direta
+  ---
+  duration_ms: 14801.194958
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-EVT-08: case sem opportunityId não quebra e não gera audit log de oportunidade
+ok 55 - CORRESPONDENT-EVT-08: case sem opportunityId não quebra e não gera audit log de oportunidade
+  ---
+  duration_ms: 12258.024583
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-01: case elegível (sandbox, RESIDENCIAL, valor dentro do teto) passa
+ok 56 - CORRESPONDENT-ELIG-01: case elegível (sandbox, RESIDENCIAL, valor dentro do teto) passa
+  ---
+  duration_ms: 4751.75775
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-02: valor acima do teto do provider é bloqueado com motivo claro
+ok 57 - CORRESPONDENT-ELIG-02: valor acima do teto do provider é bloqueado com motivo claro
+  ---
+  duration_ms: 2414.798375
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-03: provider manual não tem teto de valor (null = sem limite)
+ok 58 - CORRESPONDENT-ELIG-03: provider manual não tem teto de valor (null = sem limite)
+  ---
+  duration_ms: 2280.458416
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-04: createSimulation bloqueia ANTES de chamar o adapter quando o case é inelegível
+ok 59 - CORRESPONDENT-ELIG-04: createSimulation bloqueia ANTES de chamar o adapter quando o case é inelegível
+  ---
+  duration_ms: 2673.969083
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-05: createSimulation passa normalmente quando o case é elegível
+ok 60 - CORRESPONDENT-ELIG-05: createSimulation passa normalmente quando o case é elegível
+  ---
+  duration_ms: 2681.181625
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-06: provider não habilitado na regra é bloqueado com motivo claro
+ok 61 - CORRESPONDENT-ELIG-06: provider não habilitado na regra é bloqueado com motivo claro
+  ---
+  duration_ms: 3303.2805
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-07: finalidade não habilitada na regra é bloqueada com motivo claro
+ok 62 - CORRESPONDENT-ELIG-07: finalidade não habilitada na regra é bloqueada com motivo claro
+  ---
+  duration_ms: 3297.207958
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-08: resolveEligibilityConfig semeia o padrão automaticamente no primeiro uso
+ok 63 - CORRESPONDENT-ELIG-08: resolveEligibilityConfig semeia o padrão automaticamente no primeiro uso
+  ---
+  duration_ms: 1128.693542
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-09: imóvel fora da UF habilitada para o provider é bloqueado com motivo claro
+ok 64 - CORRESPONDENT-ELIG-09: imóvel fora da UF habilitada para o provider é bloqueado com motivo claro
+  ---
+  duration_ms: 3695.050459
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-10: imóvel dentro da UF habilitada passa normalmente
+ok 65 - CORRESPONDENT-ELIG-10: imóvel dentro da UF habilitada passa normalmente
+  ---
+  duration_ms: 3561.37275
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-ELIG-11: case sem propertyId vinculado nunca é bloqueado por região (não há como verificar)
+ok 66 - CORRESPONDENT-ELIG-11: case sem propertyId vinculado nunca é bloqueado por região (não há como verificar)
+  ---
+  duration_ms: 3163.946208
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-01: cria um financing_case em DRAFT com um proponente PRINCIPAL
+ok 67 - CORRESPONDENT-CASE-01: cria um financing_case em DRAFT com um proponente PRINCIPAL
+  ---
+  duration_ms: 4366.046291
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-02: aceita um proponente PRINCIPAL + um CO_APPLICANT
+ok 68 - CORRESPONDENT-CASE-02: aceita um proponente PRINCIPAL + um CO_APPLICANT
+  ---
+  duration_ms: 2043.568625
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-03: rejeita criação sem nenhum proponente
+ok 69 - CORRESPONDENT-CASE-03: rejeita criação sem nenhum proponente
+  ---
+  duration_ms: 625.244834
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-04: rejeita criação sem proponente PRINCIPAL (só CO_APPLICANT)
+ok 70 - CORRESPONDENT-CASE-04: rejeita criação sem proponente PRINCIPAL (só CO_APPLICANT)
+  ---
+  duration_ms: 750.218084
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-05: rejeita personId que não existe (texto livre/id inventado nunca vira proponente)
+ok 71 - CORRESPONDENT-CASE-05: rejeita personId que não existe (texto livre/id inventado nunca vira proponente)
+  ---
+  duration_ms: 748.0945
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-06: rejeita provider desconhecido
+ok 72 - CORRESPONDENT-CASE-06: rejeita provider desconhecido
+  ---
+  duration_ms: 872.090875
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-07: listFinancingCases filtra por status e traz os proponentes populados
+ok 73 - CORRESPONDENT-CASE-07: listFinancingCases filtra por status e traz os proponentes populados
+  ---
+  duration_ms: 2320.092083
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-08: financing_cases e case_applicants — outra empresa não enxerga via SELECT direto
+ok 74 - CORRESPONDENT-CASE-08: financing_cases e case_applicants — outra empresa não enxerga via SELECT direto
+  ---
+  duration_ms: 2162.486625
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-09: getFinancingCase lança NOT_FOUND para id de outra empresa/inexistente
+ok 75 - CORRESPONDENT-CASE-09: getFinancingCase lança NOT_FOUND para id de outra empresa/inexistente
+  ---
+  duration_ms: 751.133958
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-10: rejeita opportunityId inexistente/de outra empresa (não aceita silenciosamente)
+ok 76 - CORRESPONDENT-CASE-10: rejeita opportunityId inexistente/de outra empresa (não aceita silenciosamente)
+  ---
+  duration_ms: 1007.148292
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-CASE-11: aceita opportunityId quando a oportunidade existe de verdade na mesma empresa
+ok 77 - CORRESPONDENT-CASE-11: aceita opportunityId quando a oportunidade existe de verdade na mesma empresa
+  ---
+  duration_ms: 2038.301167
+  type: 'test'
+  ...
+# Subtest: FISCAL-NFSE-01: emite NFS-e via adapter sandbox — vai de REQUESTED até AUTHORIZED com histórico completo
+ok 78 - FISCAL-NFSE-01: emite NFS-e via adapter sandbox — vai de REQUESTED até AUTHORIZED com histórico completo
+  ---
+  duration_ms: 6871.751167
+  type: 'test'
+  ...
+# Subtest: FISCAL-NFSE-02: cancelar NFS-e autorizada preserva o documento e marca canceledAt, nunca apaga
+ok 79 - FISCAL-NFSE-02: cancelar NFS-e autorizada preserva o documento e marca canceledAt, nunca apaga
+  ---
+  duration_ms: 4628.798959
+  type: 'test'
+  ...
+# Subtest: FISCAL-NFSE-03: cancelar sem motivo é bloqueado
+ok 80 - FISCAL-NFSE-03: cancelar sem motivo é bloqueado
+  ---
+  duration_ms: 4126.01275
+  type: 'test'
+  ...
+# Subtest: FISCAL-NFSE-04: RLS — pedido de NFS-e de outra empresa não é encontrado
+ok 81 - FISCAL-NFSE-04: RLS — pedido de NFS-e de outra empresa não é encontrado
+  ---
+  duration_ms: 1518.200125
+  type: 'test'
+  ...
+# Subtest: FISCAL-DIMOB-01: gerar batch 2x com a mesma entrada produz o mesmo snapshotHash (reproduzível)
+ok 82 - FISCAL-DIMOB-01: gerar batch 2x com a mesma entrada produz o mesmo snapshotHash (reproduzível)
+  ---
+  duration_ms: 3752.726417
+  type: 'test'
+  ...
+# Subtest: FISCAL-DIMOB-02: fechar um batch impede gerar "fechamento" de novo (mas não impede nova versão)
+ok 83 - FISCAL-DIMOB-02: fechar um batch impede gerar "fechamento" de novo (mas não impede nova versão)
+  ---
+  duration_ms: 5640.743083
+  type: 'test'
+  ...
+# Subtest: FISCAL-DIMOB-03: RLS — batch de outra empresa não é encontrado
+ok 84 - FISCAL-DIMOB-03: RLS — batch de outra empresa não é encontrado
+  ---
+  duration_ms: 2289.650292
+  type: 'test'
+  ...
+# Subtest: FISCAL-DIMOB-04: dataset reflete valores reais — inclui RECEIVABLE/RECEIVED, exclui EXPECTED e ADJUSTED
+ok 85 - FISCAL-DIMOB-04: dataset reflete valores reais — inclui RECEIVABLE/RECEIVED, exclui EXPECTED e ADJUSTED
+  ---
+  duration_ms: 11691.416167
+  type: 'test'
+  ...
+# Subtest: FISCAL-RECON-01: diferença detectada abre reconciliação — nunca é ignorada silenciosamente
+ok 86 - FISCAL-RECON-01: diferença detectada abre reconciliação — nunca é ignorada silenciosamente
+  ---
+  duration_ms: 1004.24975
+  type: 'test'
+  ...
+# Subtest: FISCAL-RECON-02: sem diferença, nenhuma reconciliação é criada
+ok 87 - FISCAL-RECON-02: sem diferença, nenhuma reconciliação é criada
+  ---
+  duration_ms: 752.198833
+  type: 'test'
+  ...
+# Subtest: FISCAL-RECON-03: resolver exige motivo documentado
+ok 88 - FISCAL-RECON-03: resolver exige motivo documentado
+  ---
+  duration_ms: 1512.0105
+  type: 'test'
+  ...
+# Subtest: FISCAL-EXPORT-01: batch de export contábil com hash; ajuste cria linha nova, nunca edita a original
+ok 89 - FISCAL-EXPORT-01: batch de export contábil com hash; ajuste cria linha nova, nunca edita a original
+  ---
+  duration_ms: 1770.266292
+  type: 'test'
+  ...
+# Subtest: FISCAL-EXPORT-03: mesma origem não pode entrar em dois batches diferentes (nunca duplica o fato contábil)
+ok 90 - FISCAL-EXPORT-03: mesma origem não pode entrar em dois batches diferentes (nunca duplica o fato contábil)
+  ---
+  duration_ms: 1259.255708
+  type: 'test'
+  ...
+# Subtest: FISCAL-EXPORT-04: uma linha de AJUSTE não conta como duplicata para a checagem de origem
+ok 91 - FISCAL-EXPORT-04: uma linha de AJUSTE não conta como duplicata para a checagem de origem
+  ---
+  duration_ms: 2145.864041
+  type: 'test'
+  ...
+# Subtest: FISCAL-EXPORT-02: ajuste sem motivo é bloqueado
+ok 92 - FISCAL-EXPORT-02: ajuste sem motivo é bloqueado
+  ---
+  duration_ms: 1381.160875
+  type: 'test'
+  ...
+# Subtest: FISCAL-RLS-01: InvoiceRequest tem policy tenant_isolation aplicada (catálogo genérico)
+ok 93 - FISCAL-RLS-01: InvoiceRequest tem policy tenant_isolation aplicada (catálogo genérico)
+  ---
+  duration_ms: 1657.02025
+  type: 'test'
+  ...
+# {"level":30,"time":"2026-10-25T22:38:01.280Z","service":"nayaraone-api","port":21592,"apiPrefix":"/api","msg":"Nayara One API ouvindo na porta 21592 (prefixo /api)"}
+# {"level":40,"time":"2026-10-25T22:38:05.683Z","service":"nayaraone-api","correlationId":"ea34774f-6c2f-4886-a8ca-beaf2c38357f","method":"POST","path":"/api/v1/financing-cases","code":"PERMISSION_DENIED","statusCode":403,"msg":"[AppError] PERMISSION_DENIED: Permissão ausente: correspondent:create."}
+# {"level":30,"time":"2026-10-25T22:38:05.685Z","service":"nayaraone-api","req":{"id":1,"method":"POST","url":"/api/v1/financing-cases","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"187"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61652},"correlationId":"ea34774f-6c2f-4886-a8ca-beaf2c38357f","res":{"statusCode":403,"headers":{"x-powered-by":"Express","x-correlation-id":"ea34774f-6c2f-4886-a8ca-beaf2c38357f","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"154","etag":"W/\\"9a-/YalhJovil4T2rnfCxFhsASUYKY\\""}},"responseTime":21,"msg":"POST /api/v1/financing-cases 403"}
+# Subtest: CORRESPONDENT-HTTP-01: criar caso sem correspondent:create é bloqueado com 403, não 500
+ok 94 - CORRESPONDENT-HTTP-01: criar caso sem correspondent:create é bloqueado com 403, não 500
+  ---
+  duration_ms: 4402.183333
+  type: 'test'
+  ...
+# {"level":30,"time":"2026-10-25T22:38:06.839Z","service":"nayaraone-api","req":{"id":2,"method":"GET","url":"/api/v1/financing-cases/nao-e-um-uuid-valido","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61653},"correlationId":"d0e5ae65-a192-49bb-86cf-5a28233b8a7a","res":{"statusCode":400,"headers":{"x-powered-by":"Express","x-correlation-id":"d0e5ae65-a192-49bb-86cf-5a28233b8a7a","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"109","etag":"W/\\"6d-+RwGZ8gqiXCX9+aiexnu3ULnJmw\\""}},"responseTime":1146,"msg":"GET /api/v1/financing-cases/nao-e-um-uuid-valido 400"}
+# Subtest: CORRESPONDENT-HTTP-02: GET com UUID malformado na URL vira 400 amigável, nunca 500 cru
+ok 95 - CORRESPONDENT-HTTP-02: GET com UUID malformado na URL vira 400 amigável, nunca 500 cru
+  ---
+  duration_ms: 1151.480958
+  type: 'test'
+  ...
+# {"level":30,"time":"2026-10-25T22:38:10.690Z","service":"nayaraone-api","req":{"id":3,"method":"POST","url":"/api/v1/financing-cases","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"187"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61652},"correlationId":"3cc48329-11fc-4793-aa93-a32932b17af5","res":{"statusCode":201,"headers":{"x-powered-by":"Express","x-correlation-id":"3cc48329-11fc-4793-aa93-a32932b17af5","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"1439","etag":"W/\\"59f-AFZhv4hGZLCxYMklanrW6EH17UU\\""}},"responseTime":2341,"msg":"POST /financing-cases 201"}
+# {"level":30,"time":"2026-10-25T22:38:11.946Z","service":"nayaraone-api","req":{"id":4,"method":"GET","url":"/api/v1/financing-cases/428e91f7-5cb6-4890-a1e1-889619e7c609","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61655},"correlationId":"0a1a1624-b9b5-46be-9b70-b9fdef94b6e2","res":{"statusCode":200,"headers":{"x-powered-by":"Express","x-correlation-id":"0a1a1624-b9b5-46be-9b70-b9fdef94b6e2","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"1439","etag":"W/\\"59f-AFZhv4hGZLCxYMklanrW6EH17UU\\""}},"responseTime":1251,"msg":"GET /financing-cases/428e91f7-5cb6-4890-a1e1-889619e7c609 200"}
+# Subtest: CORRESPONDENT-HTTP-03: criar caso de verdade via HTTP real (201/200), persiste e aparece no GET
+ok 96 - CORRESPONDENT-HTTP-03: criar caso de verdade via HTTP real (201/200), persiste e aparece no GET
+  ---
+  duration_ms: 5106.030666
+  type: 'test'
+  ...
+# {"level":30,"time":"2026-10-25T22:38:15.878Z","service":"nayaraone-api","req":{"id":5,"method":"POST","url":"/api/v1/financing-cases","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"187"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61656},"correlationId":"55deb1f3-eb6a-4471-9a7c-4a0aacea1137","res":{"statusCode":201,"headers":{"x-powered-by":"Express","x-correlation-id":"55deb1f3-eb6a-4471-9a7c-4a0aacea1137","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"1439","etag":"W/\\"59f-E0FpGs1wVPH70ZI+up/YTBehNss\\""}},"responseTime":2132,"msg":"POST /financing-cases 201"}
+# {"level":40,"time":"2026-10-25T22:38:17.625Z","service":"nayaraone-api","correlationId":"be540421-510a-4172-b001-4566c6603f86","method":"POST","path":"/api/v1/financing-cases/17ce7273-00b4-4b8f-b91e-129404e8d942/simulations","code":"COR_ELIGIBILITY_AMOUNT_EXCEEDS_LIMIT","statusCode":422,"msg":"[AppError] COR_ELIGIBILITY_AMOUNT_EXCEEDS_LIMIT: O valor solicitado (R$ 99.999.999.999.999,00) está acima do limite aceito pelo provider \\"Sandbox\\" (até R$ 2.000.000,00). Tente um provider diferente ou ajuste o valor."}
+# {"level":30,"time":"2026-10-25T22:38:17.626Z","service":"nayaraone-api","req":{"id":6,"method":"POST","url":"/api/v1/financing-cases/17ce7273-00b4-4b8f-b91e-129404e8d942/simulations","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"42"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61657},"correlationId":"be540421-510a-4172-b001-4566c6603f86","res":{"statusCode":422,"headers":{"x-powered-by":"Express","x-correlation-id":"be540421-510a-4172-b001-4566c6603f86","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"257","etag":"W/\\"101-LXpipw1aNqG80ONFAVUy+qr54C4\\""}},"responseTime":1743,"msg":"POST /api/v1/financing-cases/17ce7273-00b4-4b8f-b91e-129404e8d942/simulations 422"}
+# Subtest: CORRESPONDENT-HTTP-04: valor de simulação absurdamente alto é bloqueado com erro de negócio limpo (gate de elegibilidade), nunca erro técnico cru
+ok 97 - CORRESPONDENT-HTTP-04: valor de simulação absurdamente alto é bloqueado com erro de negócio limpo (gate de elegibilidade), nunca erro técnico cru
+  ---
+  duration_ms: 5680.329167
+  type: 'test'
+  ...
+# {"level":40,"time":"2026-10-25T22:38:18.975Z","service":"nayaraone-api","correlationId":"93474d16-c2e4-493f-b1a4-2e19b6e1a0cd","method":"POST","path":"/api/v1/financing-cases","code":"FINANCING_CASE_VALIDATION","statusCode":400,"msg":"[AppError] FINANCING_CASE_VALIDATION: Informe ao menos um proponente (\\"applicants\\")."}
+# {"level":30,"time":"2026-10-25T22:38:18.976Z","service":"nayaraone-api","req":{"id":7,"method":"POST","url":"/api/v1/financing-cases","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"117"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61656},"correlationId":"93474d16-c2e4-493f-b1a4-2e19b6e1a0cd","res":{"statusCode":400,"headers":{"x-powered-by":"Express","x-correlation-id":"93474d16-c2e4-493f-b1a4-2e19b6e1a0cd","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"123","etag":"W/\\"7b-XfQgFg4nYj525+3cBlHHEe4zyv8\\""}},"responseTime":1342,"msg":"POST /api/v1/financing-cases 400"}
+# Subtest: CORRESPONDENT-HTTP-05: criar caso sem proponente retorna mensagem específica em português via HTTP real
+ok 98 - CORRESPONDENT-HTTP-05: criar caso sem proponente retorna mensagem específica em português via HTTP real
+  ---
+  duration_ms: 1349.6755
+  type: 'test'
+  ...
+# [FeedbackCaseAlertJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 caso(s) com SLA vencido, 0 escalonado(s), 0 erro(s).
+# [ProjectDelayDetectionJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 obra(s) verificada(s), 0 evento(s) publicado(s), 0 erro(s).
+# [LegalGuaranteeExpiryAlertJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 garantia(s) verificada(s), 0 alerta(s) novo(s), 0 erro(s).
+# [CrmTaskOverdueJob] Execução concluída — 3 grupo(s), 10 empresa(s), 3 tarefa(s) vencida(s), 0 escalonada(s), 0 erro(s).
+# [ToolLoanOverdueJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 empréstimo(s) verificado(s), 0 escalonado(s), 0 erro(s).
+# [InsuranceRenewalAlertJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 tarefa(s) verificada(s), 0 alertada(s), 0 erro(s).
+# [WarrantyEscalationJob] Execução concluída — 3 grupo(s), 10 empresa(s), 116 caso(s) verificado(s), 0 escalonado(s), 0 erro(s).
+# [CorrespondentAppraisalWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 avaliação(ões) pendente(s), 0 processada(s), 0 erro(s).
+# [CorrespondentSubmissionWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 submissão(ões) pendente(s), 0 processada(s), 0 erro(s).
+# [InsurancePolicyExpiryJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 apólice(s) verificada(s), 0 expirada(s), 0 erro(s).
+# [CaseDocumentExpiryJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 documento(s) verificado(s), 0 expirado(s), 0 erro(s).
+# [LegalDeadlineAlertJob] Execução concluída — 3 grupo(s), 10 empresa(s), 2 prazo(s) verificado(s), 0 alerta(s) novo(s), 0 escalonamento(s), 0 erro(s).
+# [MissingDailyReportJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 obra(s) verificada(s), 0 tarefa(s) criada(s), 0 erro(s).
+# {"level":30,"time":"2026-10-25T22:38:22.230Z","service":"nayaraone-api","req":{"id":8,"method":"POST","url":"/api/v1/financing-cases","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"187"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61656},"correlationId":"f40ba15d-cc9a-412d-8fbf-4ffce7cdca87","res":{"statusCode":201,"headers":{"x-powered-by":"Express","x-correlation-id":"f40ba15d-cc9a-412d-8fbf-4ffce7cdca87","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"1439","etag":"W/\\"59f-/Tc7iaDoDynqDE3Er04/jKYbWtY\\""}},"responseTime":1745,"msg":"POST /financing-cases 201"}
+# [RadarMatchingJob] Execução concluída — 3 grupo(s), 10 empresa(s), 20 radar(es) ativo(s) verificado(s), 0 novo(s) match(es), 0 erro(s).
+# [CorrespondentSubmissionWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 submissão(ões) pendente(s), 0 processada(s), 0 erro(s).
+# [CorrespondentAppraisalWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 avaliação(ões) pendente(s), 0 processada(s), 0 erro(s).
+# {"level":30,"time":"2026-10-25T22:38:23.630Z","service":"nayaraone-api","req":{"id":9,"method":"POST","url":"/api/v1/financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/requirements","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"25"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61665},"correlationId":"73fa156d-7b67-445a-a6d6-8bfa4ff90483","res":{"statusCode":201,"headers":{"x-powered-by":"Express","x-correlation-id":"73fa156d-7b67-445a-a6d6-8bfa4ff90483","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"480","etag":"W/\\"1e0-E8HtawoOc/H1VEdRTyCXbxNSqNI\\""}},"responseTime":1394,"msg":"POST /financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/requirements 201"}
+# [BillingScheduleAutoGenerateJob] Execução concluída — 3 grupo(s), 10 empresa(s), 76 contrato(s) de locação ativo(s), 0 cronograma(s) gerado(s), 55 já existiam, 21 erro(s).
+# {"level":30,"time":"2026-10-25T22:38:26.660Z","service":"nayaraone-api","req":{"id":10,"method":"POST","url":"/api/v1/financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/documents","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"104"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61656},"correlationId":"18cdf23e-fae7-4669-81e1-47bcd44e05a7","res":{"statusCode":201,"headers":{"x-powered-by":"Express","x-correlation-id":"18cdf23e-fae7-4669-81e1-47bcd44e05a7","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"683","etag":"W/\\"2ab-WaczZnZ9k7ODi1KFnLCE131/tiU\\""}},"responseTime":2274,"msg":"POST /financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/documents 201"}
+# [CorrespondentSubmissionWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 submissão(ões) pendente(s), 0 processada(s), 0 erro(s).
+# [CorrespondentAppraisalWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 avaliação(ões) pendente(s), 0 processada(s), 0 erro(s).
+# {"level":30,"time":"2026-10-25T22:38:27.303Z","service":"nayaraone-api","req":{"id":11,"method":"GET","url":"/api/v1/financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/requirements","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61666},"correlationId":"cd95ec5f-16e6-45c9-afbf-10d175ce6fa4","res":{"statusCode":200,"headers":{"x-powered-by":"Express","x-correlation-id":"cd95ec5f-16e6-45c9-afbf-10d175ce6fa4","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"1522","etag":"W/\\"5f2-wmHMYiQQkMXMci8+L33bf48Cc60\\""}},"responseTime":637,"msg":"GET /financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/requirements 200"}
+# {"level":30,"time":"2026-10-25T22:38:27.934Z","service":"nayaraone-api","req":{"id":12,"method":"GET","url":"/api/v1/financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/requirements","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61656},"correlationId":"4e335197-1adc-48a2-ac5e-af2a0720853c","res":{"statusCode":200,"headers":{"x-powered-by":"Express","x-correlation-id":"4e335197-1adc-48a2-ac5e-af2a0720853c","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"558","etag":"W/\\"22e-r5/6Gj4fYH2GJ9b8SAcDrCAqSTg\\""}},"responseTime":627,"msg":"GET /financing-cases/eb07bf70-4a06-49c4-886e-5477f035d933/requirements 200"}
+# Subtest: CORRESPONDENT-HTTP-06: documento RESTRICTED só aparece pra quem tem correspondent:documents:read, via HTTP real
+ok 99 - CORRESPONDENT-HTTP-06: documento RESTRICTED só aparece pra quem tem correspondent:documents:read, via HTTP real
+  ---
+  duration_ms: 8957.533875
+  type: 'test'
+  ...
+# {"level":30,"time":"2026-10-25T22:38:30.089Z","service":"nayaraone-api","req":{"id":13,"method":"POST","url":"/api/v1/financing-cases","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"187"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61656},"correlationId":"36855aa6-bd5a-4752-9a1d-b2f58a070dc3","res":{"statusCode":201,"headers":{"x-powered-by":"Express","x-correlation-id":"36855aa6-bd5a-4752-9a1d-b2f58a070dc3","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"1439","etag":"W/\\"59f-1CAnhjNV491+E31MyWLcqZx+D0I\\""}},"responseTime":1400,"msg":"POST /financing-cases 201"}
+# [CorrespondentSubmissionWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 submissão(ões) pendente(s), 0 processada(s), 0 erro(s).
+# [CorrespondentAppraisalWorkerJob] Execução concluída — 3 grupo(s), 10 empresa(s), 0 avaliação(ões) pendente(s), 0 processada(s), 0 erro(s).
+# {"level":40,"time":"2026-10-25T22:38:31.491Z","service":"nayaraone-api","correlationId":"18a2efbc-78d3-42ad-8c8a-96186da0a1a6","method":"POST","path":"/api/v1/correspondent/webhooks/financing/sandbox","code":"CORRESPONDENT_WEBHOOK_HMAC_INVALID","statusCode":401,"msg":"[AppError] CORRESPONDENT_WEBHOOK_HMAC_INVALID: Assinatura do webhook de financiamento ausente ou inválida."}
+# {"level":30,"time":"2026-10-25T22:38:31.492Z","service":"nayaraone-api","req":{"id":14,"method":"POST","url":"/api/v1/correspondent/webhooks/financing/sandbox","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","x-webhook-signature":"assinatura-forjada-nao-bate","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"120"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61656},"correlationId":"18a2efbc-78d3-42ad-8c8a-96186da0a1a6","res":{"statusCode":401,"headers":{"x-powered-by":"Express","x-correlation-id":"18a2efbc-78d3-42ad-8c8a-96186da0a1a6","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"144","etag":"W/\\"90-W7eE8K3TUA1J4vHvrTnfBpGQyZo\\""}},"responseTime":776,"msg":"POST /api/v1/correspondent/webhooks/financing/sandbox 401"}
+# Subtest: CORRESPONDENT-HTTP-07: webhook público com assinatura inválida é rejeitado via HTTP real, pra um externalCaseId que existe de verdade
+ok 100 - CORRESPONDENT-HTTP-07: webhook público com assinatura inválida é rejeitado via HTTP real, pra um externalCaseId que existe de verdade
+  ---
+  duration_ms: 3557.807
+  type: 'test'
+  ...
+# {"level":30,"time":"2026-10-25T22:38:31.499Z","service":"nayaraone-api","req":{"id":15,"method":"POST","url":"/api/v1/financing-cases","query":{},"params":{},"headers":{"host":"127.0.0.1:21592","connection":"keep-alive","content-type":"application/json","authorization":"[REDACTED]","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"27"},"remoteAddress":"::ffff:127.0.0.1","remotePort":61667},"correlationId":"16a43f97-904a-449c-ab1e-ce349bda3875","res":{"statusCode":400,"headers":{"x-powered-by":"Express","x-correlation-id":"16a43f97-904a-449c-ab1e-ce349bda3875","vary":"Origin","access-control-allow-credentials":"true","content-type":"application/json; charset=utf-8","content-length":"115","etag":"W/\\"73-PmGqxvdAozmPGHZJ+dvVYPUMIWk\\""}},"responseTime":1,"msg":"POST /api/v1/financing-cases 400"}
+# Subtest: CORRESPONDENT-HTTP-08: corpo JSON malformado não derruba a rota com erro técnico cru
+ok 101 - CORRESPONDENT-HTTP-08: corpo JSON malformado não derruba a rota com erro técnico cru
+  ---
+  duration_ms: 6.672666
+  type: 'test'
+  ...
+# [CorrespondentAppraisalWorkerJob] Falha ao processar empresa f23cab0a-568b-466f-9b23-b2026bc615a0 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentAppraisalWorkerJob] Falha ao processar empresa f127743c-9638-4613-a587-0c725e58ea70 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentAppraisalWorkerJob] Falha ao processar empresa b6c27725-5fa3-4451-b775-16118b4b16f5 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentAppraisalWorkerJob] Falha ao processar empresa 756dc915-8a78-4224-a878-8281f79706a7 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentAppraisalWorkerJob] Falha na execução agendada: ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] publish financing.case.created aggregate=FinancingCase:17ce7273-00b4-4b8f-b91e-129404e8d942 idempotencyKey=financing.case.created:17ce7273-00b4-4b8f-b91e-129404e8d942
+# [CorrespondentSubmissionWorkerJob] Falha ao processar empresa f23cab0a-568b-466f-9b23-b2026bc615a0 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentSubmissionWorkerJob] Falha ao processar empresa f127743c-9638-4613-a587-0c725e58ea70 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentSubmissionWorkerJob] Falha ao processar empresa b6c27725-5fa3-4451-b775-16118b4b16f5 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentSubmissionWorkerJob] Falha ao processar empresa 756dc915-8a78-4224-a878-8281f79706a7 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentSubmissionWorkerJob] Falha na execução agendada: ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] publish financing.case.created aggregate=FinancingCase:eb07bf70-4a06-49c4-886e-5477f035d933 idempotencyKey=financing.case.created:eb07bf70-4a06-49c4-886e-5477f035d933
+# [OutboxDispatcher] publish financing.status.changed aggregate=FinancingCase:eb07bf70-4a06-49c4-886e-5477f035d933 idempotencyKey=financing.status.changed:checklist:eb07bf70-4a06-49c4-886e-5477f035d933:DOCUMENTS_PENDING
+# [OutboxDispatcher] publish financing.case.created aggregate=FinancingCase:a3741ba1-a996-4af6-bfad-4f040aa1bd5f idempotencyKey=financing.case.created:a3741ba1-a996-4af6-bfad-4f040aa1bd5f
+# [OutboxDispatcher] Falha ao processar empresa ecfd4c21-e785-4bad-888e-7afa52125886 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] Falha ao processar empresa f4b9c916-5ab3-4411-b013-4e806ee341cc (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] Falha ao processar empresa 525417f5-0de5-4d9a-a5b2-4de6794c9428 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] Falha ao processar empresa f23cab0a-568b-466f-9b23-b2026bc615a0 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] Falha ao processar empresa f127743c-9638-4613-a587-0c725e58ea70 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] Falha ao processar empresa b6c27725-5fa3-4451-b775-16118b4b16f5 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcher] Falha ao processar empresa 756dc915-8a78-4224-a878-8281f79706a7 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [OutboxDispatcherJob] Falha na execução agendada: ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentSubmissionWorkerJob] Falha na execução agendada: ConnectionManager.getConnection was called after the connection manager was closed!
+# [CorrespondentAppraisalWorkerJob] Falha na execução agendada: ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha ao processar empresa ecfd4c21-e785-4bad-888e-7afa52125886 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha ao processar empresa f4b9c916-5ab3-4411-b013-4e806ee341cc (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha ao processar empresa 525417f5-0de5-4d9a-a5b2-4de6794c9428 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha ao processar empresa f23cab0a-568b-466f-9b23-b2026bc615a0 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha ao processar empresa f127743c-9638-4613-a587-0c725e58ea70 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha ao processar empresa b6c27725-5fa3-4451-b775-16118b4b16f5 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha ao processar empresa 756dc915-8a78-4224-a878-8281f79706a7 (grupo 51cca01b-6a2e-4815-9aa1-70d40e3aba24): ConnectionManager.getConnection was called after the connection manager was closed!
+# [CollectionCadenceJob] Falha na execução inicial: ConnectionManager.getConnection was called after the connection manager was closed!
+# Subtest: CORRESPONDENT-NAY-01: caso parado com documento pendente é sinalizado com o motivo certo
+ok 102 - CORRESPONDENT-NAY-01: caso parado com documento pendente é sinalizado com o motivo certo
+  ---
+  duration_ms: 6269.250709
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-02: caso com atividade recente (dentro do limiar) não aparece como parado
+ok 103 - CORRESPONDENT-NAY-02: caso com atividade recente (dentro do limiar) não aparece como parado
+  ---
+  duration_ms: 2064.384083
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-03: caso parado sem requirement pendente usa motivo de status (aguardando provider)
+ok 104 - CORRESPONDENT-NAY-03: caso parado sem requirement pendente usa motivo de status (aguardando provider)
+  ---
+  duration_ms: 2189.678166
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-04: compara simulações e recomenda a de menor parcela, sem alterar nada
+ok 105 - CORRESPONDENT-NAY-04: compara simulações e recomenda a de menor parcela, sem alterar nada
+  ---
+  duration_ms: 3822.70575
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-05: NAY nunca escreve no banco — status e simulações permanecem inalterados após a chamada
+ok 106 - CORRESPONDENT-NAY-05: NAY nunca escreve no banco — status e simulações permanecem inalterados após a chamada
+  ---
+  duration_ms: 3490.638833
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-06: nenhuma resposta da NAY contém texto de promessa de aprovação/taxa/prazo
+ok 107 - CORRESPONDENT-NAY-06: nenhuma resposta da NAY contém texto de promessa de aprovação/taxa/prazo
+  ---
+  duration_ms: 3219.942208
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-07: isolamento por empresa — caso de outra empresa não aparece nos parados nem na comparação
+ok 108 - CORRESPONDENT-NAY-07: isolamento por empresa — caso de outra empresa não aparece nos parados nem na comparação
+  ---
+  duration_ms: 761.674167
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-08: comparar simulações de case inexistente retorna 404 de negócio
+ok 109 - CORRESPONDENT-NAY-08: comparar simulações de case inexistente retorna 404 de negócio
+  ---
+  duration_ms: 747.823709
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-09 (auditoria ciclo 2): NAY nunca escreve em nenhuma tabela ligada ao caso de teste (snapshot escopado por financing_case_id, imune a ruído de outros testes/agentes rodando em paralelo no mesmo banco)
+ok 110 - CORRESPONDENT-NAY-09 (auditoria ciclo 2): NAY nunca escreve em nenhuma tabela ligada ao caso de teste (snapshot escopado por financing_case_id, imune a ruído de outros testes/agentes rodando em paralelo no mesmo banco)
+  ---
+  duration_ms: 5713.880708
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-10 (auditoria ciclo 2): regex de promessa ampliado não encontra variações indiretas no texto real retornado
+ok 111 - CORRESPONDENT-NAY-10 (auditoria ciclo 2): regex de promessa ampliado não encontra variações indiretas no texto real retornado
+  ---
+  duration_ms: 3200.840917
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-11 (auditoria ciclo 2): compareSimulations com zero simulações não quebra e recommendedSimulationId é null
+ok 112 - CORRESPONDENT-NAY-11 (auditoria ciclo 2): compareSimulations com zero simulações não quebra e recommendedSimulationId é null
+  ---
+  duration_ms: 2042.98225
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-12 (auditoria ciclo 2): empate técnico entre simulações (mesma parcela) não quebra e recomenda exatamente uma
+ok 113 - CORRESPONDENT-NAY-12 (auditoria ciclo 2): empate técnico entre simulações (mesma parcela) não quebra e recomenda exatamente uma
+  ---
+  duration_ms: 3816.616291
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-NAY-13 (auditoria ciclo 2): limiar exato de dias parado é inclusivo (idleDays === thresholdDays conta como parado)
+ok 114 - CORRESPONDENT-NAY-13 (auditoria ciclo 2): limiar exato de dias parado é inclusivo (idleDays === thresholdDays conta como parado)
+  ---
+  duration_ms: 2051.430417
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: resolve sandbox por padrão sem nenhuma configuração
+ok 115 - correspondent ProviderAdapter: resolve sandbox por padrão sem nenhuma configuração
+  ---
+  duration_ms: 3180.065375
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: resolve manual quando configurado explicitamente
+ok 116 - correspondent ProviderAdapter: resolve manual quando configurado explicitamente
+  ---
+  duration_ms: 1137.5085
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: registry por código resolve sandbox e manual, nega provider desconhecido
+ok 117 - correspondent ProviderAdapter: registry por código resolve sandbox e manual, nega provider desconhecido
+  ---
+  duration_ms: 1.160167
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.simulate é determinístico e calcula parcela > 0
+ok 118 - correspondent ProviderAdapter: sandbox.simulate é determinístico e calcula parcela > 0
+  ---
+  duration_ms: 0.4745
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.submitCase + getCaseStatus progride por tempo decorrido (SUBMITTED imediato)
+ok 119 - correspondent ProviderAdapter: sandbox.submitCase + getCaseStatus progride por tempo decorrido (SUBMITTED imediato)
+  ---
+  duration_ms: 0.624666
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.getCaseStatus reporta UNDER_ANALYSIS para um externalId "mais antigo"
+ok 120 - correspondent ProviderAdapter: sandbox.getCaseStatus reporta UNDER_ANALYSIS para um externalId "mais antigo"
+  ---
+  duration_ms: 0.299042
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.getCaseStatus reporta APPROVED após o threshold
+ok 121 - correspondent ProviderAdapter: sandbox.getCaseStatus reporta APPROVED após o threshold
+  ---
+  duration_ms: 0.177375
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox capabilities reporta todos os métodos suportados
+ok 122 - correspondent ProviderAdapter: sandbox capabilities reporta todos os métodos suportados
+  ---
+  duration_ms: 0.195917
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: manual.submitCase nunca chama rede e retorna PENDING_MANUAL_ACTION
+ok 123 - correspondent ProviderAdapter: manual.submitCase nunca chama rede e retorna PENDING_MANUAL_ACTION
+  ---
+  duration_ms: 0.362375
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: manual.simulate não é suportado e lança erro de negócio claro
+ok 124 - correspondent ProviderAdapter: manual.simulate não é suportado e lança erro de negócio claro
+  ---
+  duration_ms: 0.898666
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: manual capabilities reflete que simulate/verifyWebhook não são suportados
+ok 125 - correspondent ProviderAdapter: manual capabilities reflete que simulate/verifyWebhook não são suportados
+  ---
+  duration_ms: 0.180333
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: manual.verifyWebhook sempre nega (provider não tem webhook)
+ok 126 - correspondent ProviderAdapter: manual.verifyWebhook sempre nega (provider não tem webhook)
+  ---
+  duration_ms: 0.128542
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.verifyWebhook aceita assinatura HMAC válida
+ok 127 - correspondent ProviderAdapter: sandbox.verifyWebhook aceita assinatura HMAC válida
+  ---
+  duration_ms: 0.732083
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.verifyWebhook rejeita assinatura inválida
+ok 128 - correspondent ProviderAdapter: sandbox.verifyWebhook rejeita assinatura inválida
+  ---
+  duration_ms: 0.191166
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.verifyWebhook rejeita quando o secret configurado é diferente do usado para assinar
+ok 129 - correspondent ProviderAdapter: sandbox.verifyWebhook rejeita quando o secret configurado é diferente do usado para assinar
+  ---
+  duration_ms: 0.185833
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: sandbox.verifyWebhook rejeita sem header de assinatura
+ok 130 - correspondent ProviderAdapter: sandbox.verifyWebhook rejeita sem header de assinatura
+  ---
+  duration_ms: 0.116334
+  type: 'test'
+  ...
+# Subtest: correspondent ProviderAdapter: verifyHmacSignature exportado é a mesma função usada pelos adapters
+ok 131 - correspondent ProviderAdapter: verifyHmacSignature exportado é a mesma função usada pelos adapters
+  ---
+  duration_ms: 0.189708
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-FILEGUARD-01: usuário sem correspondent:documents:read não baixa documento RESTRICTED pelo fileId direto
+ok 132 - CORRESPONDENT-FILEGUARD-01: usuário sem correspondent:documents:read não baixa documento RESTRICTED pelo fileId direto
+  ---
+  duration_ms: 6684.464375
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-FILEGUARD-02: usuário com correspondent:documents:read passa pela guarda
+ok 133 - CORRESPONDENT-FILEGUARD-02: usuário com correspondent:documents:read passa pela guarda
+  ---
+  duration_ms: 4215.103709
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-FILEGUARD-03: arquivo não vinculado a nenhum CaseDocument RESTRICTED passa livre (não quebra outros módulos)
+ok 134 - CORRESPONDENT-FILEGUARD-03: arquivo não vinculado a nenhum CaseDocument RESTRICTED passa livre (não quebra outros módulos)
+  ---
+  duration_ms: 876.215458
+  type: 'test'
+  ...
+# Subtest: SEC-01: dois cases do mesmo proponente+imóvel no mesmo dia são sinalizados como possível duplicata, nunca bloqueados
+ok 135 - SEC-01: dois cases do mesmo proponente+imóvel no mesmo dia são sinalizados como possível duplicata, nunca bloqueados
+  ---
+  duration_ms: 5534.331584
+  type: 'test'
+  ...
+# Subtest: SEC-02: proponentes diferentes no mesmo dia NÃO são sinalizados como duplicata (sem falso positivo)
+ok 136 - SEC-02: proponentes diferentes no mesmo dia NÃO são sinalizados como duplicata (sem falso positivo)
+  ---
+  duration_ms: 2946.752083
+  type: 'test'
+  ...
+# Subtest: SEC-03: bloqueio de eligibility (provider inelegível) gera entrada de auditoria
+ok 137 - SEC-03: bloqueio de eligibility (provider inelegível) gera entrada de auditoria
+  ---
+  duration_ms: 2669.067834
+  type: 'test'
+  ...
+# Subtest: SEC-05: fingerprint de duplicidade não depende do dia calendário (achado real — virada de dia UTC escapava da detecção)
+ok 138 - SEC-05: fingerprint de duplicidade não depende do dia calendário (achado real — virada de dia UTC escapava da detecção)
+  ---
+  duration_ms: 1.148916
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-01: cria simulação via adapter sandbox (determinístico) e persiste parcela/taxa
+ok 139 - CORRESPONDENT-SIM-01: cria simulação via adapter sandbox (determinístico) e persiste parcela/taxa
+  ---
+  duration_ms: 5237.997833
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-02: o cálculo do sandbox é determinístico para os mesmos parâmetros
+ok 140 - CORRESPONDENT-SIM-02: o cálculo do sandbox é determinístico para os mesmos parâmetros
+  ---
+  duration_ms: 3550.79675
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-03: múltiplas simulações do mesmo case ficam todas versionadas (nenhuma é sobrescrita)
+ok 141 - CORRESPONDENT-SIM-03: múltiplas simulações do mesmo case ficam todas versionadas (nenhuma é sobrescrita)
+  ---
+  duration_ms: 3832.104833
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-04: listSimulations retorna mais recente primeiro
+ok 142 - CORRESPONDENT-SIM-04: listSimulations retorna mais recente primeiro
+  ---
+  duration_ms: 3811.965542
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-05: rejeita amount <= 0
+ok 143 - CORRESPONDENT-SIM-05: rejeita amount <= 0
+  ---
+  duration_ms: 1896.286208
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-06: rejeita termMonths ausente/inválido
+ok 144 - CORRESPONDENT-SIM-06: rejeita termMonths ausente/inválido
+  ---
+  duration_ms: 1899.262708
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-07: provider manual não suporta simulação — erro claro, nunca 500 cru
+ok 145 - CORRESPONDENT-SIM-07: provider manual não suporta simulação — erro claro, nunca 500 cru
+  ---
+  duration_ms: 2415.626916
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-08: financing_case inexistente/de outra empresa — NOT_FOUND
+ok 146 - CORRESPONDENT-SIM-08: financing_case inexistente/de outra empresa — NOT_FOUND
+  ---
+  duration_ms: 748.248541
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SIM-09: outra empresa não enxerga simulação via SELECT direto
+ok 147 - CORRESPONDENT-SIM-09: outra empresa não enxerga simulação via SELECT direto
+  ---
+  duration_ms: 2916.271959
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-01: submete com sucesso (sandbox) quando checklist completo e elegível
+ok 148 - CORRESPONDENT-SUB-01: submete com sucesso (sandbox) quando checklist completo e elegível
+  ---
+  duration_ms: 12013.311584
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-02: bloqueia submissão com checklist incompleto, nunca chama o adapter
+ok 149 - CORRESPONDENT-SUB-02: bloqueia submissão com checklist incompleto, nunca chama o adapter
+  ---
+  duration_ms: 3935.264292
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-03: bloqueia submissão de case inelegível (valor acima do teto do provider)
+ok 150 - CORRESPONDENT-SUB-03: bloqueia submissão de case inelegível (valor acima do teto do provider)
+  ---
+  duration_ms: 6713.930208
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-04: idempotência — 2 submissões com a mesma key retornam a MESMA linha, adapter chamado uma única vez
+ok 151 - CORRESPONDENT-SUB-04: idempotência — 2 submissões com a mesma key retornam a MESMA linha, adapter chamado uma única vez
+  ---
+  duration_ms: 10292.997459
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-05: adapter que lança erro (não-timeout) vira status UNKNOWN, nunca derruba a requisição com 500 cru
+ok 152 - CORRESPONDENT-SUB-05: adapter que lança erro (não-timeout) vira status UNKNOWN, nunca derruba a requisição com 500 cru
+  ---
+  duration_ms: 8781.900125
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-05b: withTimeout rejeita com SubmitTimeoutError quando a promise demora mais que o limite
+ok 153 - CORRESPONDENT-SUB-05b: withTimeout rejeita com SubmitTimeoutError quando a promise demora mais que o limite
+  ---
+  duration_ms: 22.476792
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-05c: withTimeout resolve normalmente quando a promise termina antes do limite
+ok 154 - CORRESPONDENT-SUB-05c: withTimeout resolve normalmente quando a promise termina antes do limite
+  ---
+  duration_ms: 0.949459
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-06: financing_case inexistente — NOT_FOUND
+ok 155 - CORRESPONDENT-SUB-06: financing_case inexistente — NOT_FOUND
+  ---
+  duration_ms: 749.833584
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-07: acknowledgeUnknownSubmission exige status UNKNOWN
+ok 156 - CORRESPONDENT-SUB-07: acknowledgeUnknownSubmission exige status UNKNOWN
+  ---
+  duration_ms: 9428.699958
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-08: listSubmissions retorna mais recente primeiro
+ok 157 - CORRESPONDENT-SUB-08: listSubmissions retorna mais recente primeiro
+  ---
+  duration_ms: 9480.135375
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-09: outra empresa não enxerga submission via SELECT direto
+ok 158 - CORRESPONDENT-SUB-09: outra empresa não enxerga submission via SELECT direto
+  ---
+  duration_ms: 9477.905166
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-10: evento financing.submission_requested é emitido (outbox)
+ok 159 - CORRESPONDENT-SUB-10: evento financing.submission_requested é emitido (outbox)
+  ---
+  duration_ms: 9317.066958
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-SUB-11: submissões concorrentes de verdade (2 transações commitadas em paralelo) nunca duplicam — perdedora recebe conflito tratado, nunca erro cru
+ok 160 - CORRESPONDENT-SUB-11: submissões concorrentes de verdade (2 transações commitadas em paralelo) nunca duplicam — perdedora recebe conflito tratado, nunca erro cru
+  ---
+  duration_ms: 13687.802875
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-01: webhook válido aplica status, grava histórico raw+normalizado
+ok 161 - CORRESPONDENT-WEBHOOK-01: webhook válido aplica status, grava histórico raw+normalizado
+  ---
+  duration_ms: 14915.276209
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-02: webhook com assinatura inválida é rejeitado e não altera nada
+ok 162 - CORRESPONDENT-WEBHOOK-02: webhook com assinatura inválida é rejeitado e não altera nada
+  ---
+  duration_ms: 11671.563583
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-03: webhook duplicado (mesmo externalEventId) aplica o efeito uma única vez
+ok 163 - CORRESPONDENT-WEBHOOK-03: webhook duplicado (mesmo externalEventId) aplica o efeito uma única vez
+  ---
+  duration_ms: 13151.914417
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-11: duas entregas CONCORRENTES de verdade do mesmo evento (Promise.all, não sequencial) nunca duplicam histórico nem estouram erro cru
+ok 164 - CORRESPONDENT-WEBHOOK-11: duas entregas CONCORRENTES de verdade do mesmo evento (Promise.all, não sequencial) nunca duplicam histórico nem estouram erro cru
+  ---
+  duration_ms: 12622.027041
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-04: status fora de ordem não regride o case, mas fica registrado no histórico
+ok 165 - CORRESPONDENT-WEBHOOK-04: status fora de ordem não regride o case, mas fica registrado no histórico
+  ---
+  duration_ms: 13785.475667
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-05: mapa de status do sandbox normaliza corretamente cada valor do Caderno
+ok 166 - CORRESPONDENT-WEBHOOK-05: mapa de status do sandbox normaliza corretamente cada valor do Caderno
+  ---
+  duration_ms: 1.4995
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-06: provider desconhecido na URL retorna processed:false sem lançar erro
+ok 167 - CORRESPONDENT-WEBHOOK-06: provider desconhecido na URL retorna processed:false sem lançar erro
+  ---
+  duration_ms: 0.565292
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-07: externalCaseId desconhecido (roteamento) não lança erro, só não processa
+ok 168 - CORRESPONDENT-WEBHOOK-07: externalCaseId desconhecido (roteamento) não lança erro, só não processa
+  ---
+  duration_ms: 126.790125
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-08: payload sem campo obrigatório é rejeitado como invalid_payload
+ok 169 - CORRESPONDENT-WEBHOOK-08: payload sem campo obrigatório é rejeitado como invalid_payload
+  ---
+  duration_ms: 0.904084
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-09: GET status isola por empresa (RLS) — case de outra empresa não aparece
+ok 170 - CORRESPONDENT-WEBHOOK-09: GET status isola por empresa (RLS) — case de outra empresa não aparece
+  ---
+  duration_ms: 9199.0495
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-10: status terminal não flipa pro irmão oposto (REJECTED não vira APPROVED, COMPLETED não vira CANCELED)
+ok 171 - CORRESPONDENT-WEBHOOK-10: status terminal não flipa pro irmão oposto (REJECTED não vira APPROVED, COMPLETED não vira CANCELED)
+  ---
+  duration_ms: 1.360791
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-PROPOSTA-01: aprovação do provider com proposta grava a proposta vigente; proposta inválida vira erro de integração sem derrubar o status
+ok 172 - CORRESPONDENT-WEBHOOK-PROPOSTA-01: aprovação do provider com proposta grava a proposta vigente; proposta inválida vira erro de integração sem derrubar o status
+  ---
+  duration_ms: 14777.319709
+  type: 'test'
+  ...
+# Subtest: CORRESPONDENT-WEBHOOK-CANCELADO-01: cancelamento enviado pelo provider leva o caso a Cancelado
+ok 173 - CORRESPONDENT-WEBHOOK-CANCELADO-01: cancelamento enviado pelo provider leva o caso a Cancelado
+  ---
+  duration_ms: 12147.211833
+  type: 'test'
+  ...
+# Subtest: M8-API-01: as APIs mínimas do caderno estão registradas
+ok 174 - M8-API-01: as APIs mínimas do caderno estão registradas
+  ---
+  duration_ms: 2.455917
+  type: 'test'
+  ...
+# Subtest: M8-COM-01: confirmar passa por CONFIRMED, vira RECEIVABLE e receber não cria outro lançamento
+ok 175 - M8-COM-01: confirmar passa por CONFIRMED, vira RECEIVABLE e receber não cria outro lançamento
+  ---
+  duration_ms: 8088.459209
+  type: 'test'
+  ...
+# Subtest: M8-COM-02: diferença de DIMOB com contrato abre reconciliação
+ok 176 - M8-COM-02: diferença de DIMOB com contrato abre reconciliação
+  ---
+  duration_ms: 1256.897459
+  type: 'test'
+  ...
+# Subtest: M8-COM-01: comissão guarda provider, fato gerador, split e valores somando o total
+ok 177 - M8-COM-01: comissão guarda provider, fato gerador, split e valores somando o total
+  ---
+  duration_ms: 9535.966334
+  type: 'test'
+  ...
+# Subtest: M8-COM-02: fato gerador fora da lista da regra é recusado e o padrão vale quando não informado
+ok 178 - M8-COM-02: fato gerador fora da lista da regra é recusado e o padrão vale quando não informado
+  ---
+  duration_ms: 3455.96925
+  type: 'test'
+  ...
+# Subtest: M8-COM-03: centavos do split sempre fecham no total (33,33% corretor)
+ok 179 - M8-COM-03: centavos do split sempre fecham no total (33,33% corretor)
+  ---
+  duration_ms: 6900.782125
+  type: 'test'
+  ...
+# Subtest: M8-PAR-01: parâmetros inválidos são recusados e a alteração gera versão nova e histórico
+ok 180 - M8-PAR-01: parâmetros inválidos são recusados e a alteração gera versão nova e histórico
+  ---
+  duration_ms: 6204.7615
+  type: 'test'
+  ...
+# Subtest: M8-ELEG-PROD-01: produto desabilitado bloqueia o caso e produto inválido não cria o caso
+ok 181 - M8-ELEG-PROD-01: produto desabilitado bloqueia o caso e produto inválido não cria o caso
+  ---
+  duration_ms: 6725.561125
+  type: 'test'
+  ...
+# Subtest: M8-EVT-01: cada evento do caderno é publicado pelo módulo
+ok 182 - M8-EVT-01: cada evento do caderno é publicado pelo módulo
+  ---
+  duration_ms: 0.613958
+  type: 'test'
+  ...
+# Subtest: M8-NFSE-ARQ-01: NFS-e autorizada preserva XML, PDF, código de verificação e hashes que conferem no download
+ok 183 - M8-NFSE-ARQ-01: NFS-e autorizada preserva XML, PDF, código de verificação e hashes que conferem no download
+  ---
+  duration_ms: 7273.695625
+  type: 'test'
+  ...
+# Subtest: M8-NFSE-ARQ-02: antes da autorização não há arquivo para baixar
+ok 184 - M8-NFSE-ARQ-02: antes da autorização não há arquivo para baixar
+  ---
+  duration_ms: 1636.231
+  type: 'test'
+  ...
+# Subtest: M8-REC-01: nota com valor diferente da comissão abre issue FINANCE_X_NFSE; rodar de novo não duplica
+ok 185 - M8-REC-01: nota com valor diferente da comissão abre issue FINANCE_X_NFSE; rodar de novo não duplica
+  ---
+  duration_ms: 18156.295959
+  type: 'test'
+  ...
+# Subtest: M8-REC-02: nota com o mesmo valor da comissão não abre issue
+ok 186 - M8-REC-02: nota com o mesmo valor da comissão não abre issue
+  ---
+  duration_ms: 8828.913833
+  type: 'test'
+  ...
+# Subtest: M8-DIMOB-OBR-01: gerar batch cadastra a obrigação do ano; fechar conclui; DIMOB x contratos confere
+ok 187 - M8-DIMOB-OBR-01: gerar batch cadastra a obrigação do ano; fechar conclui; DIMOB x contratos confere
+  ---
+  duration_ms: 14525.189
+  type: 'test'
+  ...
+# Subtest: M8-DIMOB-OBR-02: comissão entra depois do batch → DIMOB x contratos abre issue
+ok 188 - M8-DIMOB-OBR-02: comissão entra depois do batch → DIMOB x contratos abre issue
+  ---
+  duration_ms: 21766.38475
+  type: 'test'
+  ...
+# Subtest: M8-OBR-01: prazo vencido vira OVERDUE; conclusão manual exige observação; tipo e ano inválidos são recusados
+ok 189 - M8-OBR-01: prazo vencido vira OVERDUE; conclusão manual exige observação; tipo e ano inválidos são recusados
+  ---
+  duration_ms: 2033.0115
+  type: 'test'
+  ...
+# Subtest: M8-EXP-01: candidatos do mês entram no batch, não repetem em outro batch e o ajuste cria linha nova
+ok 190 - M8-EXP-01: candidatos do mês entram no batch, não repetem em outro batch e o ajuste cria linha nova
+  ---
+  duration_ms: 7366.809292
+  type: 'test'
+  ...
+# Subtest: M8-RET-01: retorno com hash errado é recusado; hash certo e valores iguais = MATCHED; valores diferentes = DIVERGENT com issue
+ok 191 - M8-RET-01: retorno com hash errado é recusado; hash certo e valores iguais = MATCHED; valores diferentes = DIVERGENT com issue
+  ---
+  duration_ms: 7500.647708
+  type: 'test'
+  ...
+# Subtest: M8-MAN-01: caso manual percorre análise, pendências, aprovação com proposta, contratação e conclusão
+ok 192 - M8-MAN-01: caso manual percorre análise, pendências, aprovação com proposta, contratação e conclusão
+  ---
+  duration_ms: 9792.208791
+  type: 'test'
+  ...
+# Subtest: M8-MAN-02: recusas do fluxo manual (provider com API, ainda não enviado, repetido, voltando, sem motivo, proposta inválida)
+ok 193 - M8-MAN-02: recusas do fluxo manual (provider com API, ainda não enviado, repetido, voltando, sem motivo, proposta inválida)
+  ---
+  duration_ms: 7320.275208
+  type: 'test'
+  ...
+# Subtest: M8-CAN-01: cancelar exige motivo, cancela submissão pendente, bloqueia novas ações e não cancela caso concluído
+ok 194 - M8-CAN-01: cancelar exige motivo, cancela submissão pendente, bloqueia novas ações e não cancela caso concluído
+  ---
+  duration_ms: 5114.587791
+  type: 'test'
+  ...
+# Subtest: M8-MAP-01: o provider alcança todos os estados internos (pendência do imóvel, contratação e cancelamento)
+ok 195 - M8-MAP-01: o provider alcança todos os estados internos (pendência do imóvel, contratação e cancelamento)
+  ---
+  duration_ms: 1.763333
+  type: 'test'
+  ...
+# Subtest: M8-INT-01: falha no envio grava erro de integração sem o texto do provider
+ok 196 - M8-INT-01: falha no envio grava erro de integração sem o texto do provider
+  ---
+  duration_ms: 6550.440334
+  type: 'test'
+  ...
+# Subtest: M8-SEC-01: conta de provider recusa o segredo e grava só a referência do cofre
+ok 197 - M8-SEC-01: conta de provider recusa o segredo e grava só a referência do cofre
+  ---
+  duration_ms: 1139.211125
+  type: 'test'
+  ...
+# Subtest: M8-DUP-01: segundo caso do mesmo proponente entra na fila; descartar mantém o caso; decisão exige nota
+ok 198 - M8-DUP-01: segundo caso do mesmo proponente entra na fila; descartar mantém o caso; decisão exige nota
+  ---
+  duration_ms: 6988.577583
+  type: 'test'
+  ...
+# Subtest: M8-DUP-02: confirmar a duplicata cancela o caso novo com motivo e preserva o original
+ok 199 - M8-DUP-02: confirmar a duplicata cancela o caso novo com motivo e preserva o original
+  ---
+  duration_ms: 4510.794625
+  type: 'test'
+  ...
+# Subtest: M8-INT-01: erro de integração aparece aberto, filtra por status e só resolve com nota, uma vez
+ok 200 - M8-INT-01: erro de integração aparece aberto, filtra por status e só resolve com nota, uma vez
+  ---
+  duration_ms: 1792.088625
+  type: 'test'
+  ...
+# (node:31781) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+# (Use `node --trace-deprecation ...` to show where the warning was created)
+# Subtest: M8-NAY-RES-01: resumo cita a origem de cada linha, aponta pendência e não decide nem altera o caso
+ok 201 - M8-NAY-RES-01: resumo cita a origem de cada linha, aponta pendência e não decide nem altera o caso
+  ---
+  duration_ms: 3808.535583
+  type: 'test'
+  ...
+# Subtest: M8-CXF-01: comissão sem NFS-e só vira issue depois do prazo; emitir a nota encerra a issue sozinha
+ok 202 - M8-CXF-01: comissão sem NFS-e só vira issue depois do prazo; emitir a nota encerra a issue sozinha
+  ---
+  duration_ms: 45097.821916
+  type: 'test'
+  ...
+# Subtest: M8-CXF-02: nota com valor diferente da comissão abre issue COMMISSION_X_FISCAL
+ok 203 - M8-CXF-02: nota com valor diferente da comissão abre issue COMMISSION_X_FISCAL
+  ---
+  duration_ms: 14351.865292
+  type: 'test'
+  ...
+# Subtest: M8-NFSE-REJ-01: emissor recusa a nota, o estado é final e uma nova solicitação para a origem é permitida
+ok 204 - M8-NFSE-REJ-01: emissor recusa a nota, o estado é final e uma nova solicitação para a origem é permitida
+  ---
+  duration_ms: 9195.394583
+  type: 'test'
+  ...
+# Subtest: M8-DIMOB-LOC-01: aluguel recebido no ano vira registro de locação; pendência de cadastro marca INVALID e impede fechar
+ok 205 - M8-DIMOB-LOC-01: aluguel recebido no ano vira registro de locação; pendência de cadastro marca INVALID e impede fechar
+  ---
+  duration_ms: 4081.305208
+  type: 'test'
+  ...
+# Subtest: M8-DIMOB-LOC-02: contrato com cadastro completo fecha o batch, conclui a obrigação e a conferência bate
+ok 206 - M8-DIMOB-LOC-02: contrato com cadastro completo fecha o batch, conclui a obrigação e a conferência bate
+  ---
+  duration_ms: 5868.059583
+  type: 'test'
+  ...
+# Subtest: M8-DIMOB-LOC-03: arquivo de conferência traz layout, hash, documentos e neutraliza fórmula de planilha
+ok 207 - M8-DIMOB-LOC-03: arquivo de conferência traz layout, hash, documentos e neutraliza fórmula de planilha
+  ---
+  duration_ms: 3937.602667
+  type: 'test'
+  ...
+# Subtest: M8-DIMOB-LOC-04: o mesmo ano gera o mesmo hash (reprodutível) e o dataset ignora aluguel de outro ano
+ok 208 - M8-DIMOB-LOC-04: o mesmo ano gera o mesmo hash (reprodutível) e o dataset ignora aluguel de outro ano
+  ---
+  duration_ms: 5118.366958
+  type: 'test'
+  ...
+# Subtest: M8-DOC-ENV-01: só o documento obrigatório e validado vai ao provider, uma vez, e fica marcado
+ok 209 - M8-DOC-ENV-01: só o documento obrigatório e validado vai ao provider, uma vez, e fica marcado
+  ---
+  duration_ms: 13027.531709
+  type: 'test'
+  ...
+# Subtest: M8-DOC-ENV-02: provider manual não recebe documento; falha do provider vira erro de integração sem desfazer o envio do caso
+ok 210 - M8-DOC-ENV-02: provider manual não recebe documento; falha do provider vira erro de integração sem desfazer o envio do caso
+  ---
+  duration_ms: 17447.758833
+  type: 'test'
+  ...
+# Subtest: M8-COM-BASE-01: sem valor-base usa o valor aprovado da proposta vigente; sem proposta recusa; valor informado prevalece
+ok 211 - M8-COM-BASE-01: sem valor-base usa o valor aprovado da proposta vigente; sem proposta recusa; valor informado prevalece
+  ---
+  duration_ms: 5574.918
+  type: 'test'
+  ...
+# Subtest: M8-AUD-01: resumo da NAY mostra data válida da proposta e provider em português; base inválida tem mensagem sem nome de campo
+ok 212 - M8-AUD-01: resumo da NAY mostra data válida da proposta e provider em português; base inválida tem mensagem sem nome de campo
+  ---
+  duration_ms: 3801.958208
+  type: 'test'
+  ...
+# Subtest: M8-AUD-02: fila de duplicatas não lista caso já cancelado
+ok 213 - M8-AUD-02: fila de duplicatas não lista caso já cancelado
+  ---
+  duration_ms: 4214.903833
+  type: 'test'
+  ...
+# Subtest: M8-AUD-03: valor-base absurdo é recusado; cadastrar obrigação repetida avisa em vez de calar
+ok 214 - M8-AUD-03: valor-base absurdo é recusado; cadastrar obrigação repetida avisa em vez de calar
+  ---
+  duration_ms: 2657.883167
+  type: 'test'
+  ...
+# Subtest: M8-AUD-04: a conferência conta todas as issues abertas e encerra a de versão antiga do DIMOB
+ok 215 - M8-AUD-04: a conferência conta todas as issues abertas e encerra a de versão antiga do DIMOB
+  ---
+  duration_ms: 13704.782708
+  type: 'test'
+  ...
+# Subtest: M8-AUD-05: a mesma identificação de confirmação não vale para duas comissões
+ok 216 - M8-AUD-05: a mesma identificação de confirmação não vale para duas comissões
+  ---
+  duration_ms: 7085.683333
+  type: 'test'
+  ...
+# Subtest: M8-AUD-01: criar caso grava antes (não existia) e depois (o caso)
+ok 217 - M8-AUD-01: criar caso grava antes (não existia) e depois (o caso)
+  ---
+  duration_ms: 4392.168667
+  type: 'test'
+  ...
+# Subtest: M8-CONS-01: envio sem consentimento é recusado e não cria submissão
+ok 218 - M8-CONS-01: envio sem consentimento é recusado e não cria submissão
+  ---
+  duration_ms: 2175.716875
+  type: 'test'
+  ...
+# Subtest: M8-CONS-02: envio com consentimento grava o fato e a auditoria de antes/depois
+ok 219 - M8-CONS-02: envio com consentimento grava o fato e a auditoria de antes/depois
+  ---
+  duration_ms: 4341.121084
+  type: 'test'
+  ...
+# Subtest: M8-STATUS-01: o caderno tem estes 12 estados e nenhum a mais
+ok 220 - M8-STATUS-01: o caderno tem estes 12 estados e nenhum a mais
+  ---
+  duration_ms: 1.173875
+  type: 'test'
+  ...
+# Subtest: M8-STATUS-02: a cadeia avança na ordem do caderno
+ok 221 - M8-STATUS-02: a cadeia avança na ordem do caderno
+  ---
+  duration_ms: 0.185958
+  type: 'test'
+  ...
+# Subtest: M8-STATUS-03: PENDING_CUSTOMER e PENDING_PROPERTY são ramos do mesmo estágio, não regressão
+ok 222 - M8-STATUS-03: PENDING_CUSTOMER e PENDING_PROPERTY são ramos do mesmo estágio, não regressão
+  ---
+  duration_ms: 0.107541
+  type: 'test'
+  ...
+# Subtest: M8-STATUS-04: status fora de ordem não regride o caso
+ok 223 - M8-STATUS-04: status fora de ordem não regride o caso
+  ---
+  duration_ms: 0.086792
+  type: 'test'
+  ...
+# Subtest: M8-STATUS-05: decisão terminal não vira o irmão oposto
+ok 224 - M8-STATUS-05: decisão terminal não vira o irmão oposto
+  ---
+  duration_ms: 0.088916
+  type: 'test'
+  ...
+# Subtest: M8-STATUS-06: status desconhecido não é aplicado
+ok 225 - M8-STATUS-06: status desconhecido não é aplicado
+  ---
+  duration_ms: 0.698541
+  type: 'test'
+  ...
+# Subtest: M8-TAB-01: cada tabela do caderno existe com RLS forçado
+ok 226 - M8-TAB-01: cada tabela do caderno existe com RLS forçado
+  ---
+  duration_ms: 5307.319458
+  type: 'test'
+  ...
+# Subtest: M8-TAB-02: o calendário fiscal do caderno é o vencimento da obrigação
+ok 227 - M8-TAB-02: o calendário fiscal do caderno é o vencimento da obrigação
+  ---
+  duration_ms: 131.055833
+  type: 'test'
+  ...
+# Subtest: M8-TAB-03: conta de provider e erro de integração não vazam para outra empresa
+ok 228 - M8-TAB-03: conta de provider e erro de integração não vazam para outra empresa
+  ---
+  duration_ms: 1649.356
+  type: 'test'
+  ...
+# Subtest: M8-VAL-01: documento enviado sem validação humana não libera o envio
+ok 229 - M8-VAL-01: documento enviado sem validação humana não libera o envio
+  ---
+  duration_ms: 6959.686084
+  type: 'test'
+  ...
+# Subtest: M8-VAL-02: validação humana deixa o caso pronto e o snapshot não leva o arquivo
+ok 230 - M8-VAL-02: validação humana deixa o caso pronto e o snapshot não leva o arquivo
+  ---
+  duration_ms: 8443.087042
+  type: 'test'
+  ...
+# Subtest: M8-VAL-03: a NAY não altera o caso nem valida documento
+ok 231 - M8-VAL-03: a NAY não altera o caso nem valida documento
+  ---
+  duration_ms: 3843.611542
+  type: 'test'
+  ...
+1..231
+# tests 231
+# suites 0
+# pass 231
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1106125.491042

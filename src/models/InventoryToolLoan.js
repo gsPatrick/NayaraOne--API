@@ -1,0 +1,48 @@
+'use strict';
+
+const { DataTypes } = require('sequelize');
+
+/**
+ * InventoryToolLoan — tabela "inventory"."tool_loans"
+ * Empréstimo/saída de ferramenta (Asset): OPEN -> RETURNED (ou OVERDUE enquanto aberto após due_at).
+ */
+module.exports = (sequelize) => {
+  const InventoryToolLoan = sequelize.define(
+    'InventoryToolLoan',
+    {
+      id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true, allowNull: false },
+      groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
+      companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
+      assetId: { type: DataTypes.UUID, allowNull: false, field: 'asset_id' },
+      personUserId: { type: DataTypes.UUID, allowNull: false, field: 'person_user_id' },
+      destinationLocationId: { type: DataTypes.UUID, allowNull: true, field: 'destination_location_id' },
+      sourceLocationId: { type: DataTypes.UUID, allowNull: true, field: 'source_location_id' },
+      // ACHADO REAL (revalidação Marco 7, N2): era DATE (timestamptz) — data pura do front
+      // ("2026-10-01") virava meia-noite UTC, exibida como o dia anterior no fuso local.
+      // DATEONLY nunca sofre conversão de fuso.
+      dueAt: { type: DataTypes.DATEONLY, allowNull: true, field: 'due_at' },
+      returnedAt: { type: DataTypes.DATE, allowNull: true, field: 'returned_at' },
+      conditionCode: { type: DataTypes.STRING(16), allowNull: true, field: 'condition_code' },
+      // EST-006: condição registrada na SAÍDA (separada da condição no retorno, condition_code).
+      conditionOutCode: { type: DataTypes.STRING(16), allowNull: true, field: 'condition_out_code' },
+      status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'OPEN', field: 'status' },
+      // EST-TS-13: nível de escalonamento calculado por quantos dias já passaram do dueAt
+      // (NONE/WARNING/CRITICAL/OVERDUE), mesmo padrão de construction.maintenance_cases.
+      escalationLevel: { type: DataTypes.STRING(16), allowNull: true, defaultValue: 'NONE', field: 'escalation_level' },
+      lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
+      createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
+      updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
+    },
+    {
+      schema: 'inventory',
+      tableName: 'tool_loans',
+      timestamps: true,
+      createdAt: 'created_at',
+      updatedAt: 'updated_at',
+      version: 'lockVersion',
+      underscored: true,
+    }
+  );
+
+  return InventoryToolLoan;
+};

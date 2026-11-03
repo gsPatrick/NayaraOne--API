@@ -1,12 +1,13 @@
 'use strict';
 
 const crypto = require('crypto');
-const { ContractVersion } = require('../../models');
+const { Contract, ContractVersion } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractVersionCreated } = require('./legalEvents.service');
 const { getContract } = require('./contracts.service');
 const { getSetting } = require('../settings/settings.service');
+const { renderTemplateForContract } = require('./contractTemplates.service');
 
 /**
  * M5-07 (fechamento) — DECISÃO DOCUMENTADA: até aqui `documentFileId` era opcional na CRIAÇÃO
@@ -65,20 +66,61 @@ function computeContentHash(content) {
   return crypto.createHash('sha256').update(serialized).digest('hex');
 }
 
+function serializeContent(content) {
+  return typeof content === 'string' ? content : JSON.stringify(content);
+}
+
+function hasValue(content) {
+  return (
+    content !== undefined &&
+    content !== null &&
+    (typeof content === 'string' ? content.trim().length > 0 : Object.keys(content).length > 0)
+  );
+}
+
+function clauseIdsOf(list) {
+  return (Array.isArray(list) ? list : []).map((c) => (c && typeof c === 'object' ? c.contractClauseId : c));
+}
+
+/**
+ * F01 (conferência Nayara 18/10/2026, revisão independente 19/10): quando a versão vem de um
+ * MODELO (`templateId`), o documento é montado AQUI, no servidor, com o contexto das condições
+ * derivado do próprio contrato (renderTemplateForContract). Decisão documentada:
+ *  - o cliente envia só `variables` (preenchimento dos {{placeholders}}), nunca o texto final;
+ *  - se o cliente ainda mandar `content` e ele divergir do texto que o servidor monta, a versão
+ *    é RECUSADA (LEGAL_CONTRACT_VERSION_CONTENT_MISMATCH) — nunca gravamos um texto que inclua
+ *    cláusula com condição falsa ou não aprovada, nem que omita uma de condição verdadeira;
+ *  - `clauseVersionIds` também é calculado pelo servidor; lista enviada pelo cliente que diverge
+ *    do que o modelo de fato usou é recusada;
+ *  - `conditionContext` não é aceito no corpo: o contexto usado e as cláusulas excluídas (com o
+ *    motivo) ficam gravados na própria versão (condition_context / excluded_clauses), que é
+ *    append-only no banco.
+ * Sem `templateId` a versão é um documento avulso (ex.: arquivo enviado pela tela "Nova versão")
+ * — não há cláusula de biblioteca envolvida, e `clauseVersionIds` não pode ser informado.
+ */
 async function createContractVersion(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
-  const { content, documentFileId, effectiveFrom, templateId } = payload;
+  const { documentFileId, effectiveFrom, templateId, variables } = payload;
+  let { content } = payload;
+  if (Object.prototype.hasOwnProperty.call(payload, 'conditionContext')) {
+    throw AppError.badRequest(
+      '"conditionContext" não é aceito na geração da versão: o contexto das cláusulas condicionais é derivado do próprio contrato (partes, garantias, imóvel, valor e prazo).',
+      'LEGAL_CONTRACT_VERSION_CONTEXT_NOT_ACCEPTED'
+    );
+  }
+  if (!templateId && clauseIdsOf(payload.clauseVersionIds).length) {
+    throw AppError.badRequest(
+      '"clauseVersionIds" só existe para versões geradas a partir de um modelo ("templateId") — e é calculado pelo servidor.',
+      'LEGAL_CONTRACT_VERSION_VALIDATION'
+    );
+  }
   // FIX AUD-008 (homologação 09/09/2026): `content === undefined || content === null` deixava
   // passar `content: ""` (ou só espaços) como se fosse um documento real — o hash de uma
   // string vazia é um hash "válido" tecnicamente, mas não representa nenhum conteúdo de
   // verdade, e isso permitia satisfazer assertDocumentGate (que só checa "existe alguma
   // versão") com uma versão vazia por trás. Content precisa ter conteúdo de fato: string não
   // pode ser vazia/só espaço; objeto/JSON não pode ser vazio.
-  const hasRealContent =
-    content !== undefined &&
-    content !== null &&
-    (typeof content === 'string' ? content.trim().length > 0 : Object.keys(content).length > 0);
-  if (!hasRealContent) {
+  if (!templateId && !hasValue(content)) {
     throw AppError.badRequest(
       'O campo "content" é obrigatório e não pode ser vazio — precisa representar o conteúdo real do documento usado para calcular o content_hash.',
       'LEGAL_CONTRACT_VERSION_VALIDATION'
@@ -92,6 +134,61 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
         `Para permitir rascunhos sem arquivo neste tenant, configure "${REQUIRE_DOCUMENT_SETTING_KEY}" como false.`,
       'LEGAL_CONTRACT_VERSION_DOCUMENT_REQUIRED'
     );
+  }
+
+  // FIX (homologação, contrato c00af665-98b9-47bc-8aa2-b7c7143ec894 — "Violação de restrição
+  // de unicidade" ao avançar o contrato): a CAUSA RAIZ real não estava na transição em si, mas
+  // aqui — `nextVersionNumber` era calculado com um SELECT MAX(version_number) sem nenhum lock
+  // antes da decisão (Categoria 1 do catálogo de bugs conhecidos: "SELECT sem lock antes de
+  // decidir"). Duas requisições de criação de versão para o MESMO contrato próximas no tempo
+  // (ex.: duplo-clique em "Nova versão"/"Anexar documento", ou um retry de rede depois de um
+  // upload que pareceu ter falhado mas já tinha sido commitado) liam o mesmo `lastVersion`,
+  // calculavam o mesmo `nextVersionNumber`, e a SEGUNDA gravação estourava a UNIQUE
+  // (contract_id, version_number) de "legal"."contract_versions" (ver migration
+  // 20260101000170) com o erro cru "Violação de restrição de unicidade" — sem nenhuma mensagem
+  // de negócio clara, e sem a versão nova (nem o avanço de status que dependia dela) acontecer.
+  // Fix: `SELECT ... FOR UPDATE` na linha do CONTRATO antes de calcular o próximo número —
+  // serializa duas criações de versão concorrentes para o mesmo contrato (a segunda espera a
+  // primeira commitar e só então enxerga o `lastVersion` já atualizado, calculando o número
+  // seguinte corretamente em vez de repetir o mesmo número da primeira).
+  await Contract.findByPk(contract.id, {
+    transaction,
+    lock: transaction.LOCK.UPDATE,
+    attributes: ['id'],
+  });
+
+  // F01: com modelo, o servidor monta o documento — depois do lock do contrato, para que partes
+  // e garantias lidas para o contexto sejam as mesmas do momento da gravação.
+  let clauseVersionIds = null;
+  let conditionContext = null;
+  let excludedClauses = null;
+  if (templateId) {
+    const rendered = await renderTemplateForContract(templateId, contract, transaction, variables);
+    if (hasValue(content) && serializeContent(content) !== rendered.content) {
+      throw AppError.conflict(
+        'O texto enviado não corresponde ao documento que o modelo gera para este contrato (cláusulas e condições aprovadas). Envie apenas "variables" e deixe o servidor montar o texto.',
+        'LEGAL_CONTRACT_VERSION_CONTENT_MISMATCH'
+      );
+    }
+    const serverClauseIds = rendered.clauses.map((c) => c.contractClauseId);
+    const clientClauseIds = clauseIdsOf(payload.clauseVersionIds);
+    if (clientClauseIds.length && clientClauseIds.join('|') !== serverClauseIds.join('|')) {
+      throw AppError.conflict(
+        '"clauseVersionIds" informado não corresponde às cláusulas que o modelo de fato usa para este contrato.',
+        'LEGAL_CONTRACT_VERSION_CLAUSES_MISMATCH'
+      );
+    }
+    content = rendered.content;
+    clauseVersionIds = rendered.clauses.map((c) => ({ contractClauseId: c.contractClauseId, code: c.code, versionNumber: c.versionNumber }));
+    conditionContext = { source: rendered.contextSource, values: rendered.conditionContext };
+    excludedClauses = rendered.excludedClauses.map((c) => ({
+      contractClauseId: c.contractClauseId,
+      code: c.code,
+      versionNumber: c.versionNumber,
+      title: c.title,
+      reason: c.reason,
+      condition: c.condition,
+    }));
   }
 
   const lastVersion = await ContractVersion.findOne({
@@ -113,9 +210,14 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       // nenhum binário real pra subir ao provedor de assinatura. Quando `content` vem como
       // objeto/JSON (fluxos que não usam renderTemplate), serializa do mesmo jeito que
       // computeContentHash — mantém content_hash sempre coerente com o texto persistido.
-      content: typeof content === 'string' ? content : JSON.stringify(content),
+      content: serializeContent(content),
       contentHash: computeContentHash(content),
       templateId: templateId || null,
+      // Snapshot de rastreabilidade calculado pelo servidor (nunca pelo cliente): qual versão de
+      // cada cláusula entrou, com que contexto, e quais ficaram de fora e por quê.
+      clauseVersionIds: clauseVersionIds && clauseVersionIds.length ? clauseVersionIds : null,
+      conditionContext,
+      excludedClauses,
       effectiveFrom: effectiveFrom || new Date(),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -124,6 +226,28 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
   );
 
   await publishContractVersionCreated(contractVersion, transaction);
+
+  // M45 (Caderno M5 §8 "Se o conteúdo muda depois de enviado para assinatura, envelope é
+  // cancelado e nova versão criada"): toda solicitação de assinatura ainda PENDENTE de versões
+  // anteriores é cancelada (no provedor e aqui), e um contrato em SIGNING volta para APPROVED —
+  // a nova versão precisa ser enviada de novo. Assinaturas já SIGNED nunca são tocadas.
+  if (lastVersion) {
+    const { Signature } = require('../../models');
+    const { cancelSignature } = require('./signatures.service');
+    const { transitionContractStatus } = require('./contracts.service');
+    const olderVersionIds = (await ContractVersion.findAll({ where: { contractId: contract.id }, attributes: ['id'], transaction }))
+      .map((v) => v.id)
+      .filter((vid) => vid !== contractVersion.id);
+    const pending = olderVersionIds.length
+      ? await Signature.findAll({ where: { contractVersionId: olderVersionIds, status: 'PENDING' }, transaction })
+      : [];
+    for (const sig of pending) {
+      await cancelSignature(sig.id, actorUserId, transaction);
+    }
+    if (contract.status === 'SIGNING') {
+      await transitionContractStatus(contract, 'APPROVED', actorUserId, transaction);
+    }
+  }
 
   await registrarAuditoria(
     {

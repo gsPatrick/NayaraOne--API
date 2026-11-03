@@ -1,8 +1,8 @@
 'use strict';
 
-const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification } = require('../../models');
+const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification, Task } = require('../../models');
 const { computeSeverity } = require('../../features/legal/legalDeadlines.service');
-const { publishLegalDeadlineAlert } = require('../../features/legal/legalEvents.service');
+const { publishLegalDeadlineAlert, publishCadernoEvent } = require('../../features/legal/legalEvents.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 
 /**
@@ -62,14 +62,15 @@ async function processEscalations(transaction, now) {
         channel: 'IN_APP',
         title: 'ESCALONAMENTO — prazo jurídico vencido sem tratativa',
         body:
-          `"${deadline.description}" (processo ${legalCase.caseNumber || legalCase.id}) está VENCIDO desde ` +
-          `${new Date(deadline.dueAt).toLocaleString('pt-BR')} e continua sem ação mais de 24h após o primeiro alerta ao responsável.`,
+          `"${deadline.description}" (processo ${legalCase.caseNumber || 'sem número'}) está VENCIDO desde ` +
+          `${new Date(deadline.dueAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} e continua sem ação mais de 24h após o primeiro alerta ao responsável.`,
         createdBy: null,
         updatedBy: null,
       },
       { transaction }
     );
 
+    const beforeEscalation = { escalatedAt: deadline.escalatedAt || null, lastAlertedSeverity: deadline.lastAlertedSeverity || null };
     deadline.escalatedAt = now;
     await deadline.save({ transaction });
 
@@ -81,7 +82,8 @@ async function processEscalations(transaction, now) {
         action: 'legal.deadline.job_escalation',
         entityType: 'LegalDeadline',
         entityId: deadline.id,
-        afterJson: { escalatedAt: deadline.escalatedAt, escalationUserId: legalCase.escalationUserId },
+        beforeJson: beforeEscalation,
+        afterJson: { escalatedAt: deadline.escalatedAt, lastAlertedSeverity: deadline.lastAlertedSeverity || null, escalationUserId: legalCase.escalationUserId },
         reason: `Prazo "${deadline.description}" vencido há mais de 24h sem ação: escalado para o usuário ${legalCase.escalationUserId}.`,
       },
       transaction
@@ -117,15 +119,22 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
 
       await publishLegalDeadlineAlert(deadline, severity, transaction);
 
-      if (legalCase && legalCase.responsibleUserId) {
+      // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 — variante do A07): o
+      // destinatário da notificação era SEMPRE o responsável do PROCESSO; um prazo com
+      // responsibleUserId próprio mas processo sem responsável contava o alerta
+      // (lastAlertedSeverity avançava) sem criar Notification pra ninguém. O responsável do
+      // PRAZO é o dono da obrigação — ele é o destinatário primário; o responsável do
+      // processo é o fallback quando o prazo não tem um próprio.
+      const recipientUserId = deadline.responsibleUserId || legalCase?.responsibleUserId || null;
+      if (recipientUserId) {
         await Notification.create(
           {
             groupId: deadline.groupId,
             companyId: deadline.companyId,
-            userId: legalCase.responsibleUserId,
+            userId: recipientUserId,
             channel: 'IN_APP',
             title: severity === 'OVERDUE' ? 'Prazo jurídico VENCIDO' : 'Prazo jurídico próximo de vencer',
-            body: `"${deadline.description}" (processo ${legalCase.caseNumber || legalCase.id}) vence em ${new Date(deadline.dueAt).toLocaleString('pt-BR')}.`,
+            body: `"${deadline.description}" (processo ${legalCase ? legalCase.caseNumber || 'sem número' : 'não encontrado'}) vence em ${new Date(deadline.dueAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`,
             createdBy: null,
             updatedBy: null,
           },
@@ -133,6 +142,35 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
         );
       }
 
+      if (severity === 'OVERDUE') {
+        // M45 (Caderno M5 §18 "legal.deadline.overdue"): nome literal, uma vez por prazo.
+        await publishCadernoEvent('legal.deadline.overdue', 'LegalDeadline', deadline, { id: deadline.id, legalCaseId: deadline.legalCaseId, dueAt: deadline.dueAt, criticality: deadline.criticality }, 'v1', transaction);
+        // M45 (Caderno M5 §15 "Prazo crítico vencido abre ocorrência HIGH/CRITICAL"): prazo de
+        // criticidade HIGH/CRITICAL vencido abre UMA ocorrência (tarefa) com essa prioridade,
+        // atribuída ao responsável; occurrence_task_id impede abrir de novo.
+        if (['HIGH', 'CRITICAL'].includes(deadline.criticality) && !deadline.occurrenceTaskId) {
+          const occurrence = await Task.create(
+            {
+              groupId: deadline.groupId,
+              companyId: deadline.companyId,
+              assignedToUserId: recipientUserId,
+              title: `Ocorrência ${({ HIGH: 'alta', CRITICAL: 'crítica' })[deadline.criticality] || 'importante'}: prazo jurídico vencido`,
+              description: `"${deadline.description}" (processo ${legalCase ? legalCase.caseNumber || 'sem número' : 'não encontrado'}) venceu em ${new Date(deadline.dueAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} sem conclusão.`,
+              relatedEntityType: 'legal.legal_deadlines',
+              relatedEntityId: deadline.id,
+              dueAt: now,
+              status: 'OPEN',
+              priority: deadline.criticality,
+              createdBy: null,
+              updatedBy: null,
+            },
+            { transaction }
+          );
+          deadline.occurrenceTaskId = occurrence.id;
+        }
+      }
+
+      const beforeAlertJson = { severity: deadline.lastAlertedSeverity || null, firstOverdueAlertedAt: deadline.firstOverdueAlertedAt || null, dueAt: deadline.dueAt };
       deadline.lastAlertedSeverity = severity;
       // Marca o instante do PRIMEIRO alerta de OVERDUE (nunca sobrescrito) — é a partir dele
       // que a janela de escalonamento de 24h é contada.
@@ -150,7 +188,8 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
           action: 'legal.deadline.job_alert',
           entityType: 'LegalDeadline',
           entityId: deadline.id,
-          afterJson: { severity, dueAt: deadline.dueAt },
+          beforeJson: beforeAlertJson,
+          afterJson: { severity, firstOverdueAlertedAt: deadline.firstOverdueAlertedAt || null, dueAt: deadline.dueAt },
           reason: `Job automático de prazos jurídicos alertou severidade ${severity} para o prazo "${deadline.description}".`,
         },
         transaction

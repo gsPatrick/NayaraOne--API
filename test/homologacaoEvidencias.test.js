@@ -11,7 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, waiveAllContractRequirements, createCommissionSource } = require('./testHelpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
@@ -113,6 +113,11 @@ async function createLeaseWithParties(transaction) {
 
 async function createSignableContractVersion(transaction) {
   const contract = await createLeaseWithParties(transaction);
+  // FIX AUD-009 reforçado (gate de checklist documental agora fail-closed de verdade, ver
+  // requirements.service.js#assertRequirementsSatisfied): a transição pra DOCUMENTS_PENDING
+  // gera o checklist automaticamente e bloqueia com requirement PENDING — este helper testa
+  // outro cenário (assinatura/webhook), não o checklist em si, então dispensa tudo antes.
+  await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
   await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
   // FIX AUD-008 (14/09/2026): assertDocumentGate agora exige um File real anexado
   // (documentFileId), não só um "content" textual — este teste precisa simular o mesmo caminho
@@ -298,6 +303,7 @@ test('AUD financeiro rejeita dueAt com ano absurdo (ex.: 92026, dígito extra po
     );
 
     // Data plausível continua funcionando normalmente.
+    const costCenter = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
         groupId: tenant.groupId,
@@ -306,6 +312,7 @@ test('AUD financeiro rejeita dueAt com ano absurdo (ex.: 92026, dígito extra po
         nature: 'PAYABLE',
         amount: 100,
         dueAt: '2026-09-20',
+        costCenterId: costCenter.id,
       },
       tenant.userId,
       transaction
@@ -382,13 +389,16 @@ test('HOMO-05 verificação MFA de origem/dispositivo diferente é sinalizada (i
 // --- TEC-09: concorrência real em liquidação de lançamento financeiro ---
 test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem sucesso (lockVersion otimista)', async () => {
   const tenantCtx = tenant;
-  const entry = await withCommittedTenantTransaction(tenantCtx, (t) =>
-    financialEntriesService.createFinancialEntry(
-      { groupId: tenantCtx.groupId, companyId: tenantCtx.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: 'TEC-09 concorrência (teste automatizado)' },
+  let resultCenterId;
+  const entry = await withCommittedTenantTransaction(tenantCtx, async (t) => {
+    const resultCenter = await createTestResultCenter(tenantCtx, t);
+    resultCenterId = resultCenter.id;
+    return financialEntriesService.createFinancialEntry(
+      { groupId: tenantCtx.groupId, companyId: tenantCtx.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: 'TEC-09 concorrência (teste automatizado)', resultCenterId },
       tenantCtx.userId,
       t
-    )
-  );
+    );
+  });
 
   try {
     const results = await Promise.allSettled([
@@ -401,9 +411,10 @@ test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem s
     assert.equal(succeeded, 1, 'exatamente uma das duas tentativas simultâneas deve ter sucesso');
     assert.equal(failed, 1, 'a outra deve falhar (conflito de versão ou status já SETTLED) — nunca as duas passarem');
   } finally {
-    // Limpeza: este teste precisa de commit real (concorrência de verdade não é simulável numa
-    // única transação), então remove explicitamente o registro criado — nunca fica no banco.
-    await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entry.id } });
+    // Desde a migration 20260101000366 (trigger append-only, FIN-003/010), DELETE direto em
+    // finance.financial_entries é bloqueado pelo banco incondicionalmente — inclusive para
+    // limpeza de teste. O lançamento fica órfão (identificável por entry.id); result_centers
+    // também não é apagado pra não violar a FK que o lançamento órfão ainda mantém dele.
   }
 });
 
@@ -547,6 +558,15 @@ test('TEC-19 healthcheck não trava quando a operação termina normalmente dent
   assert.equal(result, 'ok');
 });
 
+// BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 6, 2026-10-06): login nunca devolvia
+// mfaEnabled — o front só inicializa o badge de segurança a partir deste objeto cacheado no
+// login, nunca refaz fetch depois. "MFA não configurado" aparecia mesmo pra quem já tinha MFA
+// habilitado, e configurar de novo gerava erro confuso de "já habilitado".
+test('login devolve user.mfaEnabled refletindo o estado real do usuário', async () => {
+  const loggedIn = await authService.login({ email: 'admin@nayaraone.dev', password: 'DevAdmin#2026' });
+  assert.equal(typeof loggedIn.user.mfaEnabled, 'boolean');
+});
+
 // --- ADV-12: sessão revogada não pode mais chamar a API, nem com o access token já emitido ---
 function fakeReqRes(token) {
   const req = { header: (name) => (name.toLowerCase() === 'authorization' ? `Bearer ${token}` : undefined) };
@@ -589,6 +609,9 @@ test('ADV-12 authMiddleware bloqueia na hora um access token cuja sessão foi re
 test('AUD-008b versão SEM documentFileId (documento real) não pode avançar o contrato para SIGNING', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseWithParties(transaction);
+    // Este teste prova o gate de DOCUMENTO (AUD-008b), não o de checklist documental
+    // (AUD-009) — dispensa o checklist antes pra isolar o cenário.
+    await waiveAllContractRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     // Mesma reprodução do caso real: content textual "válido" (não vazio), mas SEM documentFileId.
     await contractVersionsService.createContractVersion(
@@ -680,9 +703,9 @@ test('ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o
           groupId: tenant.groupId,
           companyId: tenant.companyId,
           beneficiaryUserId: tenant.userId,
-          baseAmount: testCase.baseAmount,
-          percentage: testCase.percentage,
+          ...(await createCommissionSource(tenant, transaction, { baseAmount: testCase.baseAmount, percentage: testCase.percentage })),
           installmentsCount: testCase.installmentsCount,
+          idempotencyKey: `commission-${uniqueSuffix()}`,
         },
         tenant.userId,
         transaction
@@ -726,7 +749,7 @@ test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e nã
     deadline = await withCommittedTenantTransaction(tenant, (t) =>
       legalDeadlinesService.createLegalDeadline(
         legalCase.id,
-        { description: `HOMO QA prazo vencido ${uniqueSuffix()}`, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+        { description: `HOMO QA prazo vencido ${uniqueSuffix()}`, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', responsibleUserId: tenant.userId },
         tenant.userId,
         t
       )

@@ -1,7 +1,7 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Property, PropertyOffer } = require('../../models');
+const { Property, PropertyOffer, PropertyRadar } = require('../../models');
 
 /**
  * Critérios suportados em `criteriaJson` (todos opcionais — critério ausente não filtra):
@@ -17,10 +17,15 @@ const { Property, PropertyOffer } = require('../../models');
  * Retorna todas as properties com offer ACTIVE do offerType do radar que atendem
  * simultaneamente a TODOS os critérios preenchidos.
  */
-async function matchRadarToProperties(radar, transaction) {
+async function matchRadarToProperties(radar, transaction, options = {}) {
   const criteria = radar.criteriaJson || {};
 
   const offerWhere = { status: 'ACTIVE' };
+  if (options.propertyId) {
+    // Usado por matchNewPropertyToRadars (CRMX-007) para restringir a varredura a UM imóvel
+    // específico recém-publicado, em vez de rodar a query completa do radar contra toda a
+    // base — mesma lógica de critérios, só filtrada por property.id.
+  }
   if (criteria.offerType) offerWhere.offerType = String(criteria.offerType).toUpperCase();
   if (criteria.minPrice !== undefined && criteria.minPrice !== null) {
     offerWhere.askingPrice = { ...(offerWhere.askingPrice || {}), [Op.gte]: criteria.minPrice };
@@ -30,6 +35,7 @@ async function matchRadarToProperties(radar, transaction) {
   }
 
   const propertyWhere = {};
+  if (options.propertyId) propertyWhere.id = options.propertyId;
   if (criteria.propertyType) propertyWhere.propertyType = String(criteria.propertyType).toUpperCase();
   if (criteria.city) propertyWhere.city = { [Op.iLike]: criteria.city };
   if (criteria.state) propertyWhere.state = { [Op.iLike]: criteria.state };
@@ -189,4 +195,29 @@ function explainMatch(radar, property, options = {}) {
   };
 }
 
-module.exports = { matchRadarToProperties, explainMatch };
+/**
+ * M3-22 — CRMX-007 ("Radar automático": "Novo imóvel ou novo cliente pode disparar matching
+ * por eventos"). Até aqui o matching só rodava (a) sob demanda, quando alguém abria
+ * `GET /radar/:id/matches`, ou (b) periodicamente, via radarMatchingJob.js — um imóvel novo
+ * só era descoberto pelos radares existentes na próxima rodada do job (minutos/horas depois),
+ * nunca no instante em que a oferta é publicada. Esta função fecha essa lacuna: dado um
+ * imóvel recém-ativado (chamada por propertyOffers.service.js ao criar/ativar uma offer),
+ * varre todos os PropertyRadar ACTIVE do mesmo tenant e devolve os que batem com ELE
+ * especificamente — reaproveitando exatamente a mesma lógica/critérios de
+ * matchRadarToProperties (via options.propertyId), não uma heurística paralela.
+ */
+async function matchNewPropertyToRadars(property, transaction) {
+  const radars = await PropertyRadar.findAll(
+    { where: { groupId: property.groupId, companyId: property.companyId, status: 'ACTIVE' }, transaction }
+  );
+  if (radars.length === 0) return [];
+
+  const matchedRadars = [];
+  for (const radar of radars) {
+    const matches = await matchRadarToProperties(radar, transaction, { propertyId: property.id });
+    if (matches.length > 0) matchedRadars.push(radar);
+  }
+  return matchedRadars;
+}
+
+module.exports = { matchRadarToProperties, matchNewPropertyToRadars, explainMatch };

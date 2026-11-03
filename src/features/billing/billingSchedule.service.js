@@ -8,6 +8,17 @@ const { publishBillingGenerated } = require('./billingEvents.service');
 const COMPONENT_TYPES = ['RENT', 'CONDO', 'IPTU', 'OTHER'];
 const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
+// ACHADO REAL (auditoria independente Nayara, 14/10/2026, A03): soma de valores monetários com
+// `Number` bruto sofre erro de ponto flutuante (0.1 + 0.2 === 0.30000000000000004 em JS),
+// rejeitando um pagamento matematicamente correto como "excedente". `toCents` converte pra
+// centavos inteiros (nunca sofre esse erro) antes de somar/comparar; `fromCents` volta pra reais.
+function toCents(value) {
+  return Math.round(Number(value) * 100);
+}
+function fromCents(cents) {
+  return cents / 100;
+}
+
 function assertValidPeriod(period) {
   if (!period || !PERIOD_REGEX.test(period)) {
     throw AppError.badRequest('O campo "period" deve estar no formato "YYYY-MM".', 'BILLING_SCHEDULE_VALIDATION');
@@ -56,7 +67,9 @@ async function generateBillingSchedule(payload, actorUserId, transaction) {
     );
   }
 
-  const totalAmount = items.reduce((sum, item) => sum + Number(item.amount), 0);
+  // Mesmo achado A03: soma de componentes (RENT+CONDO+IPTU+OTHER) em centavos inteiros, nunca
+  // Number bruto, pra não acumular erro de ponto flutuante no total gerado.
+  const totalAmount = fromCents(items.reduce((sumCents, item) => sumCents + toCents(item.amount), 0));
 
   const billingSchedule = await BillingSchedule.create(
     {
@@ -151,15 +164,18 @@ async function registerPayment(id, amountPaid, actorUserId, transaction) {
   }
   const beforeJson = billingSchedule.toJSON();
 
-  const newPaidAmount = Number(billingSchedule.paidAmount) + amount;
-  const newBalance = Number(billingSchedule.totalAmount) - newPaidAmount;
+  const newPaidAmountCents = toCents(billingSchedule.paidAmount) + toCents(amount);
+  const newBalanceCents = toCents(billingSchedule.totalAmount) - newPaidAmountCents;
 
-  if (newBalance < 0) {
+  if (newBalanceCents < 0) {
     throw AppError.badRequest(
       `Pagamento de ${amount} excede o saldo em aberto (${billingSchedule.balance}) desta competência.`,
       'BILLING_SCHEDULE_OVERPAYMENT'
     );
   }
+
+  const newPaidAmount = fromCents(newPaidAmountCents);
+  const newBalance = fromCents(newBalanceCents);
 
   billingSchedule.paidAmount = newPaidAmount;
   billingSchedule.balance = newBalance;

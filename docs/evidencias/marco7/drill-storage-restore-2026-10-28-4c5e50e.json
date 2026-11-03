@@ -1,0 +1,98 @@
+{
+  "commit": "4c5e50e79e69209376222c3a09fe769cce7c6911",
+  "dirty": true,
+  "executadoEm": "2026-10-28T15:57:02.181Z",
+  "escopo": "Anexos vinculados a perdas, qualificação de fornecedor, apólice e sinistro do Marco 7 (drill de restore em banco/storage descartáveis)",
+  "arquivosTestados": [
+    {
+      "arquivo": "apolice-assinada.pdf",
+      "tipo": "application/pdf",
+      "vinculos": [
+        "sinistro/apólice (InsurancePolicy)"
+      ],
+      "bytesDoCadastro": 72,
+      "bytesAbertos": 72,
+      "abriu": true,
+      "sha256Confere": true,
+      "tamanhoConfere": true,
+      "sha256IndependenteConfere": true,
+      "blobCifradoIgualOrigemDestino": true,
+      "sha256": "2182730e9b6f9c6e27ae990accdd5a37bc76019c05de29ea8b326cc75d59bb08"
+    },
+    {
+      "arquivo": "doc-fornecedor-1793203019082.pdf",
+      "tipo": "application/pdf",
+      "vinculos": [
+        "qualificação de fornecedor"
+      ],
+      "bytesDoCadastro": 21,
+      "bytesAbertos": 21,
+      "abriu": true,
+      "sha256Confere": true,
+      "tamanhoConfere": true,
+      "sha256IndependenteConfere": null,
+      "blobCifradoIgualOrigemDestino": true,
+      "sha256": "5e6f07d65a629abf3fdfed6da864df5f21c3b6f0cb87cdb2982ae5f09687c0f2"
+    },
+    {
+      "arquivo": "evidencia-perda-decidida.pdf",
+      "tipo": "application/pdf",
+      "vinculos": [
+        "perda",
+        "movimento (evidência)"
+      ],
+      "bytesDoCadastro": 93,
+      "bytesAbertos": 93,
+      "abriu": true,
+      "sha256Confere": true,
+      "tamanhoConfere": true,
+      "sha256IndependenteConfere": true,
+      "blobCifradoIgualOrigemDestino": true,
+      "sha256": "21271b4d8784cd338b2f60d05d0b5c9be53ca11625711476cb85706d601bcf83"
+    },
+    {
+      "arquivo": "evidencia-perda-em-analise.pdf",
+      "tipo": "application/pdf",
+      "vinculos": [
+        "perda"
+      ],
+      "bytesDoCadastro": 111,
+      "bytesAbertos": 111,
+      "abriu": true,
+      "sha256Confere": true,
+      "tamanhoConfere": true,
+      "sha256IndependenteConfere": true,
+      "blobCifradoIgualOrigemDestino": true,
+      "sha256": "7e81cf36b84dec7fbdf074a251fd4ef33d88eed46a255a76dbfe986da847652b"
+    },
+    {
+      "arquivo": "laudo-sinistro-liquidado.pdf",
+      "tipo": "application/pdf",
+      "vinculos": [
+        "sinistro/apólice (InsuranceClaim)"
+      ],
+      "bytesDoCadastro": 100,
+      "bytesAbertos": 100,
+      "abriu": true,
+      "sha256Confere": true,
+      "tamanhoConfere": true,
+      "sha256IndependenteConfere": true,
+      "blobCifradoIgualOrigemDestino": true,
+      "sha256": "1c6bfaf1ec0eefcfb7c8ca0a95c0d4ae60027609c87aa17b593b2fa8e8596434"
+    }
+  ],
+  "todosAbriramEConferem": true,
+  "semChave": {
+    "recusou": true,
+    "codigo": "FILES_CRYPTO_CONFIG_MISSING"
+  },
+  "chaveErrada": {
+    "recusou": true,
+    "codigo": "Error"
+  },
+  "blobAdulterado": {
+    "recusou": true,
+    "codigo": "Error"
+  },
+  "observacao": "A chave FILES_ENCRYPTION_KEY não vai dentro do backup. Sem a mesma chave os arquivos restaurados não abrem."
+}

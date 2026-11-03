@@ -15,7 +15,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, settleFinancialEntryWithApproval, prepareManualSettlement } = require('./testHelpers');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -35,6 +35,11 @@ after(async () => {
 });
 
 async function createEntry(transaction, overrides = {}) {
+  let costCenterId = overrides.costCenterId;
+  if (!costCenterId && (overrides.nature || 'PAYABLE') === 'PAYABLE') {
+    const costCenter = await createTestCostCenter(tenant, transaction);
+    costCenterId = costCenter.id;
+  }
   return financialEntriesService.createFinancialEntry(
     {
       groupId: tenant.groupId,
@@ -43,6 +48,7 @@ async function createEntry(transaction, overrides = {}) {
       nature: 'PAYABLE',
       amount: 100,
       description: 'QA ADV finance',
+      costCenterId,
       ...overrides,
     },
     tenant.userId,
@@ -122,7 +128,7 @@ test('ADV-F03 conciliar lançamento da empresa A dizendo que pertence à empresa
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 100, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -100, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -188,11 +194,13 @@ test('ADV-F06 valor com mais de 2 casas decimais não "cria dinheiro": é arredo
     const entry = await createEntry(transaction, { amount: 10.005, bankAccountId: account.id });
     const relido = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(String(relido.amount), '10.01', 'o ledger guarda exatamente 2 casas — nada de fração escondida');
+        // F03 (conferência 18/10/2026): pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
 
     // Tentar sacar a fração "extra" que o atacante acha que sobrou.
-    await financialEntriesService.settleFinancialEntryPartial(entry.id, 10.01, tenant.userId, transaction);
+    await financialEntriesService.settleFinancialEntryPartial(entry.id, 10.01, tenant.userId, transaction, { manualSettlement });
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 0.01, tenant.userId, transaction),
+      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 0.01, tenant.userId, transaction, { manualSettlement }),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS');
         return true;
@@ -285,7 +293,7 @@ test('ADV-F11 lançamento já liquidado não pode ser editado nem "re-liquidado"
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 250, bankAccountId: account.id });
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    await settleFinancialEntryWithApproval(tenant, entry.id, tenant.userId, transaction);
 
     await assert.rejects(
       () => financialEntriesService.updateFinancialEntry(entry.id, { description: 'maquiando o histórico' }, tenant.userId, transaction),
@@ -338,7 +346,7 @@ test('ADV-F13 repetir o mesmo lançamento na lista do grupo pra "dobrar" a soma 
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 50, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 100, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -100, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -395,7 +403,7 @@ test('ADV-F15 reusar uma transação bancária já conciliada em um novo grupo (
     const e1 = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
     const e2 = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
     const bankTx = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: 100, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -100, transactionDate: new Date() },
       tenant.userId,
       transaction
     );
@@ -532,6 +540,21 @@ test('ADV-F19 tentar limpar o flag de revisão manual pelo update de agenda (sem
     const relido = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(relido.requiresManualReview, true, 'só clearManualReview (com revisor auditado) desliga o flag');
     assert.equal(relido.manualReviewClearedBy, null);
+
+    // Aprova o pagamento (FIX FIN-004) pra isolar exatamente o que este teste quer provar: que
+    // a revisão manual bloqueia mesmo DEPOIS de aprovado — não é a ausência de aprovação que
+    // deveria barrar aqui.
+    const [approverF19] = await User.findOrCreate({
+      where: { email: `homo-qa-advf19-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador F19 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const approvalRequest = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approvalRequest.id, { decision: 'APPROVED' }, approverF19.id, transaction);
+
     await assert.rejects(
       () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
@@ -550,6 +573,17 @@ test('ADV-F20 pagar para conta bancária BLOQUEADA depois da criação do lança
 
     account.status = 'BLOCKED';
     await account.save({ transaction });
+
+    const [approverF20] = await User.findOrCreate({
+      where: { email: `homo-qa-advf20-approver-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Aprovador F20 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    const approvalRequestF20 = await approvalsService.createApprovalRequest(
+      { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'LOW' },
+      tenant.userId,
+      transaction
+    );
+    await approvalsService.decideApprovalStep(approvalRequestF20.id, { decision: 'APPROVED' }, approverF20.id, transaction);
 
     await assert.rejects(
       () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
@@ -587,34 +621,47 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
     }
   }
 
-  const { entryId, accountId } = await withCommitted(async (t) => {
+  const { entryId, manualSettlement } = await withCommitted(async (t) => {
     const account = await createActiveBankAccount(t, suffix);
     const entry = await createEntry(t, { amount: 100, bankAccountId: account.id, description: `QA ADV-F21 ${suffix}` });
-    return { entryId: entry.id, accountId: account.id };
+        // F03 (conferência 18/10/2026): pagamento bancário sem confirmação do banco exige comprovante.
+    const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, t);
+    return { entryId: entry.id, accountId: account.id, manualSettlement };
   });
 
   try {
     // Duas baixas de 60 ao mesmo tempo somariam 120 num lançamento de 100.
+    //
+    // FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §10): o
+    // comportamento ANTERIOR deste teste esperava que a segunda baixa concorrente fosse
+    // REJEITADA (FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING). Isso contraria o contrato — "Valor
+    // excedente nunca é automaticamente tratado como receita; abre pendência de classificação"
+    // significa que o recebimento é SEMPRE aceito; é o excedente que fica retido. Sob
+    // concorrência real, o lock pessimista (FOR UPDATE) ainda serializa as duas chamadas — a
+    // segunda só prossegue depois da primeira comitar — mas agora AMBAS têm sucesso: a segunda
+    // aplica só os 40 que cabem no saldo e os 20 que sobram abrem pendência de classificação,
+    // em vez de a chamada inteira falhar. O saldo do lançamento original continua nunca ficando
+    // negativo (garantia que o teste existe para provar).
     const resultados = await Promise.allSettled([
-      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t)),
-      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t)),
+      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
+      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
     ]);
     const sucessos = resultados.filter((r) => r.status === 'fulfilled');
-    assert.equal(sucessos.length, 1, 'apenas UMA das baixas concorrentes pode passar');
-    const falha = resultados.find((r) => r.status === 'rejected');
-    assert.equal(falha.reason.code, 'FINANCE_ENTRY_PARTIAL_EXCEEDS_REMAINING');
+    assert.equal(sucessos.length, 2, 'sob o novo contrato, recebimento nunca é rejeitado — ambas as baixas concorrentes são aceitas');
+    const comExcedente = sucessos.find((r) => r.value.classificationPending);
+    assert.ok(comExcedente, 'a baixa que chegou depois do saldo já fechado gerou pendência de classificação para o excedente');
+    assert.equal(String(comExcedente.value.classificationPending.amount), '20.00');
 
     await withCommitted(async (t) => {
       const restante = await financialEntriesService.computeRemainingAmount(entryId, t);
-      assert.equal(restante, '40.00', 'o saldo restante nunca fica negativo');
+      assert.equal(restante, '0.00', 'o saldo restante nunca fica negativo (e aqui fecha em zero, nunca abaixo)');
+      const reloaded = await FinancialEntry.findByPk(entryId, { transaction: t });
+      assert.equal(reloaded.status, 'SETTLED');
     });
   } finally {
-    // Limpeza: o ledger é append-only em runtime, mas estes são dados de teste num banco
-    // compartilhado — removidos via SQL direto pra não poluir os outros agentes/suítes.
-    await withCommitted(async (t) => {
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE parent_entry_id = :id', { replacements: { id: entryId }, transaction: t });
-      await sequelize.query('DELETE FROM finance.financial_entries WHERE id = :id', { replacements: { id: entryId }, transaction: t });
-      await sequelize.query('DELETE FROM finance.bank_accounts WHERE id = :id', { replacements: { id: accountId }, transaction: t });
-    });
+    // Desde a migration 20260101000366 (trigger append-only, FIN-003/010), DELETE direto em
+    // finance.financial_entries é bloqueado pelo banco incondicionalmente — inclusive para
+    // limpeza de teste. Os registros ficam órfãos no banco de dev, identificáveis por entryId;
+    // bank_accounts também não é apagada pra não violar a FK que financial_entries mantém dela.
   }
 });

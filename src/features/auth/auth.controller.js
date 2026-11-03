@@ -23,4 +23,17 @@ const logout = catchAsync(async (req, res) => {
   return success(res, { statusCode: 200, data: result });
 });
 
-module.exports = { login, refresh, logout };
+const listCompanies = catchAsync(async (req, res) => {
+  const result = await authService.listMyCompanies({ userId: req.auth.userId, currentCompanyId: req.auth.companyId });
+  return success(res, { statusCode: 200, data: result });
+});
+
+const switchCompany = catchAsync(async (req, res) => {
+  const result = await authService.switchCompany(
+    { auth: req.auth, companyId: req.body && req.body.companyId },
+    requestMeta(req)
+  );
+  return success(res, { statusCode: 200, data: result });
+});
+
+module.exports = { login, refresh, logout, listCompanies, switchCompany };

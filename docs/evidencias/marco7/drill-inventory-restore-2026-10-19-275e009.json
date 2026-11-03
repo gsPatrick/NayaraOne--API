@@ -1,0 +1,281 @@
+{
+  "commit": "275e00976624fad99300b1189db59ad256f60119",
+  "dirty": true,
+  "date": "2026-10-19T17:52:26.224Z",
+  "durationSeconds": 11.786,
+  "exitCode": 0,
+  "checks": [
+    {
+      "name": "origem: saldo por item/local = soma dos movimentos do ledger",
+      "ok": true,
+      "detail": "3 saldos (soma 291.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0"
+    },
+    {
+      "name": "origem: nenhum saldo negativo",
+      "ok": true,
+      "detail": "0 negativo(s)"
+    },
+    {
+      "name": "origem: sem duplicidade (idempotência de movimento/recebimento, NF por empresa)",
+      "ok": true,
+      "detail": "movimentos 0, recebimentos 0, NF 0"
+    },
+    {
+      "name": "origem: recebido por item de pedido = soma dos itens de recebimento",
+      "ok": true,
+      "detail": "2 itens de pedido, 0 divergente(s)"
+    },
+    {
+      "name": "origem: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro",
+      "ok": true,
+      "detail": "2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0"
+    },
+    {
+      "name": "origem: divergências ligadas a itens de recebimento existentes",
+      "ok": true,
+      "detail": "2 divergência(s), 2 aberta(s), 0 órfã(s)"
+    },
+    {
+      "name": "origem: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor",
+      "ok": true,
+      "detail": "1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0"
+    },
+    {
+      "name": "origem: ativos de patrimônio com local/item existentes",
+      "ok": true,
+      "detail": "2 ativo(s), valor de aquisição total 5680.40"
+    },
+    {
+      "name": "destino: saldo por item/local = soma dos movimentos do ledger",
+      "ok": true,
+      "detail": "3 saldos (soma 291.250000); divergentes 0, ledger sem saldo 0, saldo sem ledger 0"
+    },
+    {
+      "name": "destino: nenhum saldo negativo",
+      "ok": true,
+      "detail": "0 negativo(s)"
+    },
+    {
+      "name": "destino: sem duplicidade (idempotência de movimento/recebimento, NF por empresa)",
+      "ok": true,
+      "detail": "movimentos 0, recebimentos 0, NF 0"
+    },
+    {
+      "name": "destino: recebido por item de pedido = soma dos itens de recebimento",
+      "ok": true,
+      "detail": "2 itens de pedido, 0 divergente(s)"
+    },
+    {
+      "name": "destino: recebimentos confirmados com recibo de estoque COMPLETED e payable íntegro",
+      "ok": true,
+      "detail": "2 confirmados, 2 com payable; recibo inválido 0, payable ausente 0, tipo errado 0, valor divergente 0"
+    },
+    {
+      "name": "destino: divergências ligadas a itens de recebimento existentes",
+      "ok": true,
+      "detail": "2 divergência(s), 2 aberta(s), 0 órfã(s)"
+    },
+    {
+      "name": "destino: apólices ativas — soma das parcelas = prêmio, cada parcela com lançamento do mesmo valor",
+      "ok": true,
+      "detail": "1 apólice(s), 1 parcela(s); soma divergente 0, parcela sem lançamento 0"
+    },
+    {
+      "name": "destino: ativos de patrimônio com local/item existentes",
+      "ok": true,
+      "detail": "2 ativo(s), valor de aquisição total 5680.40"
+    },
+    {
+      "name": "35 tabelas idênticas na origem e no destino",
+      "ok": true,
+      "detail": "46 linhas no total"
+    },
+    {
+      "name": "role de runtime sem SUPERUSER/BYPASSRLS",
+      "ok": true,
+      "detail": "superuser=false bypassrls=false"
+    },
+    {
+      "name": "sem contexto de tenant a role de runtime não vê nenhum saldo",
+      "ok": true,
+      "detail": "0 linha(s) visíveis"
+    },
+    {
+      "name": "com o SET LOCAL do tenant vê os saldos restaurados",
+      "ok": true,
+      "detail": "3 de 3"
+    },
+    {
+      "name": "pedido de compra restaurado",
+      "ok": true,
+      "detail": "status OPEN"
+    },
+    {
+      "name": "2 recebimentos confirmados com payable",
+      "ok": true,
+      "detail": "2 recebimentos, 2 payables"
+    },
+    {
+      "name": "divergências do recebimento restauradas",
+      "ok": true,
+      "detail": "OVER_RECEIPT, PRICE_MISMATCH"
+    },
+    {
+      "name": "requisição de material restaurada",
+      "ok": true,
+      "detail": "status ISSUED"
+    },
+    {
+      "name": "apólice e parcelas restauradas",
+      "ok": true,
+      "detail": "ACTIVE, 1 parcela(s)"
+    },
+    {
+      "name": "ativos de patrimônio restaurados",
+      "ok": true,
+      "detail": "2/2"
+    }
+  ],
+  "tables": {
+    "inventory.asset_movements": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inventory.assets": {
+      "rows": 2,
+      "sha256": "ff20a1d9b11e9d48a921e7d4639871080ed08a2cac009bb5b285388723e62b88"
+    },
+    "inventory.count_items": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inventory.counts": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inventory.inventory_items": {
+      "rows": 2,
+      "sha256": "879f5edf2ee89b6298346a3c04999a6faab424248507a69c7e063be6de0b1d9b"
+    },
+    "inventory.inventory_movements": {
+      "rows": 9,
+      "sha256": "6ce791ae7cc7d732fafeab5ec654d6f4d892af17e2fb86ab98ab0b7b5bf276fe"
+    },
+    "inventory.locations": {
+      "rows": 2,
+      "sha256": "7f7e769d4488bcd6e735f8da87c112a445333c4bc42352c31b79a0c923e8452d"
+    },
+    "inventory.loss_cases": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inventory.maintenance_orders": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "inventory.receipt_items": {
+      "rows": 3,
+      "sha256": "2af0775175b63907818fa40304e95ad297e0c16817c0ec650727759a3d689208"
+    },
+    "inventory.receipts": {
+      "rows": 2,
+      "sha256": "a50376575c4cf35b3ccd5ebce65107434c3426b15abb35651374bf3eab3b1015"
+    },
+    "inventory.requisition_items": {
+      "rows": 1,
+      "sha256": "aafeb265f177372bb1f5c47b410d7df28031065e9b0181fc368f46c7c6f251b6"
+    },
+    "inventory.requisitions": {
+      "rows": 1,
+      "sha256": "f7cf4a8698fdd16e0a1970bcbaa6d4c8a32833c298f70609f868a1da4f8025b1"
+    },
+    "inventory.stock_balances": {
+      "rows": 3,
+      "sha256": "7d5061b0e49981b3ad090a300e1da3419eb12704713e2cad7115b7c42091732f"
+    },
+    "inventory.tool_loans": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.goods_receipt_items": {
+      "rows": 3,
+      "sha256": "1d0fd5748a7f098007517bac2ec393a4eac64c35e0a4af3affa2503fd0f0ee56"
+    },
+    "procurement.goods_receipts": {
+      "rows": 2,
+      "sha256": "89d0ebcb0a93c25fa0f6fbb94a234ab57b4f3786f0124458da6ccd9f3316d688"
+    },
+    "procurement.insurance_claim_events": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.insurance_claims": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.insurance_coverages": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.insurance_installments": {
+      "rows": 1,
+      "sha256": "54e63204c1a28aa592987be9ecffe12a76e172466236dbe3d059ef0b709e5a65"
+    },
+    "procurement.insurance_policies": {
+      "rows": 1,
+      "sha256": "f5e32d3f45d1e838b0a9227ab91193d91c263ab372e2b1ca7b35e32adb27764b"
+    },
+    "procurement.insurance_policy_parties": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.insurance_provider_submissions": {
+      "rows": 1,
+      "sha256": "ff40a9c834137ead7631a6af679908dcb8f3e0bf599ff9a68178fda3e811c266"
+    },
+    "procurement.insurance_renewal_tasks": {
+      "rows": 1,
+      "sha256": "2866fd90feffb1f42d8e0669c66a07ccbc00c65f5ecab6fcf0a86d855949f160"
+    },
+    "procurement.purchase_order_items": {
+      "rows": 2,
+      "sha256": "539b14aac220f452fb569fb9f7dd5ce541bddee1d5042a17603b10f098888112"
+    },
+    "procurement.purchase_orders": {
+      "rows": 1,
+      "sha256": "653d00d5e92e17fc52c6fabaadea376890be9210bbf38610017464465fb3f717"
+    },
+    "procurement.purchase_request_items": {
+      "rows": 2,
+      "sha256": "f54fbf169a838ede868c42e7197c318bdef1894ca268a0bc1202cdada20555d4"
+    },
+    "procurement.purchase_requests": {
+      "rows": 1,
+      "sha256": "9d02152419a56525ce10e27256343dabc45a5012d35df199c49562d300f21958"
+    },
+    "procurement.quotations": {
+      "rows": 1,
+      "sha256": "2af5c398368faca240584c2613cee204ff60186143125731686a75c6930476e3"
+    },
+    "procurement.receipt_discrepancies": {
+      "rows": 2,
+      "sha256": "307b18862650e8d547d42b1b785df30e5406bab48f9c8c50edfa4d063d295684"
+    },
+    "procurement.supplier_evaluations": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "procurement.supplier_offer_items": {
+      "rows": 2,
+      "sha256": "7f80c332421da5e5088aaf192c38ee6ce579cd36b5c48cf8959d90be5b91f79e"
+    },
+    "procurement.supplier_offers": {
+      "rows": 1,
+      "sha256": "31fbf28716c39b33e0fe57b90d175be0f065caf99ca924af2b6b17b668367714"
+    },
+    "procurement.supplier_qualifications": {
+      "rows": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}
