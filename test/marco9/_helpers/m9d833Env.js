@@ -15,9 +15,11 @@ let seq = 0;
 
 /** Perfis: o gestor confere (approve), o maker prepara e importa mas NÃO confere. Devolve a função que desfaz. */
 async function prepare(tenant) {
+  // O estado original é lido ANTES de env.prepare (que também concede APPROVE ao gestor): ler depois guardaria o valor já concedido e o desfazer devolveria a concessão.
+  const undo = await env.withRolePermissions({ 'CI GESTOR': { [RECORD]: true, [IMPORT]: true, [APPROVE]: true }, 'CI MAKER': { [RECORD]: true, [IMPORT]: true, [APPROVE]: false } });
   await env.prepare(tenant);
   await env.setSectorRoles(tenant, SECTORS);
-  return env.withRolePermissions({ 'CI GESTOR': { [RECORD]: true, [IMPORT]: true, [APPROVE]: true }, 'CI MAKER': { [RECORD]: true, [IMPORT]: true, [APPROVE]: false } });
+  return undo;
 }
 
 /** Registra um pagamento emergencial (quem prepara = maker, salvo indicação) e devolve a operação. */
