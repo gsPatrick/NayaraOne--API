@@ -18,6 +18,13 @@ function rodar(comando, args, { cwd = RAIZ_API, env = process.env } = {}) {
   return { status: r.status, out: `${r.stdout || ''}${r.stderr || ''}`, stdout: r.stdout || '' };
 }
 
+const curto = (t, n) => { const x = String(t || '').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n)}...` : x; };
+
+/** Testes que falharam no JUnit (<failure>/<error>), com a mensagem curta de cada um: o diagnóstico nunca depende de adivinhação. */
+function detalharFalhas(xml) {
+  return casosDoXml(xml).filter((c) => /<(failure|error)\b/.test(c)).map((c) => ({ nome: curto((c.match(/name="([^"]*)"/) || [])[1] || '?', 120), mensagem: curto((c.match(/<(?:failure|error)\b[^>]*?message="([^"]*)"/) || [])[1] || (c.match(/<(?:failure|error)\b[^>]*>([\s\S]*?)<\/(?:failure|error)>/) || [])[1] || '', 200) }));
+}
+
 /**
  * Roda uma suíte `node --test` (padrões de arquivo expandidos pelo próprio Node, um processo, sem concorrência) com relatório JUnit e confere o relatório: ao menos um teste e
  * NENHUM pulado (no banco descartável teste pulado reprova). Devolve { ok, motivo }.
@@ -37,8 +44,14 @@ function rodarSuite(globs, { env = process.env } = {}) {
     const naoAplicaveis = env.CI_SEM_REPOS_IRMAOS === '1' ? detalharPulados(casosDoXml(xml)).filter((d) => /^NAO_APLICAVEL_NO_CI\b/.test(d.mensagem)) : [];
     const pulados = c.pulados.filter((n) => !naoAplicaveis.some((d) => d.nome === n));
     if (pulados.length) return { ok: false, motivo: `${pulados.length} teste(s) pulado(s) no banco descartável (${pulados.slice(0, 3).join('; ')})` };
-    if (r.status !== 0) return { ok: false, motivo: `a suíte falhou (${c.testes} testes; ${(r.out.match(/^# fail (\d+)/m) || [])[1] || '?'} com falha)` };
-    if (naoAplicaveis.length) return { ok: true, naoAplicavel: naoAplicaveis.length, motivo: `${c.testes} testes, ${c.testes - naoAplicaveis.length} executados, ${naoAplicaveis.length} NAO_APLICAVEL_NO_CI (artefato irmão ausente, coberto na suíte local: ${naoAplicaveis.map((d) => d.nome).slice(0, 3).join('; ')}), nenhum outro pulado` };
+    if (r.status !== 0) {
+      const falhas = detalharFalhas(xml);
+      const lista = falhas.slice(0, 10).map((f) => `[${f.nome}] ${f.mensagem}`).join(' | ');
+      // Cauda da saída do filho só quando o JUnit não explica a falha (suíte que morreu antes de reportar).
+      const cauda = falhas.length ? '' : ` ; saída: ${curto(r.out.split('\n').slice(-15).join(' '), 600)}`;
+      return { ok: false, motivo: `a suíte falhou (${c.testes} testes; ${falhas.length} com falha${falhas.length ? `: ${lista}${falhas.length > 10 ? ` (+${falhas.length - 10})` : ''}` : ''}; código de saída ${r.status})${cauda}` };
+    }
+    if (naoAplicaveis.length) return { ok: true, naoAplicavel: naoAplicaveis.length, motivo: `${c.testes} testes, ${c.testes - naoAplicaveis.length} executados, ${naoAplicaveis.length} NAO_APLICAVEL_NO_CI (artefato irmão ausente, coberto na suíte local: ${naoAplicaveis.map((d) => `[${curto(d.nome, 100)}] ${curto(d.mensagem, 120)}`).slice(0, 10).join(' | ')}), nenhum outro pulado` };
     return { ok: true, motivo: `${c.testes} testes, nenhum pulado` };
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
