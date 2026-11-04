@@ -81,21 +81,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Checkout do Front de BI (NayaraOne--FRONT)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/NayaraOne--FRONT
-          token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
-          path: front-checkout
-      - name: Posicionar o Front ao lado da API
-        run: ln -s "$GITHUB_WORKSPACE/front-checkout" "$(dirname "$GITHUB_WORKSPACE")/NayaraOne--FRONT"
+      - name: Front ao lado da API (ou declarar a ausência)
+        run: bash scripts/governance-ci/prepararFront.sh
+        env:
+          FRONT_REPO_TOKEN: ${{ secrets.FRONT_REPO_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
       - name: Dependências do Front (typecheck da etapa 2)
-        run: npm ci --prefix front-checkout
+        run: |
+          if [ -d ../NayaraOne--FRONT ]; then npm ci --prefix ../NayaraOne--FRONT; else echo "Front ausente (CI_SEM_REPOS_IRMAOS=1): typecheck do Front NAO_APLICAVEL_NO_CI"; fi
       - name: Esteira do BI, etapas 1 a 11
         run: node scripts/analytics/ci/run.js --fase pr --saida docs/evidencias/ci/bi-pipeline
       - name: Resumo da esteira
