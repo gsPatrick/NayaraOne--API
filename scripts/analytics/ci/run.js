@@ -7,6 +7,7 @@
  * Sem banco descartável ativo, o comando se reexecuta dentro de `scripts/withDisposableDb.js` (cluster local em 127.0.0.1, porta aleatória) e
  * semeia os dois tenants fictícios uma vez. Sai com 1 se alguma etapa reprovar. Nenhuma etapa escreve no banco compartilhado de homologação.
  */
+const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const { runPipeline } = require('./pipeline');
@@ -16,10 +17,25 @@ const { bancoDescartavelAtivo, ambienteDosComandos, portaAleatoria } = require('
 const API_ROOT = path.join(__dirname, '..', '..', '..');
 const arg = (nome, padrao) => { const i = process.argv.indexOf(nome); return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : padrao; };
 
+/**
+ * O `node --test` do Node 20 (versão do CI) não expande glob (isso veio no Node 21) e o spawn sem shell também não: o argumento com `*` no nome do
+ * arquivo vira a lista dos arquivos existentes, em ordem alfabética. Sem nenhum arquivo, o argumento segue como veio e o `node --test` reprova.
+ */
+function expandirGlobs(args) {
+  return args.flatMap((a) => {
+    if (!a.includes('*') || a.startsWith('-')) return [a];
+    const dir = path.dirname(a);
+    const re = new RegExp(`^${path.basename(a).replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*')}$`);
+    let nomes = [];
+    try { nomes = fs.readdirSync(path.join(API_ROOT, dir)).filter((n) => re.test(n)).sort(); } catch { /* diretório inexistente */ }
+    return nomes.length ? nomes.map((n) => path.posix.join(dir, n)) : [a];
+  });
+}
+
 function executarComando(comando, env) {
   return new Promise((resolve) => {
     let output = '';
-    const filho = spawn(comando.cmd, comando.args, { cwd: API_ROOT, env, shell: false });
+    const filho = spawn(comando.cmd, expandirGlobs(comando.args), { cwd: API_ROOT, env, shell: false });
     filho.stdout.on('data', (d) => { output += d; });
     filho.stderr.on('data', (d) => { output += d; });
     filho.on('error', (e) => resolve({ code: 127, output: `${output}${e.message}` }));
@@ -54,4 +70,6 @@ async function main() {
   process.exitCode = r.ok ? 0 : 1;
 }
 
-main().catch((e) => { console.error(e.message); process.exitCode = 1; });
+if (require.main === module) main().catch((e) => { console.error(e.message); process.exitCode = 1; });
+
+module.exports = { expandirGlobs };
