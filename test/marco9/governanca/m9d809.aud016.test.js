@@ -3,7 +3,7 @@
 // M9-D809 — AUD-016 (JUR-010): o dossiê reúne todos os anexos do contrato (com o hash real) e o download de anexo RESTRICTED passa pelo guard da DLP: sem MFA e sem justificativa
 // recusa, e cada pedido gera export_job. Desde a M9-D920 o teste chama as ROTAS reais (GET /files/:id/content e GET /legal/evidence-packages/:id/export), não só o guard. Banco descartável.
 // porta aleatória: portas fixas colidem com a API de outro teste que esteja de pé ao mesmo tempo
-process.env.PORT = process.env.M9D809_AUD016_TEST_PORT || String(30000 + Math.floor(Math.random() * 20000));
+process.env.PORT = process.env.M9D809_AUD016_TEST_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');

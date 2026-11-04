@@ -22,6 +22,19 @@ async function setPermissions(roleName, codes) {
   inseridas.set(roleName, rows.map((r) => r.id));
 }
 
+/** Espera o servidor do app ouvir de verdade (ou falhar de forma explícita). Antes era uma pausa fixa de 400 ms: se a porta estivesse ocupada, o erro do listen sumia e o login batia em ECONNREFUSED sem pista da causa. */
+function aguardarOuvindo(server, porta, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    if (server.listening) return resolve();
+    const timer = setTimeout(() => { limpar(); reject(new Error(`a API de teste não passou a ouvir na porta ${porta} em ${timeoutMs} ms`)); }, timeoutMs);
+    const onListening = () => { limpar(); resolve(); };
+    const onError = (err) => { limpar(); reject(new Error(`a API de teste não conseguiu ouvir na porta ${porta}: ${err.code || err.message}`)); };
+    const limpar = () => { clearTimeout(timer); server.off('listening', onListening); server.off('error', onError); };
+    server.once('listening', onListening);
+    server.once('error', onError);
+  });
+}
+
 /** { baseUrl, tenants, tokens, call, skip, close } — `logins` = { apelido: [tenant, perfil] }. */
 async function startHttp({ port, grants = {}, logins }) {
   if (!DISPOSABLE) return { skip: SKIP_DISPOSABLE };
@@ -31,9 +44,9 @@ async function startHttp({ port, grants = {}, logins }) {
   if (!password) return { skip: 'seed de dois tenants ausente.' };
   const tenants = await loadTenants();
   for (const [roleName, codes] of Object.entries(grants)) await setPermissions(roleName, codes);
-  require('../../../app');
+  const app = require('../../../app');
   const baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  await aguardarOuvindo(app.server, process.env.PORT);
   const tokens = {};
   for (const [alias, [tenantKey, profile]] of Object.entries(logins)) {
     let res; let body;
@@ -60,4 +73,4 @@ async function stopHttp(grants) {
   setTimeout(() => process.exit(0), 300);
 }
 
-module.exports = { startHttp, stopHttp, setPermissions };
+module.exports = { startHttp, stopHttp, setPermissions, aguardarOuvindo };

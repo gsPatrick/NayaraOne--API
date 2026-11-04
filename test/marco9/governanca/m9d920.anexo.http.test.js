@@ -2,8 +2,8 @@
 
 // M9-D920 §3.2 — classificação do anexo: padrão HIGH no upload, só quem tem governance:classification:manage define ou altera, a leitura em tela de HIGH e o guard em RESTRICTED no
 // GET /files/:id/content. API real em banco descartável.
-// porta aleatória: portas fixas colidem com a API de outro teste que esteja de pé ao mesmo tempo
-process.env.PORT = process.env.M9D920_ANEXO_TEST_PORT || String(30000 + Math.floor(Math.random() * 20000));
+// porta livre escolhida pelo SO (listen(0)): nem fixa (colide com outra API de pé) nem sorteada em 30000-49999 (cai na faixa efêmera do Linux, usada pelas conexões do próprio teste ao banco)
+process.env.PORT = process.env.M9D920_ANEXO_TEST_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');

@@ -2,8 +2,8 @@
 
 // M9-D920 §3.1 — impressão: POST /dlp/print-events passa pelo guard antes da visão de impressão; o PDF sai por endereço assinado de uso único, com rodapé em toda página, marca
 // d'água quando a política da classe a liga ou o usuário a pede, campos mascarados e auditoria dlp.print. API real em banco descartável.
-// porta aleatória: portas fixas colidem com a API de outro teste que esteja de pé ao mesmo tempo
-process.env.PORT = process.env.M9D920_PRINT_TEST_PORT || String(30000 + Math.floor(Math.random() * 20000));
+// porta livre escolhida pelo SO (listen(0)): nem fixa (colide com outra API de pé) nem sorteada em 30000-49999 (cai na faixa efêmera do Linux, usada pelas conexões do próprio teste ao banco)
+process.env.PORT = process.env.M9D920_PRINT_TEST_PORT || require('../_helpers/portaLivre').portaLivre();
 
 const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
