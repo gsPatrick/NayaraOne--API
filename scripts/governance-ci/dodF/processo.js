@@ -20,6 +20,16 @@ function rodar(comando, args, { cwd = RAIZ_API, env = process.env } = {}) {
 
 const curto = (t, n) => { const x = String(t || '').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim(); return x.length > n ? `${x.slice(0, n)}...` : x; };
 
+/** Cópia do JUnit de cada suíte em docs/evidencias/ci/governanca (o CI publica a pasta como artefato): quem investiga vê TODOS os testes, não só o resumo da linha. */
+function guardarJunit(xml, globs) {
+  try {
+    const destino = path.join(RAIZ_API, 'docs', 'evidencias', 'ci', 'governanca');
+    fs.mkdirSync(destino, { recursive: true });
+    const nome = path.basename(String(globs[0])).replace(/[^A-Za-z0-9._-]/g, '_');
+    fs.writeFileSync(path.join(destino, `dod-f.${nome}.junit.xml`), xml);
+  } catch (_e) { /* evidência extra: nunca derruba a prova */ }
+}
+
 /** Testes que falharam no JUnit (<failure>/<error>), com a mensagem curta de cada um: o diagnóstico nunca depende de adivinhação. */
 function detalharFalhas(xml) {
   return casosDoXml(xml).filter((c) => /<(failure|error)\b/.test(c)).map((c) => ({ nome: curto((c.match(/name="([^"]*)"/) || [])[1] || '?', 120), mensagem: curto((c.match(/<(?:failure|error)\b[^>]*?message="([^"]*)"/) || [])[1] || (c.match(/<(?:failure|error)\b[^>]*>([\s\S]*?)<\/(?:failure|error)>/) || [])[1] || '', 200) }));
@@ -38,6 +48,7 @@ function rodarSuite(globs, { env = process.env } = {}) {
     const r = rodar(process.execPath, ['--test', '--test-concurrency=1', '--test-reporter=junit', `--test-reporter-destination=${junit}`, ...expandirGlobs(globs).map((a) => path.resolve(RAIZ_API, a))], { env: { ...limpo, NODE_ENV: 'test' } });
     let xml;
     try { xml = fs.readFileSync(junit, 'utf8'); } catch (e) { throw new LeituraError(`relatório JUnit da suíte não foi gerado: ${e.code || e.message}`); }
+    guardarJunit(xml, globs);
     const c = contar(xml);
     if (!c.testes) return { ok: false, motivo: 'a suíte não executou nenhum teste' };
     // Única exceção, a mesma do checkJunit: com CI_SEM_REPOS_IRMAOS=1, o teste pulado com a mensagem NAO_APLICAVEL_NO_CI (artefato irmão ausente) não reprova, mas é contado à parte.
