@@ -134,3 +134,16 @@ test('m9d940 expandirGlobs expande padrões sem depender do shell nem do node --
   const cfg = require('../../../docs/governance/dod-bloco-f.json');
   for (const s of [...cfg.registry.suites, ...cfg.dlp.suites, ...cfg.dry3.adiamento.suites]) assert.ok(expandirGlobs([s]).length > 0, s);
 });
+
+test('m9d940 suíte que falha lista o nome e a mensagem de cada teste que falhou, e a suíte NAO_APLICAVEL_NO_CI lista nome e motivo', { skip: DISPOSABLE ? false : SKIP_DISPOSABLE }, () => {
+  const amb = kit.ambiente();
+  amb.cfg.dlp.suites = [kit.suiteMinima(amb.dir, 'falha.suite.test.js', "test('o teste que quebra', () => { throw new Error('motivo-visivel-123'); });\ntest('o que passa', () => {});")];
+  amb.salvar();
+  const r = kit.fechar(amb, ['--itens', 'dlp']);
+  assert.equal(r.status, 1, r.out);
+  assert.match(kit.linha(r, 'DLP'), /^FALHA DLP: suíte: a suíte falhou \(2 testes; 1 com falha: \[o teste que quebra\] .*motivo-visivel-123.*; código de saída 1\)/);
+  amb.cfg.dlp.suites = [kit.suiteMinima(amb.dir, 'irmao2.suite.test.js', "test('lê o irmão', { skip: 'NAO_APLICAVEL_NO_CI: Maturacao/x ausente no CI' }, () => {});")];
+  amb.salvar();
+  const na = kit.fechar(amb, ['--itens', 'dlp'], { CI_SEM_REPOS_IRMAOS: '1' });
+  assert.match(kit.linha(na, 'DLP'), /\[lê o irmão\] NAO_APLICAVEL_NO_CI: Maturacao\/x ausente/);
+});
