@@ -1,0 +1,155 @@
+name: Esteira do BI
+
+# M9-D704, M9-D705 e M9-D708: as saídas de execução real no GitHub dos jobs `bi-adversarial` (os 15 testes adversariais do BI, sem skip) e `bi-pipeline`
+# (etapas 1 a 11, parando na primeira vermelha) e da promoção (etapas 12 a 14). Os mesmos jobs existem em test.yml (que só dispara em main e na branch
+# de homologação); este arquivo os dispara também na branch de trabalho marco-9 e sob demanda, para a saída ficar registrada por commit.
+# O CI NÃO faz push nem deploy: a promoção (etapas 12 a 14) nunca roda sozinha. Ela só existe no disparo manual, depois que o Patrick confirma o deploy
+# no DEV, e o environment `bi-promocao` (com revisor obrigatório, criado por ele em Settings > Environments) segura o job até a aprovação humana.
+# Banco: sempre o cluster descartável (scripts/withDisposableDb.js), nunca o compartilhado. Segredos só em `secrets`, nunca no log.
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      executar_promocao:
+        description: 'Também pedir a promoção (etapas 12 a 14). Exige o deploy no DEV já feito pelo Patrick e a aprovação do environment bi-promocao'
+        type: boolean
+        default: false
+      deploy_dev_feito:
+        description: 'Confirmo que o deploy da API no DEV foi feito por mim para este commit (a etapa 12 chama o DEV de verdade)'
+        type: boolean
+        default: false
+
+jobs:
+  # Os 15 testes adversariais (um nome fixo cada) e a suíte que vigia nomes, skip/only e mutação. Sem needs: roda mesmo com a esteira vermelha.
+  bi-adversarial:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      # O CI faz checkout só da API: Maturacao/ (sem remoto) não existe aqui. O que depender dela sai NAO_APLICAVEL_NO_CI (pulado e dito), nunca passou.
+      CI_SEM_REPOS_IRMAOS: '1'
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Suíte adversarial do BI (M9-D704)
+        run: |
+          mkdir -p docs/evidencias/ci
+          node scripts/withDisposableDb.js -- env LOG_LEVEL=info CLAMAV_HOST=127.0.0.1 CLAMAV_PORT=3310 bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=docs/evidencias/ci/bi-adversarial-junit.xml test/marco9/analytics/m9d704.adversarial.test.js test/marco9/analytics/m9d704.suite.test.js" 2>&1 | tee docs/evidencias/ci/bi-adversarial.log
+          test "${PIPESTATUS[0]}" -eq 0
+        shell: bash
+      - name: Os 15 nomes rodaram e nenhum foi pulado
+        if: always()
+        run: |
+          grep -c 'm9d704 adv[0-9][0-9] ' docs/evidencias/ci/bi-adversarial.log || true
+          grep -E '^# (tests|pass|fail|skipped|todo)' docs/evidencias/ci/bi-adversarial.log || true
+          grep -ci 'NAO_APLICAVEL_NO_CI' docs/evidencias/ci/bi-adversarial.log || true
+      - name: Arquivar log e JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bi-adversarial-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/bi-adversarial.log
+            docs/evidencias/ci/bi-adversarial-junit.xml
+          if-no-files-found: warn
+          retention-days: 90
+
+  # Etapas 1 a 11, na ordem do livro; a primeira vermelha bloqueia as seguintes. A etapa 2 compila as telas de BI do Front, então o Front vai ao lado da API.
+  bi-pipeline:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      CI_SEM_REPOS_IRMAOS: '1'
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Checkout do Front de BI (NayaraOne--FRONT)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/NayaraOne--FRONT
+          token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
+          path: front-checkout
+      - name: Posicionar o Front ao lado da API
+        run: ln -s "$GITHUB_WORKSPACE/front-checkout" "$(dirname "$GITHUB_WORKSPACE")/NayaraOne--FRONT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Dependências do Front (typecheck da etapa 2)
+        run: npm ci --prefix front-checkout
+      - name: Esteira do BI, etapas 1 a 11
+        run: node scripts/analytics/ci/run.js --fase pr --saida docs/evidencias/ci/bi-pipeline
+      - name: Resumo da esteira
+        if: always()
+        run: |
+          { echo "## Esteira do BI (M9-D705)"; echo '```'; cat docs/evidencias/ci/bi-pipeline/resumo.json | head -80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Publicar o resultado de cada etapa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bi-pipeline-${{ github.sha }}
+          path: docs/evidencias/ci/bi-pipeline
+          if-no-files-found: warn
+          retention-days: 90
+
+  # Promoção (etapas 12 a 14): NUNCA automática. Só no disparo manual com as duas confirmações, depois das duas esteiras verdes, e o environment
+  # `bi-promocao` (revisor obrigatório: o Patrick) pausa o job até a aprovação humana. Não faz deploy: a etapa 12 só lê o DEV (GET) com os secrets
+  # DEV_API_BASE_URL e DEV_SMOKE_TOKEN; sem eles REPROVA, não inventa host. A 13 reexecuta carga e rebuild em banco descartável; a 14 confere o aceite dos owners.
+  bi-promocao:
+    needs: [bi-pipeline, bi-adversarial]
+    if: github.event_name == 'workflow_dispatch' && inputs.executar_promocao
+    runs-on: ubuntu-latest
+    environment: bi-promocao
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      CI_SEM_REPOS_IRMAOS: '1'
+      DEV_API_BASE_URL: ${{ secrets.DEV_API_BASE_URL }}
+      DEV_SMOKE_TOKEN: ${{ secrets.DEV_SMOKE_TOKEN }}
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - name: Conferir o registro humano do deploy no DEV
+        run: |
+          if [ "${{ inputs.deploy_dev_feito }}" != "true" ]; then
+            echo "::error::Promoção bloqueada: o Patrick não confirmou o deploy no DEV (input deploy_dev_feito). Nada foi executado."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Esteira do BI, etapas 12 a 14
+        run: node scripts/analytics/ci/run.js --fase promocao --ambiente LAB --saida docs/evidencias/ci/bi-promocao
+      - name: Publicar o resultado de cada etapa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bi-promocao-${{ github.sha }}
+          path: docs/evidencias/ci/bi-promocao
+          if-no-files-found: warn
+          retention-days: 90
