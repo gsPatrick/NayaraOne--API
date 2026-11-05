@@ -17,7 +17,11 @@ let A;
 before(async () => { ({ a: A } = await env.tenants()); });
 after(async () => { await sequelize.close(); });
 const run = (fn) => withRollbackTenantTransaction(A, fn);
-const at = (iso) => new Date(iso);
+// Os instantes do cenário foram escritos sobre a segunda 09/11/2026; `at` os desloca em dias inteiros para a semana
+// do NOON_SP (que acompanha a execução), mantendo hora e dia da semana. Os consentimentos que readyPerson grava
+// partem do NOON_SP; com datas fixas o cenário ficaria antes deles com o tempo.
+const SHIFT_MS = env.NOON_SP.getTime() - Date.parse('2026-11-09T17:00:00Z');
+const at = (iso) => new Date(Date.parse(iso) + SHIFT_MS);
 const FOURTEEN = at('2026-11-09T17:00:00Z'); // 14:00 em São Paulo
 const send = (t, personId, instant, purpose = 'MARKETING', channel = 'WHATSAPP', over = {}) => canSend(personId, channel, purpose, instant,
   { tenant: A, transaction: t, officialTemplate: true, ...over });
@@ -58,7 +62,7 @@ test('ordem_de_precedencia_supressao_quiet_cap_consent', async () => {
     const quiet = await send(t, q2, at('2026-11-10T01:30:00Z'), 'NUTRICAO');
     assert.equal(quiet.reason, 'QUIET_HOURS');
     assert.equal(quiet.code, 'MKT_QUIET_HOURS');
-    assert.equal(quiet.nextEligibleAt.toISOString(), '2026-11-10T11:00:00.000Z');
+    assert.equal(quiet.nextEligibleAt.toISOString(), at('2026-11-10T11:00:00.000Z').toISOString());
     // fora do silêncio, cap estourado e sem consentimento: o cap vem antes do consentimento
     const cap = await send(t, q2, FOURTEEN, 'NUTRICAO');
     assert.equal(cap.reason, 'FREQUENCY_CAP');
@@ -81,7 +85,7 @@ test('quiet_hours_cruza_meia_noite', async () => {
       assert.equal((await send(t, p, sp(utc))).reason === 'QUIET_HOURS', quiet, `UTC ${utc}`);
     }
     // o silêncio não perde a ação: a resposta traz o instante em que volta a poder enviar
-    assert.equal((await send(t, p, sp('02:00'))).nextEligibleAt.toISOString(), '2026-11-10T11:00:00.000Z');
+    assert.equal((await send(t, p, sp('02:00'))).nextEligibleAt.toISOString(), at('2026-11-10T11:00:00.000Z').toISOString());
     // o administrador muda a janela sem deploy: 20:00-09:00 passa a incluir 08:30 (11:30Z) e libera 20:00 (23:00Z -> silêncio)
     await upsertSetting('marketing.quiet_hours', '20:00 a 09:00 America/Sao_Paulo', A, A.userId, t);
     assert.equal((await send(t, p, sp('11:30'))).reason, 'QUIET_HOURS');

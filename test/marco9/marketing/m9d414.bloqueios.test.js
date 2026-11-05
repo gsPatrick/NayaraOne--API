@@ -11,6 +11,9 @@ const ks = require('../_helpers/m9d425Env');
 let tenant; let tenantB;
 before(async () => { ({ tenantA: tenant, tenantB } = await env.prepararTenants()); });
 after(async () => { await sequelize.close(); });
+// Validade futura e "dentro" derivadas do NOON_SP do runner (que acompanha a execução): data fixa viraria passado.
+const DAY_MS = 24 * 3600 * 1000;
+const FUTURO = new Date(env.NOON_SP.getTime() + 60 * DAY_MS).toISOString();
 const inTx = (fn) => withRollbackTenantTransaction(tenant, fn);
 const rows = async (t, runId) => env.runRow(t, runId);
 const statuses = (row) => Object.fromEntries(row.actions_result.map((a) => [a.type, a.status]));
@@ -92,9 +95,9 @@ test('run_fora_da_validade_nasce_blocked_outside_validity sem executar acao (eva
     const past = await scenario(t, { flow: { validFrom: '2026-01-01T00:00:00Z', validUntil: '2026-02-01T00:00:00Z' } });
     assert.equal(past.row.blocked_reason, 'OUTSIDE_VALIDITY');
     assert.deepEqual(statuses(past.row), { SEND_MESSAGE: 'SKIPPED', CREATE_TASK: 'SKIPPED' });
-    const future = await scenario(t, { flow: { validFrom: '2027-01-01T00:00:00Z' } });
+    const future = await scenario(t, { flow: { validFrom: FUTURO } });
     assert.equal(future.row.blocked_reason, 'OUTSIDE_VALIDITY');
-    const inside = await scenario(t, { flow: { validFrom: '2026-01-01T00:00:00Z', validUntil: '2027-01-01T00:00:00Z' } });
+    const inside = await scenario(t, { flow: { validFrom: '2026-01-01T00:00:00Z', validUntil: FUTURO } });
     assert.equal(inside.row.status, 'COMPLETED');
   });
 });
@@ -120,7 +123,7 @@ test('cada_motivo_de_bloqueio_da_lista_de_17_e_produzido: um caso por motivo; QU
     produced.set('OPT_OUT', optOutConsent.row);
     const noChannel = await scenario(t, { flow: { actions: [env.SEND({ channel: 'AUTO' }), env.TASK()] }, setup: (p) => env.q(t, 'DELETE FROM people.person_contacts WHERE person_id = :p', { p }) });
     produced.set('NO_CONTACT_CHANNEL', noChannel.row);
-    const expired = await scenario(t, { flow: { actions: [env.SEND({ expiresAt: '2026-11-09T16:00:00Z' }), env.TASK()] } });
+    const expired = await scenario(t, { flow: { actions: [env.SEND({ expiresAt: new Date(env.NOON_SP.getTime() - 3600 * 1000).toISOString() }), env.TASK()] } });
     produced.set('EXPIRED', expired.row);
     const cap = await scenario(t, { flow: { frequencyCap: { max: 1, windowDays: 7, scope: 'PERSON_CHANNEL_PURPOSE' } }, setup: (p) => env.addMessage(t, tenant, { personId: p, at: new Date(env.NOON_SP.getTime() - 3600 * 1000 * 30) }) });
     produced.set('FREQUENCY_CAP', cap.row);

@@ -9,6 +9,7 @@ const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { evaluateAutomationPolicy } = require('../../../src/features/marketing/automations/policy');
 const { buildAutomationFacts } = require('../../../src/features/marketing/automations/facts');
 const env = require('../_helpers/mktPolicyEnv');
+const { proximoDiaDaSemana, instante } = require('../_helpers/relogioRelativo');
 
 const { readyPerson, makeFlowVersion, publishRule, makeOpportunity, makeRadar, addMessage, addConsent, uid } = env;
 let A;
@@ -16,7 +17,9 @@ let B;
 before(async () => { ({ a: A, b: B } = await env.tenants()); });
 after(async () => { await sequelize.close(); });
 const run = (fn) => withRollbackTenantTransaction(A, fn);
-const NOW = new Date('2026-11-09T17:00:00Z');
+// Segunda-feira 17:00Z ao menos 4 dias à frente da execução: os registros gravados agora ficam antes dela.
+const DIA = proximoDiaDaSemana(1, 4);
+const NOW = instante(DIA, '17:00:00');
 const policy = (t, personId, conditions) => evaluateAutomationPolicy(
   { version: { flowId: uid(), conditions, cooldown: { amount: 1, unit: 'HOURS' } }, subject: { type: 'PERSON', id: personId }, channel: 'WHATSAPP', now: NOW }, A, t);
 
@@ -63,8 +66,8 @@ test('facts_trazem_so_campos_seguros_do_crm', async () => {
     await makeOpportunity(t, A, personId, { stage: 'VISIT', temperature: 'HOT' });
     await makeRadar(t, A, personId, { propertyTypes: ['APARTMENT', 'HOUSE'] });
     await makeRadar(t, A, personId, { propertyTypes: ['LAND'] }, 'PAUSED');
-    await addMessage(t, A, { personId, channel: 'WHATSAPP', direction: 'INBOUND', status: 'RECEIVED', at: new Date('2026-11-04T17:00:00Z') });
-    await addConsent(t, A, personId, 'WHATSAPP', 'RADAR', 'OPT_OUT', new Date('2026-11-01T17:00:00Z'));
+    await addMessage(t, A, { personId, channel: 'WHATSAPP', direction: 'INBOUND', status: 'RECEIVED', at: instante(DIA, '17:00:00', -5) });
+    await addConsent(t, A, personId, 'WHATSAPP', 'RADAR', 'OPT_OUT', instante(DIA, '17:00:00', -8));
     const facts = await buildAutomationFacts({ type: 'PERSON', id: personId }, A, t, NOW);
     assert.equal(facts.leadStage, 'VISIT');
     assert.equal(facts.leadTemperature, 'HOT');

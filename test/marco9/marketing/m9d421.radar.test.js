@@ -105,7 +105,7 @@ test('match_as_21h30_agenda_mensagem_para_08h_e_cria_tarefa_na_hora', async () =
   await inRollback(async (t) => {
     await ready(t);
     const s = await scenario(t);
-    const night = new Date('2026-11-10T00:30:00.000Z'); // 21:30 em São Paulo
+    const night = new Date(env.NOON_SP.getTime() + 7.5 * env.HOUR); // dia seguinte ao NOON_SP, 00:30Z = 21:30 em São Paulo
     const out = await env.run(t, A, env.radarEvent(A, s), { now: night });
     const row = await env.runRow(t, out.runs[0].runId);
     assert.equal(row.status, 'WAITING');

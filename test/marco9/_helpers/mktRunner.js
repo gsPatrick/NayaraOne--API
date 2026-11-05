@@ -12,8 +12,8 @@ const EVENT = 'crm.opportunity.created';
 const SEND = (over = {}) => ({ actionType: 'SEND_MESSAGE', channel: 'WHATSAPP', purpose: 'MARKETING', variables: { primeiroNome: 'Maria' }, ...over });
 const TASK = (over = {}) => ({ actionType: 'CREATE_TASK', title: 'Ligar para o lead QA-M9', ...over });
 /** 22:30 em São Paulo (horário de silêncio padrão 21h às 8h). */
-const NIGHT = new Date('2026-11-10T01:30:00Z');
-const MORNING = new Date('2026-11-10T11:00:00Z');
+const NIGHT = new Date(NOON_SP.getTime() + 8.5 * HOUR); // dia seguinte ao NOON_SP, 01:30Z
+const MORNING = new Date(NOON_SP.getTime() + 18 * HOUR); // dia seguinte ao NOON_SP, 11:00Z (08:00 em São Paulo)
 
 /** Fluxo ACTIVE com a versão PUBLISHED já ligada (a versão publicada é imutável; por isso nasce pronta). `actions` recebe o template oficial quando a ação de envio não traz `templateId`. */
 async function publishedFlow(t, tenant, over = {}) {

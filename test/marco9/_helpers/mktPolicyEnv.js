@@ -5,13 +5,14 @@
 const crypto = require('node:crypto');
 const fx = require('../../helpers/m9d412Fixtures');
 const { Rule, RuleVersion, RuleScope, RulePublication } = require('../../../src/models');
+const { proximoDiaDaSemana, instante } = require('./relogioRelativo');
 
 const { uid, q } = fx;
 const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
 const HOUR = 3600 * 1000;
 const DAY = 24 * HOUR;
-/** 14:00 em São Paulo (fora do silêncio), segunda-feira. */
-const NOON_SP = new Date('2026-11-09T17:00:00Z');
+/** 14:00 em São Paulo (fora do silêncio), segunda-feira, ao menos 4 dias à frente da execução: o que o serviço grava com o relógio real fica antes dela. */
+const NOON_SP = instante(proximoDiaDaSemana(1, 4), '17:00:00');
 
 async function addContact(t, tenant, personId, type, value, primary = true) {
   await q(t, `INSERT INTO people.person_contacts (id, group_id, company_id, person_id, contact_type, value_normalized, is_primary)
