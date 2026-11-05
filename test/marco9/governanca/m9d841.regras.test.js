@@ -8,6 +8,12 @@ const env = require('../_helpers/m9d841Env');
 let A;
 let B;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);
+// Datas de desligamento derivadas da execução: o anúncio sem data é "agora", e um sunset fixo
+// acabaria anterior ao anúncio com o tempo (a recusa mudaria de motivo).
+const diaIso = (deltaDias) => new Date(Date.now() + deltaDias * 86400000).toISOString().slice(0, 10);
+const SUNSET_DIA = diaIso(90);
+const FIM_DO_DIA_BRASILIA = `${diaIso(91)}T02:59:59.000Z`;
+const SUNSET_POSTERIOR = diaIso(120);
 const auditCount = async (tenant, action) => (await env.auditOf(tenant, action)).length;
 
 before(async () => { if (!env.DISPOSABLE) return; ({ A, B } = await env.loadTenants()); await env.cleanApi(); });
@@ -35,14 +41,14 @@ test('m9d841 sunset anterior ao anúncio recusado', { skip: skip() }, async () =
   const igual = await env.failure(env.deprecate(A, env.asOwner(A, { target: 'MAJOR:1', announcedAt: '2026-10-27T12:00:00Z', sunsetAt: '2026-10-27T12:00:00Z' })));
   assert.equal(igual.code, 'GOV_API_DEPRECATION_INVALID', 'igual ao anúncio também recusa');
   assert.equal((await env.failure(env.deprecate(A, env.asOwner(A, { target: 'MAJOR:1', sunsetAt: 'em breve' })))).code, 'GOV_API_DATE_INVALID');
-  const ok = await env.deprecate(A, env.asOwner(A, { target: 'ROUTE:get /people/:id', announcedAt: '2026-10-20', sunsetAt: '2027-02-01', replacement: '/v2/people/{id}', replacementNote: 'Use o recurso novo.' }));
+  const ok = await env.deprecate(A, env.asOwner(A, { target: 'ROUTE:get /people/:id', announcedAt: '2026-10-20', sunsetAt: SUNSET_DIA, replacement: '/v2/people/{id}', replacementNote: 'Use o recurso novo.' }));
   assert.equal(ok.target, 'ROUTE:GET /people/{id}');
   assert.equal(ok.status, 'ANNOUNCED');
-  assert.equal(new Date(ok.sunsetAt).toISOString(), '2027-02-02T02:59:59.000Z', 'só data = fim do dia de Brasília');
+  assert.equal(new Date(ok.sunsetAt).toISOString(), FIM_DO_DIA_BRASILIA, 'só data = fim do dia de Brasília');
   assert.equal((await env.auditOf(A, 'api.deprecation.announced')).length > 0, true, 'auditoria do anúncio');
-  const dup = await env.failure(env.deprecate(A, env.asOwner(A, { target: 'ROUTE:GET /people/{id}', sunsetAt: '2027-03-01' })));
+  const dup = await env.failure(env.deprecate(A, env.asOwner(A, { target: 'ROUTE:GET /people/{id}', sunsetAt: SUNSET_POSTERIOR })));
   assert.deepEqual([dup.status, dup.code], [409, 'GOV_API_DEPRECATION_EXISTS'], 'uma só em andamento por alvo');
-  const replacement = await env.failure(env.deprecate(A, env.asOwner(A, { target: 'MAJOR:2', sunsetAt: '2027-03-01', replacement: 'https://x' })));
+  const replacement = await env.failure(env.deprecate(A, env.asOwner(A, { target: 'MAJOR:2', sunsetAt: SUNSET_POSTERIOR, replacement: 'https://x' })));
   assert.equal(replacement.code, 'GOV_API_REPLACEMENT_INVALID');
 });
 

@@ -10,6 +10,12 @@ const insuranceService = require('../src/features/procurement/insurance.service'
 const { alertDueRenewals } = require('../src/engines/jobs/insuranceRenewalAlertJob');
 const AppError = require('../src/utils/AppError');
 
+// Vigência derivada da execução: começa há 31 dias e vence daqui a 334 dias (uma apólice de
+// um ano em curso). Data fixa deixaria a apólice vencida com o tempo e o sinistro seria barrado.
+const diaIso = (deltaDias) => new Date(Date.now() + deltaDias * 86400000).toISOString().slice(0, 10);
+const VIGENCIA_INICIO = diaIso(-31);
+const VIGENCIA_FIM = diaIso(334);
+
 // Gap real encontrado em auditoria "loop até secar" (2026-10-05, rodada 1): o Insurance Hub
 // (Marco 7 — "COMPRAS/PROCUREMENT + SEGUROS") não tinha NENHUM teste automatizado, apesar do
 // Marco 6 ter estabelecido o padrão de testar admin/permissões/RLS explicitamente. Este arquivo
@@ -41,7 +47,7 @@ test('Insurance Hub: fluxo feliz completo — cotação → emissão → sinistr
 
     const issued = await insuranceService.issuePolicy(
       policy.id,
-      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' },
+      { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM },
       withTenant({ userId: tenant.userId }),
       transaction
     );
@@ -75,7 +81,7 @@ test('Insurance Hub: sinistro rejeitado pela seguradora NÃO cria lançamento fi
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
-    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' }, withTenant({ userId: tenant.userId }), transaction);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM }, withTenant({ userId: tenant.userId }), transaction);
     const claim = await insuranceService.openClaim(policy.id, { description: 'teste rejeitado', claimAmount: 500 }, withTenant({ userId: tenant.userId }), transaction);
     const submitted = await insuranceService.submitClaim(claim.id, withTenant({ userId: tenant.userId }), transaction);
 
@@ -91,7 +97,7 @@ test('Insurance Hub: openClaim recusa claimAmount negativo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
-    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' }, withTenant({ userId: tenant.userId }), transaction);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM }, withTenant({ userId: tenant.userId }), transaction);
     await assert.rejects(
       () => insuranceService.openClaim(policy.id, { description: 'valor inválido', claimAmount: -100 }, withTenant({ userId: tenant.userId }), transaction),
       (err) => { assert.equal(err.code, 'INSURANCE_CLAIM_VALIDATION'); return true; }
@@ -109,7 +115,7 @@ test('Insurance Hub: emitir a apólice gera as parcelas do prêmio (installments
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
-      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 3 },
+      { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 3 },
       withTenant({ userId: tenant.userId }),
       transaction
     );
@@ -173,7 +179,7 @@ test('Insurance Hub: confirmação SETTLED sem nenhum valor disponível marca RE
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
-    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' }, withTenant({ userId: tenant.userId }), transaction);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM }, withTenant({ userId: tenant.userId }), transaction);
     // Sinistro aberto SEM claimAmount (campo opcional) — e confirmação sem settledAmount.
     const claim = await insuranceService.openClaim(policy.id, { description: 'sem valor nenhum' }, withTenant({ userId: tenant.userId }), transaction);
     const submitted = await insuranceService.submitClaim(claim.id, withTenant({ userId: tenant.userId }), transaction);
@@ -328,7 +334,7 @@ test('Insurance Hub: confirmação de liquidação é idempotente — reprocessa
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
-    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' }, withTenant({ userId: tenant.userId }), transaction);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM }, withTenant({ userId: tenant.userId }), transaction);
     const claim = await insuranceService.openClaim(policy.id, { description: 'idempotência', claimAmount: 300 }, withTenant({ userId: tenant.userId }), transaction);
     const submitted = await insuranceService.submitClaim(claim.id, withTenant({ userId: tenant.userId }), transaction);
 
@@ -351,7 +357,7 @@ test('Insurance Hub: duas parcelas concorrentes não conseguem usar o mesmo fina
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
-      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 2 },
+      { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 2 },
       withTenant({ userId: tenant.userId }),
       transaction
     );
@@ -388,7 +394,7 @@ test('Insurance Hub: baixa da 2ª parcela com o lançamento da 1ª é rejeitada 
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, withTenant({ userId: tenant.userId }), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
-      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 2 },
+      { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 2 },
       withTenant({ userId: tenant.userId }),
       transaction
     );
@@ -596,7 +602,7 @@ test('Insurance Hub: issuePolicy recusa emitir apólice sem premiumAmount (sem t
     await assert.rejects(
       () => insuranceService.issuePolicy(
         policy.id,
-        { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 2 },
+        { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 2 },
         withTenant({ userId: tenant.userId }),
         transaction
       ),
@@ -618,7 +624,7 @@ test('Insurance Hub: issuePolicy funciona normalmente depois de cotar (fluxo cor
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 5000 }, withTenant({ userId: tenant.userId }), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
-      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 2 },
+      { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 2 },
       withTenant({ userId: tenant.userId }),
       transaction
     );

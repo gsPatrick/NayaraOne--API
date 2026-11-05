@@ -20,6 +20,12 @@ const movementsService = require('../src/features/inventory/movements.service');
 const { InventoryItem, InventoryLocation, File } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
+// Vigência derivada da execução: começa há 31 dias e vence daqui a 334 dias (uma apólice de
+// um ano em curso). Data fixa deixaria a apólice vencida com o tempo e o sinistro seria barrado.
+const diaIso = (deltaDias) => new Date(Date.now() + deltaDias * 86400000).toISOString().slice(0, 10);
+const VIGENCIA_INICIO = diaIso(-31);
+const VIGENCIA_FIM = diaIso(334);
+
 let tenant;
 
 before(async () => {
@@ -77,7 +83,7 @@ test('Item 1: quotePolicy recusa recotar apólice já ACTIVE/ISSUED', async () =
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, actor(), transaction);
     const issued = await insuranceService.issuePolicy(
       policy.id,
-      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' },
+      { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM },
       actor(),
       transaction
     );
@@ -136,7 +142,7 @@ test('Item 4: issuePolicy recusa installmentsCount não-inteiro ou fora do teto 
     await assert.rejects(
       () => insuranceService.issuePolicy(
         policy.id,
-        { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 2.5 },
+        { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 2.5 },
         actor(),
         transaction
       ),
@@ -151,7 +157,7 @@ test('Item 4: issuePolicy recusa installmentsCount não-inteiro ou fora do teto 
     await assert.rejects(
       () => insuranceService.issuePolicy(
         policy.id,
-        { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 5000000 },
+        { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 5000000 },
         actor(),
         transaction
       ),
@@ -169,7 +175,7 @@ test('Item 4: issuePolicy recusa installmentsCount não-inteiro ou fora do teto 
 
     const issued = await insuranceService.issuePolicy(
       policy.id,
-      { effectiveDate: '2026-10-05', expiryDate: '2027-10-05', installmentsCount: 12 },
+      { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM, installmentsCount: 12 },
       actor(),
       transaction
     );
@@ -181,7 +187,7 @@ test('Item 6: openClaim bloqueia sinistro duplicado (mesma descrição, ainda at
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const policy = await insuranceService.createPolicy(withTenant({}), tenant.userId, transaction);
     await insuranceService.quotePolicy(policy.id, { estimatedValue: 10000 }, actor(), transaction);
-    await insuranceService.issuePolicy(policy.id, { effectiveDate: '2026-10-05', expiryDate: '2027-10-05' }, actor(), transaction);
+    await insuranceService.issuePolicy(policy.id, { effectiveDate: VIGENCIA_INICIO, expiryDate: VIGENCIA_FIM }, actor(), transaction);
 
     const claim = await insuranceService.openClaim(
       policy.id,

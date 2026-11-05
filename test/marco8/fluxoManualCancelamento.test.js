@@ -15,6 +15,10 @@ const simulationsService = require('../../src/features/correspondent/cases/simul
 const webhooksService = require('../../src/features/correspondent/webhooks.service');
 const { Person, ProviderSubmission, OutboxEvent, FinancingProposal } = require('../../src/models');
 
+// A validade da proposta vem da execução (daqui a 60 dias): o serviço recusa validade já vencida,
+// e uma data fixa passaria a ser recusada com o tempo.
+const VALIDADE_PROPOSTA = new Date(Date.now() + 60 * 86400000).toISOString().slice(0, 10);
+
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
 after(async () => { await sequelize.close(); });
@@ -49,7 +53,7 @@ test('M8-MAN-01: caso manual percorre análise, pendências, aprovação com pro
       const r = await registrar(t, caso.id, { status, note: 'Conversa com o gerente do banco' });
       assert.equal(r.financingCase.status, status);
     }
-    const aprovado = await registrar(t, caso.id, { status: 'APPROVED', proposal: { approvedAmount: 250000, annualRatePct: 10.5, termMonths: 360, monthlyPayment: 2300.55, validUntil: '2026-12-31' } });
+    const aprovado = await registrar(t, caso.id, { status: 'APPROVED', proposal: { approvedAmount: 250000, annualRatePct: 10.5, termMonths: 360, monthlyPayment: 2300.55, validUntil: VALIDADE_PROPOSTA } });
     assert.equal(aprovado.financingCase.status, 'APPROVED');
     assert.equal(aprovado.proposal.status, 'ACTIVE');
     assert.equal(Number(aprovado.proposal.approvedAmount), 250000);
