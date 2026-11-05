@@ -12,7 +12,8 @@ const settingsService = require('../../../src/features/settings/settings.service
 
 let tenant;
 let tenantB;
-const AGORA = new Date('2026-10-28T12:00:00Z');
+// Relativo ao dia da execução: com data fixa, as janelas calculadas a partir dela passam do prazo de 7 dias do teste de retenção e a suíte quebra com o passar do tempo.
+const AGORA = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
 
 before(async () => {
   tenant = await getSeedTenant();
