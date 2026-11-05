@@ -26,7 +26,14 @@ async function createContact(personId, payload, actorUserId, transaction) {
   const person = await assertPersonExists(personId, transaction);
   const { contactType, valueNormalized, isPrimary, consentStatus } = payload;
   if (!contactType || !valueNormalized) {
-    throw AppError.badRequest('Os campos "contactType" e "valueNormalized" são obrigatórios.', 'PERSON_CONTACT_VALIDATION');
+    const fields = [];
+    if (!contactType) fields.push({ field: 'contactType', message: 'Escolha o tipo do contato.' });
+    if (!valueNormalized) fields.push({ field: 'valueNormalized', message: 'Informe o contato.' });
+    throw AppError.badRequest(
+      'Os campos "contactType" e "valueNormalized" são obrigatórios.',
+      'PERSON_CONTACT_VALIDATION',
+      { fields }
+    );
   }
   const normalizedType = String(contactType).toUpperCase();
   assertValidContactType(normalizedType);

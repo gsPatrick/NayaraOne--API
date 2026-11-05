@@ -37,13 +37,23 @@ async function createPerson(payload, actorUserId, transaction) {
   const { groupId, companyId, personType, legalName, taxIdNormalized, birthOrFoundationDate, status, contacts, documents, allowDuplicate } =
     payload;
 
-  if (!groupId || !companyId || !legalName) {
-    throw AppError.badRequest('Os campos "groupId", "companyId" e "legalName" são obrigatórios.', 'PERSON_VALIDATION');
+  // groupId/companyId vêm da sessão (não são campos que a pessoa preenche): faltar é falha de contexto, e a mensagem não cita nome técnico.
+  if (!groupId || !companyId) {
+    throw AppError.badRequest('Não foi possível identificar a empresa da sua sessão. Entre novamente e tente de novo.', 'PERSON_VALIDATION', {
+      fields: [],
+    });
+  }
+  if (!legalName || !String(legalName).trim()) {
+    throw AppError.badRequest('Informe o nome da pessoa.', 'PERSON_VALIDATION', {
+      fields: [{ field: 'legalName', message: 'Informe o nome da pessoa.' }],
+    });
   }
 
   const normalizedType = (personType || 'PF').toUpperCase();
   if (!['PF', 'PJ'].includes(normalizedType)) {
-    throw AppError.badRequest('O campo "personType" deve ser "PF" ou "PJ".', 'PERSON_VALIDATION');
+    throw AppError.badRequest('O campo "personType" deve ser "PF" ou "PJ".', 'PERSON_VALIDATION', {
+      fields: [{ field: 'personType', message: 'Escolha pessoa física (PF) ou jurídica (PJ).' }],
+    });
   }
 
   const taxIdDigits = onlyDigits(taxIdNormalized) || null;

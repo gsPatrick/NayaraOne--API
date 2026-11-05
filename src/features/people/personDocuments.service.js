@@ -105,7 +105,14 @@ async function createDocument(personId, payload, actorUserId, transaction) {
   const person = await assertPersonExists(personId, transaction);
   const { documentType, fileId, versionNo, issuedAt, expiresAt, verificationStatus, extractedDataJson } = payload;
   if (!documentType || !fileId) {
-    throw AppError.badRequest('Os campos "documentType" e "fileId" são obrigatórios.', 'PERSON_DOCUMENT_VALIDATION');
+    const fields = [];
+    if (!documentType) fields.push({ field: 'documentType', message: 'Escolha o tipo do documento.' });
+    if (!fileId) fields.push({ field: 'fileId', message: 'Anexe o arquivo do documento.' });
+    throw AppError.badRequest(
+      'Os campos "documentType" e "fileId" são obrigatórios.',
+      'PERSON_DOCUMENT_VALIDATION',
+      { fields }
+    );
   }
   if (verificationStatus !== undefined && !VALID_VERIFICATION_STATUSES.includes(String(verificationStatus).toUpperCase())) {
     throw AppError.badRequest(
