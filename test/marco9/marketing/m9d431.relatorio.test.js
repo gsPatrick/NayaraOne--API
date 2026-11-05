@@ -96,7 +96,8 @@ test('lead_com_referencia_invalida_nasce_sem_atribuicao e campanha_ou_link_de_ou
     const camp = await fx.makeCampaign(t, tenant);
     const lk = await link(t, { campaignId: camp.id });
     const ok = await lead(t);
-    const good = await newLead(t, ok, '2026-11-05T10:00:00Z', { trackingLinkId: lk.id, campaignId: camp.id });
+    // o link só vale a partir da criação (created_at <= data do clique): a data do lead vem da execução, não de uma data fixa que a suíte ultrapassa
+    const good = await newLead(t, ok, new Date(Date.now() + 3600e3).toISOString(), { trackingLinkId: lk.id, campaignId: camp.id });
     assert.equal(good.attributionValid, true);
     const [opp] = await fx.q(t, 'SELECT lead_source, campaign_id, tracking_link_id, attribution_valid FROM crm.opportunities WHERE id = :id', { id: ok.opportunityId });
     assert.deepEqual(opp, { lead_source: 'FORM', campaign_id: camp.id, tracking_link_id: lk.id, attribution_valid: true });
