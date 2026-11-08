@@ -67,12 +67,19 @@ const blockedText = (blocked, missing) => [
   ...blocked.map((b) => `${b.code} [${b.refId || 'sem item'}]: ${b.reason}`), ...missing.map((c) => `ITEM_NAO_RETORNADO [${c.refId}]: a NAY não escreveu este item.`),
 ].join(' | ').slice(0, 4000) || null;
 
+/**
+ * Briefing que FALHOU (provedor, orçamento, identidade de serviço desligada...) é tentado de novo depois de `analytics.brief.reintento_falha_min` (padrão 60 min), até
+ * o fim do período. Sem isso, uma empresa que corrigiu a configuração às 7h continuava "Briefing indisponível" até o dia seguinte. BLOCKED_GROUNDING não se repete:
+ * o modelo recebeu os mesmos dados.
+ */
+const isRetryable = (brief, now, minutes) => brief.status === 'FAILED' && brief.generatedAt && new Date(now).getTime() - new Date(brief.generatedAt).getTime() >= minutes * 60000;
+
 async function generateBrief({ scope, briefType, regenerate = false, now = clock.now(), correlationId = null }, deps, transaction) {
   const params = await readBriefParams(scope, transaction);
   const periods = resolveBriefPeriods(briefType, now);
   const key = { companyId: scope.companyId, groupId: scope.groupId, briefType, periodStart: periods.current.startDate, periodEnd: periods.current.endDate };
   const existing = await readStore.findCurrentBrief(key, transaction);
-  if (existing && !regenerate) return { skipped: 'EXISTS', brief: existing };
+  if (existing && !regenerate && !isRetryable(existing, now, params.retryFailedMinutes)) return { skipped: 'EXISTS', brief: existing };
 
   const ctx = await directorContext(scope, params, transaction);
   const { facts, noData } = await collectMetricFacts({ ctx, scope, params, periods }, transaction);

@@ -5,6 +5,7 @@
  * Dicionário em SETTINGS_SCHEMA (settings.service.js faz o spread) + leitura por `readBriefParams`. Padrões: Maturacao/demandas/parametros.csv.
  *
  *  analytics.brief.hora_diario            "06:30 America/Sao_Paulo": a partir de quando o briefing diário (D-1) é gerado
+ *  analytics.brief.reintento_falha_min    minutos até o job tentar de novo um briefing que falhou no período (padrão 60)
  *  analytics.brief.hora_semanal           "segunda 07:00 America/Sao_Paulo": dia e hora do briefing semanal (semana anterior, segunda a domingo)
  *  analytics.brief.max_itens              "diário 7; semanal 12": limite de itens de cada tipo
  *  analytics.brief.papel                  papel cujos painéis o briefing usa como entrada (painel sem papel definido vale para todos)
@@ -23,7 +24,7 @@ const KEYS = Object.freeze({
   daily: 'analytics.brief.hora_diario', weekly: 'analytics.brief.hora_semanal', max: 'analytics.brief.max_itens', role: 'analytics.brief.papel',
   domains: 'analytics.brief.dominios', relevant: 'analytics.brief.variacao_relevante_pct', polarity: 'analytics.brief.polaridade',
   causes: 'analytics.brief.fontes_causa', words: 'analytics.brief.palavras_causalidade', closingSome: 'analytics.brief.texto_demais_areas',
-  closingAll: 'analytics.brief.texto_todas_areas',
+  closingAll: 'analytics.brief.texto_todas_areas', retryMinutes: 'analytics.brief.reintento_falha_min',
 });
 const DEFAULTS = Object.freeze({
   [KEYS.daily]: '06:30 America/Sao_Paulo', [KEYS.weekly]: 'segunda 07:00 America/Sao_Paulo', [KEYS.max]: 'diário 7; semanal 12', [KEYS.role]: 'Diretoria',
@@ -33,6 +34,7 @@ const DEFAULTS = Object.freeze({
   [KEYS.causes]: 'crm.loss_reasons=motivo',
   [KEYS.words]: 'porque; devido a; causado por; por causa de; em razão de',
   [KEYS.closingSome]: 'Todas as demais áreas dentro do esperado', [KEYS.closingAll]: 'Todas as áreas dentro do esperado',
+  [KEYS.retryMinutes]: 60,
 });
 
 const WEEKDAYS = Object.freeze({ domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 });
@@ -106,6 +108,7 @@ const BRIEF_SETTINGS_SCHEMA = {
   [KEYS.words]: { type: 'string', validate: rule(parseWords, 'deve listar palavras separadas por ponto e vírgula.') },
   [KEYS.closingSome]: { type: 'string' },
   [KEYS.closingAll]: { type: 'string' },
+  [KEYS.retryMinutes]: { type: 'integer', min: 1, max: 1440 },
 };
 
 const splitWordsText = (text) => String(text).split(';').map((w) => w.trim()).filter(Boolean).join(', ');
@@ -120,6 +123,7 @@ async function readBriefParams(scope, transaction) {
     return own !== null && own !== undefined ? own : parse(DEFAULTS[key]);
   };
   const relevant = Number(stored[KEYS.relevant]);
+  const retry = Number(stored[KEYS.retryMinutes]);
   return {
     daily: pick(KEYS.daily, parseDaily), weekly: pick(KEYS.weekly, parseWeekly), maxItems: pick(KEYS.max, parseMax),
     role: present(stored[KEYS.role]) ? String(stored[KEYS.role]).trim() : DEFAULTS[KEYS.role], domains: pick(KEYS.domains, parseDomains),
@@ -128,6 +132,7 @@ async function readBriefParams(scope, transaction) {
     causalWordsText: splitWordsText(present(stored[KEYS.words]) && parseWords(stored[KEYS.words]) ? stored[KEYS.words] : DEFAULTS[KEYS.words]),
     closingSome: present(stored[KEYS.closingSome]) ? String(stored[KEYS.closingSome]).trim() : DEFAULTS[KEYS.closingSome],
     closingAll: present(stored[KEYS.closingAll]) ? String(stored[KEYS.closingAll]).trim() : DEFAULTS[KEYS.closingAll],
+    retryFailedMinutes: Number.isInteger(retry) && retry >= 1 && retry <= 1440 ? retry : DEFAULTS[KEYS.retryMinutes],
   };
 }
 

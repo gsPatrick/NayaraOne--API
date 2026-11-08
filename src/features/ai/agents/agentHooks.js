@@ -6,6 +6,8 @@
  *  - `serverTools(state)`: pedidos de tool que o servidor decide fazer antes da geração (ex.: encaminhar a um humano), passando pelo
  *    mesmo pipeline de segurança de qualquer tool; devolve [{ name, arguments }];
  *  - `requiredServerTools`: true = falha em alguma delas encerra o run com erro (nunca responder como se tivesse feito);
+ *  - `serverGroundedTasks`: tarefas cujos números o SERVIDOR confere por conta própria com a fonte exata (ex.: briefing_executivo, M9-D693): o orquestrador não busca
+ *    fontes de conhecimento nem reescreve a resposta pela checagem de fontes, que trocaria o JSON do briefing pela mensagem de "fonte insuficiente";
  *  - `checkAnswer(state, text)`: última palavra sobre o texto da resposta (substituir resposta proibida); devolve o texto.
  */
 const hooks = new Map();

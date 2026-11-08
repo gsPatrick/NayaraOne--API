@@ -9,6 +9,8 @@
  *   code, outOfScopeMessage, scopeTermsKey, scopeTermsDefault,
  *   prohibitions: [{ code, label, key, defaultTerms, message, respond?(ruleInput, env) }],
  *   decorate?(answer, { taskType }) -> texto da resposta com a marca obrigatória do agente,
+ *   serverTasks?: [taskType] tarefas cujo texto de entrada é montado pelo SERVIDOR (ex.: briefing_executivo), não digitado por uma pessoa: a fronteira de termos
+ *   não se aplica a elas (o texto do próprio sistema contém palavras como "estime" e "calcule", justamente para proibi-las ao modelo),
  * }
  */
 const scopes = new Map();

@@ -21,9 +21,10 @@ function registerNayDiretoria() {
     scopeTermsDefault: DIRETORIA_SETTING_DEFAULTS[K.scopeTerms],
     prohibitions: policy.PROHIBITIONS.map((p) => ({ ...p, key: KEY[p.code], defaultTerms: DIRETORIA_SETTING_DEFAULTS[KEY[p.code]] })),
     decorate: areaLabelDecorator,
+    serverTasks: ['briefing_executivo'],
   });
   wireScopeGuard();
-  registerAgentHooks(policy.CODE, { readOnly: true }); // somente leitura: nenhuma recomendação nem proposta nasce deste agente
+  registerAgentHooks(policy.CODE, { readOnly: true, serverGroundedTasks: ['briefing_executivo'] }); // somente leitura: nenhuma recomendação nem proposta nasce deste agente
   for (const [task, resolver] of Object.entries(RESOLVERS)) ruleResolvers.register(task, resolver);
   registerDiretoriaNumbers();
 }

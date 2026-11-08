@@ -62,6 +62,22 @@ test('m9d693 o job gera às 06:30 SP, uma vez por período, só com a IA ligada,
   assert.equal(caido.calls.length, 1);
   rows = await rowsOf();
   assert.deepEqual(rows.map((r) => [r.status, r.periodStart, r.reason]), [['GENERATED', '2026-10-27', null], ['FAILED', '2026-10-28', 'ANALYTICS_BRIEF_AI_BUDGET']]);
+  // a configuração foi corrigida: antes de 1 hora o job espera; depois, tenta de novo o mesmo período e o briefing aparece (antes ficava "indisponível" até o dia seguinte)
+  // (o relógio do teste é fixo e o do banco é o real: a hora da falha é gravada na do teste, como em produção, onde as duas são a mesma)
+  await env.admin.transaction(async (transaction) => { // o briefing gravado é imutável por gatilho; só o teste, como dono do banco, acerta a hora da falha
+    await env.admin.query('SET LOCAL session_replication_role = replica', { transaction });
+    await env.admin.query("UPDATE analytics.executive_briefs SET generated_at = '2026-10-29T09:41:00Z' WHERE company_id = :c AND status = 'FAILED'", { replacements: { c: A().companyId }, transaction });
+  });
+  const corrigido = e.agent();
+  out = await runAnalyticsBriefJob({ now: at('2026-10-29T10:30:00Z'), runAgent: corrigido, types: ['DAILY'] });
+  assert.equal(corrigido.calls.length, 0, 'menos de 1 hora depois da falha: não tenta de novo');
+  out = await runAnalyticsBriefJob({ now: at('2026-10-29T10:42:00Z'), runAgent: corrigido, types: ['DAILY'] });
+  assert.equal(out.generated, 1, JSON.stringify(out));
+  rows = await rowsOf();
+  assert.deepEqual(rows.filter((r) => r.periodStart === '2026-10-28').map((r) => r.status).sort(), ['GENERATED', 'SUPERSEDED']);
+  // briefing que deu certo nunca é refeito
+  await runAnalyticsBriefJob({ now: at('2026-10-29T12:00:00Z'), runAgent: corrigido, types: ['DAILY'] });
+  assert.equal(corrigido.calls.length, 1);
 });
 
 test('m9d693 o semanal sai na segunda às 07:00 SP', async () => {

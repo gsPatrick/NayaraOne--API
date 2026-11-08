@@ -12,6 +12,7 @@ const { evaluateScope, termsOf } = require('./scope.evaluate');
 async function scopeGuard(ruleInput, env) {
   const def = ruleInput && getAgentScope(ruleInput.agentCode);
   if (!def) return null;
+  if (Array.isArray(def.serverTasks) && def.serverTasks.includes(ruleInput.taskType)) return null; // entrada do servidor, não pergunta de uma pessoa
   const tenant = env.tenant;
   const read = (key, fallback) => getSetting(key, tenant, env.transaction, fallback);
   const scopeTerms = termsOf(await read(def.scopeTermsKey, def.scopeTermsDefault), def.scopeTermsDefault);

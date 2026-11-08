@@ -4,6 +4,7 @@ const { safeLogger: logger } = require('../../audit/safeLogger');
 const { screenUserInput } = require('../injectionScreen');
 const { loadInjectionLimits } = require('../injectionDetector');
 const { loadGroundingSettings } = require('../grounding');
+const { isServerGrounded } = require('../grounding/finalizeGrounding');
 const { semAcento } = require('../numbers/decimalText');
 const runs = require('../runs');
 const { executionCeiling, providerPolicy } = require('./flow.retrieve');
@@ -14,6 +15,7 @@ const CLASSES = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
 
 /** Tarefa factual busca fontes sempre; as não factuais (parâmetro `ia.grounding.tarefas_nao_factuais`) dispensam a busca. */
 async function needsSources(state) {
+  if (isServerGrounded(state.agent && state.agent.code, state.parsed.taskType)) return false;
   const settings = await loadGroundingSettings(state.ctx, state.transaction);
   return !settings.tarefasNaoFactuais.includes(semAcento(state.parsed.taskType).toLowerCase());
 }

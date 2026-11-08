@@ -28,6 +28,6 @@ async function build({ now, params, window, transaction }) {
   });
 }
 
-const def = defineCompanyWideModel({ name: 'rm_tech_availability', keyColumns: KEY, build });
+const def = defineCompanyWideModel({ name: 'rm_tech_availability', keyColumns: KEY, build, reconcileAtRefresh: true });
 
 module.exports = { def, build };

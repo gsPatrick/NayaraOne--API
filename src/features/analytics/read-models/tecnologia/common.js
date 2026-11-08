@@ -27,14 +27,14 @@ const monthStart = (day) => `${day.slice(0, 7)}-01`;
  * Registra um read model da empresa inteira. `build({ companyId, groupId, now, params, window, transaction })` devolve as linhas { key, fields }; `events` são
  * os eventos do outbox que o recalculam (vazio = só agenda e rebuild); `scheduled` liga o recálculo pela agenda (padrão: sim, porque todos dependem do relógio ou de fonte sem evento).
  */
-function defineCompanyWideModel({ name, keyColumns, events = [], build, version = 1 }) {
+function defineCompanyWideModel({ name, keyColumns, events = [], build, version = 1, reconcileAtRefresh = false }) {
   async function recompute({ companyId, groupId, now, transaction }) {
     const params = await readTechParams({ companyId, groupId }, transaction);
     const rows = await build({ companyId, groupId, now, params, window: windowOf(now, params.historyDays), transaction });
     return { rows, sourceSnapshotAt: now };
   }
   return registerReadModel({
-    name, version, keyColumns, aggregateColumns: [], eventTypes: [...events], aggregateKey: companyAggregateKey, recompute,
+    name, version, keyColumns, aggregateColumns: [], eventTypes: [...events], reconcileAtRefresh, aggregateKey: companyAggregateKey, recompute,
     scheduled: { keys: companyKeys }, rebuild: { keys: companyKeys },
   });
 }

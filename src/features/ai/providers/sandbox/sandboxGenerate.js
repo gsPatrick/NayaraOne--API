@@ -37,6 +37,28 @@ function jsonValido(raw) {
   try { JSON.parse(raw); return true; } catch (e) { return false; }
 }
 
+// Briefing executivo (M9-D693): o pedido do servidor termina em "DADOS:" + JSON. O sandbox devolve um item por refId, escrito SÓ com os números dos DADOS
+// (nada calculado nem inventado), para a homologação e os testes exercitarem o fluxo inteiro (grounding, fontes, gravação e exibição) sem provedor externo.
+const BRIEF_MARK = 'Escreva o briefing executivo a partir SOMENTE dos DADOS';
+function briefingFromData(entrada) {
+  const at = entrada.lastIndexOf('DADOS:');
+  let dados;
+  const resto = entrada.slice(at + 'DADOS:'.length); // o orquestrador fecha a entrada com </untrusted>: o JSON vai da primeira { à última }
+  try { dados = JSON.parse(resto.slice(resto.indexOf('{'), resto.lastIndexOf('}') + 1)); } catch (e) { return null; }
+  if (!dados || !Array.isArray(dados.itens)) return null;
+  const itens = dados.itens.map((i) => {
+    const v = i.valor;
+    const fato = v ? `${i.nome}: ${v.valor}${v.unidade ? ` ${v.unidade}` : ''}.` : `${i.nome}: sem valor confiável neste período.`;
+    const x = i.variacao;
+    const variacao = x && x.anterior !== undefined && x.atual !== undefined ? `Era ${x.anterior} e agora é ${x.atual}.` : '';
+    return {
+      refId: i.refId, tipo: i.tipoSugerido, fato, variacao, fonte: [{ metricCode: i.metricCode }], incerteza: 'causa não identificada nos dados',
+      acaoSugerida: 'Acompanhar o indicador na área responsável.', tipoAfirmacao: 'FATO', fonteCausa: [],
+    };
+  });
+  return JSON.stringify({ itens });
+}
+
 /** generate({ system, messages }) -> { text, toolRequests, inputTokens, outputTokens, costMicros, latencyMs }. */
 function sandboxGenerate({ system = '', messages = [] } = {}) {
   const ultimoUser = [...messages].reverse().find((m) => m && m.role === 'user');
@@ -49,8 +71,10 @@ function sandboxGenerate({ system = '', messages = [] } = {}) {
   const resposta = RESPOSTA.exec(entrada);
   const eco = ECO.exec(entrada);
   const fixtureJson = JSON_FIXTURE.exec(entrada);
+  const briefing = entrada.includes(BRIEF_MARK) ? briefingFromData(entrada) : null;
   let text;
-  if (eco) text = eco[1].replace(CUSTO, '').replace(LENTO, '').trim();
+  if (briefing) text = briefing;
+  else if (eco) text = eco[1].replace(CUSTO, '').replace(LENTO, '').trim();
   else if (fixtureJson && jsonValido(fixtureJson[1])) text = fixtureJson[1];
   else if (toolRequests.length) text = '';
   else if (resposta) text = resposta[1].trim();

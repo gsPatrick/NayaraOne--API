@@ -48,11 +48,23 @@ async function storedRows(ctx, def, keys, columns, today) {
   return sql.rows(ctx, `SELECT ${select} FROM ${sql.tableOf(ctx)} WHERE company_id = :companyId${asOf} AND (${agg.map((c) => `${q(c)}::text`).join(', ')}) IN (:tuples)`, { today, tuples });
 }
 
+/**
+ * Instante em que a fonte é recalculada na conciliação. Padrão: agora. Read model de fonte contínua (`reconcileAtRefresh`, ex.: as sondas de saúde,
+ * que entram a cada minuto) é recalculado no instante da fonte do último refresh guardado (`source_snapshot_at`); sem isso, qualquer sonda que chegasse entre o refresh e a checagem
+ * reprovava a conciliação (tolerância zero) e o indicador ficava para sempre "não confiável".
+ */
+async function referenceInstant(ctx, def) {
+  if (!def.reconcileAtRefresh) return clock.now();
+  const [row] = await sql.rows(ctx, `SELECT max(source_snapshot_at) AS at FROM ${sql.tableOf(ctx)} WHERE company_id = :companyId`);
+  return row && row.at ? new Date(row.at) : clock.now();
+}
+
 /** Recalcula da fonte as chaves dadas; devolve as linhas por chave completa (sem repetir quando a consulta devolve a empresa inteira). */
 async function recomputed(ctx, def, keys, today) {
   const out = new Map();
+  const now = await referenceInstant(ctx, def);
   for (const key of keys) {
-    const result = await def.recompute({ ...ctx.scope, key, limit: null, asOfDate: today, now: clock.now(), event: null, transaction: ctx.transaction });
+    const result = await def.recompute({ ...ctx.scope, key, limit: null, asOfDate: today, now, event: null, transaction: ctx.transaction });
     const list = result && result.rows ? result.rows : [{ key: {}, fields: (result && result.fields) || {} }];
     for (const r of list) {
       const full = { ...key, ...r.key };
