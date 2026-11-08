@@ -1,6 +1,7 @@
 'use strict';
 
 const legalHold = require('../core-governance/data-quality/legalHold.guard');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { Person, PersonContact, PersonDocument, PersonRole, PersonAddress } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { onlyDigits, validateDocumentFormat, hashTaxId } = require('./personDocumentFormat.service');
@@ -106,6 +107,21 @@ async function createPerson(payload, actorUserId, transaction) {
   }
 
   await publishPersonCreated(person, transaction);
+  // Quem cadastrou, o quê e quando. Sem documento nem contato no registro: a trilha guarda a identidade e o tipo, não o dado pessoal.
+  await registrarAuditoria(
+    {
+      groupId,
+      companyId,
+      actorUserId,
+      action: 'people.person.create',
+      entityType: 'Person',
+      entityId: person.id,
+      beforeJson: null,
+      afterJson: { id: person.id, personType: normalizedType, status: person.status },
+      reason: 'Pessoa cadastrada.',
+    },
+    transaction
+  );
 
   if (Array.isArray(contacts)) {
     for (const contact of contacts) {

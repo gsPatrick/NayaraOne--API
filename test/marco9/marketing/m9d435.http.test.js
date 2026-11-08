@@ -55,7 +55,7 @@ async function call(who, method, route, body) {
 const forbidden = (res, required) => { assert.equal(res.status, 403, JSON.stringify(res.body)); assert.equal(res.body.error.code, 'MKT_FORBIDDEN'); assert.equal(res.body.error.details.required, required); };
 const automationBody = (owner, over = {}) => ({
   name: `${PREFIX} ${crypto.randomUUID().slice(0, 6)}`, ownerUserId: owner, riskLevel: 'MEDIUM', triggerType: 'EVENT', triggerConfig: { eventType: 'crm.opportunity.created' }, conditions: ['LEAD_SEM_RETORNO'],
-  actions: [{ actionType: 'CREATE_TASK' }, { actionType: 'SEND_MESSAGE', channel: 'WHATSAPP' }], cooldown: { amount: 72, unit: 'HOURS' }, frequencyCap: { max: 3, windowDays: 7, scope: 'PERSON_CHANNEL_PURPOSE' },
+  actions: [{ actionType: 'CREATE_TASK', title: 'Ligar para o lead' }, { actionType: 'SEND_MESSAGE', channel: 'WHATSAPP' }], cooldown: { amount: 72, unit: 'HOURS' }, frequencyCap: { max: 3, windowDays: 7, scope: 'PERSON_CHANNEL_PURPOSE' },
   validFrom: '2026-01-01T00:00:00Z', ...over,
 });
 

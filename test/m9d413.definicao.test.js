@@ -56,7 +56,7 @@ test('automacao_exige_trigger_condicao_acao_cooldown_limite_e_owner', async () =
     // ação fora do catálogo
     await rejects(create(t, fx.validBody(tenant, { actions: [{ actionType: 'PAGAR_FORNECEDOR' }] })), 422, 'MKT_AUTOMATION_ACTION_UNKNOWN');
     assert.equal(catalog.ACTION_TYPES.length, 7);
-    await rejects(create(t, fx.validBody(tenant, { actions: Array.from({ length: 11 }, () => ({ actionType: 'CREATE_TASK' })) })), 422, 'MKT_AUTOMATION_INCOMPLETE');
+    await rejects(create(t, fx.validBody(tenant, { actions: Array.from({ length: 11 }, () => ({ actionType: 'CREATE_TASK', title: 'Ligar para o lead' })) })), 422, 'MKT_AUTOMATION_INCOMPLETE');
     await rejects(create(t, { ...fx.validBody(tenant), campoInventado: 1 }), 400, 'MKT_VALIDATION');
   });
 });
@@ -132,7 +132,7 @@ test('versao_publicada_e_imutavel', async () => {
     // o conteúdo da versão 1 não mudou
     assert.deepEqual((await fx.versionRow(t, v1.flow.id, 1)).actions, v1.version.actions);
     // alterar = nova versão N+1 em DRAFT
-    assert.equal((await create(t, { flowId: v1.flow.id, actions: [{ actionType: 'NOTIFY_USER' }] })).version.versionNo, 2);
+    assert.equal((await create(t, { flowId: v1.flow.id, actions: [{ actionType: 'NOTIFY_USER', title: 'Aviso à equipe' }] })).version.versionNo, 2);
   });
 });
 

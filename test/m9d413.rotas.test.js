@@ -109,7 +109,7 @@ test('rotas_de_automacao_exigem_permissao_listam_o_que_falta_e_publicam_v4', { s
   const body = (over = {}) => ({
     name: `QA-M9 D413 ${Math.random().toString(16).slice(2, 8)}`, ownerUserId: owner, riskLevel: 'MEDIUM', triggerType: 'EVENT',
     triggerConfig: { eventType: 'crm.opportunity.created' }, conditions: ['LEAD_SEM_RETORNO'],
-    actions: [{ actionType: 'CREATE_TASK' }, { actionType: 'SEND_MESSAGE', channel: 'WHATSAPP' }], cooldown: { amount: 72, unit: 'HOURS' },
+    actions: [{ actionType: 'CREATE_TASK', title: 'Ligar para o lead' }, { actionType: 'SEND_MESSAGE', channel: 'WHATSAPP' }], cooldown: { amount: 72, unit: 'HOURS' },
     frequencyCap: { max: 3, windowDays: 7, scope: 'PERSON_CHANNEL_PURPOSE' }, validFrom: '2026-01-01T00:00:00Z', ...over,
   });
 

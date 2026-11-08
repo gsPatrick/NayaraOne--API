@@ -2,6 +2,7 @@
 
 const { CommunicationConsent, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 const VALID_CHANNELS = ['PHONE', 'WHATSAPP', 'EMAIL'];
 const VALID_STATUSES = ['OPT_IN', 'OPT_OUT'];
@@ -56,6 +57,21 @@ async function recordConsent(personId, payload, actorUserId, transaction, option
       updatedBy: actorUserId || null,
     },
     { transaction }
+  );
+  // Quem registrou, o quê e quando: o consentimento é histórico append-only e cada mudança de estado deixa a linha de auditoria.
+  await registrarAuditoria(
+    {
+      groupId: person.groupId,
+      companyId: person.companyId,
+      actorUserId,
+      action: 'people.consent.record',
+      entityType: 'CommunicationConsent',
+      entityId: consent.id,
+      beforeJson: null,
+      afterJson: { personId, channel: normalizedChannel, purpose: String(purpose).toUpperCase(), status: normalizedStatus },
+      reason: normalizedStatus === 'OPT_OUT' ? 'Pessoa deixou de aceitar comunicação neste canal e finalidade (opt-out).' : 'Pessoa aceitou comunicação neste canal e finalidade (opt-in).',
+    },
+    transaction
   );
   // OPT_OUT (M9-D419): na MESMA transação, o Marketing cria a supressão, cancela o agendado e emite customer.opted_out. Quem já é o
   // serviço do opt-out (a supressão do Marketing) registra o consentimento com skipOptOutHandler para não entrar em laço.

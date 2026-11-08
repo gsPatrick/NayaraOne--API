@@ -64,13 +64,28 @@ function checkConditions(def, problems) {
   if (def.conditions.length === 0 && !reason) problems.push({ field: 'conditionsEmptyReason', reason: 'Sem condições, informe a justificativa.' });
 }
 
+const filled = (v) => typeof v === 'string' && v.trim().length > 0;
+const ACTION_REQUIRED_FIELDS = {
+  NOTIFY_USER: { field: 'title', reason: 'Informe o título da notificação.', test: (a) => filled(a.title) },
+  CREATE_TASK: { field: 'title', reason: 'Informe o título da tarefa.', test: (a) => filled(a.title) },
+  CREATE_CONTENT_DRAFT: { field: 'type', reason: 'Informe o tipo do conteúdo do rascunho.', test: (a) => filled(a.type) },
+  OPEN_CASE: { field: 'description', reason: 'Informe a descrição da ocorrência.', test: (a) => filled(a.description) },
+  UPDATE_CRM_STAGE_TAG: { field: 'stage', reason: 'Informe a etapa ou a etiqueta.', test: (a) => filled(a.stage) || filled(a.temperature) },
+};
+
 function checkActions(def, problems) {
   if (!Array.isArray(def.actions) || def.actions.length < 1 || def.actions.length > MAX_ACTIONS) {
     problems.push({ field: 'actions', reason: `Informe de 1 a ${MAX_ACTIONS} ações.` });
     return;
   }
   def.actions.forEach((action, i) => {
-    if (!isObject(action) || typeof action.actionType !== 'string' || !action.actionType) problems.push({ field: `actions[${i}].actionType`, reason: 'Informe o tipo da ação.' });
+    if (!isObject(action) || typeof action.actionType !== 'string' || !action.actionType) {
+      problems.push({ field: `actions[${i}].actionType`, reason: 'Informe o tipo da ação.' });
+      return;
+    }
+    // O que o executor exige para rodar e que não depende do contato: falta aqui vira pendência na publicação, não falha na execução.
+    const required = ACTION_REQUIRED_FIELDS[action.actionType];
+    if (required && !required.test(action)) problems.push({ field: `actions[${i}].${required.field}`, reason: required.reason });
   });
 }
 
