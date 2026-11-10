@@ -481,7 +481,11 @@ test('M3-15: imóvel que falha só no preço mostra priceRange matched=false com
     assert.equal(explanation.criteria.propertyType.matched, true);
     assert.equal(explanation.criteria.city.matched, true);
     assert.equal(explanation.criteria.offerType.matched, true);
-    assert.ok(explanation.score > 0 && explanation.score < 1);
+    // Guia §9 ("Radar scoring"): obrigatório que falha zera o score (REQUIRED_FAILED); a fração dos obrigatórios atendidos
+    // continua visível em requiredScore.
+    assert.equal(explanation.score, 0);
+    assert.deepEqual(explanation.reasons, ['REQUIRED_FAILED']);
+    assert.ok(explanation.requiredScore > 0 && explanation.requiredScore < 1);
   });
 });
 

@@ -1,7 +1,9 @@
 'use strict';
 
 const { Op } = require('sequelize');
-const { Property, PropertyOffer, PropertyRadar } = require('../../models');
+const { Property, PropertyOffer, PropertyRadar, PropertyAddress } = require('../../models');
+const { normalizeCriteria } = require('./radarCriteria');
+const { evaluateExtras, scoreOf } = require('./radarScoring');
 
 /**
  * Critérios suportados em `criteriaJson` (todos opcionais — critério ausente não filtra):
@@ -18,7 +20,8 @@ const { Property, PropertyOffer, PropertyRadar } = require('../../models');
  * simultaneamente a TODOS os critérios preenchidos.
  */
 async function matchRadarToProperties(radar, transaction, options = {}) {
-  const criteria = radar.criteriaJson || {};
+  // Obrigatórios (§13): chaves planas + `required`. Preferências/flexíveis/exclusões são avaliados depois, em memória.
+  const criteria = normalizeCriteria(radar.criteriaJson).required;
 
   const offerWhere = { status: 'ACTIVE' };
   if (options.propertyId) {
@@ -46,7 +49,7 @@ async function matchRadarToProperties(radar, transaction, options = {}) {
     propertyWhere.areaTotalM2 = { ...(propertyWhere.areaTotalM2 || {}), [Op.lte]: criteria.maxAreaM2 };
   }
 
-  return Property.findAll({
+  const found = await Property.findAll({
     where: propertyWhere,
     include: [
       {
@@ -55,10 +58,22 @@ async function matchRadarToProperties(radar, transaction, options = {}) {
         where: offerWhere,
         required: true,
       },
+      // Bairro da preferência NEIGHBORHOOD vem do endereço do imóvel (real_estate.property_addresses).
+      { model: PropertyAddress, as: 'address', required: false },
     ],
     order: [[{ model: PropertyOffer, as: 'offers' }, 'created_at', 'DESC']],
     transaction,
   });
+
+  // Exclusão que bate tira o imóvel; os que ficam saem ordenados pelo score (empate mantém a ordem acima) e levam a explicação.
+  return found
+    .map((property, index) => ({ property, index, explanation: explainMatch(radar, property) }))
+    .filter((m) => m.explanation.matched)
+    .sort((a, b) => (b.explanation.score - a.explanation.score) || (a.index - b.index))
+    .map(({ property, explanation }) => {
+      property.setDataValue('radarMatch', explanation);
+      return property;
+    });
 }
 
 /**
@@ -69,12 +84,9 @@ async function matchRadarToProperties(radar, transaction, options = {}) {
  * imóvel JÁ CARREGADO, e responde a pergunta que o corretor faz na tela: "por que este imóvel
  * (não) apareceu pra este cliente?".
  *
- * DECISÃO DE ENGENHARIA DOCUMENTADA: não inventamos um "score" ponderado com pesos
- * arbitrários. O matching do sistema é booleano (todos os critérios preenchidos precisam
- * bater), então o número honesto que dá para mostrar é `matchedCount / totalCriteria` — uma
- * razão de critérios atendidos, exposta como `score`, com `matched: true/false` + `reason`
- * por critério. Um score ponderado (ex.: "preço vale 40%") seria um número inventado que não
- * corresponde a nenhuma regra real do produto.
+ * Pontuação (livro §13 + Guia §9 "Radar scoring", radarScoring.js): cada obrigatório entra com category REQUIRED; preferências,
+ * flexíveis (com peso, padrão 1) e exclusões entram com a sua categoria. Obrigatório que falhou ou exclusão que bateu ->
+ * matched=false e score 0 (reasons REQUIRED_FAILED/EXCLUDED); senão score = pesos atendidos / pesos totais (1 sem preferências).
  *
  * Recebe `property` com as suas `offers` já carregadas (include as: 'offers'), ou um array
  * de offers explícito em `options.offers`.
@@ -82,20 +94,23 @@ async function matchRadarToProperties(radar, transaction, options = {}) {
  * Retorno:
  *   {
  *     propertyId,
- *     matched: boolean,           // true só se TODOS os critérios avaliados bateram
- *     score: 0..1,                // critérios atendidos / critérios avaliados
+ *     matched: boolean,           // obrigatórios todos atendidos e nenhuma exclusão aplicada
+ *     score: 0..1,                // Guia §9 (acima)
+ *     requiredScore: 0..1,        // obrigatórios atendidos / obrigatórios avaliados
+ *     reasons: [...],             // REQUIRED_FAILED/EXCLUDED, ou os códigos de preferência atendidos
  *     matchedCount, totalCriteria,
- *     criteria: { propertyType: { matched: true }, priceRange: { matched: false, reason: 'Acima do máximo' }, ... }
+ *     criteria: { propertyType: { category: 'REQUIRED', matched: true }, 'preference:MIN_BEDROOMS': { category: 'PREFERENCE', weight: 2, matched: false, reason }, ... }
  *   }
  */
 function explainMatch(radar, property, options = {}) {
-  const criteria = (radar && radar.criteriaJson) || {};
+  const normalized = normalizeCriteria(radar && radar.criteriaJson);
+  const criteria = normalized.required;
   const offers = options.offers || property.offers || [];
   const activeOffers = offers.filter((offer) => offer.status === 'ACTIVE');
   const result = {};
 
   const add = (key, matched, reason) => {
-    result[key] = reason === undefined ? { matched } : { matched, reason };
+    result[key] = reason === undefined ? { category: 'REQUIRED', matched } : { category: 'REQUIRED', matched, reason };
   };
 
   if (criteria.propertyType) {
@@ -182,15 +197,22 @@ function explainMatch(radar, property, options = {}) {
     }
   }
 
+  const requiredKeys = Object.keys(result);
+  const requiredMatched = requiredKeys.filter((key) => result[key].matched).length;
+  for (const [key, entry] of evaluateExtras(normalized, property)) result[key] = entry;
+
   const keys = Object.keys(result);
   const matchedCount = keys.filter((key) => result[key].matched).length;
+  const scored = scoreOf(result);
 
   return {
     propertyId: property.id,
-    matched: matchedCount === keys.length,
+    matched: scored.matched,
     matchedCount,
     totalCriteria: keys.length,
-    score: keys.length === 0 ? 1 : Number((matchedCount / keys.length).toFixed(4)),
+    score: scored.score,
+    requiredScore: requiredKeys.length === 0 ? 1 : Number((requiredMatched / requiredKeys.length).toFixed(4)),
+    reasons: scored.reasons,
     criteria: result,
   };
 }
@@ -206,18 +228,20 @@ function explainMatch(radar, property, options = {}) {
  * especificamente — reaproveitando exatamente a mesma lógica/critérios de
  * matchRadarToProperties (via options.propertyId), não uma heurística paralela.
  */
-async function matchNewPropertyToRadars(property, transaction) {
+async function matchNewPropertyToRadarsDetailed(property, transaction) {
   const radars = await PropertyRadar.findAll(
     { where: { groupId: property.groupId, companyId: property.companyId, status: 'ACTIVE' }, transaction }
   );
-  if (radars.length === 0) return [];
-
-  const matchedRadars = [];
+  const out = [];
   for (const radar of radars) {
-    const matches = await matchRadarToProperties(radar, transaction, { propertyId: property.id });
-    if (matches.length > 0) matchedRadars.push(radar);
+    const [matched] = await matchRadarToProperties(radar, transaction, { propertyId: property.id });
+    if (matched) out.push({ radar, property: matched });
   }
-  return matchedRadars;
+  return out;
 }
 
-module.exports = { matchRadarToProperties, matchNewPropertyToRadars, explainMatch };
+async function matchNewPropertyToRadars(property, transaction) {
+  return (await matchNewPropertyToRadarsDetailed(property, transaction)).map((m) => m.radar);
+}
+
+module.exports = { matchRadarToProperties, matchNewPropertyToRadars, matchNewPropertyToRadarsDetailed, explainMatch };
