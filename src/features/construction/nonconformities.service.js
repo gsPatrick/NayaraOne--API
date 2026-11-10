@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishNonconformityOpened, publishNonconformityClosed } = require('./constructionEvents.service');
 const { getActiveSlaDaysMap } = require('./slaRules.service');
 const { resolveSameContentFileIds } = require('./evidenceReuse.service');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
 
 /**
  * detectEvidenceReuse — M6-59: verifica se algum arquivo de evidência (before/after) já foi
@@ -100,6 +101,7 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
     throw AppError.badRequest('Pelo menos uma evidência "antes" ("beforeEvidenceFileIds") é obrigatória para abrir uma não conformidade.', 'NONCONFORMITY_BEFORE_EVIDENCE_REQUIRED');
   }
 
+  await assertEvidenceFilesExist(beforeEvidenceFileIds, companyId, transaction, 'beforeEvidenceFileIds');
   const resolvedBeforeEvidence = beforeEvidenceFileIds;
   const reuse = await detectEvidenceReuse(resolvedBeforeEvidence, companyId, null, transaction);
 
@@ -198,6 +200,8 @@ async function closeNonconformity(id, payload, actorUserId, transaction) {
       'NONCONFORMITY_CLOSE_REQUIRES_AFTER_EVIDENCE'
     );
   }
+
+  await assertEvidenceFilesExist(resolvedAfterEvidence, nonconformity.companyId, transaction, 'afterEvidenceFileIds');
 
   const resolvedAcceptedBy = acceptedByUserId !== undefined ? acceptedByUserId : nonconformity.acceptedByUserId;
   if (nonconformity.requiresAcceptance && !resolvedAcceptedBy) {

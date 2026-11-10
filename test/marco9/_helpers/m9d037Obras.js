@@ -7,6 +7,7 @@ const nonconformitiesService = require('../../../src/features/construction/nonco
 const maintenanceCasesService = require('../../../src/features/construction/maintenanceCases.service');
 const { FinancialEntry, Property } = require('../../../src/models');
 const { uniqueSuffix } = require('../../testHelpers');
+const { evidenceIds } = require('../../constructionEvidenceFixture');
 
 const DAY = 86400000;
 const dia = (offsetDias) => new Date(Date.now() + offsetDias * DAY).toISOString().slice(0, 10);
@@ -31,8 +32,9 @@ const diario = (tenant, tx, projectId, extra = {}) => dailyReportsService.create
   projectId, { groupId: tenant.groupId, companyId: tenant.companyId, reportDate: dia(0), shiftCode: 'UNICO', workforceCount: 4, servicesPerformed: 'Alvenaria do térreo.', ...extra }, tenant.userId, tx,
 );
 
-const naoConformidade = (tenant, tx, projectId, extra = {}) => nonconformitiesService.createNonconformity(
-  projectId, { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'HIGH', description: 'Infiltração na laje do segundo pavimento.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['11111111-1111-1111-1111-111111111111'], ...extra }, tenant.userId, tx,
+// Evidência "antes" real (core.files): desde 10/11/2026 a NC recusa ID de arquivo inexistente.
+const naoConformidade = async (tenant, tx, projectId, extra = {}) => nonconformitiesService.createNonconformity(
+  projectId, { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'HIGH', description: 'Infiltração na laje do segundo pavimento.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: await evidenceIds(tenant, tx), ...extra }, tenant.userId, tx,
 );
 
 async function garantia(tenant, tx, projectId, extra = {}) {

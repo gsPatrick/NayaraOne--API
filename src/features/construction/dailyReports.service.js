@@ -4,6 +4,7 @@ const { DailyReport, DailyWorker, DailyMaterial, Project } = require('../../mode
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishDailyLogCreated } = require('./constructionEvents.service');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
 // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): a checagem de reuso suspeito de
 // evidência por hash (`detectEvidenceReuse`, nonconformities.service.js — M6-59) nunca tinha sido
 // conectada ao Diário de Obra, apesar do RDO também gravar `evidenceFileIds`. Reusa o MESMO
@@ -189,6 +190,7 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
   }
 
   const resolvedEvidenceFileIds = Array.isArray(evidenceFileIds) ? evidenceFileIds : [];
+  await assertEvidenceFilesExist(resolvedEvidenceFileIds, companyId, transaction, 'evidenceFileIds');
 
   // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): checagem de reuso suspeito de
   // evidência por hash, mesmo padrão do M6-59 (nonconformities.service.js) — gera alerta, nunca
@@ -353,6 +355,7 @@ async function correctDailyReport(id, payload, actorUserId, transaction) {
   const original = await getCurrentDailyReport(id, transaction);
   const { weather, workforceCount, occurrences, blockages, servicesPerformed, workers, materials, evidenceFileIds } = payload;
   validateWorkforceCount(workforceCount);
+  if (Array.isArray(evidenceFileIds)) await assertEvidenceFilesExist(evidenceFileIds, original.companyId, transaction, 'evidenceFileIds');
 
   const revision = await DailyReport.create(
     {
