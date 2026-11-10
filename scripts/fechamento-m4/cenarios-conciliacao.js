@@ -43,7 +43,7 @@ module.exports = async function conciliacao(R) {
   await sug('C20', ['M4-§11.1', 'M4-FIN-009'], 'EX', 'Sugestão EXATO: ID externo + valor + data, com score 1.00 e critérios');
   await sug('C21', ['M4-§11.2', 'M4-G§9'], 'FO', 'Sugestão FORTE: referência + contraparte (conta) + janela, score 0.90 (pesos 0.45/0.30/0.15/0.10)');
   await sug('C22', ['M4-§11.3', 'M4-G§20.7'], 'PR', 'Sugestão PROVÁVEL: valor/data/conta parecidos, score 0.70 — humano confirma');
-  await sug('C23', ['M4-§11.4', 'M4-FIN-TS-008'], 'AM', 'Dois candidatos empatados: AMBÍGUO, nunca auto');
+  await R.http({ id: 'C23', linhas: ['M4-§11.4', 'M4-FIN-TS-008'], titulo: 'Dois candidatos empatados: AMBÍGUO, nunca auto', quem: 'A:leitura', metodo: 'GET', rota: (c) => `/finance/bank-transactions/${c.tx.AM}/reconciliation-suggestions`, esperado: { status: 200 }, confere: { regra: 'finalClass = AMBIGUOUS', fn: (d) => d.finalClass === 'AMBIGUOUS' } });
   await sug('C24', ['M4-§11.5', 'M4-G§15.7'], 'SEM', 'Nenhum candidato: SEM CORRESPONDÊNCIA (fila de pendência)');
 
   const auto = (id, linhas, k, titulo) => R.http({ id, linhas, titulo, quem: 'A:gestor', metodo: 'POST', rota: (c) => `/finance/bank-transactions/${c.tx[k]}/auto-reconcile`, corpo: {}, esperado: { status: 200 } });
@@ -54,7 +54,7 @@ module.exports = async function conciliacao(R) {
   await auto('C34', ['M4-§11.5'], 'SEM', 'Auto-conciliação sem correspondência: nada é conciliado');
 
   await R.http({ id: 'C40', linhas: ['M4-§11.2', 'M4-§5.9', 'M4-G§15.8'], titulo: 'Humano confirma o match FORTE (vínculo banco x lançamento)', quem: 'A:gestor', metodo: 'POST', rota: '/finance/reconciliations', corpo: (c) => ({ financialEntryId: c.eFo, bankTransactionId: c.tx.FO }), esperado: { status: 201 } });
-  await R.http({ id: 'C41', linhas: ['M4-§11.3', 'M4-G§14.7', 'M4-§17.7'], titulo: 'Humano confirma o match PROVÁVEL', quem: 'A:gestor', metodo: 'POST', rota: '/finance/reconciliations', corpo: (c) => ({ financialEntryId: c.ePr, bankTransactionId: c.tx.PR }), esperado: { status: 201 } });
+  await R.http({ id: 'C41', linhas: ['M4-§11.3', 'M4-G§14.7'], titulo: 'Humano confirma o match PROVÁVEL', quem: 'A:gestor', metodo: 'POST', rota: '/finance/reconciliations', corpo: (c) => ({ financialEntryId: c.ePr, bankTransactionId: c.tx.PR }), esperado: { status: 201 } });
   await R.http({ id: 'C42', linhas: ['M4-§21.6', 'M4-G§17.9'], titulo: 'Conciliar de novo a mesma transação: recusado (conciliação duplicada)', quem: 'A:gestor', metodo: 'POST', rota: '/finance/reconciliations', corpo: (c) => ({ financialEntryId: c.ePr, bankTransactionId: c.tx.PR }), esperado: { status: 409 } });
   await R.http({ id: 'C43', linhas: ['M4-§8.12'], titulo: 'Valor do extrato divergente do lançamento: conciliação bloqueada', quem: 'A:gestor', metodo: 'POST', rota: '/finance/reconciliations', corpo: (c) => ({ financialEntryId: c.eDv, bankTransactionId: c.tx.DV }), esperado: { status: 409, codigo: 'FINANCE_RECONCILIATION_AMOUNT_MISMATCH' } });
   await R.http({ id: 'C44', linhas: ['M4-§11.4'], titulo: 'Ambíguo resolvido por humano escolhendo o lançamento certo', quem: 'A:gestor', metodo: 'POST', rota: '/finance/reconciliations', corpo: (c) => ({ financialEntryId: c.eAm1, bankTransactionId: c.tx.AM }), esperado: { status: 201 } });

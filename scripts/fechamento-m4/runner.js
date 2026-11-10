@@ -39,7 +39,7 @@ class RunnerM4 extends Runner {
   }
 
   /** Passo HTTP com linhas da matriz e cabeçalhos extras. */
-  async http({ id, linhas = [], titulo, quem, metodo, rota, corpo, cabecalhos, corpoBruto, esperado, guardar, nota }) {
+  async http({ id, linhas = [], titulo, quem, metodo, rota, corpo, cabecalhos, corpoBruto, esperado, guardar, nota, confere }) {
     this.seq += 1;
     const rotaFinal = typeof rota === 'function' ? rota(this.ctx) : rota;
     const corpoFinal = typeof corpo === 'function' ? corpo(this.ctx) : corpo;
@@ -60,13 +60,19 @@ class RunnerM4 extends Runner {
     try { corpoResp = JSON.parse(texto); } catch (_) { corpoResp = texto === '' ? null : texto; }
     const codigo = corpoResp && corpoResp.error ? corpoResp.error.code : null;
     const statusOk = Array.isArray(esperado.status) ? esperado.status.includes(res.status) : res.status === esperado.status;
-    const ok = statusOk && (esperado.codigo === undefined || esperado.codigo === codigo);
+    let conferencia = null;
+    if (confere) {
+      let passou = false;
+      try { passou = Boolean(confere.fn(corpoResp && corpoResp.data !== undefined ? corpoResp.data : corpoResp, this.ctx)); } catch (_) { passou = false; }
+      conferencia = { regra: confere.regra, passou };
+    }
+    const ok = statusOk && (esperado.codigo === undefined || esperado.codigo === codigo) && (!conferencia || conferencia.passou);
     const cabecalhosEnviados = Object.fromEntries(Object.entries(extras).map(([k, v]) => [k, /signature/i.test(k) ? `${String(v).slice(0, 13)}…(assinatura HMAC calculada no envio)` : v]));
     const passo = {
       id, tipo: 'http', linhas, titulo, perfil: quem || 'anonimo', metodo, rota: rotaFinal,
       cabecalhosEnviados: Object.keys(cabecalhosEnviados).length ? cabecalhosEnviados : 'somente Content-Type e Authorization (token omitido)',
       corpoEnviado: bruto !== undefined ? redigirFundo(JSON.parse(bruto)) : corpoFinal === undefined ? 'sem corpo' : redigirFundo(corpoFinal),
-      esperado, status: res.status, codigo: codigo || 'não se aplica (sem código de erro)', ok, ms,
+      esperado: conferencia ? { ...esperado, conteudo: conferencia.regra } : esperado, conferenciaDoConteudo: conferencia || 'só status/código', status: res.status, codigo: codigo || 'não se aplica (sem código de erro)', ok, ms,
       quando: new Date().toISOString(),
       cabecalhosResposta: Object.fromEntries(['content-type', 'x-content-type-options', 'x-frame-options', 'strict-transport-security', 'content-security-policy', 'referrer-policy', 'x-request-id'].filter((h) => res.headers.get(h)).map((h) => [h, res.headers.get(h)])),
       corpo: redigirFundo(corpoResp),
