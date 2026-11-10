@@ -17,7 +17,7 @@ async function person(t, tx) {
 
 async function opportunity(t, tx) {
   const owner = await person(t, tx);
-  return opportunitiesService.createOpportunity({ groupId: t.groupId, companyId: t.companyId, personId: owner.id, stage: 'QUALIFYING', nextAction: 'Ligar', nextActionDueAt: future(3) }, t.userId, tx);
+  return opportunitiesService.createOpportunity({ groupId: t.groupId, companyId: t.companyId, personId: owner.id, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: future(3) }, t.userId, tx);
 }
 
 async function property(t, tx) {

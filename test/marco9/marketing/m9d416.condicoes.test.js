@@ -37,11 +37,11 @@ test('regra_inexistente_nao_envia', async () => {
 test('condicoes_avaliadas_pelo_motor_de_regras_todas_precisam_ser_verdadeiras', async () => {
   await run(async (t) => {
     const personId = await readyPerson(t, A);
-    await makeOpportunity(t, A, personId, { stage: 'NEGOTIATION' });
+    await makeOpportunity(t, A, personId, { stage: 'PROPOSAL' });
     const stage = `QA-M9-ESTAGIO-${uid().slice(0, 6)}`;
     const other = `QA-M9-OUTRO-${uid().slice(0, 6)}`;
     const broken = `QA-M9-QUEBRADA-${uid().slice(0, 6)}`;
-    await publishRule(t, A, stage, { fact: 'leadStage', op: '==', value: 'NEGOTIATION' });
+    await publishRule(t, A, stage, { fact: 'leadStage', op: '==', value: 'PROPOSAL' });
     await publishRule(t, A, other, { fact: 'leadStage', op: '==', value: 'NEW' });
     await publishRule(t, A, broken, { fact: 'leadStage', op: 'CONTEM', value: 'N' }); // operador inválido: erro do motor
 
@@ -63,13 +63,13 @@ test('condicoes_avaliadas_pelo_motor_de_regras_todas_precisam_ser_verdadeiras', 
 test('facts_trazem_so_campos_seguros_do_crm', async () => {
   await run(async (t) => {
     const personId = await readyPerson(t, A);
-    await makeOpportunity(t, A, personId, { stage: 'VISIT', temperature: 'HOT' });
+    await makeOpportunity(t, A, personId, { stage: 'VISIT_SCHEDULED', temperature: 'HOT' });
     await makeRadar(t, A, personId, { propertyTypes: ['APARTMENT', 'HOUSE'] });
     await makeRadar(t, A, personId, { propertyTypes: ['LAND'] }, 'PAUSED');
     await addMessage(t, A, { personId, channel: 'WHATSAPP', direction: 'INBOUND', status: 'RECEIVED', at: instante(DIA, '17:00:00', -5) });
     await addConsent(t, A, personId, 'WHATSAPP', 'RADAR', 'OPT_OUT', instante(DIA, '17:00:00', -8));
     const facts = await buildAutomationFacts({ type: 'PERSON', id: personId }, A, t, NOW);
-    assert.equal(facts.leadStage, 'VISIT');
+    assert.equal(facts.leadStage, 'VISIT_SCHEDULED');
     assert.equal(facts.leadTemperature, 'HOT');
     assert.equal(facts.daysSinceContact, 5);
     assert.deepEqual(facts.interests.sort(), ['APARTMENT', 'HOUSE']);

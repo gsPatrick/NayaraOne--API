@@ -73,7 +73,7 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
-      stage: 'QUALIFYING',
+      stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
       ...extra,
@@ -549,7 +549,7 @@ test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho err
     );
 
     const persisted = await opportunitiesService.getOpportunity(opportunity.id, transaction);
-    assert.equal(persisted.stage, 'QUALIFYING', 'a oportunidade não pode ter sido fechada pela tentativa recusada');
+    assert.equal(persisted.stage, 'QUALIFIED', 'a oportunidade não pode ter sido fechada pela tentativa recusada');
     assert.equal(persisted.closedAt, null);
   });
 });
@@ -765,33 +765,26 @@ test('ADV-C20 temperature inventada é recusada e estágio desconhecido nunca vi
       }
     );
 
-    // `stage` é livre POR DECISÃO (funil configurável por tenant — ver
-    // opportunityNextAction.validator.js), então um estágio inventado não é recusado. O que
-    // NÃO pode acontecer é ele virar um atalho para "fechar" a oportunidade: o validador é
-    // fail-closed e trata qualquer estágio desconhecido como ATIVO — ou seja, continua
-    // exigindo próxima ação e nunca carimba closedAt/motivo de desfecho.
+    // Livro do Marco 3 §10: o funil é um catálogo fechado. Estágio inventado é recusado na criação e na atualização,
+    // então nunca vira atalho para "fechar" a oportunidade nem grava etapa fora do funil.
     await assert.rejects(
-      () =>
-        opportunitiesService.createOpportunity(
-          {
-            groupId: tenant.groupId,
-            companyId: tenant.companyId,
-            personId: person.id,
-            stage: 'ESTAGIO_INVENTADO',
-          },
-          tenant.userId,
-          transaction
-        ),
+      () => createActiveOpportunity(transaction, person.id, { stage: 'ESTAGIO_INVENTADO' }),
       (err) => {
-        assert.equal(err.code, 'OPPORTUNITY_NEXT_ACTION_REQUIRED');
+        assert.equal(err.statusCode, 400);
+        assert.equal(err.code, 'OPPORTUNITY_STAGE_INVALID');
         return true;
       }
     );
-
-    const inventada = await createActiveOpportunity(transaction, person.id, { stage: 'ESTAGIO_INVENTADO' });
-    assert.equal(inventada.closedAt, null, 'estágio desconhecido nunca pode fechar a oportunidade');
-    assert.equal(inventada.wonReason, null);
-    assert.equal(inventada.lostReason, null);
-    assert.equal(inventada.withdrawnReason, null);
+    const ativa = await createActiveOpportunity(transaction, person.id);
+    await assert.rejects(
+      () => opportunitiesService.updateOpportunity(ativa.id, { stage: 'ESTAGIO_INVENTADO' }, tenant.userId, transaction),
+      (err) => err.code === 'OPPORTUNITY_STAGE_INVALID'
+    );
+    const recarregada = await opportunitiesService.getOpportunity(ativa.id, transaction);
+    assert.equal(recarregada.stage, 'QUALIFIED');
+    assert.equal(recarregada.closedAt, null, 'estágio desconhecido nunca pode fechar a oportunidade');
+    assert.equal(recarregada.wonReason, null);
+    assert.equal(recarregada.lostReason, null);
+    assert.equal(recarregada.withdrawnReason, null);
   });
 });

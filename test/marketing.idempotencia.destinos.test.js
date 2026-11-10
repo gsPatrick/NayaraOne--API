@@ -70,7 +70,7 @@ test('action_key_e_unica_no_crm', async () => {
     const suffix = uniqueSuffix();
     const person = await peopleService.createPerson({ groupId: tenantA.groupId, companyId: tenantA.companyId, personType: 'PF', legalName: `Lead D415 ${suffix}` }, tenantA.userId, tx);
     const opp = await opportunitiesService.createOpportunity({
-      groupId: tenantA.groupId, companyId: tenantA.companyId, personId: person.id, stage: 'QUALIFYING', nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000),
+      groupId: tenantA.groupId, companyId: tenantA.companyId, personId: person.id, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000),
     }, tenantA.userId, tx);
     const tkey = idem.actionKey(uid(), 1, 'CREATE_TASK');
     const t1 = await opportunityTasksService.createOpportunityTask(opp.id, { title: 'Retornar contato', actionKey: tkey }, tenantA.userId, tx);
