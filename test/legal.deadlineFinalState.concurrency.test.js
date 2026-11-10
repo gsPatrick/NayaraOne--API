@@ -13,6 +13,7 @@ const { getSeedTenant, withTenantTransaction } = require('./testHelpers');
 const { sequelize, newUser, concludedCriticalWithoutCaseResponsible: setup } = require('./legal.deadlineFinalState.helpers');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const { LegalDeadline, AuditLog } = require('../src/models');
+const { createRaceLog } = require('./legal.raceSessionLog.helpers');
 
 let tenant;
 before(async () => {
@@ -52,14 +53,26 @@ for (const order of ['B-primeiro', 'null-primeiro']) {
     const bodyB = { status: 'PENDING', responsibleUserId: fx.b.id };
     const bodyNull = { status: 'PENDING', responsibleUserId: null };
     const [firstBody, secondBody] = order === 'B-primeiro' ? [bodyB, bodyNull] : [bodyNull, bodyB];
+    const log = createRaceLog(sequelize, `Duas reaberturas simultaneas (${order})`);
+    const label = (body) => (body.responsibleUserId ? 'B (reabre com responsavel B)' : 'null (reabre removendo o responsavel)');
+    log.emit(`prazo CRITICAL ${fx.d.id} (DONE) do processo ${fx.legalCase.id}; processo sem responsavel proprio; usuario B = ${fx.b.id}`);
     const t1 = await begin();
     const t2 = await begin();
+    const s1 = await log.session(`1 = ${label(firstBody)}`, t1);
+    const s2 = await log.session(`2 = ${label(secondBody)}`, t2);
+    const byPid = { [s1.pid]: s1, [s2.pid]: s2 };
     const first = await attempt(firstBody, fx.d.id, t1);
+    log.emit(`sessão 1 executou PATCH ${JSON.stringify(firstBody)} -> ${log.outcome(first)}; ${first.ok ? 'transação 1 segue ABERTA (segurando o lock processo -> prazo)' : 'transação 1 encerrada por ROLLBACK (nada gravado)'}`);
     const secondP = attempt(secondBody, fx.d.id, t2);
+    log.emit(`sessão 2 disparou PATCH ${JSON.stringify(secondBody)} ${first.ok ? 'enquanto a transação 1 está aberta' : 'com a transação 1 já encerrada'}`);
     await sleep(300);
+    await log.observe(s2, byPid);
     if (first.ok) await t1.commit();
+    log.emit(first.ok ? 'sessão 1 COMMIT (1º commit)' : 'sessão 1 já tinha feito ROLLBACK (recusada)');
     const second = await secondP;
+    log.emit(`sessão 2 terminou${first.ok ? ' depois do commit da 1' : ''} -> ${log.outcome(second)}`);
     if (second.ok) await t2.commit();
+    log.emit(second.ok ? `sessão 2 COMMIT (${first.ok ? '2º' : 'único'} commit)` : 'sessão 2 ROLLBACK (recusada, nada gravado)');
 
     const results = order === 'B-primeiro' ? [first, second] : [second, first];
     const [rB, rNull] = results;
@@ -77,6 +90,7 @@ for (const order of ['B-primeiro', 'null-primeiro']) {
       assert.equal(logs[1].beforeJson.status, 'DONE');
       assert.equal(logs[1].beforeJson.responsibleUserId, logs[0].afterJson.responsibleUserId);
       assert.equal(logs[1].afterJson.responsibleUserId, fx.b.id);
+      log.emit(`estado final: status=${final.status} criticality=${final.criticality} responsavel=${final.responsibleUserId}; audit_log legal.deadline.update = ${logs.length} linhas (conclusao + 1 reabertura); before.status da reabertura = ${logs[1].beforeJson.status}`);
     });
   });
 }

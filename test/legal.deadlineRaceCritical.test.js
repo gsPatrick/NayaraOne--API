@@ -13,6 +13,7 @@ const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix } = requir
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const { LegalDeadline, LegalCase } = require('../src/models');
+const { createRaceLog } = require('./legal.raceSessionLog.helpers');
 
 let tenant;
 before(async () => {
@@ -37,7 +38,7 @@ async function begin() {
  * Duas conexoes reais: A executa e fica com a transacao ABERTA; B executa enquanto A segue aberta
  * (com o lock, B espera A); so depois A commita e B termina. Sem lock, as duas passam e commitam.
  */
-async function race(opA, txA, opB, txB) {
+async function race(opA, txA, opB, txB, log) {
   const outcome = async (op, tx) => {
     try {
       await op();
@@ -47,14 +48,25 @@ async function race(opA, txA, opB, txB) {
       return { ok: false, status: err.statusCode, code: err.code, message: err.message };
     }
   };
+  // Log nominal (so observa): PID de cada sessao, quem espera por quem e a ordem de commit.
+  const sA = log ? await log.session(`A = ${opA.label}`, txA) : null;
+  const sB = log ? await log.session(`B = ${opB.label}`, txB) : null;
   const a = await outcome(opA, txA);
+  if (log) log.emit(`sessão A executou (${opA.label}) -> ${log.outcome(a)}; transação A segue ${a.ok ? 'ABERTA' : 'encerrada por ROLLBACK'}`);
   const pendingB = outcome(opB, txB);
+  if (log) log.emit(`sessão B disparou (${opB.label}) com a transação A ${a.ok ? 'aberta' : 'já encerrada'}`);
   await sleep(250);
+  if (log) await log.observe(sB, { [sA.pid]: sA, [sB.pid]: sB });
   if (a.ok) await txA.commit();
+  if (log) log.emit(a.ok ? 'sessão A COMMIT (1º commit)' : 'sessão A sem commit (recusada)');
   const b = await pendingB;
+  if (log) log.emit(`sessão B terminou -> ${log.outcome(b)}`);
   if (b.ok) await txB.commit();
+  if (log) log.emit(b.ok ? 'sessão B COMMIT' : 'sessão B ROLLBACK (recusada, nada gravado)');
   return [a, b];
 }
+
+const labeled = (label, fn) => Object.assign(fn, { label });
 
 async function setupConcluded() {
   const out = {};
@@ -95,13 +107,17 @@ for (let round = 1; round <= 8; round += 1) {
     const t1 = await begin();
     const t2 = await begin();
     // alterna quem comeca, para cobrir as duas ordens de chegada
-    const reopen = () => legalDeadlinesService.updateLegalDeadline(fx.d.id, { status: 'PENDING' }, tenant.userId, t1);
-    const removeEscalation = () => legalCasesService.updateLegalCase(fx.legalCase.id, { escalationUserId: null }, tenant.userId, t2);
-    const results = round % 2 ? await race(reopen, t1, removeEscalation, t2) : (await race(removeEscalation, t2, reopen, t1)).reverse();
+    const reopen = labeled('reabrir o prazo CRITICAL (DONE -> PENDING)', () => legalDeadlinesService.updateLegalDeadline(fx.d.id, { status: 'PENDING' }, tenant.userId, t1));
+    const removeEscalation = labeled('tirar o escalonamento do processo (escalationUserId = null)', () => legalCasesService.updateLegalCase(fx.legalCase.id, { escalationUserId: null }, tenant.userId, t2));
+    const log = createRaceLog(sequelize, `Corrida #${round} (${round % 2 ? 'reabrir primeiro' : 'tirar escalonamento primeiro'})`);
+    log.emit(`prazo CRITICAL ${fx.d.id} (DONE), processo ${fx.legalCase.id}`);
+    const results = round % 2 ? await race(reopen, t1, removeEscalation, t2, log) : (await race(removeEscalation, t2, reopen, t1, log)).reverse();
     const rejected = results.filter((r) => !r.ok);
     assert.equal(rejected.length, 1, `exatamente um lado deve ser recusado: ${JSON.stringify(results)}`);
     assert.equal(rejected[0].status, 422, JSON.stringify(rejected[0]));
-    assertValid(await finalState(fx));
+    const fin = await finalState(fx);
+    log.emit(`estado final: prazo ${fin.deadline.status}/${fin.deadline.criticality}, escalonamento do processo = ${fin.legalCase.escalationUserId || 'nenhum'}`);
+    assertValid(fin);
   });
 }
 
@@ -110,9 +126,11 @@ test('Corrida: criar CRITICAL novo x tirar escalonamento do processo -> um lado 
     const fx = await setupConcluded();
     const t1 = await begin();
     const t2 = await begin();
-    const create = () => legalDeadlinesService.createLegalDeadline(fx.legalCase.id, { description: `Novo ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', criticality: 'CRITICAL' }, tenant.userId, t1);
-    const remove = () => legalCasesService.updateLegalCase(fx.legalCase.id, { escalationUserId: null }, tenant.userId, t2);
-    const results = round % 2 ? await race(create, t1, remove, t2) : await race(remove, t2, create, t1);
+    const create = labeled('criar prazo CRITICAL novo', () => legalDeadlinesService.createLegalDeadline(fx.legalCase.id, { description: `Novo ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', criticality: 'CRITICAL' }, tenant.userId, t1));
+    const remove = labeled('tirar o escalonamento do processo (escalationUserId = null)', () => legalCasesService.updateLegalCase(fx.legalCase.id, { escalationUserId: null }, tenant.userId, t2));
+    const log = createRaceLog(sequelize, `Criar CRITICAL x tirar escalonamento, rodada ${round + 1} (${round % 2 ? 'criar primeiro' : 'tirar primeiro'})`);
+    log.emit(`processo ${fx.legalCase.id}`);
+    const results = round % 2 ? await race(create, t1, remove, t2, log) : await race(remove, t2, create, t1, log);
     assert.equal(results.filter((r) => !r.ok).length, 1, JSON.stringify(results));
     assert.equal(results.find((r) => !r.ok).status, 422);
     await withTenantTransaction(tenant, async (tx) => {
