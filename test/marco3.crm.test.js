@@ -578,7 +578,8 @@ test('M3-20: criação calcula o SLA correto por severidade (HIGH 24h, MEDIUM 72
         transaction
       );
 
-      assert.equal(feedbackCase.status, 'OPEN');
+      // Reclamação HIGH é "reclamação grave": nasce escalonada para a gerência (livro §15); as demais nascem abertas.
+      assert.equal(feedbackCase.status, severity === 'HIGH' ? 'ESCALATED' : 'OPEN');
       assert.equal(feedbackCase.severity, severity);
       const deltaHours = (new Date(feedbackCase.slaDueAt).getTime() - before) / 3600000;
       // Tolerância de alguns segundos entre o `before` do teste e o `new Date()` do service.
@@ -687,7 +688,8 @@ test('M3-20: o job encontra e escalona um caso com SLA VENCIDO (tempo simulado v
         personId: person.id,
         type: 'COMPLAINT',
         description: `Reclamação vencida ${suffix}`,
-        severity: 'HIGH',
+        // MEDIUM: reclamação HIGH já nasce escalonada para a gerência (livro §15), e aqui o que se prova é o SLA vencido.
+        severity: 'MEDIUM',
         assignedToUserId: tenant.userId,
       },
       tenant.userId,

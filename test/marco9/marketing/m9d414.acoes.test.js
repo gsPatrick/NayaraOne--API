@@ -58,7 +58,8 @@ test('executor_de_cada_tipo_de_acao_do_catalogo: as 7 acoes chamam o servico da 
     const kase = await oneAction(t, { actionType: 'OPEN_CASE', caseType: 'COMPLAINT', description: 'Cliente reclamou do atendimento QA-M9.', severity: 'HIGH' });
     assert.equal(kase.entry.status, 'OK');
     assert.equal((await receipts(t, kase.key)).length, 1);
-    assert.equal((await env.q(t, "SELECT count(*)::int AS n FROM crm.feedback_cases WHERE person_id = :p AND status = 'OPEN'", { p: kase.person }))[0].n, 1);
+    // Reclamação HIGH é reclamação grave: nasce escalonada para a gerência (livro do Marco 3, §15).
+    assert.equal((await env.q(t, "SELECT count(*)::int AS n FROM crm.feedback_cases WHERE person_id = :p AND status = 'ESCALATED'", { p: kase.person }))[0].n, 1);
 
     const stage = await oneAction(t, { actionType: 'UPDATE_CRM_STAGE_TAG', stage: 'QUALIFIED', temperature: 'HOT', nextAction: 'Ligar para o cliente', nextActionDueAt: '2026-12-01T12:00:00Z' });
     assert.equal(stage.entry.status, 'OK', JSON.stringify(stage.entry));

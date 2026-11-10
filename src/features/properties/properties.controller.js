@@ -8,6 +8,7 @@ const ownersService = require('./propertyOwners.service');
 const offersService = require('./propertyOffers.service');
 const occurrencesService = require('./propertyInternalOccurrences.service');
 const mediaService = require('./propertyMedia.service');
+const mediaQuality = require('./propertyMediaQuality.service');
 const documentsService = require('./propertyDocuments.service');
 const priceHistoryService = require('./propertyPriceHistory.service');
 const publishService = require('./publish.service');
@@ -151,6 +152,14 @@ const removeMedia = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
+// Livro §6/§7: revisão de qualidade da foto (aprovar/recusar com motivo); só foto aprovada conta para publicar.
+const reviewMediaQuality = catchAsync(async (req, res) => {
+  const media = await req.withTenantTransaction((transaction) =>
+    mediaQuality.reviewMediaQuality(req.params.id, req.params.mediaId, req.body, req.auth.userId, transaction)
+  );
+  return success(res, { data: media });
+});
+
 // --- Documents ---
 
 const createDocument = catchAsync(async (req, res) => {
@@ -208,6 +217,7 @@ module.exports = {
   createOccurrence,
   listOccurrences,
   createMedia,
+  reviewMediaQuality,
   listMedia,
   removeMedia,
   createDocument,

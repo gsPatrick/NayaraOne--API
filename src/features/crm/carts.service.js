@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { Cart, CartVersion, CartShareRouting, Opportunity, Property, PropertyOffer, PropertyMedia } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishDomainEvent } = require('../../engines/events/outbox');
+const { PHOTO_MEDIA_TYPES } = require('../properties/propertyMediaQuality.service');
 
 /**
  * carts.service.js — item 3 do ciclo de auditoria externa Marco 3 ("crm.carts — não existe
@@ -191,7 +192,7 @@ async function getPublicCartByToken(token, sequelize) {
       const activeOffer = await PropertyOffer.findOne({ where: { propertyId: property.id, status: 'ACTIVE' }, transaction: t });
       // eslint-disable-next-line no-await-in-loop
       const approvedMedia = await PropertyMedia.findAll({
-        where: { propertyId: property.id, mediaType: 'PHOTO', qualityStatus: 'APPROVED' },
+        where: { propertyId: property.id, mediaType: PHOTO_MEDIA_TYPES, qualityStatus: 'APPROVED' },
         transaction: t,
       });
       sanitizedProperties.push(sanitizePropertyForPublicCart(property, activeOffer, approvedMedia));

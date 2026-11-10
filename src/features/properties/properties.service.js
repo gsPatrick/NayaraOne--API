@@ -10,6 +10,7 @@ const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { ADDRESS_VISIBILITIES } = require('./publicReadModel/constants');
 const { assertAddressBelongsToCompany } = require('./propertyAddress.guard');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, propertyEntity } = require('../core-governance/data-quality/evidence');
+const { PHOTO_MEDIA_TYPES } = require('./propertyMediaQuality.service');
 
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
 // M9-D403: política de endereço em conteúdo público de Marketing (padrão do banco: SO_BAIRRO).
@@ -317,7 +318,7 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
       // Mesmo gate aplicado em publish.service.js (REG-IMO-PHOTO-MIN / REG-IMO-DOCS-001) —
       // este caminho genérico de PATCH não pode contornar as mesmas regras do Motor de Regras.
       const approvedPhotoCount = await PropertyMedia.count({
-        where: { propertyId: property.id, mediaType: 'PHOTO', qualityStatus: 'APPROVED' },
+        where: { propertyId: property.id, mediaType: PHOTO_MEDIA_TYPES, qualityStatus: 'APPROVED' },
         transaction,
       });
       const photoEvaluation = await evaluateRule('REG-IMO-PHOTO-MIN', { approvedPhotoCount }, tenant, { transaction });
