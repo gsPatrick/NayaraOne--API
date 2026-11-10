@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 818. Rotas só com login ou públicas: 42.
+Rotas com permissão exigida: 829. Rotas só com login ou públicas: 42.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -265,14 +265,24 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/crm/dashboard` | `crm:dashboard:read` | não |
 | `PATCH` | `/api/v1/crm/feedback-cases/:id/escalate` | `crm:feedback:update` | não |
 | `PATCH` | `/api/v1/crm/feedback-cases/:id/resolve` | `crm:feedback:update` | não |
+| `DELETE` | `/api/v1/crm/feedback-cases/:id` | `crm:feedback:update` | não |
 | `GET` | `/api/v1/crm/feedback-cases/:id` | `crm:feedback:read` | não |
 | `GET` | `/api/v1/crm/feedback-cases` | `crm:feedback:read` | não |
 | `POST` | `/api/v1/crm/feedback-cases` | `crm:feedback:create` | não |
+| `DELETE` | `/api/v1/crm/occurrences/:id` | `crm:feedback:update` | não |
+| `POST` | `/api/v1/crm/occurrences` | `crm:feedback:create` | não |
+| `POST` | `/api/v1/crm/opportunities/:id/interactions` | `crm:messages:create` | não |
+| `POST` | `/api/v1/crm/opportunities/:id/lost` | `crm:opportunities:update` | não |
+| `POST` | `/api/v1/crm/opportunities/:id/visits` | `crm:visits:create` | não |
 | `GET` | `/api/v1/crm/opportunities/export` | `crm:opportunities:export` | não |
+| `POST` | `/api/v1/crm/opportunities/reassign` | `crm:opportunities:reassign` | não |
+| `POST` | `/api/v1/crm/opportunities` | `crm:opportunities:create` | não |
 | `PATCH` | `/api/v1/crm/proposals/:id/status` | `crm:proposals:update` | não |
 | `GET` | `/api/v1/crm/proposals/:id` | `crm:proposals:read` | não |
 | `GET` | `/api/v1/crm/proposals` | `crm:proposals:read` | não |
 | `POST` | `/api/v1/crm/proposals` | `crm:proposals:create` | não |
+| `GET` | `/api/v1/crm/radars/:id/matches` | `radar:read` | não |
+| `POST` | `/api/v1/crm/radars` | `radar:create` | não |
 | `GET` | `/api/v1/data-classification/legacy-review` | `governance:data-quality:read` | não |
 | `GET` | `/api/v1/data-classification` | `governance:data-quality:read` | não |
 | `PUT` | `/api/v1/data-classification` | `governance:classification:manage` | não |
@@ -759,6 +769,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/properties/:id/documents` | `properties:read` | não |
 | `POST` | `/api/v1/properties/:id/documents` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/impact` | `properties:delete` | não |
+| `PATCH` | `/api/v1/properties/:id/media/:mediaId/quality` | `properties:update` | não |
 | `DELETE` | `/api/v1/properties/:id/media/:mediaId` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/media` | `properties:read` | não |
 | `POST` | `/api/v1/properties/:id/media` | `properties:update` | não |
