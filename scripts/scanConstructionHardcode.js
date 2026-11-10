@@ -30,7 +30,8 @@
 const fs = require('fs');
 const path = require('path');
 
-const TARGET_DIR = path.join(__dirname, '..', 'src', 'features', 'construction');
+// SCAN_CONSTRUCTION_DIR só existe para o teste do próprio scanner (test/construction.hardcodeScanner.test.js).
+const TARGET_DIR = process.env.SCAN_CONSTRUCTION_DIR ? path.resolve(process.env.SCAN_CONSTRUCTION_DIR) : path.join(__dirname, '..', 'src', 'features', 'construction');
 const ALLOW_MARKER = 'scanner:allow';
 
 // Frações decimais fora de intervalo "estrutural" comum (0, 1) — candidatas a percentual
