@@ -25,6 +25,7 @@ function assertCompetenceOpen(companyId, competenceMonths, transaction) {
 }
 const { isApprovalRequestApproved, listApprovedDeciders, markApprovalRequestsStale } = require('./approvals.service');
 const { getBankAccount } = require('./bankAccounts.service');
+const { deriveKey, findPartialReplay, findSettleReplay } = require('./settlementIdempotency');
 
 // finance.financial_entries É o ledger (não existe uma tabela "finance.ledger" separada — ver
 // nota em financeAntifraud.service.js e o relatório de schema real). Regras duras
@@ -1209,11 +1210,12 @@ async function applyThirdPartySettlementEffects(entry, settledAmount, actorUserI
 }
 
 async function settleFinancialEntry(id, actorUserId, transaction, options = {}) {
-  // Lock pessimista: sem isto, duas chamadas concorrentes (ex.: executePaymentIntent chamado
-  // duas vezes pra mesma intenção, ou dois cliques de "liquidar") liam PENDING nas duas antes
-  // de qualquer uma commitar e ambas liquidavam.
+  // Lock pessimista: sem ele, duas chamadas concorrentes (dois cliques, retry) liquidavam as duas.
   const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
+  const settleKey = deriveKey('baixa-integral', entry.companyId, options && options.idempotencyKey);
+  const settleReplay = await findSettleReplay(entry, settleKey, transaction); // FIN-004: mesma chave = baixa original
+  if (settleReplay) return settleReplay;
   if (entry.status === 'PARTIALLY_SETTLED') {
     throw AppError.conflict(
       'Este lançamento já tem baixas parciais — use a liquidação parcial do saldo restante (settleFinancialEntryPartial) para fechá-lo.',
@@ -1250,7 +1252,7 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
       entityType: 'FinancialEntry',
       entityId: entry.id,
       beforeJson,
-      afterJson: entry.toJSON(),
+      afterJson: settleKey ? { ...entry.toJSON(), settlementIdempotencyKey: settleKey } : entry.toJSON(),
       reason: `Lançamento de ${toBRLDisplay(entry.amount)} liquidado.${settlementAuditSuffix(settlementInfo)}${warnings.map((w) => ` ${w.reason}`).join('')}`,
     },
     transaction
@@ -1280,11 +1282,7 @@ function fromCents(cents) {
   return (cents / 100).toFixed(2);
 }
 
-// BUG GRAVE REAL CORRIGIDO (auditoria Marco 7 "reval", 2026-10-16): a `description` do
-// lançamento de baixa parcial (visível em seletores de UI, ex.: baixa de parcela de seguro)
-// embutia o valor cru ("60.00") e o UUID do lançamento original — jargão técnico vazando pro
-// usuário final. `descriptionToBRL` formata em pt-BR; a description referencia o lançamento
-// original pela SUA PRÓPRIA descrição de negócio, nunca pelo UUID.
+// Marco 7 "reval" (16/10/2026): a description da baixa parcial usa valor em pt-BR e a descrição de negócio do original, nunca o UUID.
 function toBRLDisplay(decimalString) {
   return Number(decimalString).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
@@ -1303,16 +1301,16 @@ async function computeRemainingAmount(entryOrId, transaction) {
   return fromCents(toCents(entry.amount) - settledCents);
 }
 
-/**
- * settleFinancialEntryPartial — baixa parcial de `partialAmount` sobre o lançamento `id`.
- * Valida 0 < partialAmount <= saldo restante (tolerância zero, em centavos).
- */
+/** settleFinancialEntryPartial — baixa parcial; 0 < partialAmount, excedente vira pendência de classificação (§10). */
 async function settleFinancialEntryPartial(id, partialAmount, actorUserId, transaction, options = {}) {
-  // Lock pessimista no pai: sem ele, duas baixas parciais concorrentes poderiam ler o mesmo
-  // saldo restante e, somadas, ultrapassar o total do lançamento.
+  // Lock pessimista no pai: sem ele, duas baixas concorrentes somadas passariam do total.
   const entry = await FinancialEntry.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
-
+  assertPositiveAmount(partialAmount);
+  // FIN-004: a chave do cliente (obrigatória na rota HTTP) é gravada na filha; repetir a mesma baixa devolve a original.
+  const partialKey = deriveKey('baixa-parcial', entry.companyId, options && options.idempotencyKey);
+  const partialReplay = await findPartialReplay(entry, partialKey, partialAmount, transaction, computeRemainingAmount);
+  if (partialReplay) return partialReplay;
   if (!['PENDING', 'PARTIALLY_SETTLED'].includes(entry.status)) {
     throw AppError.conflict(
       `Só é possível liquidar parcialmente um lançamento PENDING ou PARTIALLY_SETTLED (atual: "${entry.status}").`,
@@ -1327,7 +1325,6 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       'FINANCE_THIRD_PARTY_COMPENSATION_PARTIAL_FORBIDDEN'
     );
   }
-  assertPositiveAmount(partialAmount);
   const compensationOf = options && options.viaCompensationOf ? options.viaCompensationOf : null;
   const gates = compensationOf
     ? { settlementInfo: null, warnings: [] }
@@ -1373,7 +1370,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       competenceMonth: entry.competenceMonth,
       settledAt: options && options.settledAt ? new Date(options.settledAt) : new Date(),
       status: 'SETTLED',
-      idempotencyKey: null,
+      idempotencyKey: partialKey,
       reversalOfEntryId: null,
       parentEntryId: entry.id,
       settlementMethod: settlementInfo ? settlementInfo.method : null,
@@ -1414,7 +1411,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
         competenceMonth: entry.competenceMonth,
         settledAt: null,
         status: 'PENDING',
-        idempotencyKey: null,
+        idempotencyKey: partialKey ? `${partialKey}:excedente` : null,
         reversalOfEntryId: null,
         parentEntryId: entry.id,
         createdBy: actorUserId || null,
@@ -1453,6 +1450,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       afterJson: {
         original: entry.toJSON(),
         settlementEntryId: settlement.id,
+        idempotencyKey: partialKey,
         appliedAmount: fromCents(appliedCents),
         remainingAmount: fromCents(newRemainingCents),
         excessAmount: excessCents > 0 ? fromCents(excessCents) : '0.00',

@@ -12,6 +12,7 @@ const reconciliationService = require('./reconciliation.service');
 const approvalsService = require('./approvals.service');
 const budgetsForecastsService = require('./budgetsForecasts.service');
 const { clearManualReview } = require('./financeAntifraud.service');
+const { readClientKey, validateClientKey } = require('./settlementIdempotency');
 const commissionsService = require('./commissions.service');
 const ownerRepassesService = require('./ownerRepasses.service');
 const chartOfAccountsService = require('./chartOfAccounts.service');
@@ -142,7 +143,8 @@ const attachSettlementEvidence = catchAsync(async (req, res) => {
 });
 
 const settleFinancialEntry = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => financialEntriesService.settleFinancialEntry(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) }));
+  const idempotencyKey = validateClientKey(readClientKey(req), { required: false }); // FIN-004: aceita e grava quando vem
+  const item = await req.withTenantTransaction((t) => financialEntriesService.settleFinancialEntry(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body), idempotencyKey }));
   return success(res, { data: item });
 });
 const reverseFinancialEntry = catchAsync(async (req, res) => {
@@ -151,13 +153,11 @@ const reverseFinancialEntry = catchAsync(async (req, res) => {
   );
   return success(res, { data: result });
 });
-// GAP REAL CORRIGIDO (ciclo de verificação Marco 4, 12/10/2026): settleFinancialEntryPartial
-// (recebimento parcial, FIN-TS-006) existia no service e era testada diretamente, mas nunca
-// tinha rota/controller — nenhum humano conseguia dar baixa parcial pela API/tela, só a baixa
-// total via settleFinancialEntry.
+// Baixa parcial (FIN-TS-006) pela API/tela — rota criada no ciclo de verificação do Marco 4 (12/10/2026).
 const settleFinancialEntryPartial = catchAsync(async (req, res) => {
+  const idempotencyKey = validateClientKey(readClientKey(req), { required: true }); // FIN-004: chave obrigatória na baixa parcial
   const item = await req.withTenantTransaction((t) =>
-    financialEntriesService.settleFinancialEntryPartial(req.params.id, req.body.partialAmount, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body) })
+    financialEntriesService.settleFinancialEntryPartial(req.params.id, req.body.partialAmount, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body), idempotencyKey })
   );
   return success(res, { data: item });
 });
