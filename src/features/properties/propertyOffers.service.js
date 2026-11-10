@@ -7,7 +7,8 @@ const { supersedeCurrentActiveOffer } = require('./propertyOfferSupersede.servic
 const { publishPropertyOfferCreated, publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { OutboxEvent } = require('../../models');
-const { matchNewPropertyToRadars } = require('../radar/radarMatching.service');
+const { matchNewPropertyToRadarsDetailed } = require('../radar/radarMatching.service');
+const { recordRadarMatch } = require('../radar/radarMatchStore.service');
 const { publishRadarMatched } = require('../radar/radarEvents.service');
 
 /**
@@ -17,8 +18,11 @@ const { publishRadarMatched } = require('../radar/radarEvents.service');
  * coluna no outbox garante que, se o job também rodar depois, não duplica o aviso.
  */
 async function triggerRadarMatchingForProperty(property, transaction) {
-  const matchedRadars = await matchNewPropertyToRadars(property, transaction);
-  if (matchedRadars.length === 0) return;
+  const detailed = await matchNewPropertyToRadarsDetailed(property, transaction);
+  if (detailed.length === 0) return;
+  // Match gravado (crm.radar_matches) + evento do livro crm.radar.match.created; idempotente pela impressão digital dos critérios.
+  for (const { radar, property: matched } of detailed) await recordRadarMatch(radar, matched, transaction);
+  const matchedRadars = detailed.map((m) => m.radar);
 
   // Pré-checagem (mesmo padrão de radarMatchingJob.js: "notifiedKeys") em vez de
   // tentar/capturar a violação de unicidade — um erro capturado deixaria a transação do
