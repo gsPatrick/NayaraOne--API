@@ -12,7 +12,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.PORT = process.env.M3_DOC_REPLACE_HTTP_PORT || '21611';
+process.env.PORT = process.env.M3_DOC_REPLACE_HTTP_PORT || '21661';
 
 require('../app');
 const { getSeedTenant, withTenantTransaction, uniqueSuffix, sequelize } = require('./testHelpers');
