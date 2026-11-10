@@ -60,7 +60,7 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
-      stage: 'QUALIFYING',
+      stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
       ...extra,
@@ -525,7 +525,7 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
       transaction
     );
 
-    await createActiveOpportunity(transaction, person.id); // segue aberta em QUALIFYING
+    await createActiveOpportunity(transaction, person.id); // segue aberta em QUALIFIED
 
     const dashboard = await dashboardService.getCrmDashboard({ personId: person.id }, transaction);
 

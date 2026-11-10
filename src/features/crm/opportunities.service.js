@@ -9,12 +9,17 @@
 const opportunityService = require('./opportunity.service');
 const { isActiveStage, assertNextActionWhenActive, CLOSED_STAGES } = require('./opportunityNextAction.validator');
 const outcomeReasons = require('./opportunityOutcomeReason.validator');
+const stages = require('./opportunityStages');
 
 module.exports = {
   ...opportunityService,
   isActiveStage,
   assertNextActionWhenActive,
   CLOSED_STAGES,
+  // Livro do Marco 3 §10 — catálogo fechado do funil.
+  STAGES: stages.STAGES,
+  ACTIVE_STAGES: stages.ACTIVE_STAGES,
+  normalizeStage: stages.normalizeStage,
   // M3-12 — enums fechados de motivo de ganho/perda/desistência.
   WON_REASONS: outcomeReasons.WON_REASONS,
   LOST_REASONS: outcomeReasons.LOST_REASONS,

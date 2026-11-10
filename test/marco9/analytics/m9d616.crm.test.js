@@ -80,7 +80,7 @@ test('m9d616 carteira sem próxima ação por corretor', async () => {
   const b = src.uuid();
   const a = await src.opportunity(env, env.cX, { owner: b, stage: 'NEW', nextAction: 'Ligar amanhã' });
   await src.opportunity(env, env.cX, { owner: b, stage: 'NEW' });
-  await src.opportunity(env, env.cX, { owner: b, stage: 'VISIT', nextAction: '   ' });
+  await src.opportunity(env, env.cX, { owner: b, stage: 'VISIT_SCHEDULED', nextAction: '   ' });
   await src.opportunity(env, env.cX, { owner: b, stage: 'CLOSED_LOST', closedAt: iso('2026-10-10') });
   await apply(env.cX, created(a));
   const r = pick(await rows(env, 'rm_crm_next_action', env.cX), { broker_id: b });
