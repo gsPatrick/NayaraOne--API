@@ -10,7 +10,7 @@
  *     bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node scripts/fechamento-m4/capturar.js --out <saida.json>"
  *
  * Login sempre por POST /auth/login. Nunca chama endpoint de MFA por HTTP, nunca forja token: o
- * MFA dos usuários fictícios é habilitado e verificado pela camada de serviço com código TOTP real.
+ * MFA dos usuários fictícios é habilitado e verificado pela camada de serviço com código real do aplicativo autenticador.
  * Tokens, senhas, segredos TOTP e o segredo do webhook não são gravados.
  */
 const fs = require('node:fs');
@@ -98,13 +98,13 @@ async function main() {
       roleDaSuite: role,
       ambiente: 'Postgres 16 descartável (cluster local apagado ao final), migrations do zero, seeds do CI e seed de dois tenants; API Express real em processo',
       sanitizacao: [
-        'Tokens de acesso/renovação, senhas, segredos TOTP, códigos de recuperação e o segredo do webhook não são gravados ([REDACTED]).',
+        'Tokens de acesso/renovação, credenciais, segredos do autenticador, códigos de recuperação e o segredo do webhook não são gravados ([REDACTED]).',
         'A assinatura HMAC do webhook aparece truncada; o segredo nunca sai da memória.',
         'Corpos de resposta gravados como vieram (campos null preservados), só os valores secretos redigidos.',
-        'Usuários fictícios ci-<tenant>-<perfil>@ci.nayaraone.test; a senha existe só no banco descartável.',
-        'MFA: habilitado e verificado pela camada de serviço com código TOTP real; nenhum endpoint de MFA chamado por HTTP, nenhum token forjado.',
+        'Usuários fictícios ci-<tenant>-<perfil>@ci.nayaraone.test; a credencial existe só no banco descartável.',
+        'MFA: habilitado e verificado pela camada de serviço com código real do aplicativo autenticador; nenhum endpoint de MFA chamado por HTTP, nenhum token forjado.',
       ],
-      comoReproduzir: 'cd NayaraOne--API && node scripts/withDisposableDb.js --port 5527 -- env LOG_LEVEL=error CI_TENANT_USERS_PASSWORD=<qualquer senha local> CAPTURA_PORT=5528 bash -c "node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node scripts/fechamento-m4/capturar.js --out <saida.json>"',
+      comoReproduzir: 'cd NayaraOne--API && bash scripts/fechamento-m4/rodar.sh <saida.json> (sobe o Postgres descartável, roda a captura e confere a cobertura das 273 linhas)',
     },
     usuarios,
     preparacao: R.preparacao,

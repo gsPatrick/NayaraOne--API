@@ -9,7 +9,7 @@
  *
  * MFA: nunca chama endpoint de MFA por HTTP e nunca forja token. Os usuários fictícios do seed de
  * dois tenants habilitam e verificam o MFA pela camada de serviço (mfa.service setupMfa/confirmMfa/
- * verifyMfa) com um código TOTP real gerado a partir do segredo devolvido pelo setup. O segredo e os
+ * verifyMfa) com um código real do autenticador gerado a partir do segredo devolvido pelo setup. O segredo e os
  * códigos ficam só em memória e nunca entram na saída.
  */
 const { Runner, redigir } = require('../captura-marco45/runner');
@@ -106,7 +106,7 @@ class RunnerM4 extends Runner {
   }
 
   /**
-   * MFA pela camada de serviço real, com código TOTP real (nenhum endpoint de MFA por HTTP, nenhum
+   * MFA pela camada de serviço real, com código real do aplicativo autenticador (nenhum endpoint de MFA por HTTP, nenhum
    * token forjado). `habilitarMfa` = setupMfa + confirmMfa; `verificarMfa` = verifyMfa (step-up).
    * Segredo e códigos ficam só em memória.
    */
@@ -116,15 +116,15 @@ class RunnerM4 extends Runner {
     const t = this.tenant(quem);
     return this.servico({
       id: `MFA-HAB-${quem}`,
-      titulo: `MFA de ${quem} habilitado pela camada de serviço (setupMfa + confirmMfa com código TOTP real); nenhum endpoint de MFA chamado por HTTP`,
-      chamada: 'mfa.service.setupMfa + mfa.service.confirmMfa(código TOTP real)',
+      titulo: `MFA de ${quem} habilitado pela camada de serviço (setupMfa + confirmMfa com código real do aplicativo autenticador); nenhum endpoint de MFA chamado por HTTP`,
+      chamada: 'mfa.service.setupMfa + mfa.service.confirmMfa(código real do autenticador)',
       esperado: {},
       fn: async () => {
         const { otpauthUri } = await inTenant(t, (tx) => mfaService.setupMfa(t.userId, t, tx));
         const segredo = new URL(otpauthUri).searchParams.get('secret');
         this.mfaSegredos.set(quem, { segredo, ultimaJanela: Math.floor(Date.now() / 30000) });
         await inTenant(t, (tx) => mfaService.confirmMfa(t.userId, authenticator.generate(segredo), t, tx));
-        return { perfil: quem, mfaHabilitado: true, observacao: 'segredo TOTP, códigos e códigos de recuperação não são gravados' };
+        return { perfil: quem, mfaHabilitado: true, observacao: 'segredo do autenticador, códigos e códigos de recuperação não são gravados' };
       },
     });
   }
@@ -139,8 +139,8 @@ class RunnerM4 extends Runner {
     reg.ultimaJanela = Math.floor(Date.now() / 30000);
     return this.servico({
       id: `MFA-VER-${quem}-${this.seq + 1}`,
-      titulo: `Step-up MFA de ${quem}: código TOTP real verificado pela camada de serviço (verifyMfa); nenhum endpoint de MFA chamado por HTTP`,
-      chamada: 'mfa.service.verifyMfa(código TOTP real)',
+      titulo: `Step-up MFA de ${quem}: código real do autenticador verificado pela camada de serviço (verifyMfa); nenhum endpoint de MFA chamado por HTTP`,
+      chamada: 'mfa.service.verifyMfa(código real do autenticador)',
       esperado: {},
       fn: async () => {
         await inTenant(t, (tx) => mfaService.verifyMfa(t.userId, authenticator.generate(reg.segredo), t, tx));
