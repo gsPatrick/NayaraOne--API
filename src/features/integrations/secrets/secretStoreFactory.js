@@ -30,16 +30,23 @@ function getSecretStore() {
 }
 const setSecretStoreForTests = (store) => { instancia = store; };
 
-/** Boot: em PRODUÇÃO sem driver (ou com sandbox/driver inválido) a API não sobe. Fora dela, só valida o que foi configurado. */
+/**
+ * Boot: em ambiente PUBLICADO (PRODUÇÃO ou HOMOLOGAÇÃO) sem driver, ou com o cofre sandbox em memória, a API não sobe. Só no SANDBOX
+ * (máquina do desenvolvedor, CI) o cofre é opcional. Homologação sem cofre subia e falhava em silêncio tudo o que assina com chave do
+ * cofre (link de descadastro, links rastreados, person_hash): o e-mail de campanha virava FAILED MKT_UNSUBSCRIBE_KEY_UNAVAILABLE.
+ * O cofre em memória perde as chaves a cada reinício (descadastro de e-mail antigo deixaria de valer), por isso também fica fora.
+ */
 function assertSecretStoreAtBoot(env = process.env) {
-  const producao = getServerEnvironment(env) === 'PRODUCTION';
+  const ambiente = getServerEnvironment(env);
+  const publicado = ambiente === 'PRODUCTION' || ambiente === 'HOMOLOG';
+  const nome = ambiente === 'PRODUCTION' ? 'produção' : 'homologação';
   if (!env.SECRET_STORE_DRIVER) {
-    if (producao) throw storeNotConfigured();
+    if (publicado) throw storeNotConfigured(`Em ${nome}, defina SECRET_STORE_DRIVER (file-mounted com SECRET_STORE_DIR e SECRET_STORE_MASTER_KEY, ou http-vault).`);
     return;
   }
   const store = buildSecretStoreFromEnv(env);
-  if (producao && env.SECRET_STORE_DRIVER === 'http-vault' && env.SECRET_STORE_VAULT_MODE === 'sandbox') {
-    throw storeConfig('o cofre sandbox em memória não é permitido em produção.');
+  if (publicado && env.SECRET_STORE_DRIVER === 'http-vault' && env.SECRET_STORE_VAULT_MODE === 'sandbox') {
+    throw storeConfig(`o cofre sandbox em memória não é permitido em ${nome}.`);
   }
   assertStoreShape(store);
 }
