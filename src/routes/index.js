@@ -17,6 +17,7 @@ const crmController = require('../features/crm/crm.controller');
 const radarRouter = require('../features/radar/radar.routes');
 const financeRouter = require('../features/finance/finance.routes');
 const financeExportRouter = require('../features/finance/financeExport.routes');
+const financeOfficialRouter = require('../features/finance/financeOfficialRoutes.routes'); // Guia M4 §15 (caminhos literais)
 const legalRouter = require('../features/legal/legal.routes');
 const legalController = require('../features/legal/legal.controller');
 const financeController = require('../features/finance/finance.controller');
@@ -127,6 +128,7 @@ router.use('/v1', crmRouter);
 router.use('/v1', radarRouter);
 router.use('/v1', financeRouter);
 router.use('/v1', financeExportRouter);
+router.use('/v1', financeOfficialRouter);
 router.use('/v1', legalRouter);
 router.use('/v1', constructionRouter);
 router.use('/v1', inventoryRouter);
