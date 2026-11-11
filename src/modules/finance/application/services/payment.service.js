@@ -15,7 +15,6 @@
  */
 const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
-const { AnomalyCase } = require('../../../../models');
 const intents = require('../../infrastructure/repositories/payment-intent.repository');
 const entries = require('../../infrastructure/repositories/financial-entry.repository');
 const domain = require('../../domain/payment-intent');
@@ -135,8 +134,10 @@ async function executePaymentIntent(id, actorUserId, transaction, options = {}) 
   }
   await assertStillApprovable(intent, transaction, 'executar');
   const beforeJson = intent.toJSON();
-  await markExecuting(intent, actorUserId, 'NOT_STARTED', transaction);
+  // As travas da baixa (comprovante, aprovação depois do comprovante, período, revisão) rodam antes de a intenção mudar de estado: uma
+  // recusa deixa a intenção APPROVED, sem pedido de execução no outbox.
   const settled = await settleIntentAmount(intent, actorUserId, transaction, { manualSettlement: options.manualSettlement || null });
+  await markExecuting(intent, actorUserId, 'NOT_STARTED', transaction);
   intent.status = 'CONFIRMED';
   intent.executedAt = new Date();
   intent.updatedBy = actorUserId || null;
@@ -195,7 +196,7 @@ function openAnomaly(intent, caseType, riskLevel, reason, transaction) {
 
 /** §8.12 — valor confirmado diferente do aprovado: um caso aberto por intenção (as repetições do banco não abrem outro). */
 async function openAmountMismatchAnomaly(intent, informed, transaction) {
-  const open = await AnomalyCase.findOne({ where: { relatedEntityType: 'PaymentIntent', relatedEntityId: intent.id, caseType: 'BANK_AMOUNT_MISMATCH', status: 'OPEN' }, transaction });
+  const open = await intents.findOpenAnomaly(intent.id, 'BANK_AMOUNT_MISMATCH', transaction);
   if (open) return open;
   return openAnomaly(intent, 'BANK_AMOUNT_MISMATCH', 'CRITICAL',
     `O banco informou R$ ${informed ?? '(sem valor)'} para o pagamento aprovado de R$ ${intent.snapshotJson.amount}: o pagamento não foi confirmado e precisa de revisão.`, transaction);

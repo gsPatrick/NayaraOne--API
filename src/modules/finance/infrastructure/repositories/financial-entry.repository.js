@@ -100,7 +100,14 @@ function findContractParties(contractId, personId, transaction) {
   return ContractParty.findAll({ where: { contractId, personId }, transaction });
 }
 
+/** Ids dos lançamentos nos estados informados que pagam esta conta bancária (troca do favorecido). */
+async function findIdsByBankAccount(bankAccountId, statuses, transaction) {
+  const rows = await FinancialEntry.findAll({ attributes: ['id'], where: { bankAccountId, status: statuses }, transaction });
+  return rows.map((r) => r.id);
+}
+
 module.exports = {
+  findIdsByBankAccount,
   /** O modelo, para a checagem genérica de chave duplicada do antifraude (assertNoDuplicatePayment recebe o modelo). */
   model: FinancialEntry,
   findById,

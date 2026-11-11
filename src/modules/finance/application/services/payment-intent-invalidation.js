@@ -13,8 +13,8 @@
  * Cada invalidação é auditada com antes/depois; o motivo fica em português na intenção.
  */
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
-const { PaymentIntent, ApprovalRequest, FinancialEntry } = require('../../../../models');
 const intents = require('../../infrastructure/repositories/payment-intent.repository');
+const entries = require('../../infrastructure/repositories/financial-entry.repository');
 const { NOT_SUBMITTED_STATUSES } = require('../../domain/payment-intent');
 const { OPEN_FOR_SETTLEMENT_STATUSES } = require('../../domain/financial-entry');
 const { currentApprovable } = require('./payment-snapshot');
@@ -29,7 +29,7 @@ async function cancelIntent(intent, reason, action, actorUserId, transaction) {
   intent.updatedBy = actorUserId || null;
   await intents.save(intent, transaction);
   if (intent.approvalRequestId) {
-    const approval = await ApprovalRequest.findByPk(intent.approvalRequestId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+    const approval = await workflow.getApprovalForUpdate(intent.approvalRequestId, transaction).catch(() => null);
     if (approval) await workflow.markStale(approval, reason, actorUserId, transaction);
   }
   await registrarAuditoria(
@@ -54,18 +54,14 @@ async function invalidateStaleOpenPaymentIntents(entry, actorUserId, transaction
 async function invalidateForBeneficiaryChange(bankAccount, changedFields, actorUserId, transaction) {
   const reason = `Favorecido alterado (${changedFields.join(', ')}) na conta de destino depois da preparação: a intenção de pagamento e as aprovações anteriores ` +
     'foram invalidadas (Caderno §9). Prepare uma nova intenção, que congela o favorecido atual, e peça a aprovação de novo.';
-  const affected = await PaymentIntent.findAll({ where: { bankAccountId: bankAccount.id, status: NOT_SUBMITTED_STATUSES }, transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
+  const affected = await intents.findForBankAccountForUpdate(bankAccount.id, NOT_SUBMITTED_STATUSES, transaction);
   for (const intent of affected) await cancelIntent(intent, reason, 'finance.payment_intent.beneficiary_changed', actorUserId, transaction);
 
   // Aprovações de baixa (sem intenção) dos lançamentos em aberto que pagam esta conta também deixam de valer.
-  const openEntries = await FinancialEntry.findAll({ attributes: ['id'], where: { bankAccountId: bankAccount.id, status: OPEN_FOR_SETTLEMENT_STATUSES }, transaction });
+  const openEntryIds = await entries.findIdsByBankAccount(bankAccount.id, OPEN_FOR_SETTLEMENT_STATUSES, transaction);
   let staleApprovals = 0;
-  if (openEntries.length) {
-    const approvals = await ApprovalRequest.findAll({
-      where: { relatedEntityType: 'FinancialEntry', relatedEntityId: openEntries.map((e) => e.id), status: ['PENDING', 'APPROVED'] },
-      transaction,
-      lock: transaction.LOCK.UPDATE,
-    });
+  if (openEntryIds.length) {
+    const approvals = await workflow.findActiveForUpdate('FinancialEntry', openEntryIds, transaction);
     for (const approval of approvals) if (await workflow.markStale(approval, reason, actorUserId, transaction)) staleApprovals += 1;
   }
 

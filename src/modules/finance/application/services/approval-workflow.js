@@ -83,6 +83,15 @@ function findPendingFor(relatedEntityType, relatedEntityId, transaction) {
   return ApprovalRequest.findOne({ where: { relatedEntityType, relatedEntityId, status: 'PENDING' }, transaction });
 }
 
+/** Pedidos ainda válidos (PENDING/APPROVED) das entidades informadas, com lock. */
+function findActiveForUpdate(relatedEntityType, relatedEntityIds, transaction) {
+  return ApprovalRequest.findAll({
+    where: { relatedEntityType, relatedEntityId: relatedEntityIds, status: ['PENDING', 'APPROVED'] },
+    transaction,
+    lock: transaction ? transaction.LOCK.UPDATE : undefined,
+  });
+}
+
 async function listApprovers(approvalRequestId, transaction) {
   const steps = await ApprovalStep.findAll({ where: { approvalRequestId }, order: [['stepOrder', 'ASC']], transaction });
   return steps.map((s) => ({ approverUserId: s.approverUserId, decision: s.decision, decidedAt: s.decidedAt, stepOrder: s.stepOrder }));
@@ -196,6 +205,7 @@ module.exports = {
   createApprovalFor,
   getApprovalForUpdate,
   findPendingFor,
+  findActiveForUpdate,
   listApprovers,
   recordDecision,
   markStale,

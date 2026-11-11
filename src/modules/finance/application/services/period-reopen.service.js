@@ -18,7 +18,7 @@ const { publishCadernoEvent } = require('./finance-events.service');
 const workflow = require('./approval-workflow');
 const { KEYS, readNumber } = require('./payment-approval-settings');
 const closing = require('./closing.service');
-const { assertValidReferenceMonth } = require('./closing-period-guards.service');
+const { assertValidReferenceMonth, monthBR } = require('./closing-period-guards.service');
 const { computeSnapshotHash } = require('../../domain/payment-intent');
 
 const TYPE = 'PeriodReopen';
@@ -48,10 +48,10 @@ async function requestPeriodReopen(payload, actorUserId, transaction) {
     throw AppError.badRequest(`Explique a reabertura com pelo menos ${minChars} caracteres.`, 'FINANCE_PERIOD_REOPEN_REASON_TOO_SHORT', { minChars });
   }
   const closure = await closing.getClosureByMonth(companyId, referenceMonth, transaction, { forUpdate: true });
-  if (!closure) throw AppError.notFound('Não há fechamento registrado para este período.', 'FINANCE_PERIOD_NOT_FOUND');
-  if (closure.status !== 'CLOSED') throw AppError.conflict('O período não está fechado.', 'FINANCE_PERIOD_NOT_CLOSED');
+  if (!closure) throw AppError.notFound(`Não há fechamento registrado para o período ${monthBR(referenceMonth)}.`, 'FINANCE_PERIOD_NOT_FOUND');
+  if (closure.status !== 'CLOSED') throw AppError.conflict(`O período ${monthBR(referenceMonth)} não está fechado.`, 'FINANCE_PERIOD_NOT_CLOSED');
   const pending = await workflow.findPendingFor(TYPE, closure.id, transaction);
-  if (pending) throw AppError.conflict('Já existe um pedido de reabertura aguardando aprovação para este período.', 'FINANCE_PERIOD_REOPEN_ALREADY_REQUESTED', { requestId: pending.id });
+  if (pending) throw AppError.conflict(`Já existe um pedido de reabertura de ${monthBR(referenceMonth)} aguardando aprovação.`, 'FINANCE_PERIOD_REOPEN_ALREADY_REQUESTED', { requestId: pending.id });
 
   const required = await readNumber(KEYS.reopenApprovers, tenant, transaction);
   const request = await workflow.createApprovalFor(

@@ -110,6 +110,7 @@ async function approveReversalCase(caseId, actorUserId, transaction) {
   const distinct = await readBoolean(KEYS.reversalDistinctApprover, { groupId: original.groupId, companyId: original.companyId }, transaction);
   await workflow.recordDecision(reversalCase, { decision: 'APPROVED', approverUserId: actorUserId, requireMfa: true, allowRequester: !distinct }, transaction);
 
+  const caseBefore = reversalCase.toJSON();
   const { original: after, reversal } = await reverseFinancialEntry(original.id, reversalCase.reason, actorUserId, transaction, {
     ...(partial ? { amount: partial } : {}),
     idempotencyKey: key,
@@ -120,6 +121,7 @@ async function approveReversalCase(caseId, actorUserId, transaction) {
   await registrarAuditoria(
     {
       groupId: reversalCase.groupId, companyId: reversalCase.companyId, actorUserId, action: 'finance.reversal_case.execute', entityType: 'ApprovalRequest', entityId: reversalCase.id,
+      beforeJson: caseBefore,
       afterJson: { case: reversalCase.toJSON(), reversalEntryId: reversal.id, idempotencyKey: key },
       reason: `Estorno lançado pelo caso aprovado (pedido de ${reversalCase.requestedByUserId}, aprovado por ${actorUserId}): ${reversalCase.reason}`,
     },
