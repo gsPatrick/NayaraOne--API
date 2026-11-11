@@ -38,6 +38,14 @@ const assertUnitInCompany = (v, companyId, t, field = 'unitId') => assertRow(Uni
 const assertPropertyInCompany = (v, companyId, t, field = 'propertyId') => assertRow(Property, v, companyId, field, 'o imóvel informado', t);
 const assertPersonInCompany = (v, companyId, t, field = 'personId') => assertRow(Person, v, companyId, field, 'a pessoa informada', t);
 const assertProjectInCompany = (v, companyId, t, field = 'projectId') => assertRow(Project, v, companyId, field, 'a obra informada', t);
+/** Obra do parâmetro da rota: de outra empresa (ou inexistente) é 404, como toda leitura de obra sob RLS (ADV-OBR-1). */
+async function assertRouteProjectInCompany(projectId, companyId, transaction) {
+  const id = idOuNulo(projectId, 'projectId');
+  if (!id || !(await Project.findOne({ where: { id, companyId }, attributes: ['id'], transaction }))) {
+    throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+  }
+  return id;
+}
 const assertLocationInCompany = (v, companyId, t, field = 'locationId') => assertRow(InventoryLocation, v, companyId, field, 'o local de estoque informado', t);
 
 /** Etapa da MESMA obra (e, por consequência, da mesma empresa). */
@@ -80,6 +88,7 @@ module.exports = {
   assertPersonInCompany,
   assertPersonsInCompany,
   assertProjectInCompany,
+  assertRouteProjectInCompany,
   assertStageInProject,
   assertLocationInCompany,
   assertActiveMember,

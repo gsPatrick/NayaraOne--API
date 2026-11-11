@@ -8,7 +8,7 @@ const { publishNonconformityOpened, publishNonconformityClosed } = require('./co
 const { getActiveSlaDaysMap } = require('./slaRules.service');
 const { resolveSameContentFileIds } = require('./evidenceReuse.service');
 const { assertEvidenceFilesExist } = require('./evidenceFiles');
-const { assertProjectInCompany, assertStageInProject, assertActiveMember } = require('./companyRefs');
+const { assertRouteProjectInCompany, assertStageInProject, assertActiveMember } = require('./companyRefs');
 
 /**
  * detectEvidenceReuse — M6-59: verifica se algum arquivo de evidência (before/after) já foi
@@ -104,7 +104,7 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
 
   // Verificação independente do Marco 6 (varredura de referências): obra, etapa e responsável da MESMA empresa — a obra
   // nem era consultada; FK ignora RLS (companyRefs.js).
-  await assertProjectInCompany(projectId, companyId, transaction);
+  await assertRouteProjectInCompany(projectId, companyId, transaction);
   await assertStageInProject(projectStageId, projectId, companyId, transaction);
   await assertActiveMember(responsibleUserId, companyId, transaction);
   await assertEvidenceFilesExist(beforeEvidenceFileIds, companyId, transaction, 'beforeEvidenceFileIds');

@@ -109,8 +109,9 @@ test('varredura: NC, linha de orçamento, lançamento financeiro e local de esto
   await H.withRollbackTenantTransaction(tenant, async (t) => {
     const obraAlheia = await inOtherCompany(tenant, t, (other) => projectsService.createProject({ groupId: tenant.groupId, companyId: other.id, name: `Obra alheia ${H.uniqueSuffix()}` }, tenant.userId, t));
     const foto = await evidenceIds(tenant, t);
-    await assert.rejects(nonconformitiesService.createNonconformity(obraAlheia.id, W(tenant, { description: 'x', responsibleUserId: tenant.userId, beforeEvidenceFileIds: foto }), tenant.userId, t), REF);
-    await assert.rejects(budgetLinesService.createBudgetLine(obraAlheia.id, W(tenant, { category: 'X', plannedAmount: 10 }), tenant.userId, t), REF);
+    // Obra do parâmetro da rota: de outra empresa é 404 (como toda leitura de obra sob RLS).
+    await assert.rejects(nonconformitiesService.createNonconformity(obraAlheia.id, W(tenant, { description: 'x', responsibleUserId: tenant.userId, beforeEvidenceFileIds: foto }), tenant.userId, t), { code: 'PROJECT_NOT_FOUND' });
+    await assert.rejects(budgetLinesService.createBudgetLine(obraAlheia.id, W(tenant, { category: 'X', plannedAmount: 10 }), tenant.userId, t), { code: 'PROJECT_NOT_FOUND' });
     const cc = await H.createTestCostCenter(tenant, t);
     await assert.rejects(
       financialEntriesService.createFinancialEntry(W(tenant, { entryType: 'DEBIT', nature: 'PAYABLE', amount: 10, costCenterId: cc.id, constructionProjectId: obraAlheia.id }), tenant.userId, t),
