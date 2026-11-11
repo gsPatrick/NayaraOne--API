@@ -1,0 +1,158 @@
+# estágio 6: concurrency_tests
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-6-0.xml test/adversarial.finance.test.js test/nayaraConferencia1810.payments.test.js test/homologacaoEvidencias.test.js test/marco4.acceptance.batch2.test.js test/marco4.contract.gaps.test.js
+✔ ADV-F01 trocar o company_id do contexto não deixa ler o lançamento da outra empresa (RLS bloqueia, não filtra no app) (61.772125ms)
+✔ ADV-F02 forjar companyId no payload (escrever lançamento na empresa vizinha) é barrado pelo banco, não pela UI (8.653291ms)
+✔ ADV-F03 conciliar lançamento da empresa A dizendo que pertence à empresa vizinha é recusado (23.129958ms)
+✔ ADV-F04 valor negativo, zero, NaN, Infinity e string não-numérica são recusados na criação do lançamento (6.507209ms)
+✔ ADV-F05 overflow numérico (valor além do DECIMAL(18,2)) falha alto — nunca grava valor truncado silenciosamente (12.986708ms)
+(node:25812) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ ADV-F06 valor com mais de 2 casas decimais não "cria dinheiro": é arredondado pelo tipo e a baixa parcial respeita o centavo (104.000708ms)
+✔ ADV-F07 SQL injection em campo de texto é armazenada como texto literal (Sequelize parametriza) e nada quebra (9.38775ms)
+✔ ADV-F08 competência forjada com payload de injeção é recusada pelo validador de formato (4.451333ms)
+✔ ADV-F09 id inexistente ou malformado devolve erro de negócio tratado — nunca 500 com detalhe de SQL vazando (2.707083ms)
+✔ ADV-F10 mandar "amount" e "status" no update de agenda não altera o valor nem o status do lançamento (12.972459ms)
+✔ ADV-F11 lançamento já liquidado não pode ser editado nem "re-liquidado", e o estorno não apaga o original (72.1705ms)
+✔ ADV-F12 baixa parcial em lançamento REVERSED/CANCELLED é recusada (não se paga o que já foi estornado) (23.480583ms)
+✔ ADV-F13 repetir o mesmo lançamento na lista do grupo pra "dobrar" a soma e casar com o extrato é recusado (13.795042ms)
+✔ ADV-F14 misturar crédito e débito no extrato pra "compensar" a diferença não engana a conciliação em grupo (16.404ms)
+✔ ADV-F15 reusar uma transação bancária já conciliada em um novo grupo (dupla baixa do mesmo dinheiro) é recusado (28.510833ms)
+✔ ADV-F16 trocar o BENEFICIÁRIO depois da aprovação invalida a decisão baseada no que foi revisado (32.118417ms)
+✔ ADV-F17 abrir uma segunda solicitação de aprovação para a mesma entidade (garimpar um aprovador mais fácil) é bloqueado (11.555542ms)
+✔ ADV-F18 insistir numa solicitação já REJEITADA (reaprovar com outro usuário) não ressuscita o pagamento (16.16325ms)
+✔ ADV-F19 tentar limpar o flag de revisão manual pelo update de agenda (sem revisor) não funciona (35.145459ms)
+✔ ADV-F20 pagar para conta bancária BLOQUEADA depois da criação do lançamento é recusado no momento da baixa (26.892125ms)
+✔ ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total do lançamento (69.158791ms)
+✔ HOMO-01 reajuste aplicado grava ruleVersionId (evidência de qual versão da regra estava vigente) (110.324625ms)
+✔ HOMO-01b reajuste PENDING_SOURCE também grava ruleVersionId quando a regra está publicada (39.873375ms)
+(node:25825) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ HOMO-02 assinatura grava o providerEnvelopeId e permite consultar status ativo no provedor (216.069333ms)
+✔ HOMO-03 cancelamento de assinatura pendente funciona, e assinatura já confirmada não pode ser cancelada (162.6595ms)
+✔ HOMO-04 MFA bloqueia após 5 tentativas seguidas de código inválido (fail closed, mesmo com código certo depois) (5368.043875ms)
+✔ AUD-008 criar versão de contrato com content vazio/só espaço é rejeitado (não gera hash de documento vazio) (26.740667ms)
+✔ AUD financeiro rejeita dueAt com ano absurdo (ex.: 92026, dígito extra por engano) tanto na criação quanto na edição (9.78975ms)
+✔ AUD-004 correctContractData exige motivo, bloqueia campos não permitidos e audita a correção (22.579875ms)
+✔ HOMO-05 verificação MFA de origem/dispositivo diferente é sinalizada (isNewDevice), sem bloquear a ação (967.950292ms)
+✔ TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem sucesso (lockVersion otimista) (19.104291ms)
+✔ TEC-08 registrarAuditoria e publishDomainEvent gravam o correlationId da requisição em curso (5.379333ms)
+✔ TEC-12 suspender um usuário revoga imediatamente todas as sessões ativas dele (15.222167ms)
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:ca1dfb11-cef2-40e4-a31f-c906ce783895 idempotencyKey=finance.entry.created:ca1dfb11-cef2-40e4-a31f-c906ce783895
+[OutboxDispatcher] publish ai.run.completed aggregate=AiRun:0cfdc57e-63f1-464b-bfad-d3945c1abcbc idempotencyKey=ai.run.completed:0cfdc57e-63f1-464b-bfad-d3945c1abcbc
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:03c9964a-a5ea-46b4-8f66-0ea4822d159f idempotencyKey=finance.entry.created:03c9964a-a5ea-46b4-8f66-0ea4822d159f
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:57673a88-d52f-4f77-960c-8c71c8fa534d idempotencyKey=finance.entry.created:57673a88-d52f-4f77-960c-8c71c8fa534d
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:5cd5acc9-f9d7-4d19-8261-64e92366a013 idempotencyKey=finance.entry.created:5cd5acc9-f9d7-4d19-8261-64e92366a013
+[OutboxDispatcher] publish finance.receipt.completed aggregate=FinancialEntry:5cd5acc9-f9d7-4d19-8261-64e92366a013 idempotencyKey=finance.receipt.completed:5cd5acc9-f9d7-4d19-8261-64e92366a013
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:5cd5acc9-f9d7-4d19-8261-64e92366a013 idempotencyKey=finance.entry.settled:5cd5acc9-f9d7-4d19-8261-64e92366a013
+[OutboxDispatcher] publish finance.commission.created aggregate=Commission:8fff6419-f1f9-4799-8b23-4da288ce68c7 idempotencyKey=finance.commission.created:8fff6419-f1f9-4799-8b23-4da288ce68c7
+[OutboxDispatcher] publish finance.bank_account.created aggregate=BankAccount:bc6c6e0a-0762-4e37-932f-7356a0900a1b idempotencyKey=finance.bank_account.created:bc6c6e0a-0762-4e37-932f-7356a0900a1b
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:1400b33e-be90-47d4-982e-32006ef4577c idempotencyKey=finance.entry.created:1400b33e-be90-47d4-982e-32006ef4577c
+[OutboxDispatcher] publish finance.reconciliation.completed aggregate=Reconciliation:e56fd500-8e3a-4476-a50a-fb00fa0619b2 idempotencyKey=finance.reconciliation.completed:1400b33e-be90-47d4-982e-32006ef4577c:8124e0b9-2e83-445b-a228-e49fd694f122
+[OutboxDispatcher] publish finance.reconciliation.matched aggregate=Reconciliation:e56fd500-8e3a-4476-a50a-fb00fa0619b2 idempotencyKey=finance.reconciliation.matched:1400b33e-be90-47d4-982e-32006ef4577c:8124e0b9-2e83-445b-a228-e49fd694f122
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:0076162b-a63d-417c-9899-9ba49c3e9f57 idempotencyKey=finance.entry.created:0076162b-a63d-417c-9899-9ba49c3e9f57
+[OutboxDispatcher] publish finance.receipt.completed aggregate=FinancialEntry:0076162b-a63d-417c-9899-9ba49c3e9f57 idempotencyKey=finance.receipt.completed:0076162b-a63d-417c-9899-9ba49c3e9f57
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:0076162b-a63d-417c-9899-9ba49c3e9f57 idempotencyKey=finance.entry.settled:0076162b-a63d-417c-9899-9ba49c3e9f57
+[OutboxDispatcher] publish finance.commission.created aggregate=Commission:c6420e96-2310-4d6b-af44-a4ec291ea7d2 idempotencyKey=finance.commission.created:c6420e96-2310-4d6b-af44-a4ec291ea7d2
+[OutboxDispatcher] publish property.created aggregate=Property:fa61e8ea-6c73-4a0c-a6bf-889fd519e584 idempotencyKey=property.created:fa61e8ea-6c73-4a0c-a6bf-889fd519e584
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:3a8a9f41-9891-4028-bfa2-bd2514230a70 idempotencyKey=finance.entry.created:3a8a9f41-9891-4028-bfa2-bd2514230a70
+[OutboxDispatcher] publish finance.receipt.completed aggregate=FinancialEntry:3a8a9f41-9891-4028-bfa2-bd2514230a70 idempotencyKey=finance.receipt.completed:3a8a9f41-9891-4028-bfa2-bd2514230a70
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:3a8a9f41-9891-4028-bfa2-bd2514230a70 idempotencyKey=finance.entry.settled:3a8a9f41-9891-4028-bfa2-bd2514230a70
+[OutboxDispatcher] publish finance.owner_repasse.created aggregate=OwnerRepass:3b22b32b-fb98-42b4-aff4-d3ad1adc51df idempotencyKey=finance.owner_repasse.created:3b22b32b-fb98-42b4-aff4-d3ad1adc51df
+[OutboxDispatcher] publish finance.reconciliation.completed aggregate=Reconciliation:1166cb0a-4aae-45cb-b1f6-cf5e1a27b4af idempotencyKey=finance.reconciliation.completed:bfd0d62d-4180-403c-a92d-d62deb0f8dc1:88c7ca4a-2621-43ac-bac5-36e3ce663f32
+[OutboxDispatcher] publish finance.reconciliation.matched aggregate=Reconciliation:1166cb0a-4aae-45cb-b1f6-cf5e1a27b4af idempotencyKey=finance.reconciliation.matched:bfd0d62d-4180-403c-a92d-d62deb0f8dc1:88c7ca4a-2621-43ac-bac5-36e3ce663f32
+[OutboxDispatcher] publish finance.reconciliation.completed aggregate=Reconciliation:5b090aff-36e5-474f-b537-017cbd76abde idempotencyKey=finance.reconciliation.completed:a719a238-753c-49f0-bf6e-4a47b3acda36:88c7ca4a-2621-43ac-bac5-36e3ce663f32
+[OutboxDispatcher] publish finance.reconciliation.matched aggregate=Reconciliation:5b090aff-36e5-474f-b537-017cbd76abde idempotencyKey=finance.reconciliation.matched:a719a238-753c-49f0-bf6e-4a47b3acda36:88c7ca4a-2621-43ac-bac5-36e3ce663f32
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:40c8dc5f-a560-44c1-9e89-73e1c776d93e idempotencyKey=finance.entry.created:40c8dc5f-a560-44c1-9e89-73e1c776d93e
+[OutboxDispatcher] publish finance.approval_request.created aggregate=ApprovalRequest:1e2ca62f-2150-49c0-bc55-6c2fbb3d0647 idempotencyKey=finance.approval_request.created:1e2ca62f-2150-49c0-bc55-6c2fbb3d0647
+[OutboxDispatcher] publish finance.approval_step.decided aggregate=ApprovalStep:e6ef100f-8065-4678-891f-50f90dbbf857 idempotencyKey=finance.approval_step.decided:e6ef100f-8065-4678-891f-50f90dbbf857
+[OutboxDispatcher] publish finance.approval_request.created aggregate=ApprovalRequest:098825df-0df3-4dd5-9702-eb0267aeec14 idempotencyKey=finance.approval_request.created:098825df-0df3-4dd5-9702-eb0267aeec14
+[OutboxDispatcher] publish finance.approval_step.decided aggregate=ApprovalStep:5594bc01-11a9-4a5e-93f9-4e2516556d78 idempotencyKey=finance.approval_step.decided:5594bc01-11a9-4a5e-93f9-4e2516556d78
+[OutboxDispatcher] publish finance.payment.completed aggregate=FinancialEntry:40c8dc5f-a560-44c1-9e89-73e1c776d93e idempotencyKey=finance.payment.completed:40c8dc5f-a560-44c1-9e89-73e1c776d93e
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:40c8dc5f-a560-44c1-9e89-73e1c776d93e idempotencyKey=finance.entry.settled:40c8dc5f-a560-44c1-9e89-73e1c776d93e
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:5082ebb2-0373-4428-9e21-2b6ff5be461c idempotencyKey=finance.entry.created:5082ebb2-0373-4428-9e21-2b6ff5be461c
+[OutboxDispatcher] publish finance.receipt.completed aggregate=FinancialEntry:5082ebb2-0373-4428-9e21-2b6ff5be461c idempotencyKey=finance.receipt.completed:5082ebb2-0373-4428-9e21-2b6ff5be461c
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:5082ebb2-0373-4428-9e21-2b6ff5be461c idempotencyKey=finance.entry.settled:5082ebb2-0373-4428-9e21-2b6ff5be461c
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:d1a8d79b-fea8-4c3d-9118-4e8973b36464 idempotencyKey=finance.entry.created:d1a8d79b-fea8-4c3d-9118-4e8973b36464
+[OutboxDispatcher] publish finance.bank_account.created aggregate=BankAccount:108956c2-3eb3-4429-b73e-2f03c8fe050e idempotencyKey=finance.bank_account.created:108956c2-3eb3-4429-b73e-2f03c8fe050e
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:97996b26-8bc2-4bf3-ad82-77dc57ed4728 idempotencyKey=finance.entry.created:97996b26-8bc2-4bf3-ad82-77dc57ed4728
+[OutboxDispatcher] publish finance.approval_request.created aggregate=ApprovalRequest:c8787198-c80b-4884-9692-829b7f12e735 idempotencyKey=finance.approval_request.created:c8787198-c80b-4884-9692-829b7f12e735
+[OutboxDispatcher] publish finance.approval_step.decided aggregate=ApprovalStep:97d43c88-a2db-4de2-93ef-1322421905b2 idempotencyKey=finance.approval_step.decided:97d43c88-a2db-4de2-93ef-1322421905b2
+[OutboxDispatcher] publish finance.payment.completed aggregate=FinancialEntry:014316d7-5059-4f99-8f2e-9e69334280e7 idempotencyKey=finance.payment.completed:014316d7-5059-4f99-8f2e-9e69334280e7
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:014316d7-5059-4f99-8f2e-9e69334280e7 idempotencyKey=finance.entry.settled:014316d7-5059-4f99-8f2e-9e69334280e7
+[OutboxDispatcher] publish finance.payment.completed aggregate=FinancialEntry:e3e7078a-ad16-4b0f-b06c-fffb6ea431f5 idempotencyKey=finance.payment.completed:e3e7078a-ad16-4b0f-b06c-fffb6ea431f5
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:e3e7078a-ad16-4b0f-b06c-fffb6ea431f5 idempotencyKey=finance.entry.settled:e3e7078a-ad16-4b0f-b06c-fffb6ea431f5
+[OutboxDispatcher] publish finance.entry.created aggregate=FinancialEntry:271b10a2-d4c4-40e7-a4e7-975a6595ba48 idempotencyKey=finance.entry.created:271b10a2-d4c4-40e7-a4e7-975a6595ba48
+[OutboxDispatcher] publish finance.receipt.completed aggregate=FinancialEntry:271b10a2-d4c4-40e7-a4e7-975a6595ba48 idempotencyKey=finance.receipt.completed:271b10a2-d4c4-40e7-a4e7-975a6595ba48
+[OutboxDispatcher] publish finance.entry.settled aggregate=FinancialEntry:271b10a2-d4c4-40e7-a4e7-975a6595ba48 idempotencyKey=finance.entry.settled:271b10a2-d4c4-40e7-a4e7-975a6595ba48
+[OutboxDispatcher] publish homologacao.tec06_test aggregate=User:3be3ef7d-bbc9-49a6-b6fb-ab1e842e0b4b idempotencyKey=homologacao.tec06_test:179435676542426469
+✔ TEC-06/TEC-07 dispatchPendingEventsForCompany processa eventos PENDING do tenant e marca DISPATCHED (42.371375ms)
+✔ TEC-19 healthcheck nunca fica pendurado esperando o banco — responde em até HEALTH_CHECK_TIMEOUT_MS (201.860542ms)
+✔ TEC-19 healthcheck não trava quando a operação termina normalmente dentro do timeout (0.182125ms)
+✔ login devolve user.mfaEnabled refletindo o estado real do usuário (507.405375ms)
+✔ ADV-12 authMiddleware bloqueia na hora um access token cuja sessão foi revogada — não espera expirar (458.459167ms)
+✔ AUD-008b versão SEM documentFileId (documento real) não pode avançar o contrato para SIGNING (62.427708ms)
+✔ ADV-08 webhook duplicado (mesma assinatura) é no-op idempotente — não reaplica efeito nem duplica auditoria (143.643958ms)
+✔ ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o totalAmount, mesmo com divisão não exata (72.222042ms)
+✔ legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e não reavisa duas vezes pela mesma severidade (24.53825ms)
+✔ usersService.listUsers filtra por status — usuário suspenso não aparece quando filtra ACTIVE (62.423917ms)
+✔ M4-08 decideApprovalStep recusa aprovação com expectedLockVersion desatualizado (FINANCE_APPROVAL_STALE) (72.662125ms)
+✔ M4-12 createBankTransaction bloqueia reimportação da mesma transação (externalTransactionId único) (8.431292ms)
+✔ M4-23 createFinancialEntry com a mesma idempotencyKey não duplica o lançamento (9.008084ms)
+✔ M4-24 duas tentativas concorrentes do MESMO aprovador decidindo a mesma solicitação: só uma conta (36.282792ms)
+✔ contrato §11 scoreMatch aplica os pesos EXATOS do contrato (0.45/0.30/0.15/0.10) (66.93175ms)
+✔ contrato §11 suggestReconciliationMatches classifica AMBÍGUO quando há múltiplos candidatos fortes empatados, e nunca auto concilia nesse caso (25.613958ms)
+✔ contrato §11 autoReconcileSuggestion concilia automaticamente só nas classes EXATO/FORTE, sem ambiguidade (24.779167ms)
+✔ contrato §11 suggestReconciliationMatches devolve SEM CORRESPONDÊNCIA quando nenhum candidato chega a 0.45 (13.882833ms)
+✔ FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pago, e nunca apaga o histórico (88.711792ms)
+(node:26311) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o lançamento nem cria sucesso falso (85.792333ms)
+✔ FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvio de webhook) liquida só uma vez — nenhum ledger duplicado (80.861583ms)
+✔ FIN-005 resolveAntifraudThresholds usa os defaults hardcoded quando a regra não foi publicada para o tenant (fail closed, nunca enfraquece a proteção) (1.510375ms)
+✔ FIN-005 limiares de antifraude vêm do Motor de Regras (evaluateRule) quando a regra FIN-005 está publicada, ajustável via settings (7.464333ms)
+✔ FIN-005 flagAnomalousPayment continua detectando desvio histórico e primeiro-pagamento-alto com os limiares resolvidos pelo Motor de Regras (32.963333ms)
+✔ FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imediato, com o limiar vindo do Motor de Regras (9.624708ms)
+✔ antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno em si); conciliação manual recorrente só sinaliza (39.572542ms)
+✔ FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovação prévia (payment_intent OU ApprovalRequest) (109.021041ms)
+✔ FIN-TS-007: importação de extrato em lote (CSV) é idempotente — reimportar o MESMO arquivo não duplica (16.8835ms)
+✔ FIN-TS-007: importação de extrato recusa CSV com cabeçalho errado ou linha sem externalTransactionId (4.244ms)
+✔ FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequest aprovada invalida a liquidação direta (29.622667ms)
+✔ FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra é rejeitada (idempotente, não duplica ledger) (41.318584ms)
+✔ M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dias, conciliação pendente, comissão provisionada, repasse pendente, anomalia aberta) (89.406625ms)
+✔ M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de terceiro retido; marginBySector agrupa por centro de resultado (72.732084ms)
+✔ A1: a conta bancária de um PAYABLE não pode ser removida (era o atalho para liquidar sem controle) (56.606791ms)
+(node:26377) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ A1: PAYABLE SEM conta não é mais liquidado direto — exige aprovação e comprovante; com eles vira MANUAL_WITH_EVIDENCE (109.044958ms)
+✔ A2: baixa manual com intenção SUBMITTED no banco é recusada (128.92125ms)
+✔ A2: CONFIRMED do banco para lançamento já liquidado vira anomalia (pagamento em dobro), não erro em loop (84.763084ms)
+✔ A3: excedente classificado como PAYABLE vira obrigação PENDENTE (com centro de custo), nunca saída de caixa automática (26.044208ms)
+✔ C1: competência de mês fechado não recebe nem perde lançamento (criação, update atual/novo, classificação) (44.952709ms)
+✔ A4: comprovante informado só na baixa (sem anexar antes da aprovação) é recusado (37.165792ms)
+✔ A4: anexar o comprovante invalida a aprovação anterior — aprovação precisa vir depois (70.21825ms)
+✔ A4: o mesmo comprovante não serve para duas baixas; comprovante precisa ser PDF ou imagem (56.329667ms)
+✔ A4: quem anexou o comprovante não pode ser quem aprovou a baixa manual (41.756625ms)
+✔ A4: execução manual de intenção aprovada ANTES do comprovante é recusada (51.136625ms)
+✔ B1: erro/timeout na chamada ao banco deixa a intenção SUBMITTING (incerta) — nunca FAILED, nunca libera outra intenção (241.537042ms)
+✔ B1: o adapter real envia a chave de idempotência ao provedor (0.439542ms)
+✔ B2: ERROR é transitório (continua SUBMITTED); RETURNED depois de pago vira anomalia; resolver incerteza só com resposta final do banco (208.507334ms)
+✔ B4: CONFIRMED depois de FAILED abre anomalia (dinheiro pode ter saído duas vezes) (86.066708ms)
+✔ B5: confirmação via sandbox é SANDBOX_CONFIRMED; Santander incompleto falha fechado; sandbox proibido em produção (227.679375ms)
+✔ B5: webhook bancário exige assinatura HMAC também em sandbox (sem segredo configurado, falha fechado) (81.079708ms)
+✔ B6: confirmação do banco não é recusada por controle de pré-pagamento (revisão manual posterior) — liquida e abre anomalia (114.819958ms)
+✔ D1: estornar o recebimento da caução com devolução ativa é bloqueado (37.816083ms)
+✔ D2: caução sem contrato/titular é recusada; titular precisa ser locatário/comprador/fiador (13.399458ms)
+✔ D3: baixa parcial da caução mantém a marca de terceiro; evento de saída só na liquidação (58.79075ms)
+✔ D3: compensação aponta a dívida do titular, exige aprovação, não move caixa e abate a dívida (66.082709ms)
+✔ E1: solicitação de aprovação recusa tipo inventado e entidade inexistente (3.70625ms)
+✔ B3: duas criações SIMULTÂNEAS de intenção para o mesmo lançamento — a 2ª espera o lock; o índice único barra a duplicata (1526.899833ms)
+✔ D4: duas devoluções SIMULTÂNEAS da mesma caução — a 2ª espera o lock da origem; juntas não passam do saldo (1542.20575ms)
+ℹ tests 91
+ℹ suites 0
+ℹ pass 91
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20690.565916
+# estágio 6: concurrency_tests => VERDE

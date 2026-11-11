@@ -1,0 +1,28 @@
+# estágio 11: multi_company_tests
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-11-0.xml test/marco4.crossCompanyIsolation.test.js test/ciTwoTenantsFinanceLegal.test.js test/m4.estruturaOperacoes.test.js
+(node:27357) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ CI dois tenants (Financeiro): maker cria e pede aprovação, maker NÃO aprova (403), checker aprova (2454.205083ms)
+✔ CI dois tenants (Financeiro): checker com finance:approve NÃO aprova a solicitação que ele mesmo abriu (52.7905ms)
+✔ CI dois tenants (Financeiro): leitura recebe 403 ao criar lançamento e ao pedir aprovação, e consegue listar (60.780542ms)
+✔ CI dois tenants (Financeiro): tenant B não lê o lançamento de A nem decide a aprovação de A (404) (245.0425ms)
+✔ CI dois tenants (Jurídico): maker cria contrato; leitura recebe 403 ao criar e consegue ler (56.909625ms)
+✔ CI dois tenants (Jurídico): tenant B não lê nem altera o contrato de A (404), e o contrato segue intacto (59.515333ms)
+✔ CI dois tenants (Jurídico): condição de cláusula — maker não aprova, checker não aprova a própria, checker aprova a do maker, tenant B não aprova a de A (31.831125ms)
+✔ M4-§3 Locação (Sicredi) e Construção (Banco do Brasil): cada operação vê e usa só a própria conta (54.46925ms)
+✔ M4-§3/§15 despesa de obra da Construção na conta Sicredi da Locação é recusada; na conta Banco do Brasil da própria Construção é aceita (19.933875ms)
+✔ M4-§3 Locação recebe aluguel na própria conta Sicredi, com centro de resultado (receita da operação de Locação) (14.269875ms)
+✔ M4-§3 NC Serviços Bancários: conta própria vinculada ao corretor (owner_person_id), invisível para as outras operações (14.442083ms)
+✔ FIN-TS-020: financial_entries é isolado por EMPRESA — outra empresa do mesmo grupo nunca vê o lançamento (49.38475ms)
+✔ FIN-TS-020: commissions é isolado por EMPRESA — outra empresa do mesmo grupo nunca vê a comissão (49.906667ms)
+✔ FIN-TS-020: payment_intents é isolado por EMPRESA — outra empresa do mesmo grupo nunca vê a intenção de pagamento (12.429875ms)
+✔ FIN-TS-004: lançamento não pode usar bankAccount de outra empresa (mesmo do mesmo grupo) — erro de aplicação, não só RLS (16.500625ms)
+ℹ tests 15
+ℹ suites 0
+ℹ pass 15
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4535.722
+# estágio 11: multi_company_tests => VERDE

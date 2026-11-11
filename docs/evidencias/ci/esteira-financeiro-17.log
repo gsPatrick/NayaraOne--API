@@ -1,0 +1,5 @@
+# estágio 17: production_approval
+$ node scripts/financeiro/ci/aprovacaoProducao.js
+[production_approval] portão conferido: estágio 17 atrás de environment "production" (revisor obrigatório), depois dos estágios 1 a 16; nenhum passo da esteira financeira publica produção; o deploy de produção do test.yml também está atrás do mesmo environment.
+[production_approval] execução local: só o portão foi conferido; nenhuma aprovação foi dada nem registrada, nenhum deploy feito.
+# estágio 17: production_approval => VERDE

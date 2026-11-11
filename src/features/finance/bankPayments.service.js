@@ -72,6 +72,9 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
       'FINANCE_PAYMENT_INTENT_STALE'
     );
   }
+  if (currentEntry.requiresManualReview) {
+    throw AppError.conflict('Este pagamento está retido para revisão manual (antifraude): ele só vai ao banco depois de liberado por um revisor.', 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW');
+  }
   const bankAccountId = intent.snapshotJson?.bankAccountId;
   if (!bankAccountId) {
     throw AppError.badRequest('O lançamento desta intenção não tem conta bancária de destino definida.', 'FINANCE_BANK_PAYMENT_NO_BANK_ACCOUNT');
@@ -98,7 +101,7 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
   intent.bankAccountId = bankAccountId;
   intent.beneficiarySnapshot = beneficiarySnapshot;
   intent.paymentMethod = paymentMethod;
-  intent.idempotencyKey = `payment-intent:${intent.id}`;
+  intent.idempotencyKey = intent.idempotencyKey || `payment-intent:${intent.id}`; // §8.4: a chave nasce na criação; intenção antiga sem chave recebe o mesmo formato de antes
   intent.status = 'SUBMITTING';
   intent.uncertainSince = new Date();
   intent.updatedBy = actor.userId || null;

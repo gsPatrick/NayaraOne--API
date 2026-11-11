@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 829. Rotas só com login ou públicas: 42.
+Rotas com permissão exigida: 839. Rotas só com login ou públicas: 42.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -253,6 +253,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/construction/projects` | `construction:create` | não |
 | `POST` | `/api/v1/construction/quality-items/:id/check` | `construction:update` | não |
 | `DELETE` | `/api/v1/construction/quality-items/:id` | `construction:update` | não |
+| `GET` | `/api/v1/construction/settings/cost-basis` | `construction:read` | não |
+| `PUT` | `/api/v1/construction/settings/cost-basis` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/settings/sla-rule` | `construction:read` | não |
 | `POST` | `/api/v1/construction/settings/sla-rule` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/stages/:id/dependencies` | `construction:read` | não |
@@ -371,6 +373,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/entries` | `finance:read` | não |
 | `POST` | `/api/v1/finance/entries` | `finance:create` | não |
 | `GET` | `/api/v1/finance/exports/entries` | `finance:read` | não |
+| `GET` | `/api/v1/finance/health` | `finance:read` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/approve` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/reconcile` | `finance:reconcile` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/reject` | `finance:approve` | não |
@@ -378,6 +381,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/intercompany-transfers/destination-companies` | `finance:read` | não |
 | `GET` | `/api/v1/finance/intercompany-transfers` | `finance:read` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers` | `finance:settle` | sim |
+| `POST` | `/api/v1/finance/ledger/:id/reverse` | `finance:settle` | não |
 | `GET` | `/api/v1/finance/nay/insights` | `finance:read` | não |
 | `POST` | `/api/v1/finance/owner-repasses/:id/approve` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/owner-repasses/:id/composition` | `finance:read` | não |
@@ -394,6 +398,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/payment-intents/:id/submit-to-bank` | `finance:settle` | sim |
 | `GET` | `/api/v1/finance/payment-intents` | `finance:read` | não |
 | `POST` | `/api/v1/finance/payment-intents` | `finance:create` | não |
+| `POST` | `/api/v1/finance/payments/:id/approve` | `finance:approve` | não |
+| `POST` | `/api/v1/finance/payments/:id/execute` | `finance:settle` | sim |
+| `POST` | `/api/v1/finance/payments/prepare` | `finance:create` | não |
 | `GET` | `/api/v1/finance/period-closures/:referenceMonth/preconditions` | `finance:read` | não |
 | `POST` | `/api/v1/finance/period-closures/approve` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/period-closures/checks` | `finance:settle` | não |
@@ -401,6 +408,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/period-closures/return-to-open` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/period-closures` | `finance:read` | não |
 | `POST` | `/api/v1/finance/period-closures` | `finance:settle` | não |
+| `POST` | `/api/v1/finance/periods/:month/close` | `finance:settle` | não |
+| `POST` | `/api/v1/finance/reconciliation/:id/confirm` | `finance:reconcile` | não |
+| `GET` | `/api/v1/finance/reconciliation/pending` | `finance:read` | não |
 | `POST` | `/api/v1/finance/reconciliations/group` | `finance:reconcile` | não |
 | `GET` | `/api/v1/finance/reconciliations` | `finance:read` | não |
 | `POST` | `/api/v1/finance/reconciliations` | `finance:reconcile` | não |

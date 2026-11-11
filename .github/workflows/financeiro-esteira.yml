@@ -1,0 +1,148 @@
+name: Esteira do Financeiro
+
+# Marco 4, Guia do Marcelo §17 "CI/CD financeiro": lint, typecheck, unit_tests, db_migrations, finance_integration_tests, concurrency_tests, idempotency_tests,
+# bank_adapter_contract_tests, reconciliation_tests, closed_period_tests, multi_company_tests, security_scan, deploy_DEV, deploy_LAB, failure_drills, pentest e
+# production_approval, nesta ordem, parando no primeiro estágio vermelho (um passo vermelho interrompe os seguintes).
+#   - Estágios 1 a 13, 15 e 16: todo push e pull request. O 13 (deploy_DEV) sobe a API do HEAD contra o banco descartável e confere a saúde e o smoke do
+#     Financeiro; o disparo do deploy no servidor DEV (secret DEV_API_DEPLOY_HOOK_URL) é um passo à parte, só em branch de entrega.
+#   - Estágio 14 (deploy_LAB): só em branch de entrega `entrega/**` ou tag `fin-release-*`, depois dos anteriores; dispara o LAB por secret
+#     (LAB_API_DEPLOY_HOOK_URL, environment "lab") e roda o mesmo build em modo LAB com a suíte de contrato dos adapters bancários.
+#   - Estágio 17 (production_approval): environment "production" com revisor obrigatório; confere o portão e registra a aprovação. NUNCA faz deploy:
+#     quem publica é o Patrick. Banco: sempre o cluster descartável (scripts/withDisposableDb.js), nunca o compartilhado.
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9, 'entrega/**']
+    tags: ['fin-release-*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  esteira-financeiro:
+    name: Estágios 1 a 13, 15 e 16
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: "Estágio 1: lint"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-1.log --de 1 --ate 1
+      - name: "Estágio 2: typecheck"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-2.log --de 2 --ate 2
+      - name: "Estágio 3: unit_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-3.log --de 3 --ate 3
+      - name: "Estágio 4: db_migrations"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-4.log --de 4 --ate 4
+      - name: "Estágio 5: finance_integration_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-5.log --de 5 --ate 5
+      - name: "Estágio 6: concurrency_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-6.log --de 6 --ate 6
+      - name: "Estágio 7: idempotency_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-7.log --de 7 --ate 7
+      - name: "Estágio 8: bank_adapter_contract_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-8.log --de 8 --ate 8
+      - name: "Estágio 9: reconciliation_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-9.log --de 9 --ate 9
+      - name: "Estágio 10: closed_period_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-10.log --de 10 --ate 10
+      - name: "Estágio 11: multi_company_tests"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-11.log --de 11 --ate 11
+      - name: "Estágio 12: security_scan"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-12.log --de 12 --ate 12
+      - name: "Estágio 13: deploy_DEV"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-13.log --de 13 --ate 13
+      - name: "Estágio 15: failure_drills"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-15.log --de 15 --ate 15
+      - name: "Estágio 16: pentest"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-16.log --de 16 --ate 16
+      - name: Arquivar o log por estágio e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-financeiro-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-financeiro-*.log
+            docs/evidencias/ci/esteira-financeiro-*.json
+            reports/fin-ci/
+          if-no-files-found: warn
+          retention-days: 90
+
+  entrega-financeiro:
+    # Só em branch de entrega ou tag de release do Financeiro: DEV e LAB por secret e o estágio 14 (deploy_LAB).
+    if: ${{ startsWith(github.ref, 'refs/heads/entrega/') || startsWith(github.ref, 'refs/tags/fin-release-') }}
+    name: Estágio 14
+    needs: esteira-financeiro
+    environment: lab
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Disparar deploy da API no DEV (secret; sem o secret, registra e não inventa host)
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEV_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then echo "::notice::DEV_API_DEPLOY_HOOK_URL não configurado — DEV coberto pelo estágio 13 (API do HEAD em banco descartável)."; exit 0; fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"esteira-financeiro\"}"
+      - name: Disparar deploy da API no LAB (secret do environment lab)
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.LAB_API_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then echo "::notice::LAB_API_DEPLOY_HOOK_URL não configurado no environment lab — o estágio 14 roda o build em modo LAB localmente."; exit 0; fi
+          curl -fsS -X POST "$DEPLOY_HOOK_URL" -H 'Content-Type: application/json' -d "{\"ref\":\"${GITHUB_SHA}\",\"source\":\"esteira-financeiro\"}"
+      - name: "Estágio 14: deploy_LAB"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-14.log --entrega --de 14 --ate 14
+      - name: Arquivar o log por estágio e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-financeiro-entrega-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-financeiro-*.log
+            docs/evidencias/ci/esteira-financeiro-*.json
+            reports/fin-ci/
+          if-no-files-found: warn
+          retention-days: 90
+
+  aprovacao-producao-financeiro:
+    # Depois de TODOS os estágios: o environment "production" (com revisor obrigatório, docs/runbooks/CI_CD.md) pausa este job até a aprovação manual.
+    # O estágio 17 confere o portão e registra a aprovação; não há passo de deploy aqui.
+    if: ${{ startsWith(github.ref, 'refs/heads/entrega/') || startsWith(github.ref, 'refs/tags/fin-release-') }}
+    name: Estágio 17
+    needs: [esteira-financeiro, entrega-financeiro]
+    environment: production
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: "Estágio 17: production_approval"
+        run: bash scripts/ci-estagios-financeiro.sh docs/evidencias/ci/esteira-financeiro-17.log --aprovacao --de 17 --ate 17
+      - name: Arquivar o log por estágio e o relatório
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-financeiro-aprovacao-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-financeiro-*.log
+            docs/evidencias/ci/esteira-financeiro-*.json
+            reports/fin-ci/
+          if-no-files-found: warn
+          retention-days: 90

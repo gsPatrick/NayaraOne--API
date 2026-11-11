@@ -1,0 +1,41 @@
+# estágio 9: reconciliation_tests
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-9-0.xml test/finance.reconciliationSuggestions.test.js test/marco4.contract.gaps.test.js
+✔ suggestReconciliationMatches: EXATO quando id externo (idempotencyKey) + conta + data batem (360.296333ms)
+✔ suggestReconciliationMatches: AMBÍGUO quando 2 candidatos empatados na faixa FORTE — nunca resolve sozinho (23.59625ms)
+✔ suggestReconciliationMatches: SEM CORRESPONDÊNCIA quando nenhum lançamento aberto bate (8.698083ms)
+✔ GET /finance/bank-transactions/:id/reconciliation-suggestions responde com a classificação real (rota ponta a ponta) (157.6875ms)
+✔ R6 FORTE: valor + referência (texto) + mesma conta + data = 1 candidato só; não vira EXATO sem ID externo (13.350875ms)
+✔ R6 PROVÁVEL: 0,85 (valor + referência + janela, sem conta) continua sugestão; 1 candidato (12.662208ms)
+✔ R6 AMBÍGUO: 2 lançamentos de mesmo valor (só valor+data) NÃO são "Provável" — são ambíguos e nunca auto (18.517917ms)
+✔ R6: FORTE não confirma sozinho por padrão; EXATO confirma e informa método AUTO_EXACT (29.229708ms)
+✔ R6: valor divergente, sinal oposto e outra conta nunca conciliam (nem aparecem como sugestão) (37.129792ms)
+✔ contrato §11 scoreMatch aplica os pesos EXATOS do contrato (0.45/0.30/0.15/0.10) (65.411125ms)
+✔ contrato §11 suggestReconciliationMatches classifica AMBÍGUO quando há múltiplos candidatos fortes empatados, e nunca auto concilia nesse caso (26.865084ms)
+✔ contrato §11 autoReconcileSuggestion concilia automaticamente só nas classes EXATO/FORTE, sem ambiguidade (26.223083ms)
+✔ contrato §11 suggestReconciliationMatches devolve SEM CORRESPONDÊNCIA quando nenhum candidato chega a 0.45 (13.933792ms)
+✔ FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pago, e nunca apaga o histórico (95.974709ms)
+(node:27233) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o lançamento nem cria sucesso falso (93.741792ms)
+✔ FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvio de webhook) liquida só uma vez — nenhum ledger duplicado (85.679583ms)
+✔ FIN-005 resolveAntifraudThresholds usa os defaults hardcoded quando a regra não foi publicada para o tenant (fail closed, nunca enfraquece a proteção) (5.163375ms)
+✔ FIN-005 limiares de antifraude vêm do Motor de Regras (evaluateRule) quando a regra FIN-005 está publicada, ajustável via settings (15.906292ms)
+✔ FIN-005 flagAnomalousPayment continua detectando desvio histórico e primeiro-pagamento-alto com os limiares resolvidos pelo Motor de Regras (22.650708ms)
+✔ FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imediato, com o limiar vindo do Motor de Regras (15.119041ms)
+✔ antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno em si); conciliação manual recorrente só sinaliza (55.31375ms)
+✔ FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovação prévia (payment_intent OU ApprovalRequest) (117.373167ms)
+✔ FIN-TS-007: importação de extrato em lote (CSV) é idempotente — reimportar o MESMO arquivo não duplica (16.424083ms)
+✔ FIN-TS-007: importação de extrato recusa CSV com cabeçalho errado ou linha sem externalTransactionId (4.83025ms)
+✔ FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequest aprovada invalida a liquidação direta (33.884334ms)
+✔ FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra é rejeitada (idempotente, não duplica ledger) (44.771333ms)
+✔ M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dias, conciliação pendente, comissão provisionada, repasse pendente, anomalia aberta) (92.44525ms)
+✔ M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de terceiro retido; marginBySector agrupa por centro de resultado (70.01925ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3750.079166
+# estágio 9: reconciliation_tests => VERDE

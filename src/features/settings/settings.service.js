@@ -56,6 +56,7 @@ const { INSURANCE_SETTINGS_SCHEMA } = require('../procurement/insurance/insuranc
 const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
 const { BANK_SETTINGS_SCHEMA } = require('../finance/bank/bank.settings');
+const { FINANCE_SETTINGS_SCHEMA } = require('../finance/finance.settings');
 const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
 const { STORAGE_SETTINGS_SCHEMA } = require('../integrations/storage/storage.settings');
 const { IDENTITY_SETTINGS_SCHEMA } = require('../integrations/identity/identity.settings');
@@ -135,16 +136,8 @@ const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics
  * documentado — a confirmar com o cliente antes de produção.
  */
 const SETTINGS_SCHEMA = {
-  // FIN-005 (contrato bruto, Centro Financeiro §2 "Princípios constitucionais": "Limites vêm
-  // do Motor de Regras; aprovação usa snapshot/hash.") — o QUANTO (multiplicador/limiar em
-  // R$) é ajustável aqui, mas o SE a regra de antifraude está ativa para o tenant continua
-  // decidido pelo Motor de Regras (evaluateRule('FIN-005', ...), fail-closed) — mesmo padrão
-  // já usado em billing.late_fee_percentage/REG-LOC-001 (collectionCase.service.js).
-  'finance.antifraud_history_multiplier': { type: 'number', min: 1 },
-  'finance.antifraud_new_account_threshold': { type: 'number', min: 0 },
-  // FIN-TS-013 "Conta nova | Pagamento alto imediato | Controle extra" — período de
-  // resfriamento (em horas) de conta bancária nova/alterada, mesma regra FIN-005.
-  'finance.bank_account_cooldown_hours': { type: 'integer', min: 0 },
+  // Financeiro (aba "Financeiro" de Configurações): antifraude FIN-005, conciliação manual recorrente (§17) e política AUTO_STRONG (§11), com faixas.
+  ...FINANCE_SETTINGS_SCHEMA,
   // EST-013 / Guia §12 (NAY Estoque, inventoryNay.service.js): lead time padrão (dias) usado
   // pela sugestão de compra quando o item ainda não tem histórico real de reposição
   // (pedido de compra -> recebimento) para medir o prazo observado.

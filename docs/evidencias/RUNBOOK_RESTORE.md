@@ -37,7 +37,9 @@ Guardar o `.dump` e o diretório do storage juntos (mesmo timestamp), fora do se
 
 1. Criar no destino as roles que o dump referencia, **antes** do restore:
    `nayara_runtime` (LOGIN, NOSUPERUSER, NOBYPASSRLS, NOCREATEROLE, NOCREATEDB) e
-   `nayara_migration` (dona dos objetos). Sem elas o restore **falha** e diz qual role falta
+   `nayara_migration` (dona dos objetos) e `nayara_analytics_reader` (NOLOGIN, NOBYPASSRLS —
+   leitor do BI, migration 9612; achado do drill de 10/11/2026: sem ela o restore falha).
+   Script pronto: `scripts/restoreDrill/restoreRoles.js`. Sem elas o restore **falha** e diz qual role falta
    (comportamento provado no passo 4a do drill — antes da correção ele "concluía" sem GRANTs).
 2. Criar banco de destino vazio (nome novo).
 3. `npm run restore -- --file <dump> --target-db <banco-novo>`

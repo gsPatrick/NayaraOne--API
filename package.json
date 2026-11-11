@@ -17,6 +17,7 @@
     "verify-restore:construction": "node scripts/verifyRestoreConstructionData.js",
     "verify-restore:finance-legal": "node scripts/verifyRestoreFinanceLegalData.js",
     "restore-drill:legal-full": "node scripts/restoreDrill/legalFullDrill.js",
+    "restore-drill:finance-full": "node scripts/restoreDrill/financeFullDrill.js --port 5523 --report-dir docs/evidencias/marco4-5",
     "verify-restore:inventory-procurement": "node scripts/verifyRestoreInventoryProcurementData.js",
     "restore-drill:inventory-full": "node scripts/restoreDrill/inventoryFullDrill.js",
     "restore-drill:construction-full": "node scripts/restoreDrill/constructionFullDrill.js",

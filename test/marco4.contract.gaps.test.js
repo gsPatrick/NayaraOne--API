@@ -455,9 +455,12 @@ test('FIN-005 flagAnomalousPayment continua detectando desvio histórico e prime
     const account = await createActiveBankAccount(transaction, suffix);
 
     const entry = await createEntry(transaction, { amount: 50000, bankAccountId: account.id });
-    const flag = await antifraudService.flagAnomalousPayment(entry, transaction);
+    // Fechamento do Marco 4 (10/11/2026, §17): o antifraude roda na CRIAÇÃO do pagamento — o lançamento já
+    // nasce retido e chamar a regra de novo não duplica a retenção nem o caso.
+    const flag = { flagged: entry.requiresManualReview, reason: entry.manualReviewReason };
     assert.equal(flag.flagged, true, 'conta nova recebendo pagamento alto continua detectada mesmo com os limiares vindos do Motor de Regras');
     assert.match(flag.reason, /FIN-005/);
+    assert.equal((await antifraudService.flagAnomalousPayment(entry, transaction)).alreadyFlagged, true);
 
     // GAP REAL CORRIGIDO (Caderno §17/§19): flagAnomalousPayment agora também abre um
     // AnomalyCase HIGH (antes só marcava a flag requires_manual_review, sem registro próprio).

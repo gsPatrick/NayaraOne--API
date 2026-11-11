@@ -121,6 +121,8 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
       'FINANCE_PAYMENT_INTENT_INVALID_ENTRY_STATUS'
     );
   }
+  // §17: pagamento ainda não avaliado pelo antifraude é avaliado aqui (fica retido até a revisão humana).
+  await require('./paymentAnomalyGate').evaluatePayableAnomaly(entry, transaction, 'prepare');
 
   // F06-PAY-04/06 (conferência 18/10/2026): SUBMITTED também é intenção em aberto — o pagamento
   // está em trânsito no banco (inclusive com resposta incerta, que agora mantém SUBMITTED). Abrir
@@ -150,8 +152,13 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
   const snapshot = buildEntrySnapshot(entry);
   let intent;
   try {
+  // §8.4 "Cria payment_intent + snapshot/hash + idempotency_key": a chave nasce aqui, estável e
+  // única por intenção; o envio ao banco reaproveita a mesma (bankPayments.prepareBankSubmission).
+  const intentId = crypto.randomUUID();
   intent = await PaymentIntent.create(
     {
+      id: intentId,
+      idempotencyKey: `payment-intent:${intentId}`,
       groupId: entry.groupId,
       companyId: entry.companyId,
       financialEntryId: entry.id,

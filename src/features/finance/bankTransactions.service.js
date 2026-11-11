@@ -17,7 +17,7 @@ function dateKeyOf(value, fieldLabel) {
 }
 
 // finance.bank_transactions representa linhas de extrato importadas. `externalTransactionId`
-// (UNIQUE) é a idempotência natural de um import — reprocessar o mesmo arquivo/webhook não
+// (UNIQUE por conta, migration 9985) é a idempotência natural de um import — reprocessar o mesmo arquivo/webhook não
 // duplica a linha (FIN-004), então createBankTransaction checa antes de inserir e explica o
 // motivo do 409 em vez de deixar estourar a constraint de banco crua.
 
@@ -39,7 +39,8 @@ async function createBankTransaction(payload, actorUserId, transaction) {
   const storedDate = DATE_ONLY_REGEX.test(String(transactionDate).trim()) ? `${String(transactionDate).trim()}${NOON_SAO_PAULO_SUFFIX}` : transactionDate;
 
   if (externalTransactionId) {
-    const existing = await BankTransaction.findOne({ where: { externalTransactionId }, transaction });
+    // Guia §10: a duplicidade é por CONTA (bank_account_id + chave) — outra conta/empresa com o mesmo id não interfere.
+    const existing = await BankTransaction.findOne({ where: { bankAccountId, externalTransactionId }, transaction });
     if (existing) {
       throw AppError.conflict(
         'Já existe uma transação importada com este mesmo identificador externo — import duplicado bloqueado.',
@@ -267,7 +268,7 @@ async function importBankStatement(payload, actorUserId, transaction) {
   const result = { imported: [], duplicates: [], total: rows.length };
   for (const row of rows) {
     // eslint-disable-next-line no-await-in-loop
-    const existing = await BankTransaction.findOne({ where: { externalTransactionId: row.externalTransactionId }, transaction });
+    const existing = await BankTransaction.findOne({ where: { bankAccountId, externalTransactionId: row.externalTransactionId }, transaction });
     if (existing) {
       result.duplicates.push({ externalTransactionId: row.externalTransactionId, existingId: existing.id });
       continue;

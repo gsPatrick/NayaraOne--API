@@ -177,7 +177,7 @@ async function flagAnomalousPayment(financialEntry, transaction) {
     where: {
       bankAccountId: financialEntry.bankAccountId,
       status: 'SETTLED',
-      parentEntryId: null,
+      parentEntryId: null, nature: 'PAYABLE', // histórico = pagamentos (§17), nunca recebimentos na mesma conta
       id: { [Op.ne]: financialEntry.id },
     },
     transaction,

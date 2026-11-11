@@ -211,11 +211,12 @@ async function main() {
     log(`      → ${firstAttempt.ok ? 'concluiu (ERRADO: restore sem GRANTs para a aplicação)' : 'falhou'}${missingRoleDetected ? ` apontando as roles ausentes ✅ (${(firstAttempt.output.match(/servidor de destino: ([^.]+)\./) || [])[1] || ''})` : ''}`);
     if (!missingRoleDetected) throw new Error(`o restore sem a role deveria falhar apontando a role ausente:\n${firstAttempt.output.split('\n').slice(-10).join('\n')}`);
 
-    log('  4b. Procedimento do runbook: cria as roles que o dump referencia (nayara_runtime e nayara_migration), recria o banco vazio, refaz o restore:');
+    log('  4b. Procedimento do runbook: cria as roles que o dump referencia (nayara_runtime, nayara_migration e nayara_analytics_reader), recria o banco vazio, refaz o restore:');
     createRuntimeRole(PORT_TARGET);
     // nayara_migration: role NOLOGIN criada pela migration 336 (dona de default privileges) —
     // o dump referencia essa role; num cluster novo ela também precisa existir antes do restore.
-    psql(PORT_TARGET, 'postgres', 'CREATE ROLE nayara_migration');
+    // nayara_analytics_reader (migration 9612, BI do Marco 9) também é referenciada pelo dump.
+    require('./restoreRoles').createSupportRoles(psql, PORT_TARGET);
     psql(PORT_TARGET, 'postgres', 'DROP DATABASE drill_target');
     psql(PORT_TARGET, 'postgres', 'CREATE DATABASE drill_target');
     log(`      → ${mustRun('npm run restore', 'npm', ['run', '--silent', 'restore', '--', '--file', dumpFile, '--target-db', 'drill_target'], restoreEnv).split('\n').filter(Boolean).pop()}`);

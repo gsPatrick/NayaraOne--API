@@ -1,0 +1,14 @@
+# estágio 13: deploy_DEV
+$ node scripts/financeiro/ci/deployLocal.js --ambiente dev
+OK    DEV GET /api/health -> 200 (API do HEAD no ar em 1.6 s, porta efêmera, banco descartável, role de runtime)
+OK    DEV GET /api/version -> 200 (HTTP 200)
+OK    DEV GET /api/v1/finance/entries sem token -> 401 (HTTP 401)
+OK    DEV POST /api/v1/auth/login (perfil gestor do tenant A) -> 200 (HTTP 200)
+OK    DEV GET /api/v1/finance/entries -> 200 (HTTP 200)
+OK    DEV GET /api/v1/finance/bank-accounts -> 200 (HTTP 200)
+OK    DEV GET /api/v1/finance/reports/weekly-health -> 200 (HTTP 200)
+OK    DEV GET /api/v1/finance/approval-requests -> 200 (HTTP 200)
+OK    DEV GET /api/v1/finance/period-closures -> 200 (HTTP 200)
+OK    DEV GET /api/v1/audit-log -> 403 (HTTP 403)
+[deploy_DEV] OK
+# estágio 13: deploy_DEV => VERDE

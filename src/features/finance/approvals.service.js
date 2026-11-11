@@ -53,12 +53,8 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
     );
   }
   const relatedEntityForCheck = await RelatedModel.findOne({ where: { id: relatedEntityId, companyId }, transaction });
-  if (!relatedEntityForCheck) {
-    throw AppError.notFound(
-      'A entidade a ser aprovada não foi encontrada nesta empresa.',
-      'FINANCE_APPROVAL_RELATED_ENTITY_NOT_FOUND'
-    );
-  }
+  if (!relatedEntityForCheck) throw AppError.notFound('A entidade a ser aprovada não foi encontrada nesta empresa.', 'FINANCE_APPROVAL_RELATED_ENTITY_NOT_FOUND');
+  if (relatedEntityType === 'FinancialEntry') await require('./paymentAnomalyGate').evaluatePayableAnomaly(relatedEntityForCheck, transaction, 'prepare'); // §17
 
   let existingPending = await ApprovalRequest.findOne({
     where: { relatedEntityType, relatedEntityId, status: 'PENDING' },

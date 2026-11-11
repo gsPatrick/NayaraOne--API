@@ -159,6 +159,12 @@ before(async () => {
 const A = () => fixtures[tenant.companyId];
 
 after(async () => {
+  // Limpa o passo recente de MFA que o teste gravou (uma linha por usuário, presa pela RLS à empresa onde ficou): outra execução no MESMO banco não o
+  // enxergaria a partir das empresas novas e o INSERT daria UNIQUE (visto ao rodar o arquivo nos estágios 15 e 16 da esteira do Financeiro).
+  if (stepUpCompany) {
+    const { MfaStepUp } = require('../src/models');
+    await withTenantTransaction(stepUpCompany, (transaction) => MfaStepUp.destroy({ where: { userId: tenant.userId }, transaction }));
+  }
   await sequelize.close();
   // Mesmo padrão dos demais testes que sobem ../app (app.listen incondicional).
   process.exit(0);
@@ -313,7 +319,12 @@ const EXPORT_QUERY = `?purpose=AUDITORIA&justification=${encodeURIComponent('Con
 let stepUpCompany = null;
 async function grantRecentMfa(ctx) {
   const { MfaStepUp } = require('../src/models');
-  if (stepUpCompany && stepUpCompany.companyId !== ctx.companyId) {
+  if (!stepUpCompany) {
+    // Primeira chamada do arquivo: apaga um passo recente que outro teste tenha deixado para o mesmo usuário nas empresas deste arquivo (o after() limpa o deste).
+    for (const empresa of [tenant, sameGroupTenant, otherGroupTenant]) {
+      await withTenantTransaction(empresa, (transaction) => MfaStepUp.destroy({ where: { userId: tenant.userId }, transaction }));
+    }
+  } else if (stepUpCompany.companyId !== ctx.companyId) {
     await withTenantTransaction(stepUpCompany, (transaction) => MfaStepUp.destroy({ where: { userId: tenant.userId }, transaction }));
   }
   await withTenantTransaction(ctx, async (transaction) => {

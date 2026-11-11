@@ -52,6 +52,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'matched_by_user_id',
       },
+      // §17 conciliação manual recorrente: como a conciliação foi feita (migration 9984).
+      matchMethod: {
+        type: DataTypes.STRING(30),
+        allowNull: false,
+        defaultValue: 'MANUAL',
+        field: 'match_method',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

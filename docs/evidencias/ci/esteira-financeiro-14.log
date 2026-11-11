@@ -1,0 +1,19 @@
+# estágio 14: deploy_LAB
+$ node scripts/financeiro/ci/deployLocal.js --ambiente lab
+OK    LAB GET /api/health -> 200 (API do HEAD no ar em 2.1 s, porta efêmera, banco descartável, role de runtime)
+OK    LAB GET /api/version -> 200 (HTTP 200)
+OK    LAB GET /api/v1/finance/entries sem token -> 401 (HTTP 401)
+OK    LAB POST /api/v1/auth/login (perfil gestor do tenant A) -> 200 (HTTP 200)
+OK    LAB GET /api/v1/finance/entries -> 200 (HTTP 200)
+OK    LAB GET /api/v1/finance/bank-accounts -> 200 (HTTP 200)
+OK    LAB GET /api/v1/finance/reports/weekly-health -> 200 (HTTP 200)
+OK    LAB GET /api/v1/finance/approval-requests -> 200 (HTTP 200)
+OK    LAB GET /api/v1/finance/period-closures -> 200 (HTTP 200)
+OK    LAB GET /api/v1/audit-log -> 403 (HTTP 403)
+OK    LAB POST /api/v1/finance/webhooks/bank-payment sem assinatura e com pagamento desconhecido -> nada processado (HTTP 200, processed=false, reason=unknown_routing)
+OK    LAB POST /api/v1/finance/webhooks/bank-payment com corpo malformado -> 400 (HTTP 400)
+PASSED bank-sandbox: 88/88 execuções em v1 -> ./reports/contract/bank-sandbox.json
+PASSED bank-santander: 88/88 execuções em v1 -> ./reports/contract/bank-santander.json
+OK    LAB suíte de contrato dos adapters bancários (bank-sandbox, bank-santander) em modo laboratório (exit 0)
+[deploy_LAB] OK
+# estágio 14: deploy_LAB => VERDE

@@ -1,0 +1,30 @@
+# estágio 10: closed_period_tests
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-10-0.xml test/nayaraConferencia1810.closing.test.js test/m45.reconf2010.repasseMfaFechamento.test.js
+✔ R1: repasse sem conta de saída — recusa com mensagem exata e aprova quando a tela envia a conta (93.848125ms)
+✔ R4: aprovação e reabertura do fechamento têm o portão de MFA recente; sem MFA recente => MFA_STEP_UP_REQUIRED, com => liberado (9.309125ms)
+✔ Textos: mensagens do fechamento usam MM/AAAA (3.17625ms)
+✔ F02-C1: assertCompetenceOpen recusa competência CLOSED e REVIEW, aceita OPEN e ignora vazios (392.755333ms)
+✔ F02-C1b: mês fechado não recebe nem perde lançamento em nenhum caminho (criar, editar, baixar, baixa parcial, estornar) (63.882042ms)
+✔ F02-C2: conferência desatualizada em REVIEW — o aprovador devolve para OPEN com motivo, reconfere e o mês fecha (67.256834ms)
+(node:27291) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ F02-C3: intenção de pagamento enviada ao banco e sem resposta bloqueia o fechamento da competência (102.203042ms)
+✔ F02-C3b: confirmação do banco que chega depois do fechamento liquida no período corrente com aviso POST_CLOSING_BANK_CONFIRMATION (114.939333ms)
+✔ F02-C4a: +500 de caução e −500 de devolução depois da conferência deixam a conferência desatualizada (líquido igual) (79.226083ms)
+✔ F02-C4b: baixa parcial de caução entra no caixa de terceiros e no saldo do fim do mês (30.383375ms)
+✔ F02-C5a: extrato que não cobre o mês inteiro não satisfaz "extratos importados"; cobrindo, satisfaz (38.802792ms)
+✔ F02-C5b: movimento de caixa bancário do mês sem conciliação bloqueia, mesmo sem linha de extrato pendente (58.171125ms)
+✔ F02-C6a: quem registrou uma conferência não aprova o fechamento (29.141541ms)
+✔ F02-C6b: limites do mês no fuso de São Paulo — 22h do dia 31 em Brasília é do próprio mês (19.191042ms)
+✔ F02-C6c: snapshot do fechamento recusa TRUNCATE (trigger de instrução no banco) (2.703417ms)
+✔ F02-C6d: aprovação trava a linha do período (FOR UPDATE) — uma segunda aprovação simultânea espera, sem commit (1522.7475ms)
+✔ F02-C7 (HTTP): devolver para aberto exige finance:approve, MFA e motivo; o checklist mostra pagamentos em trânsito (89.923792ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4605.310667
+# estágio 10: closed_period_tests => VERDE

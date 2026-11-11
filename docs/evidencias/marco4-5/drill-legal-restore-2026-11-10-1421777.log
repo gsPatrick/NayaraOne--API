@@ -1,0 +1,267 @@
+# Drill de restore jurídico (F05)
+Data: 2026-11-10T22:45:12.154Z
+Commit da API: 142177717c7662fcdc8e8fbb0259cf7c2091a335 (com alterações locais não commitadas)
+PostgreSQL: postgres (PostgreSQL) 17.11 (Homebrew)
+Diretório de trabalho: /var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/nayara-legal-drill-LOQWc5
+
+### 1. Cluster de ORIGEM descartável (porta 5525)
+  role nayara_runtime NOSUPERUSER/NOBYPASSRLS; 599 migrations; seeds base; GRANT em 18 schemas.
+
+### 2. Fixtures controladas pelos serviços reais (role de runtime, storage isolado)
+  Fixtures criadas: 5 arquivos (inclui o documento assinado), 2 assinaturas de contrato, versão gerada pelo modelo 1583aca0-0a65-4ddc-9ea2-df777c9fa366, 2 itens de vistoria, dossiê e6d4b024-50d6-49f3-aff8-3ae12588f014, pagamento bancário confirmado sandbox-payment-intent:86fad61a-5aa7-4440-8b3f-fb43e49ef2d2.
+(node:25889) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+### 3. Backup com os scripts reais do projeto (npm run backup + scripts/backupStorage.js)
+  Backup gerado com sucesso: /var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/nayara-legal-drill-LOQWc5/backup/drill_source_2026-11-10T22-47-05-613Z.dump (2.73 MB)
+  Backup do storage gerado: 9 arquivo(s) em /var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/nayara-legal-drill-LOQWc5/backup/storage (manifest.json com SHA-256 por arquivo).
+
+### 4. Cluster de DESTINO NOVO (porta 5526, outro initdb — a role de runtime não existe)
+  role nayara_runtime no cluster novo antes do restore: ausente
+  4a. npm run restore SEM a role de runtime no destino:
+      → falhou apontando as roles ausentes ✅ (nayara_runtime, nayara_analytics_reader)
+  4b. Procedimento do runbook: cria as roles que o dump referencia (nayara_runtime, nayara_migration e nayara_analytics_reader), recria o banco vazio, refaz o restore:
+      → Restore concluído em "drill_target" a partir de /var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/nayara-legal-drill-LOQWc5/backup/drill_source_2026-11-10T22-47-05-613Z.dump
+      → role nayara_runtime no destino: superuser/bypassrls = false/false
+  4c. scripts/restoreStorage.js num diretório novo:
+      → Restore do storage concluído: 9/9 arquivo(s) conferidos contra o manifesto em /var/folders/lg/yzbfqvd96k1gm8yydv0zz2fw0000gn/T/nayara-legal-drill-LOQWc5/uploads-target.
+      → 9 arquivo(s) no storage restaurado.
+
+### 5. Verificação pós-restore
+
+=== Drill de restore jurídico — comparação origem x destino restaurado ===
+Tenant A (dados controlados): company=3ef3df58-2462-4757-8638-69e06118b2d7
+Tenant B (isolamento):        company=5dc53b99-fd7d-43f9-a458-ea95a3023cde
+
+--- legal.contracts ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)
+
+--- legal.contract_parties ---
+  ✅ registros na origem: 2 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 6 comparações COM VALOR idênticas (2 registros × 3 campos; 0 nulo=nulo à parte)
+
+--- people.persons (partes e signatários) ---
+  ✅ registros na origem: 2 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 14 comparações COM VALOR idênticas (2 registros × 7 campos; 0 nulo=nulo à parte)
+
+--- real_estate.properties ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)
+
+--- core.users (atores do drill) ---
+  ✅ registros na origem: 2 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 10 comparações COM VALOR idênticas (2 registros × 5 campos; 0 nulo=nulo à parte)
+
+--- legal.contract_clauses ---
+  ✅ registros na origem: 3 (mínimo 3)
+  ✅ mesma quantidade de registros (origem 3, destino 3)
+  ✅ 29 comparações COM VALOR idênticas (3 registros × 11 campos; 4 nulo=nulo à parte)
+
+--- legal.contract_versions ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)
+
+--- legal.signatures ---
+  ✅ registros na origem: 2 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 12 comparações COM VALOR idênticas (2 registros × 6 campos; 0 nulo=nulo à parte)
+
+--- legal.signature_provider_routing ---
+  ✅ registros na origem: 2 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 8 comparações COM VALOR idênticas (2 registros × 4 campos; 0 nulo=nulo à parte)
+
+--- legal.contract_requirements ---
+  ✅ registros na origem: 5 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 5, destino 5)
+  ✅ 31 comparações COM VALOR idênticas (5 registros × 8 campos; 9 nulo=nulo à parte)
+
+--- legal.guarantees ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 7 comparações COM VALOR idênticas (1 registros × 7 campos; 0 nulo=nulo à parte)
+
+--- legal.inspections ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 8 comparações COM VALOR idênticas (1 registros × 8 campos; 0 nulo=nulo à parte)
+
+--- legal.inspection_items ---
+  ✅ registros na origem: 2 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 8 comparações COM VALOR idênticas (2 registros × 4 campos; 0 nulo=nulo à parte)
+
+--- legal.inspection_signatures ---
+  ✅ registros na origem: 2 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 10 comparações COM VALOR idênticas (2 registros × 5 campos; 0 nulo=nulo à parte)
+
+--- people.file_links ---
+  ✅ registros na origem: 2 (mínimo 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 8 comparações COM VALOR idênticas (2 registros × 4 campos; 0 nulo=nulo à parte)
+
+--- people.files (metadados) ---
+  ✅ registros na origem: 5 (mínimo 5)
+  ✅ mesma quantidade de registros (origem 5, destino 5)
+  ✅ 29 comparações COM VALOR idênticas (5 registros × 6 campos; 1 nulo=nulo à parte)
+
+--- legal.legal_cases ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 11 comparações COM VALOR idênticas (1 registros × 13 campos; 2 nulo=nulo à parte)
+
+--- legal.evidence_packages ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 4 comparações COM VALOR idênticas (1 registros × 4 campos; 0 nulo=nulo à parte)
+
+--- legal.evidence_package_access_log ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 4 comparações COM VALOR idênticas (1 registros × 4 campos; 0 nulo=nulo à parte)
+
+--- audit.audit_log (trilha dos objetos do drill) ---
+  ✅ registros na origem: 23 (mínimo 8)
+  ✅ mesma quantidade de registros (origem 23, destino 23)
+  ✅ 194 comparações COM VALOR idênticas (23 registros × 9 campos; 13 nulo=nulo à parte)
+
+--- finance.financial_entries ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 8 comparações COM VALOR idênticas (1 registros × 10 campos; 2 nulo=nulo à parte)
+
+--- finance.payment_intents ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 7 comparações COM VALOR idênticas (1 registros × 7 campos; 0 nulo=nulo à parte)
+
+--- finance.bank_payment_provider_routing ---
+  ✅ registros na origem: 1 (mínimo 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 4 comparações COM VALOR idênticas (1 registros × 4 campos; 0 nulo=nulo à parte)
+
+--- Bytes dos arquivos (storage em disco, cifrado em repouso) ---
+  ✅ fixtures registraram SHA-256 independente para 5 arquivo(s)
+  ✅ drill-contrato-v1.pdf: blob cifrado restaurado idêntico ao de origem (2826 bytes)
+  ✅ drill-contrato-v1.pdf: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (26264e6c9dd2c266…)
+  ✅ drill-contrato-v1.pdf: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (2791 bytes)
+  ✅ sbx-env-715d944a6e189b43-assinado.txt: blob cifrado restaurado idêntico ao de origem (168 bytes)
+  ❌ sbx-env-715d944a6e189b43-assinado.txt: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (1baa0b120595c7db…)
+  ✅ sbx-env-715d944a6e189b43-assinado.txt: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (133 bytes)
+  ✅ drill-documento-checklist.pdf: blob cifrado restaurado idêntico ao de origem (2824 bytes)
+  ✅ drill-documento-checklist.pdf: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (dc2b2e7075a888cc…)
+  ✅ drill-documento-checklist.pdf: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (2789 bytes)
+  ✅ drill-foto-1.png: blob cifrado restaurado idêntico ao de origem (4158 bytes)
+  ✅ drill-foto-1.png: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (889242c5b41d978b…)
+  ✅ drill-foto-1.png: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (4123 bytes)
+  ✅ drill-foto-2.png: blob cifrado restaurado idêntico ao de origem (4163 bytes)
+  ✅ drill-foto-2.png: SHA-256 do conteúdo restaurado = SHA-256 independente das fixtures (b064c3f4afbeacf5…)
+  ✅ drill-foto-2.png: e = checksum gravado pelo serviço; conteúdo não vazio e do tamanho gravado (4128 bytes)
+  ❌ todos os arquivos com SHA-256 independente foram encontrados e conferidos (4/5)
+
+--- Documento assinado (versão do contrato) ---
+  ✅ versão f7701c26-4b44-4a1d-9351-ce4ed95564bd tem documento assinado (signed_document_file_id preenchido)
+  ❌ bytes do documento assinado restaurado (133 bytes) = SHA-256 independente
+
+--- PDF do relatório de vistoria (bytea no banco) ---
+  ✅ vistoria f481c030-4175-4493-b370-b7272568872f: PDF restaurado não vazio (2022 bytes) e SHA-256 = report_hash
+
+--- Relações no banco restaurado ---
+  ✅ assinaturas a verificar (2)
+  ✅ assinatura 73a59761-3d2b-4ade-aab1-0faf687baa52 → versão f7701c26-4b44-4a1d-9351-ce4ed95564bd e signatário c60dc4ec-ae7a-4f40-928d-5f140a16e6b5 existem no destino
+  ✅ assinatura b2cb123b-8dae-43ed-a123-db6b206ac5ae → versão f7701c26-4b44-4a1d-9351-ce4ed95564bd e signatário a53a9cf1-3b29-4f90-91a4-613815d58f49 existem no destino
+  ✅ versão f7701c26-4b44-4a1d-9351-ce4ed95564bd → documento 1268c088-97d7-4a45-b4e5-cb3a0e23711d existe no destino
+  ✅ versão f7701c26-4b44-4a1d-9351-ce4ed95564bd → documento assinado 27bffa47-dafa-49d3-be98-fd65e2f2d923 existe no destino
+  ✅ versão f7701c26-4b44-4a1d-9351-ce4ed95564bd → modelo 1583aca0-0a65-4ddc-9ea2-df777c9fa366 existe no destino
+  ✅ vínculos polimórficos a verificar (2)
+  ✅ file_link 161d5a36-c1d6-4195-84dc-686da246d7d4: arquivo 8153fcb6-bca6-4746-aab8-5cf1bfdc8697 existe e InspectionItem 4272b897-d7b5-4602-b87c-72accb8f11e8 existe no destino
+  ✅ file_link 631d1f63-2e0f-460d-b518-8f20e95b2407: arquivo ea7bac99-4b80-4da9-a462-9d15b088e6fa existe e InspectionItem 5234ba83-31d3-45be-9cb5-4cb0831d387c existe no destino
+  ✅ dossiês a verificar (1)
+  ✅ dossiê e6d4b024-50d6-49f3-aff8-3ae12588f014: manifesto não vazio (4 itens)
+  ✅ dossiê: item CONTRACT_VERSION_DOCUMENT → referência f7701c26-4b44-4a1d-9351-ce4ed95564bd resolve para arquivo restaurado com o mesmo hash
+  ✅ dossiê: item REQUIREMENT_DOCUMENT → referência 5ef3805f-4d13-4f32-babf-6eb2ec9a56bc resolve para arquivo restaurado com o mesmo hash
+  ✅ dossiê: item INSPECTION_MEDIA → referência 161d5a36-c1d6-4195-84dc-686da246d7d4 resolve para arquivo restaurado com o mesmo hash
+  ✅ dossiê: item INSPECTION_MEDIA → referência 631d1f63-2e0f-460d-b518-8f20e95b2407 resolve para arquivo restaurado com o mesmo hash
+
+--- Imutabilidade da versão assinada no banco restaurado ---
+  ✅ trocar o documento assinado por outro arquivo → recusado pelo trigger do banco
+  ✅ remover o documento assinado → recusado pelo trigger do banco
+  ✅ alterar o conteúdo da versão → recusado pelo trigger do banco
+
+--- Exportação do dossiê a partir do banco restaurado (serviço real) ---
+  ✅ manifesto exportado (4 itens) recalculado = hash gravado ANTES do backup (9acb4a106b0bd80b…)
+  ✅ manifesto exportado não vazio (4 itens)
+  ✅ item CONTRACT_VERSION_DOCUMENT: bytes servidos pelo serviço de arquivos têm o hash do manifesto
+  ✅ item REQUIREMENT_DOCUMENT: bytes servidos pelo serviço de arquivos têm o hash do manifesto
+  ✅ item INSPECTION_MEDIA: bytes servidos pelo serviço de arquivos têm o hash do manifesto
+  ✅ item INSPECTION_MEDIA: bytes servidos pelo serviço de arquivos têm o hash do manifesto
+
+--- Permissões pós-restore: isolamento por tenant (RLS do banco restaurado) ---
+  ✅ tenant B exportando o dossiê de A → LEGAL_EVIDENCE_PACKAGE_NOT_FOUND
+  ✅ tenant B baixando arquivo de A → FILE_NOT_FOUND
+  ✅ tenant B não enxerga contrato/versão/assinaturas/arquivos/dossiê/pessoas de A (0/0/0/0/0/0)
+  ✅ controle positivo: tenant B enxerga o próprio contrato (1)
+  ✅ tenant B tentando alterar contrato de A → 0 linha(s) afetada(s)
+
+--- Permissões pós-restore: RBAC pela API real servindo o banco restaurado ---
+  ✅ perfil do tenant A SEM legal:read exportando o dossiê → HTTP 403
+  ✅ tenant B COM legal:read exportando o dossiê de A → HTTP 404
+  ❌ controle positivo: tenant A COM legal:read → HTTP 422, export íntegro contra o hash pré-backup
+  ✅ download do contrato assinado por perfil do tenant A SEM legal:read → HTTP 403
+  ✅ download do contrato assinado pelo tenant B COM legal:read → HTTP 404
+  ❌ controle positivo: perfil do tenant A COM legal:read baixa o contrato assinado → HTTP 200, bytes = SHA-256 independente
+  ❌ cadeia de custódia: só o export permitido gerou registro EXPORTED (1 → 1)
+
+--- Replay pós-restore do callback bancário pela rota do webhook com HMAC (F06) ---
+  ✅ estado restaurado: lançamento liquidado uma vez (1) por uma intenção executada (1)
+  ✅ callback com assinatura HMAC forjada → HTTP 401 (recusado)
+  ✅ entrega 1 do mesmo callback CONFIRMED com HMAC válido → HTTP 200, processado sem erro
+  ✅ entrega 2 do mesmo callback CONFIRMED com HMAC válido → HTTP 200, processado sem erro
+  ✅ nenhum lançamento novo (1 → 1), nenhum filho (0), lançamento intocado (lock_version 1 → 1), intenção continua uma só executada
+
+--- Adulteração deliberada de um arquivo restaurado ---
+  ✅ um byte alterado no blob restaurado é detectado no arquivo (autenticação AES-GCM / checksum)
+  ✅ a API recusa servir o arquivo adulterado → HTTP 409
+  ✅ marcador do formato cifrado alterado: a API recusa servir → HTTP 409
+
+=== Resumo por objeto ===
+  ✅ legal.contracts: 1 registro(s), 12 comparações com valor, 0 nulo=nulo — campos: group_id, company_id, property_id, contract_type, contract_number, status, total_value, starts_at, ends_at, lock_version, created_by, created_at
+  ✅ legal.contract_parties: 2 registro(s), 6 comparações com valor, 0 nulo=nulo — campos: contract_id, person_id, party_role
+  ✅ people.persons (partes e signatários): 2 registro(s), 14 comparações com valor, 0 nulo=nulo — campos: company_id, person_type, legal_name, birth_or_foundation_date, status, lock_version, created_by
+  ✅ real_estate.properties: 1 registro(s), 12 comparações com valor, 0 nulo=nulo — campos: company_id, title, internal_code, property_type, address_line, city, state, zip_code, description, bedrooms, parking_spots, lock_version
+  ✅ core.users (atores do drill): 2 registro(s), 10 comparações com valor, 0 nulo=nulo — campos: name, email, password_hash, status, mfa_enabled
+  ✅ legal.contract_clauses: 3 registro(s), 29 comparações com valor, 4 nulo=nulo — campos: code, title, body_text, category, version_number, is_active, condition_json, condition_status, condition_approved_by, condition_approved_at, created_by
+  ✅ legal.contract_versions: 1 registro(s), 12 comparações com valor, 0 nulo=nulo — campos: contract_id, version_number, document_file_id, signed_document_file_id, content_hash, content, template_id, clause_version_ids, condition_context, excluded_clauses, effective_from, created_by
+  ✅ legal.signatures: 2 registro(s), 12 comparações com valor, 0 nulo=nulo — campos: contract_version_id, person_id, status, signed_at, external_signature_id, provider_envelope_id
+  ✅ legal.signature_provider_routing: 2 registro(s), 8 comparações com valor, 0 nulo=nulo — campos: external_signature_id, provider_envelope_id, group_id, company_id
+  ✅ legal.contract_requirements: 5 registro(s), 31 comparações com valor, 9 nulo=nulo — campos: contract_id, requirement_code, description, requirement_type, status, satisfied_by_file_id, satisfied_at, waived_reason
+  ✅ legal.guarantees: 1 registro(s), 7 comparações com valor, 0 nulo=nulo — campos: contract_id, guarantee_type, value, status, starts_at, ends_at, lock_version
+  ✅ legal.inspections: 1 registro(s), 8 comparações com valor, 0 nulo=nulo — campos: contract_id, property_id, inspection_type, status, completed_at, report_hash, report_pdf_bytes, report_generated_at
+  ✅ legal.inspection_items: 2 registro(s), 8 comparações com valor, 0 nulo=nulo — campos: inspection_id, item_name, condition, notes
+  ✅ legal.inspection_signatures: 2 registro(s), 10 comparações com valor, 0 nulo=nulo — campos: inspection_id, party_role, signed_by_user_id, signature_hash, signed_at
+  ✅ people.file_links: 2 registro(s), 8 comparações com valor, 0 nulo=nulo — campos: file_id, related_entity_type, related_entity_id, purpose
+  ✅ people.files (metadados): 5 registro(s), 29 comparações com valor, 1 nulo=nulo — campos: storage_key, file_name, mime_type, size_bytes, checksum_sha256, uploaded_by_user_id
+  ✅ legal.legal_cases: 1 registro(s), 11 comparações com valor, 2 nulo=nulo — campos: contract_id, property_id, responsible_user_id, escalation_user_id, case_number, case_type, status, summary, phase, legal_hold, legal_hold_reason, legal_hold_set_by, legal_hold_set_at; sempre nulos: case_number, phase
+  ✅ legal.evidence_packages: 1 registro(s), 4 comparações com valor, 0 nulo=nulo — campos: legal_case_id, manifest_json, package_hash, created_by
+  ✅ legal.evidence_package_access_log: 1 registro(s), 4 comparações com valor, 0 nulo=nulo — campos: evidence_package_id, accessed_by_user_id, action, accessed_at
+  ✅ audit.audit_log (trilha dos objetos do drill): 23 registro(s), 194 comparações com valor, 13 nulo=nulo — campos: company_id, user_id, action, entity_type, entity_id, before_json, after_json, reason, occurred_at
+  ✅ finance.financial_entries: 1 registro(s), 8 comparações com valor, 2 nulo=nulo — campos: entry_type, nature, amount, status, due_at, settled_at, bank_account_id, idempotency_key, parent_entry_id, lock_version; sempre nulos: idempotency_key, parent_entry_id
+  ✅ finance.payment_intents: 1 registro(s), 7 comparações com valor, 0 nulo=nulo — campos: financial_entry_id, status, snapshot_hash, external_submission_id, external_status, idempotency_key, executed_at
+  ✅ finance.bank_payment_provider_routing: 1 registro(s), 4 comparações com valor, 0 nulo=nulo — campos: external_submission_id, payment_intent_id, group_id, company_id
+  ❌ arquivos (bytes): 5 registro(s), 20 comparações com valor, 0 nulo=nulo — campos: blob cifrado sha256 origem=destino, conteúdo decifrado sha256 = sha256 independente das fixtures, conteúdo decifrado sha256 = checksum_sha256 gravado, tamanho = size_bytes
+
+127/133 checagens aprovadas.
+❌ RESULTADO FINAL: falhas encontradas — ver acima.
+(node:26749) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+
+### 6. Teardown

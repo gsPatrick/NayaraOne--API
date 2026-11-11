@@ -1,0 +1,56 @@
+# estágio 7: idempotency_tests
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-7-0.xml test/finance.entries.test.js test/marco4.acceptance.batch2.test.js test/marco4.contract.gaps.test.js test/marco4.finance.batch3.test.js
+✔ FIN-004 idempotência: 2ª tentativa com a mesma chave é bloqueada (não duplica pagamento) (57.737292ms)
+✔ maker-checker: quem solicitou a aprovação não pode decidir a própria solicitação (13.2885ms)
+✔ maker-checker: segundo usuário aprova (risco HIGH exige 2 aprovações independentes) (921.572292ms)
+✔ listApprovalRequests resolve relatedEntityLabel com a descrição real do lançamento (achado M4-R01, auditoria rodada 4) (16.238417ms)
+✔ listApprovalRequests nunca deixa relatedEntityLabel vazio, mesmo quando o lançamento não tem descrição (achado #2, verificação complementar rodada 4) (12.043209ms)
+✔ listApprovalRequests gera um rótulo legível em português mesmo para uma entidade relacionada que não existe mais (3.275292ms)
+✔ conciliação: valores divergentes entre lançamento e extrato são bloqueados (12.357625ms)
+✔ conciliação: valores batendo concilia; conciliar de novo o mesmo lançamento é bloqueado (18.232625ms)
+✔ estorno: lançamento estornado não pode ser estornado de novo (15.108417ms)
+✔ M4-08 decideApprovalStep recusa aprovação com expectedLockVersion desatualizado (FINANCE_APPROVAL_STALE) (77.107666ms)
+✔ M4-12 createBankTransaction bloqueia reimportação da mesma transação (externalTransactionId único) (8.379667ms)
+✔ M4-23 createFinancialEntry com a mesma idempotencyKey não duplica o lançamento (9.205209ms)
+✔ M4-24 duas tentativas concorrentes do MESMO aprovador decidindo a mesma solicitação: só uma conta (35.14675ms)
+✔ contrato §11 scoreMatch aplica os pesos EXATOS do contrato (0.45/0.30/0.15/0.10) (73.475667ms)
+✔ contrato §11 suggestReconciliationMatches classifica AMBÍGUO quando há múltiplos candidatos fortes empatados, e nunca auto concilia nesse caso (26.390041ms)
+✔ contrato §11 autoReconcileSuggestion concilia automaticamente só nas classes EXATO/FORTE, sem ambiguidade (25.762208ms)
+✔ contrato §11 suggestReconciliationMatches devolve SEM CORRESPONDÊNCIA quando nenhum candidato chega a 0.45 (15.7715ms)
+✔ FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pago, e nunca apaga o histórico (106.732833ms)
+(node:26608) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o lançamento nem cria sucesso falso (97.578333ms)
+✔ FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvio de webhook) liquida só uma vez — nenhum ledger duplicado (82.199542ms)
+✔ FIN-005 resolveAntifraudThresholds usa os defaults hardcoded quando a regra não foi publicada para o tenant (fail closed, nunca enfraquece a proteção) (1.409542ms)
+✔ FIN-005 limiares de antifraude vêm do Motor de Regras (evaluateRule) quando a regra FIN-005 está publicada, ajustável via settings (6.587333ms)
+✔ FIN-005 flagAnomalousPayment continua detectando desvio histórico e primeiro-pagamento-alto com os limiares resolvidos pelo Motor de Regras (23.741ms)
+✔ FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imediato, com o limiar vindo do Motor de Regras (9.186292ms)
+✔ antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno em si); conciliação manual recorrente só sinaliza (55.259875ms)
+✔ FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovação prévia (payment_intent OU ApprovalRequest) (101.061625ms)
+✔ FIN-TS-007: importação de extrato em lote (CSV) é idempotente — reimportar o MESMO arquivo não duplica (15.002083ms)
+✔ FIN-TS-007: importação de extrato recusa CSV com cabeçalho errado ou linha sem externalTransactionId (3.793875ms)
+✔ FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequest aprovada invalida a liquidação direta (30.528375ms)
+✔ FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra é rejeitada (idempotente, não duplica ledger) (40.281625ms)
+✔ M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dias, conciliação pendente, comissão provisionada, repasse pendente, anomalia aberta) (87.521542ms)
+✔ M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de terceiro retido; marginBySector agrupa por centro de resultado (64.197833ms)
+✔ M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem por conta contábil (74.482958ms)
+✔ M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do snapshot (hash divergente) (18.1215ms)
+(node:26675) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida o lançamento (69.659459ms)
+✔ M4-16 dinheiro de terceiro exige referência e nunca entra na soma de receita própria (16.848041ms)
+✔ M4-18 createIntercompanyTransfer gera exatamente 2 lançamentos, um em cada empresa, com valores batendo (34.394459ms)
+✔ M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige motivo e libera de novo (65.556625ms)
+✔ M4-20 getWeeklyHealthReport bate com a soma manual dos lançamentos criados no teste (64.1385ms)
+✔ M4-25 replay do mesmo evento em transações distintas não duplica FinancialEntry (idempotencyKey) (17.628709ms)
+✔ M4-25 replay de liquidação não paga duas vezes o mesmo lançamento (31.546291ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 41
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4477.863459
+# estágio 7: idempotency_tests => VERDE
