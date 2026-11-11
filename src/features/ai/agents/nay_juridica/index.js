@@ -8,6 +8,7 @@ const { decorateDraft } = require('./juridica.output');
 const { legalNay } = require('./juridica.toolServices');
 const TOOL_DEFINITIONS = require('./tools');
 const { registerAgentScope } = require('../scope');
+const { registerJuridicaHooks, compareInstruction } = require('./juridica.hooks');
 
 const KEY = {
   DECIDIR_VALIDADE: 'ia.nay_juridica.proibicao.decidir_validade',
@@ -19,6 +20,7 @@ const KEY = {
 };
 
 function registerNayJuridica() {
+  registerJuridicaHooks(); // Fechamento M5 (§11): comparação de vistorias pedida pelo servidor
   registerAgentScope({
     code: policy.CODE,
     outOfScopeMessage: policy.OUT_OF_SCOPE_MESSAGE,
@@ -31,4 +33,4 @@ function registerNayJuridica() {
   });
 }
 
-module.exports = { ...policy, JURIDICA_SETTING_DEFAULTS, JURIDICA_SETTINGS_SCHEMA, TOOL_DEFINITIONS, legalNay, registerNayJuridica };
+module.exports = { ...policy, JURIDICA_SETTING_DEFAULTS, JURIDICA_SETTINGS_SCHEMA, TOOL_DEFINITIONS, legalNay, registerNayJuridica, compareInstruction };
