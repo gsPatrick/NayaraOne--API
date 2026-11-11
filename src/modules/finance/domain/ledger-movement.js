@@ -104,6 +104,8 @@ function buildPartialSettlementValues(entry, { appliedCents, settledAt, idempote
     thirdPartyOriginEntryId: entry.thirdPartyOriginEntryId || null,
     thirdPartyHolderPersonId: entry.thirdPartyHolderPersonId || null,
     thirdPartyReleaseType: entry.thirdPartyReleaseType || null,
+    // M6-97 (verificação independente do Marco 6): a baixa parcial carrega a obra do original, como o estorno já fazia.
+    constructionProjectId: entry.constructionProjectId || null,
     createdBy: actorUserId || null,
     updatedBy: actorUserId || null,
   };

@@ -8,13 +8,14 @@ const {
   BudgetLine,
   FinancialEntry,
   ChangeOrder,
+  Budget,
   LossRecord,
   Nonconformity,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { RULE_CODE: MARGIN_RULE_CODE } = require('./marginRules.service');
-const { accrualByProject } = require('./costBasis');
+const { accrualByProject, paidFinancialCostByProject } = require('./costBasis');
 
 // M6-42/M6-99 — read model de custo/saúde da obra. Cálculo REAL sobre dados já existentes no
 // banco (nenhum número inventado): tudo aqui é soma/derivação de linhas reais, lida sob o RLS
@@ -82,29 +83,15 @@ async function getProject(id, transaction) {
 async function computeMarginProjection(projectId, transaction, { extraApprovedChanges = 0 } = {}) {
   const project = await getProject(projectId, transaction);
 
-  const [budgetLines, settledEntries] = await Promise.all([
-    BudgetLine.findAll({ where: { projectId }, transaction }),
-    FinancialEntry.findAll({
-      where: { constructionProjectId: projectId, nature: 'PAYABLE', status: { [Op.in]: ['SETTLED', 'PARTIALLY_SETTLED'] } },
-      transaction,
-    }),
-  ]);
+  const budgetLines = await BudgetLine.findAll({ where: { projectId }, transaction });
 
   const committedCost = budgetLines.reduce((acc, line) => acc + toNumber(line.plannedAmount), 0);
   const approvedChangesBase = await getApprovedChangeOrdersTotal(projectId, transaction);
   const approvedChanges = approvedChangesBase + toNumber(extraApprovedChanges);
 
-  const settledIds = settledEntries.map((e) => e.id);
-  const partialSettlements = settledIds.length
-    ? await FinancialEntry.findAll({
-        where: { parentEntryId: { [Op.in]: settledIds }, status: 'SETTLED' },
-        transaction,
-      })
-    : [];
-  const paidFinancialCost = settledEntries.reduce((acc, entry) => {
-    if (entry.status === 'SETTLED') return acc + toNumber(entry.amount);
-    return acc;
-  }, 0) + partialSettlements.reduce((acc, s) => acc + toNumber(s.amount), 0);
+  // Custo pago: mesma regra do painel agregado (costBasis.paidFinancialCostByProject) — SETTLED pelo valor da obrigação,
+  // PARTIALLY_SETTLED só pelas baixas filhas; a baixa filha (que carrega a obra, M6-97) nunca é somada de novo.
+  const paidFinancialCost = (await paidFinancialCostByProject([projectId], transaction)).get(projectId) || 0;
   // Base CAIXA (padrão) ou COMPETENCIA da empresa (costBasis.js): em COMPETENCIA as obrigações em aberto da obra entram.
   const { base, open, accrual } = await accrualByProject([projectId], project, transaction);
   const actualFinancialCost = paidFinancialCost + (accrual.get(projectId) || 0);
@@ -216,8 +203,8 @@ async function computeMarginProjection(projectId, transaction, { extraApprovedCh
 /**
  * getProjectHealth — os 9 campos do M6-42 + KPIs adicionais do M6-99.
  *
- *  1. baselineBudget         — construction.projects.budget_amount (orçamento base aprovado da
- *                               obra); se nulo, soma construction.budget_lines.planned_amount.
+ *  1. baselineBudget         — baseline APROVADA (construction.budgets.baseline_amount, imutável); sem
+ *                               orçamento aprovado, projects.budget_amount; senão a soma das linhas.
  *  2. approvedChanges        — soma de Change Orders APROVADOS (fatia em paralelo — ver acima).
  *  3. committedCost          — soma de construction.budget_lines.planned_amount (o que já foi
  *                               comprometido/orçado por linha de custo).
@@ -266,9 +253,11 @@ async function getProjectHealth(projectId, transaction) {
     costBasis,
   } = await computeMarginProjection(projectId, transaction);
 
-  const baselineBudget = project.budgetAmount !== null && project.budgetAmount !== undefined
-    ? toNumber(project.budgetAmount)
-    : committedCost;
+  // M6-42/M6-17: baselineBudget é a baseline APROVADA (congelada, nunca muda); os aditivos ficam em approvedChanges.
+  const approvedBudget = await Budget.findOne({ where: { projectId, status: 'APPROVED' }, transaction });
+  let baselineBudget = committedCost;
+  if (approvedBudget && approvedBudget.baselineAmount !== null) baselineBudget = toNumber(approvedBudget.baselineAmount);
+  else if (project.budgetAmount !== null && project.budgetAmount !== undefined) baselineBudget = toNumber(project.budgetAmount);
 
   const [stages, pendingEntries] = await Promise.all([
     ProjectStage.findAll({ where: { projectId }, transaction }),
@@ -310,7 +299,7 @@ async function getProjectHealth(projectId, transaction) {
       !['FINAL_INSPECTION', 'DELIVERED', 'WARRANTY', 'CLOSED', 'CANCELLED'].includes(project.status)
   );
   const scheduleDelayDays = isOverdue
-    ? Math.ceil((Date.now() - new Date(project.endsAtPlanned).getTime()) / (24 * 60 * 60 * 1000))
+    ? Math.ceil((Date.now() - new Date(project.endsAtPlanned).getTime()) / (24 * 60 * 60 * 1000)) // scanner:allow — conversão de unidade de tempo (milissegundos), não regra de negócio
     : 0;
 
   const measurementsByStatus = measurements.reduce((acc, m) => {
@@ -364,6 +353,7 @@ async function getProjectHealth(projectId, transaction) {
     // --- Os 9 campos pedidos pelo M6-42 ---
     baselineBudget: round2(baselineBudget),
     approvedChanges: round2(approvedChanges),
+    currentApprovedBudget: round2(baselineBudget + approvedChanges), // baseline + aditivos aprovados (revisões)
     committedCost: round2(committedCost),
     actualFinancialCost: round2(actualFinancialCost),
     consumedInventoryCost: round2(consumedInventoryCost),

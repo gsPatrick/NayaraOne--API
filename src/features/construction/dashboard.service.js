@@ -5,6 +5,7 @@ const {
   Project,
   ProjectStage,
   BudgetLine,
+  Budget,
   ChangeOrder,
   StageMeasurement,
   Nonconformity,
@@ -72,8 +73,11 @@ async function getConstructionDashboard(filters, transaction) {
   ]);
 
   const committedCostTotal = budgetLines.reduce((acc, l) => acc + toNumber(l.plannedAmount), 0);
+  // M6-42/M6-17: a baseline é a APROVADA (imutável); aditivos aprovados só em approvedChangesTotal (nunca duas vezes).
+  const approvedBudgets = projectIds.length ? await Budget.findAll({ where: { projectId: { [Op.in]: projectIds }, status: 'APPROVED' }, transaction }) : [];
+  const baselineByProject = new Map(approvedBudgets.map((b) => [b.projectId, toNumber(b.baselineAmount)]));
   const baselineBudgetTotal = projects.reduce(
-    (acc, p) => acc + (p.budgetAmount !== null && p.budgetAmount !== undefined ? toNumber(p.budgetAmount) : 0),
+    (acc, p) => acc + (baselineByProject.has(p.id) ? baselineByProject.get(p.id) : toNumber(p.budgetAmount)),
     0
   );
   const approvedChangesTotal = changeOrders.reduce((acc, c) => acc + toNumber(c.budgetImpact), 0);
