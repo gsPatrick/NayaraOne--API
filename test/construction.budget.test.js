@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, settleFinancialEntryWithApproval } = require('./testHelpers');
+const { setThresholds, createMember } = require('./constructionM6vFixture');
 const { evidenceIds } = require('./constructionEvidenceFixture');
 const { Company } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
@@ -161,7 +162,7 @@ test('M6-17/M6-32: aprovar orçamento fora de DRAFT (já APPROVED) é bloqueado'
 // M6-06/M6-33/M6-82: Change Order aprovado é a ÚNICA forma de alterar valor de orçamento já
 // aprovado — este teste comprova que o caminho de exceção realmente funciona (não é só bloqueio).
 
-test('M6-33/M6-82: Change Order aprovado altera o baseline do orçamento já congelado', async () => {
+test('M6-33/M6-82: Change Order aprovado cria revisão nova do orçamento e a baseline aprovada fica congelada (Guia §3)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { project, budget } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
     assert.equal(Number(budget.baselineAmount), 1000);
@@ -177,16 +178,18 @@ test('M6-33/M6-82: Change Order aprovado altera o baseline do orçamento já con
     const decided = await changeOrdersService.decideChangeOrder(changeOrder.id, { decision: 'APPROVE' }, tenant.userId, transaction);
     assert.equal(decided.status, 'APPROVED');
 
+    // Verificação independente do Marco 6 (M6-17/M6-82): "Nunca UPDATE no baseline aprovado" — o aditivo vira
+    // revisão append-only; a baseline do orçamento e o orçamento da obra continuam os aprovados.
     const budgetsService2 = require('../src/features/construction/budgets.service');
     const reloaded = await budgetsService2.getBudget(budget.id, transaction);
-    assert.equal(Number(reloaded.baselineAmount), 1250);
-
-    // Bug real corrigido nesta auditoria (rodada 48, 2026-10-05): approveBudget (R46) já
-    // sincroniza project.budgetAmount, mas decideChangeOrder (única outra forma de mudar um
-    // baseline já aprovado) não replicava isso — project.budgetAmount ficava desatualizado
-    // depois do primeiro Change Order aprovado.
+    assert.equal(Number(reloaded.baselineAmount), 1000);
     const reloadedProject = await projectsService.getProject(project.id, transaction);
-    assert.equal(Number(reloadedProject.budgetAmount), 1250, 'project.budgetAmount precisa acompanhar o novo baseline aprovado pelo Change Order');
+    assert.equal(Number(reloadedProject.budgetAmount), 1000, 'orçamento da obra = baseline aprovada');
+    const revisoes = await changeOrdersService.listBudgetRevisions(project.id, transaction);
+    assert.equal(revisoes.length, 1);
+    assert.equal(Number(revisoes[0].previousTotal), 1000);
+    assert.equal(Number(revisoes[0].newTotal), 1250);
+    assert.equal(revisoes[0].changeOrderId, changeOrder.id);
   });
 });
 
@@ -460,6 +463,7 @@ test('M6-NOVO-15: economyAmount/commissionAmount são calculados a partir da mar
 // contando 100% como desperdício, podendo disparar falso alerta de "desperdício acima de 5%".
 test('M6-99: wastagePct abate material devolvido (RETURN), não conta a perda já corrigida', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
 
     const loss = await lossRecordsService.createLossRecord(

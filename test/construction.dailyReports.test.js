@@ -337,7 +337,7 @@ test('RDO aceita e preserva evidenceFileIds, inclusive numa correção (append-o
 // Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige "documentação
 // correspondente" vinculada ao prestador do dia — campo estava inteiramente ausente em
 // DailyWorker. Confirma que o RDO aceita e preserva documentFileIds por trabalhador.
-test('RDO aceita e preserva documentFileIds por trabalhador (documentação do prestador)', async () => {
+test('RDO aceita e preserva documentFileIds por trabalhador (documentação do prestador: arquivo real da empresa)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const suffix = uniqueSuffix();
     const project = await createTestProject(t, suffix);
@@ -346,7 +346,8 @@ test('RDO aceita e preserva documentFileIds por trabalhador (documentação do p
       tenant.userId,
       t
     );
-    const fakeDocId = '33333333-3333-3333-3333-333333333333';
+    // Verificação independente do Marco 6 (M6-08): documento é arquivo real (enviado e examinado pelo antivírus).
+    const [fakeDocId] = await evidenceIds(tenant, t, 1, 'documento-prestador');
 
     const created = await dailyReportsService.createDailyReport(
       project.id,

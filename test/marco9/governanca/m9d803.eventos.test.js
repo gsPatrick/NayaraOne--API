@@ -53,7 +53,7 @@ test('m9d803 project.stage.updated é publicado uma vez por mudança', { skip: s
     await calendarEvents.publishProjectStageUpdated(await stagesService.getProjectStage(stage.id, tx), tx);
     assert.equal((await list()).length, 2);
 
-    await stagesService.updateProjectStage(stage.id, { status: 'IN_PROGRESS', stageCode: 'REB', plannedCost: 100, startsAt: '2026-11-01T12:00:00Z' }, tenant.userId, tx);
+    await stagesService.updateProjectStage(stage.id, { status: 'IN_PROGRESS', stageCode: 'REB', plannedCost: 100, startsAt: '2026-11-01T12:00:00Z', responsibleUserId: tenant.userId }, tenant.userId, tx);
     await stagesService.updateProjectStage(stage.id, { status: 'DONE' }, tenant.userId, tx);
     rows = await list();
     assert.equal(rows.length, 4, 'IN_PROGRESS e DONE publicam um evento cada');
@@ -72,7 +72,12 @@ test('m9d803 etapa sem prazo e mudança de responsável da obra reemitem a etapa
     assert.equal(created.payloadJson.responsibleUserId, tenant.userId);
     assert.ok(created.payloadJson.endsAtPlanned, 'project.created leva o prazo final');
 
-    const [other] = await env.sequelize.query('SELECT id FROM core.users WHERE id <> :id LIMIT 1', { replacements: { id: tenant.userId }, transaction: tx, type: 'SELECT' });
+    // Verificação do Marco 6: o responsável da obra é membro ATIVO da empresa (companyRefs.js) — outro membro da mesma empresa.
+    const [other] = await env.sequelize.query(
+      `SELECT m.user_id AS id FROM core.user_memberships m JOIN core.users u ON u.id = m.user_id
+        WHERE m.company_id = :c AND m.user_id <> :id AND m.status = 'ACTIVE' AND u.status = 'ACTIVE' AND m.deleted_at IS NULL AND u.deleted_at IS NULL LIMIT 1`,
+      { replacements: { id: tenant.userId, c: tenant.companyId }, transaction: tx, type: 'SELECT' }
+    );
     await projectsService.updateProject(project.id, { responsibleUserId: other ? other.id : null }, tenant.userId, tx);
     assert.equal((await env.events(project.id, 'project.schedule.updated', tx)).length, 1);
     const rows = await env.events(stage.id, 'project.stage.updated', tx);

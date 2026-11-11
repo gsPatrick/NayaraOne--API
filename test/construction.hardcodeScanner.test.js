@@ -34,3 +34,43 @@ test('M6-96: margem mínima ou valor fixado em código é acusado (exit 1); "sca
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Verificação independente do Marco 6 (M6-96): o scanner não acusava os próprios exemplos que documenta — a regex de
+// valor exigia 5+ dígitos (1500, 2500 e 1000.0 passavam) e percentual inteiro (15) nunca era detectado.
+test('M6-96: 1500, 2500, 1000.0 e percentual inteiro (15) são acusados, um por linha, com a linha certa', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm6v-scanner-'));
+  try {
+    const linhas = [
+      '/* bloco de comentário',
+      '   em duas linhas */',
+      'const LIMITE = 1500;',
+      'const ALCADA_PADRAO = 1000.0;',
+      'const COMISSAO_FIXA = 2500;',
+      'const MARGEM_MINIMA = 15;',
+      'const regra = { minMarginPct: 15 };',
+      'const desconto = valor * 15 / 100;',
+      'const ok = Math.round(v * 100) / 100;',
+      'const ano = 2026;',
+      'module.exports = { LIMITE, ALCADA_PADRAO, COMISSAO_FIXA, MARGEM_MINIMA, regra, desconto, ok, ano };',
+    ];
+    fs.writeFileSync(path.join(dir, 'regra.js'), `${linhas.join('\n')}\n`);
+    const r = rodar(dir);
+    assert.equal(r.status, 1, r.stdout);
+    for (const [n, trecho] of [[3, '1500'], [4, '1000.0'], [5, '2500'], [6, 'MARGEM_MINIMA = 15'], [7, 'minMarginPct: 15'], [8, '15 / 100']]) {
+      assert.match(r.stderr, new RegExp(`linha ${n}: valor\\(es\\) suspeito\\(s\\) \\[[^\\]]*${trecho.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), `linha ${n} (${trecho}) não acusada:\n${r.stderr}`);
+    }
+    assert.doesNotMatch(r.stderr, /linha (9|10):/, 'arredondamento (x * 100 / 100) e ano não são regra de negócio');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('M6-96: o padrão da alçada (R$ 1.000,00) não está mais no código de Obras', () => {
+  const src = path.join(__dirname, '..', 'src', 'features', 'construction');
+  const achados = [];
+  for (const f of fs.readdirSync(src).filter((n) => n.endsWith('.js'))) {
+    const texto = fs.readFileSync(path.join(src, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+    if (/DEFAULT_MAX_AUTO_APPROVE_AMOUNT|\b1000(\.0+)?\b(?!\s*\*\s*60)/.test(texto.replace(/24 \* 60 \* 60 \* 1000|1000 \* 60 \* 60/g, ''))) achados.push(f);
+  }
+  assert.deepEqual(achados, []);
+});

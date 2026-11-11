@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
@@ -202,7 +203,7 @@ test('missingDailyReportJob: trabalhador com documentFileIds preenchido não ger
       project.id,
       withTenant({
         reportDate: checkDate,
-        workers: [{ personId: worker.id, role: 'Pedreiro', documentFileIds: ['11111111-1111-1111-1111-111111111111'] }],
+        workers: [{ personId: worker.id, role: 'Pedreiro', documentFileIds: await evidenceIds(tenant, transaction, 1, 'documento') }],
       }),
       tenant.userId,
       transaction

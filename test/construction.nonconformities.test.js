@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { setThresholds, createMember } = require('./constructionM6vFixture');
 const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const nonconformitiesService = require('../src/features/construction/nonconformities.service');
@@ -136,6 +137,7 @@ test('NC fecha normalmente quando after_evidence_file_ids está preenchido e nã
 // e só vira APPROVED com aprovação explícita.
 test('M6-29: perda de material acima da alçada exige aprovação explícita', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const project = await createTestProject(transaction);
     const threshold = await lossRecordsService.getApprovalThreshold(
       tenant.groupId,
@@ -303,6 +305,7 @@ test('upsertApprovalThreshold recusa valores Infinity/NaN/negativo', async () =>
 // M6-60: devolução de material gera movimento inverso e corrige o saldo calculado.
 test('M6-60: devolução de material corrige o saldo (movimento inverso real)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const project = await createTestProject(transaction);
     const materialDescription = 'Telha cerâmica colonial';
 
@@ -374,6 +377,7 @@ test('M6-60: devolução de material corrige o saldo (movimento inverso real)', 
 // (idempotencyKey diferente, quantidade diferente) continua funcionando normalmente.
 test('returnLossRecord: idempotencyKey é obrigatória, e reenviar a MESMA chave (retry) devolve o registro original — não duplica a devolução', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const project = await createTestProject(transaction);
     const loss = await lossRecordsService.createLossRecord(
       project.id,
