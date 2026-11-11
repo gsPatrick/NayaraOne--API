@@ -219,8 +219,9 @@ test('conciliação: valores batendo concilia; conciliar de novo o mesmo lançam
       tenant.userId,
       transaction
     );
+    // Segunda linha de extrato do mesmo valor: descrição diferente (a MESMA linha é barrada pelo UNIQUE do fingerprint, Guia §10).
     const bankTx2 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -150.5, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -150.5, transactionDate: new Date(), description: 'segunda linha' },
       tenant.userId,
       transaction
     );
