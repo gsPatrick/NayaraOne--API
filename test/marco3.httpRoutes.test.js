@@ -148,6 +148,7 @@ test('Marco 3 ponta a ponta via HTTP real: pessoa -> merge -> imóvel -> 2 ofert
     direction: 'OUTBOUND',
     authorType: 'EMPLOYEE',
     channel: 'WHATSAPP',
+    purpose: 'TRANSACTIONAL', // M3-18: mensagem saída para pessoa declara a finalidade
     body: 'Mensagem de teste via HTTP real.',
   });
   assert.equal(message.status, 201, JSON.stringify(message.body));

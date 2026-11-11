@@ -2,7 +2,9 @@
 
 const { Message, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('./carteira/carteira.scope');
 const { canContact } = require('../people/personConsents.service');
+const { resolveOutboundPurpose } = require('./messagePurpose');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
 const { businessDateKey } = require('../../utils/businessDate');
@@ -67,13 +69,16 @@ async function createMessage(payload, actorUserId, transaction) {
   // (OUTBOUND) para uma pessoa identificada — mensagem recebida do cliente (INBOUND) nunca é
   // bloqueada por consentimento (o cliente está livre pra falar com a empresa mesmo tendo
   // pedido pra não ser contatado).
+  // M3-18: mensagem SAÍDA para pessoa identificada declara a finalidade, que precisa estar na lista única da empresa; nunca vira
+  // TRANSACTIONAL por omissão (crm/messagePurpose.js).
+  const finalPurpose = await resolveOutboundPurpose({ direction: normalizedDirection, personId: person ? person.id : null, purpose }, { groupId, companyId }, transaction);
   if (person && normalizedDirection === 'OUTBOUND') {
-    const allowed = await canContact(person, normalizedChannel, purpose || 'TRANSACTIONAL', transaction);
+    const allowed = await canContact(person, normalizedChannel, finalPurpose, transaction);
     if (!allowed) {
       throw AppError.unprocessable(
         'Envio bloqueado: a pessoa optou por não receber contato (opt-out) neste canal/finalidade, ou a finalidade exige opt-in explícito ausente.',
         'MESSAGE_BLOCKED_BY_CONSENT',
-        { personId, channel: normalizedChannel, purpose: purpose || 'TRANSACTIONAL' }
+        { personId, channel: normalizedChannel, purpose: finalPurpose }
       );
     }
   }
@@ -112,7 +117,7 @@ async function createMessage(payload, actorUserId, transaction) {
       deliveryStatus: deliveryStatus || null,
       conversationId: conversationId || null,
       mediaQuarantineId: mediaQuarantineId || null,
-      purpose: purpose && /^[A-Za-z0-9_]{2,40}$/.test(String(purpose)) ? String(purpose).toUpperCase() : null, // M9-D230: a finalidade fica na mensagem; o consentimento é conferido de novo no envio
+      purpose: finalPurpose, // M9-D230 / M3-18: a finalidade fica na mensagem; o consentimento é conferido de novo no envio
       actionKey: actionKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -143,7 +148,8 @@ async function listMessages(transaction, filters = {}) {
   const where = {};
   if (filters.personId) where.personId = filters.personId;
   if (filters.opportunityId) where.opportunityId = filters.opportunityId;
-  return describeMedia(await Message.findAll({ where, order: [['created_at', 'DESC']], transaction }), transaction);
+  // CRM-TS-012: o corretor de escopo próprio só lista mensagens da carteira (filters.carteira vem da rota).
+  return describeMedia(await Message.findAll({ where: withScope(where, 'message', filters.carteira), order: [['created_at', 'DESC']], transaction }), transaction);
 }
 
 async function getMessage(id, transaction) {

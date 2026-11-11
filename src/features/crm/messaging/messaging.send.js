@@ -11,6 +11,7 @@ const { readMessagingParams } = require('./messaging.params');
 const { assertE164 } = require('./messaging.phone');
 const { readWhatsappParams } = require('./whatsapp.params');
 const { assertConsent } = require('./whatsapp.consent');
+const { resolveOutboundPurpose } = require('../messagePurpose');
 const { assertTemplate } = require('./whatsapp.templates');
 const { prepareOutboundMedia } = require('./whatsapp.media');
 const { ensureConversation, assertSessionWindow } = require('./whatsapp.conversation');
@@ -55,6 +56,8 @@ function buildPayload(input, operation, degraded, recipientName, conversationId,
 async function sendMessage(ctx, input, actorUserId, transaction, opts = {}) {
   const pedido = input || {};
   const operacaoPedida = checkInput(pedido);
+  // M3-18: o envio declara a finalidade (lista única da empresa); sem ela, 422 MESSAGE_PURPOSE_REQUIRED — nunca TRANSACTIONAL por omissão.
+  pedido.purpose = await resolveOutboundPurpose({ direction: 'OUTBOUND', personId: pedido.personId || null, purpose: pedido.purpose, required: true }, ctx, transaction);
   const params = await readMessagingParams(ctx, transaction);
   const wa = await readWhatsappParams(ctx, transaction);
   const to = assertE164(pedido.to, params.countryCode);
