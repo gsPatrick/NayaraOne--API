@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const stageDependenciesService = require('../src/features/construction/stageDependencies.service');
@@ -309,8 +310,8 @@ test('RDO aceita e preserva evidenceFileIds, inclusive numa correção (append-o
   await withRollbackTenantTransaction(tenant, async (t) => {
     const suffix = uniqueSuffix();
     const project = await createTestProject(t, suffix);
-    const fakeFileId1 = '11111111-1111-1111-1111-111111111111';
-    const fakeFileId2 = '22222222-2222-2222-2222-222222222222';
+    // Fotos reais (core.files): desde 10/11/2026 o RDO recusa ID de arquivo inexistente.
+    const [fakeFileId1, fakeFileId2] = await evidenceIds(tenant, t, 2, 'rdo');
 
     const created = await dailyReportsService.createDailyReport(
       project.id,

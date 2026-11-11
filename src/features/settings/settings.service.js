@@ -149,6 +149,10 @@ const SETTINGS_SCHEMA = {
   // pela sugestão de compra quando o item ainda não tem histórico real de reposição
   // (pedido de compra -> recebimento) para medir o prazo observado.
   'inventory.nay_default_lead_time_days': { type: 'integer', min: 0, max: 365 },
+  // Marco 6 (matriz de fechamento, 10/11/2026): base do custo financeiro realizado das obras — lacuna do Caderno
+  // (Construção §5 actual_financial_cost). CAIXA = só o pago (padrão, comportamento anterior); COMPETENCIA = soma as
+  // medições aprovadas ainda a pagar (src/features/construction/costBasis.js). Gravação exige construction:approve.
+  'construction.custo_realizado.base': { type: 'string', enum: ['CAIXA', 'COMPETENCIA'] },
   'billing.late_fee_percentage': { type: 'number', min: 0, max: 100 },
   'billing.interest_percentage': { type: 'number', min: 0, max: 100 },
   'billing.grace_period_days': { type: 'integer', min: 0 },

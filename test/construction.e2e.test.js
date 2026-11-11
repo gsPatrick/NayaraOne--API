@@ -9,6 +9,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const budgetsService = require('../src/features/construction/budgets.service');
@@ -220,8 +221,8 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
       {
         status: 'CLOSED',
         rootCauseCode: 'WORKMANSHIP',
-        beforeMediaFileIds: ['99999999-9999-9999-9999-999999999999'],
-        afterMediaFileIds: ['aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'],
+        beforeMediaFileIds: await evidenceIds(tenant, transaction),
+        afterMediaFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
