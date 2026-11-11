@@ -21,6 +21,8 @@
     { "route": "DELETE /opportunities/:id", "guard": "exempt", "reason": "Oportunidade de CRM não é um tipo retido; a pessoa dela é guardada e o lead tem a retenção (ANONYMIZE) sob a trava." },
     { "route": "DELETE /visits/:id", "guard": "exempt", "reason": "Visita agendada de CRM: fora dos tipos retidos." },
     { "route": "DELETE /radar/:id", "guard": "exempt", "reason": "Alerta do Radar: fora dos tipos retidos." },
+    { "route": "DELETE /crm/occurrences/:id", "guard": "exempt", "reason": "A rota nunca apaga: sempre recusa e grava a tentativa em audit.audit_log (feedback_case.delete_refused). Livro do Marco 3, §15: ocorrência de atendimento não se apaga." },
+    { "route": "DELETE /crm/feedback-cases/:id", "guard": "exempt", "reason": "A rota nunca apaga: sempre recusa e grava a tentativa em audit.audit_log (feedback_case.delete_refused). Livro do Marco 3, §15: ocorrência de atendimento não se apaga." },
     { "route": "DELETE /finance/cost-centers/:id", "guard": "exempt", "reason": "Cadastro contábil de apoio (centro de custo): não é documento fiscal nem obrigação; fora dos tipos retidos." },
     { "route": "DELETE /finance/result-centers/:id", "guard": "exempt", "reason": "Cadastro contábil de apoio (centro de resultado): fora dos tipos retidos." },
     { "route": "DELETE /finance/bank-accounts/:id", "guard": "exempt", "reason": "Conta bancária cadastrada: cadastro de apoio; fora dos tipos retidos (lançamentos e notas são retidos e não têm rota de exclusão)." },

@@ -503,6 +503,13 @@
    "status",
    "updated_by"
   ],
+  "analytics.metric_snapshot_confirmations": [
+   "confirmations",
+   "confirmed_at",
+   "metric_id",
+   "snapshot_id",
+   "source_confirmed_at"
+  ],
   "analytics.metric_snapshots": [
    "as_of_date",
    "calc_hash",
@@ -2289,6 +2296,7 @@
    "description",
    "escalated_at",
    "lock_version",
+   "message_id",
    "opportunity_id",
    "person_id",
    "resolution_notes",
@@ -2318,6 +2326,7 @@
    "failure_reason",
    "media_quarantine_id",
    "media_state",
+   "occurred_at",
    "opportunity_id",
    "person_id",
    "purpose",
@@ -2375,6 +2384,16 @@
    "valid_until",
    "value",
    "version_number"
+  ],
+  "crm.radar_matches": [
+   "criteria_fingerprint",
+   "criteria_version",
+   "explanation",
+   "failed_criteria",
+   "matched_criteria",
+   "property_id",
+   "radar_id",
+   "score"
   ],
   "crm.visits": [
    "agent_user_id",
@@ -2489,6 +2508,7 @@
    "created_by",
    "description",
    "external_transaction_id",
+   "fingerprint",
    "transaction_date",
    "updated_by"
   ],
@@ -2798,6 +2818,7 @@
    "created_by",
    "financial_entry_id",
    "match_group_id",
+   "match_method",
    "matched_at",
    "matched_by_user_id",
    "updated_by"
