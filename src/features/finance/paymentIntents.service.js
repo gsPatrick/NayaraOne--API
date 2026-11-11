@@ -152,8 +152,13 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
   const snapshot = buildEntrySnapshot(entry);
   let intent;
   try {
+  // §8.4 "Cria payment_intent + snapshot/hash + idempotency_key": a chave nasce aqui, estável e
+  // única por intenção; o envio ao banco reaproveita a mesma (bankPayments.prepareBankSubmission).
+  const intentId = crypto.randomUUID();
   intent = await PaymentIntent.create(
     {
+      id: intentId,
+      idempotencyKey: `payment-intent:${intentId}`,
       groupId: entry.groupId,
       companyId: entry.companyId,
       financialEntryId: entry.id,

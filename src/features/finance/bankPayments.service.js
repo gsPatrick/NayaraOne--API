@@ -101,7 +101,7 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
   intent.bankAccountId = bankAccountId;
   intent.beneficiarySnapshot = beneficiarySnapshot;
   intent.paymentMethod = paymentMethod;
-  intent.idempotencyKey = `payment-intent:${intent.id}`;
+  intent.idempotencyKey = intent.idempotencyKey || `payment-intent:${intent.id}`; // §8.4: a chave nasce na criação; intenção antiga sem chave recebe o mesmo formato de antes
   intent.status = 'SUBMITTING';
   intent.uncertainSince = new Date();
   intent.updatedBy = actor.userId || null;
