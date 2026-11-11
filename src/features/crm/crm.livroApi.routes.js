@@ -6,6 +6,7 @@ const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const crmController = require('./crm.controller');
 const radarController = require('../radar/radar.controller');
 const livro = require('./crm.livroApi.controller');
+const { requireOpportunityInScope } = require('./opportunityScope.guard');
 
 /**
  * Guia do Marcelo §13 "APIs mínimas" do Marco 3, no caminho exato do livro. Os caminhos de sempre continuam valendo
@@ -18,9 +19,9 @@ const scoped = [authMiddleware, tenantMiddleware];
 // §18: troca de responsável em massa com permissão específica (antes de '/crm/opportunities/:id/...').
 crmLivroRouter.post('/crm/opportunities/reassign', scoped, requirePermission('crm:opportunities:reassign'), livro.reassignOwners);
 crmLivroRouter.post('/crm/opportunities', scoped, requirePermission('crm:opportunities:create'), crmController.createOpportunity);
-crmLivroRouter.post('/crm/opportunities/:id/interactions', scoped, requirePermission('crm:messages:create'), livro.recordInteraction);
-crmLivroRouter.post('/crm/opportunities/:id/visits', scoped, requirePermission('crm:visits:create'), livro.scheduleVisit);
-crmLivroRouter.post('/crm/opportunities/:id/lost', scoped, requirePermission('crm:opportunities:update'), livro.markLost);
+crmLivroRouter.post('/crm/opportunities/:id/interactions', scoped, requireOpportunityInScope, requirePermission('crm:messages:create'), livro.recordInteraction);
+crmLivroRouter.post('/crm/opportunities/:id/visits', scoped, requireOpportunityInScope, requirePermission('crm:visits:create'), livro.scheduleVisit);
+crmLivroRouter.post('/crm/opportunities/:id/lost', scoped, requireOpportunityInScope, requirePermission('crm:opportunities:update'), livro.markLost);
 crmLivroRouter.post('/crm/radars', scoped, requirePermission('radar:create'), radarController.create);
 crmLivroRouter.get('/crm/radars/:id/matches', scoped, requirePermission('radar:read'), radarController.matches);
 crmLivroRouter.post('/crm/occurrences', scoped, requirePermission('crm:feedback:create'), crmController.createFeedbackCase);

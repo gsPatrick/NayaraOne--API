@@ -204,3 +204,21 @@ test('§18/CRM-TS-013: exportar as oportunidades (base de clientes) exige a perm
   assert.equal(job.classification, 'HIGH');
   assert.equal(job.status, 'BLOCKED');
 });
+
+test('§18/CRM-TS-012: corretor (escopo próprio) não abre, não edita nem vê a linha do tempo de oportunidade de outra carteira pelo id', async () => {
+  const claims = { sub: tenant.userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['corretor'] };
+  const corretor = signAccessToken({ ...claims, permissions: ['people:create', 'people:read', 'crm:opportunities:create', 'crm:opportunities:read', 'crm:opportunities:read:own', 'crm:opportunities:update', 'crm:messages:create'] });
+  const personId = await pessoa('Carteira escopo');
+  const minha = await oportunidade(personId, { ownerUserId: tenant.userId });
+  const alheia = await oportunidade(personId, { ownerUserId: null });
+  assert.equal((await http('GET', `/opportunities/${minha.id}`, undefined, corretor)).status, 200);
+  for (const [metodo, rota, corpo] of [['GET', `/opportunities/${alheia.id}`], ['PATCH', `/opportunities/${alheia.id}`, { nextAction: 'x' }], ['GET', `/opportunities/${alheia.id}/timeline`], ['POST', `/crm/opportunities/${alheia.id}/interactions`, { channel: 'PHONE', direction: 'OUT', summary: 'x' }]]) {
+    const r = await http(metodo, rota, corpo, corretor);
+    assert.equal(r.status, 404, `${metodo} ${rota}: ${JSON.stringify(r.body)}`);
+    assert.equal(r.body.error.code, 'OPPORTUNITY_NOT_FOUND');
+  }
+  const lista = await http('GET', '/opportunities', undefined, corretor);
+  assert.ok(lista.body.data.some((o) => o.id === minha.id));
+  assert.ok(!lista.body.data.some((o) => o.id === alheia.id));
+  assert.equal((await http('GET', `/opportunities/${alheia.id}`)).status, 200, 'gestor continua vendo tudo');
+});
