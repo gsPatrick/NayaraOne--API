@@ -79,7 +79,8 @@ test('m9d802 VISIT: visita agendada, reagendada, concluída e cancelada na orige
   await run(async (tx) => {
     const prop = await origin.property(T(), tx);
     const lead = await origin.person(T(), tx);
-    const create = (extra = {}) => visits.createVisit({ groupId: T().groupId, companyId: T().companyId, propertyId: prop.id, personId: lead.id, agentUserId: T().userId, scheduledAt: origin.future(2), ...extra }, T().userId, tx);
+    const opp = await origin.opportunity(T(), tx); // M3-13: visita é sempre de uma oportunidade
+    const create = (extra = {}) => visits.createVisit({ groupId: T().groupId, companyId: T().companyId, propertyId: prop.id, opportunityId: opp.id, personId: lead.id, agentUserId: T().userId, scheduledAt: origin.future(2), ...extra }, T().userId, tx);
     const visit = await create();
     let item = await seen('VISIT', visit.id, tx);
     assert.equal(item.status, 'OPEN'); assertLink(item);

@@ -66,10 +66,10 @@ test('m9d633 crm.broker_capture fica DEGRADED com valor nulo quando a regra de q
 });
 
 test('m9d633 crm.broker_conversion fica INCOMPLETE com valor nulo quando a regra de qualidade falha', async () => {
-  const mk = (stage) => src.opportunity(env, env.cX, { owner: ana, stage, created: sc.iso('2026-09-01'), closedAt: sc.iso('2026-10-15'), lostReason: stage === 'CLOSED_LOST' ? 'PRICE' : null });
-  await mk('CLOSED_WON');
-  await mk('CLOSED_LOST');
-  await mk('CLOSED_LOST');
+  const mk = (stage) => src.opportunity(env, env.cX, { owner: ana, stage, created: sc.iso('2026-09-01'), closedAt: sc.iso('2026-10-15'), lostReason: stage === 'LOST' ? 'PRICE' : null });
+  await mk('WON');
+  await mk('LOST');
+  await mk('LOST');
   const bad = await run('crm.broker_conversion', 'rm_broker_performance');
   assert.equal(bad.status, 'INCOMPLETE', '3 fechadas, abaixo da amostra mínima de 5');
   assert.ok(isNull(bad.value));

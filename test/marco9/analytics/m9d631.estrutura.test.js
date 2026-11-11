@@ -32,10 +32,10 @@ async function scenario(t) {
   const closed = {};
   for (let i = 0; i < 3; i += 1) ids.push(await opp(env, t, { owner: broker, stage: 'NEW', created: at(2), updated: at(27), nextAction: 'Ligar', nextActionDueAt: '2026-11-05T15:00:00Z' }));
   ids.push(await opp(env, t, { owner: broker, stage: 'VISIT_SCHEDULED', created: at(2), updated: at(20) }));
-  for (const [stage, day] of [['CLOSED_WON', 10], ['CLOSED_LOST', 11]]) {
+  for (const [stage, day] of [['WON', 10], ['LOST', 11]]) {
     const id = await opp(env, t, { owner: broker, stage, created: at(2), closedAt: at(day), lostReason: 'PRICE' });
     ids.push(id);
-    closed[id] = stage === 'CLOSED_WON' ? 'won' : 'lost';
+    closed[id] = stage === 'WON' ? 'won' : 'lost';
   }
   await kit.refreshAll(t, ids, closed);
   return { ids, closed, broker };
@@ -85,15 +85,15 @@ test('m9d631 os parâmetros existem no SETTINGS_SCHEMA, rejeitam valor inválido
   assert.doesNotThrow(() => validate('k', 'NEW,QUALIFIED,PROPOSAL'));
   for (const bad of ['', 'NEW,NEW', 'NEW,,X', '1ABC', 'new stage']) assert.throws(() => validate('k', bad), (e) => e.code === 'SETTING_INVALID_VALUE', bad);
   const t = env.cX;
-  await kit.setSetting(env, t, 'analytics.comercial.ordem_estagios', 'VISIT_SCHEDULED,NEW,CLOSED_LOST,CLOSED_WON');
+  await kit.setSetting(env, t, 'analytics.comercial.ordem_estagios', 'VISIT_SCHEDULED,NEW,LOST,WON');
   const entries = await kit.inTx(t, {}, (tx) => buildCrmKpiEntries({ companyId: t.companyId, groupId: t.groupId }, TODAY, tx));
   const stages = entries.find((e) => e.code === 'crm.opportunities_by_stage').result.details.stages.map((s) => s.stage);
-  assert.deepEqual(stages, ['VISIT_SCHEDULED', 'NEW', 'CLOSED_LOST', 'CLOSED_WON', 'WITHDRAWN'], 'a ordem do administrador vale; o que ficou fora vai depois');
+  assert.deepEqual(stages, ['VISIT_SCHEDULED', 'NEW', 'LOST', 'WON', 'WITHDRAWN'], 'a ordem do administrador vale; o que ficou fora vai depois');
 });
 
 test('m9d631 replay do mesmo evento não altera o valor', async () => { // helper compartilhado assertReplayIdempotent (M9-D607)
   const t = env.cX;
-  const id = await opp(env, t, { owner: src.uuid(), stage: 'CLOSED_WON', created: at(2), closedAt: at(12) });
+  const id = await opp(env, t, { owner: src.uuid(), stage: 'WON', created: at(2), closedAt: at(12) });
   const event = kit.makeEvent(t, 'crm.opportunity.won', { id });
   const readRows = async () => [...await kit.rows(env, 'rm_crm_outcome', t), ...await kit.rows(env, 'rm_crm_opportunity_stage', t), ...await kit.rows(env, 'rm_crm_next_action', t)];
   await asserts.assertReplayIdempotent({ applyEvent: () => kit.apply(t, event), readRow: readRows });

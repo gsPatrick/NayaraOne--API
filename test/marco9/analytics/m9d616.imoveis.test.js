@@ -50,7 +50,7 @@ test('m9d616 cruzamentos do Radar por dia e os que viraram negócio', async () =
   const [p1, p2, pr1, pr2] = [src.uuid(), src.uuid(), src.uuid(), src.uuid()];
   await src.radarEvent(env, env.cX, { person: p1, property: pr1, at: iso('2026-10-27') });
   await src.radarEvent(env, env.cX, { person: p2, property: pr2, at: iso('2026-10-27') });
-  await src.opportunity(env, env.cX, { person: p1, property: pr1, stage: 'CLOSED_WON', closedAt: iso('2026-10-28') });
+  await src.opportunity(env, env.cX, { person: p1, property: pr1, stage: 'WON', closedAt: iso('2026-10-28') });
   await src.opportunity(env, env.cX, { person: p2, property: pr2, stage: 'NEW' });
   await apply(env.cX, makeEvent(env.cX, 'radar.matched', { radarId: src.uuid(), personId: p1, propertyId: pr1 }, { occurredAt: new Date(iso('2026-10-27')) }));
   const r = pick(await rows(env, 'rm_radar_matches', env.cX), { day: '2026-10-27' });
@@ -64,7 +64,7 @@ test('m9d616 captação, leads recebidos e ganhos por corretor e mês', async ()
   await src.property(env, env.cX, { createdBy: b, created: iso('2026-09-06') });
   await src.opportunity(env, env.cX, { owner: b, created: iso('2026-10-02') });
   await src.opportunity(env, env.cX, { owner: b, created: iso('2026-10-03') });
-  const won = await src.opportunity(env, env.cX, { owner: b, created: iso('2026-10-04'), stage: 'CLOSED_WON', closedAt: iso('2026-10-20') });
+  const won = await src.opportunity(env, env.cX, { owner: b, created: iso('2026-10-04'), stage: 'WON', closedAt: iso('2026-10-20') });
   await apply(env.cX, makeEvent(env.cX, 'property.created', { id: prop }));
   await apply(env.cX, makeEvent(env.cX, 'crm.opportunity.won', { id: won }));
   const list = (await rows(env, 'rm_broker_performance', env.cX)).filter((r) => r.broker_id === b);

@@ -1,7 +1,7 @@
 'use strict';
 
 // Livro do Marco 3 §10 (Funil CRM): NEW, QUALIFIED, MATCHING, VISIT_SCHEDULED, VISITED, PROPOSAL, FINANCING, CONTRACT,
-// WON, LOST, NURTURE. O funil é catálogo fechado; WON/LOST do livro são gravados como CLOSED_WON/CLOSED_LOST.
+// WON, LOST, NURTURE. O funil é catálogo fechado e grava os códigos do livro (DI-M3CA-3); desistência é LOST com motivo.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -29,9 +29,9 @@ function create(t, personId, extra = {}) {
 }
 const invalid = (err) => err.statusCode === 400 && err.code === 'OPPORTUNITY_STAGE_INVALID';
 
-test('funil do livro: catálogo tem exatamente os 9 estágios ativos do §10 e os terminais CLOSED_WON/CLOSED_LOST/WITHDRAWN', () => {
+test('funil do livro: catálogo tem exatamente os 9 estágios ativos do §10 e os terminais WON/LOST', () => {
   assert.deepEqual([...ACTIVE_STAGES], ['NEW', 'QUALIFIED', 'MATCHING', 'VISIT_SCHEDULED', 'VISITED', 'PROPOSAL', 'FINANCING', 'CONTRACT', 'NURTURE']);
-  assert.deepEqual(STAGES.slice(ACTIVE_STAGES.length), ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN']);
+  assert.deepEqual(STAGES.slice(ACTIVE_STAGES.length), ['WON', 'LOST']);
 });
 
 test('funil do livro: sem estágio a oportunidade nasce NEW; cada estágio ativo do livro é aceito na criação e na mudança', async () => {
@@ -52,20 +52,20 @@ test('funil do livro: sem estágio a oportunidade nasce NEW; cada estágio ativo
   });
 });
 
-test('funil do livro: WON e LOST viram CLOSED_WON e CLOSED_LOST, com o motivo estruturado obrigatório', async () => {
+test('funil do livro: WON e LOST gravados com o código do livro, com o motivo estruturado obrigatório', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const person = await lead(t);
     const a = await create(t, person.id, { stage: 'PROPOSAL' });
     await assert.rejects(opportunitiesService.updateOpportunity(a.id, { stage: 'WON' }, tenant.userId, t), (err) => err.code === 'OPPORTUNITY_OUTCOME_REASON_REQUIRED');
     const ganha = await opportunitiesService.updateOpportunity(a.id, { stage: 'WON', wonReason: 'PRICE_ACCEPTED' }, tenant.userId, t);
-    assert.equal(ganha.stage, 'CLOSED_WON');
+    assert.equal(ganha.stage, 'WON');
     assert.ok(ganha.closedAt);
     const b = await create(t, person.id, { stage: 'VISITED' });
     await assert.rejects(opportunitiesService.updateOpportunity(b.id, { stage: 'lost' }, tenant.userId, t), (err) => err.code === 'OPPORTUNITY_OUTCOME_REASON_REQUIRED');
     const perdida = await opportunitiesService.updateOpportunity(b.id, { stage: 'lost', lostReason: 'COMPETITOR' }, tenant.userId, t);
-    assert.equal(perdida.stage, 'CLOSED_LOST');
+    assert.equal(perdida.stage, 'LOST');
     const c = await opportunitiesService.createOpportunity({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'LOST', lostReason: 'LOCATION' }, tenant.userId, t);
-    assert.equal(c.stage, 'CLOSED_LOST');
+    assert.equal(c.stage, 'LOST');
   });
 });
 

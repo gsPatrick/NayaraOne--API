@@ -17,6 +17,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { createTestProperty } = require('./helpers/m3caCrm');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
@@ -76,6 +77,8 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
+      // M3-13: proposta e visita são sempre da oportunidade e de um imóvel; a oportunidade de teste já nasce com o imóvel de interesse.
+      propertyId: extra.propertyId !== undefined ? extra.propertyId : (await createTestProperty(tenant, transaction)).id,
       ...extra,
     },
     tenant.userId,
@@ -126,7 +129,8 @@ test('ADV-C02 forjar companyId no payload da oportunidade (plantar lead na empre
     await assert.rejects(
       () => createActiveOpportunity(transaction, person.id, { companyId: vizinha.id }),
       (err) => {
-        assert.match(String(err.message), /row-level security|política|policy/i);
+        // Barrado antes do banco quando o responsável (quem cria) não é membro da empresa vizinha (CRMX-006, DI-M3CA-1); senão, pelo RLS.
+        assert.match(String(err.message), /row-level security|política|policy|responsável/i);
         return true;
       }
     );
@@ -492,10 +496,12 @@ test('ADV-C13 visita agendada para o PASSADO é recusada, mas registrar uma visi
       tenant.userId,
       transaction
     );
+    const opportunity = await createActiveOpportunity(transaction, person.id, { propertyId: property.id });
     const base = {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       propertyId: property.id,
+      opportunityId: opportunity.id, // M3-13: visita é sempre de uma oportunidade
       personId: person.id,
     };
 
@@ -527,7 +533,7 @@ test('ADV-C13 visita agendada para o PASSADO é recusada, mas registrar uma visi
   });
 });
 
-test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho errado) não passa', async () => {
+test('ADV-C14 fechar como WON enviando lostReason (motivo do desfecho errado) não passa', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await createLead(transaction, `ADV C14 ${suffix}`);
@@ -537,7 +543,7 @@ test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho err
       () =>
         opportunitiesService.updateOpportunity(
           opportunity.id,
-          { stage: 'CLOSED_WON', lostReason: 'PRICE' },
+          { stage: 'WON', lostReason: 'PRICE' },
           tenant.userId,
           transaction
         ),

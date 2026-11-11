@@ -116,7 +116,7 @@ test('Eventos mínimos: crm.opportunity.won e crm.opportunity.lost são publicad
       tenant.userId,
       transaction
     );
-    await opportunitiesService.updateOpportunity(oppWon.id, { stage: 'CLOSED_WON', wonReason: 'PRICE_ACCEPTED' }, tenant.userId, transaction);
+    await opportunitiesService.updateOpportunity(oppWon.id, { stage: 'WON', wonReason: 'PRICE_ACCEPTED' }, tenant.userId, transaction);
     const wonEvent = await findEvent('crm.opportunity.won', oppWon.id, transaction);
     assert.ok(wonEvent, 'esperava um evento crm.opportunity.won no outbox');
 
@@ -137,7 +137,7 @@ test('Eventos mínimos: crm.opportunity.won e crm.opportunity.lost são publicad
       tenant.userId,
       transaction
     );
-    await opportunitiesService.updateOpportunity(oppLost.id, { stage: 'CLOSED_LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, transaction);
+    await opportunitiesService.updateOpportunity(oppLost.id, { stage: 'LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, transaction);
     const lostEvent = await findEvent('crm.opportunity.lost', oppLost.id, transaction);
     assert.ok(lostEvent, 'esperava um evento crm.opportunity.lost no outbox');
   });
@@ -194,6 +194,7 @@ test('Eventos mínimos: crm.visit.completed é publicado ao concluir (DONE) uma 
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         propertyId: property.id,
+        opportunityId: (await opportunitiesService.createOpportunity({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, nextAction: 'Visitar', nextActionDueAt: new Date(Date.now() + 86400000) }, tenant.userId, transaction)).id,
         personId: person.id,
         scheduledAt: new Date(Date.now() + 3600000),
         status: 'SCHEDULED',
@@ -238,6 +239,7 @@ test('Eventos mínimos: registrar visita já concluída (status DONE na criaçã
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         propertyId: property.id,
+        opportunityId: (await opportunitiesService.createOpportunity({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, nextAction: 'Visitar', nextActionDueAt: new Date(Date.now() + 86400000) }, tenant.userId, transaction)).id,
         personId: person.id,
         scheduledAt: new Date(Date.now() - 3600000),
         status: 'DONE',

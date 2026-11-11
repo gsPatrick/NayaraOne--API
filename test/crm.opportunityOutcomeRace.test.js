@@ -3,9 +3,9 @@
 /**
  * CICLO 4 (Marco 3): os 6 eventos mínimos novos da seção 17 do Caderno (commit bb9fa88)
  * incluem crm.opportunity.lost/won, disparados em updateOpportunity() na transição para
- * CLOSED_LOST/CLOSED_WON. Esse arquivo prova, com corrida REAL (duas transações commitadas em
+ * LOST/WON. Esse arquivo prova, com corrida REAL (duas transações commitadas em
  * paralelo, não chamadas sequenciais), que duas tentativas simultâneas de fechar a MESMA
- * oportunidade como CLOSED_LOST não duplicam o evento no outbox nem corrompem o estado — o
+ * oportunidade como LOST não duplicam o evento no outbox nem corrompem o estado — o
  * FOR UPDATE já existente em getOpportunity(..., { lock: true }) deve serializar a segunda
  * chamada atrás da primeira.
  */
@@ -43,7 +43,7 @@ async function withCommittedTenantTransaction(tenantCtx, fn) {
   }
 }
 
-test('crm.opportunity.lost: duas chamadas CONCORRENTES fechando a mesma oportunidade como CLOSED_LOST não duplicam o evento no outbox', async () => {
+test('crm.opportunity.lost: duas chamadas CONCORRENTES fechando a mesma oportunidade como LOST não duplicam o evento no outbox', async () => {
   const suffix = uniqueSuffix();
   const created = {};
 
@@ -66,23 +66,23 @@ test('crm.opportunity.lost: duas chamadas CONCORRENTES fechando a mesma oportuni
     );
 
     // Corrida REAL: duas transações commitadas em paralelo, ambas tentando fechar a MESMA
-    // oportunidade como CLOSED_LOST com o mesmo motivo.
+    // oportunidade como LOST com o mesmo motivo.
     const results = await Promise.allSettled([
       withCommittedTenantTransaction(tenant, (t) =>
-        opportunityService.updateOpportunity(created.opportunityId, { stage: 'CLOSED_LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, t)
+        opportunityService.updateOpportunity(created.opportunityId, { stage: 'LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, t)
       ),
       withCommittedTenantTransaction(tenant, (t) =>
-        opportunityService.updateOpportunity(created.opportunityId, { stage: 'CLOSED_LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, t)
+        opportunityService.updateOpportunity(created.opportunityId, { stage: 'LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, t)
       ),
     ]);
 
     // Ambas devem ter sucesso (o lock serializa, não rejeita) — a segunda só reafirma um
-    // estado que já é CLOSED_LOST depois da primeira commitar.
+    // estado que já é LOST depois da primeira commitar.
     const okCount = results.filter((r) => r.status === 'fulfilled').length;
     assert.equal(okCount, 2, 'as duas chamadas devem ter sucesso — FOR UPDATE serializa, não rejeita');
 
     const finalOpportunity = await withCommittedTenantTransaction(tenant, (t) => Opportunity.findByPk(created.opportunityId, { transaction: t }));
-    assert.equal(finalOpportunity.stage, 'CLOSED_LOST');
+    assert.equal(finalOpportunity.stage, 'LOST');
 
     const lostEvents = await withCommittedTenantTransaction(tenant, (t) =>
       OutboxEvent.findAll({

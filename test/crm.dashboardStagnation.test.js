@@ -96,7 +96,7 @@ test('Painel CRM: oportunidade com nextAction no futuro NÃO aparece em staleOpp
   });
 });
 
-test('Painel CRM: oportunidade FECHADA (CLOSED_WON/LOST) nunca entra em staleOpportunities mesmo com tarefa vencida', async () => {
+test('Painel CRM: oportunidade FECHADA (WON/LOST) nunca entra em staleOpportunities mesmo com tarefa vencida', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await peopleService.createPerson(
@@ -116,10 +116,10 @@ test('Painel CRM: oportunidade FECHADA (CLOSED_WON/LOST) nunca entra em staleOpp
       tenant.userId,
       transaction
     );
-    await opportunitiesService.updateOpportunity(opportunity.id, { stage: 'CLOSED_LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, transaction);
+    await opportunitiesService.updateOpportunity(opportunity.id, { stage: 'LOST', lostReason: 'PRICE_TOO_HIGH' }, tenant.userId, transaction);
 
     const dashboard = await dashboardService.getCrmDashboard({ personId: person.id }, transaction);
     assert.equal(dashboard.staleOpportunities.count, 0);
-    assert.equal(dashboard.avgTimeInStageByStageDays.CLOSED_LOST, undefined, 'stage fechado não entra na métrica de tempo parado');
+    assert.equal(dashboard.avgTimeInStageByStageDays.LOST, undefined, 'stage fechado não entra na métrica de tempo parado');
   });
 });

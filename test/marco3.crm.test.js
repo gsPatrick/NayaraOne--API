@@ -18,6 +18,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { createTestProperty } = require('./helpers/m3caCrm');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
@@ -63,6 +64,8 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
+      // M3-13: proposta e visita são sempre da oportunidade e de um imóvel; a oportunidade de teste já nasce com o imóvel de interesse.
+      propertyId: extra.propertyId !== undefined ? extra.propertyId : (await createTestProperty(tenant, transaction)).id,
       ...extra,
     },
     tenant.userId,
@@ -74,14 +77,14 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
 // M3-12 — Motivos estruturados de ganho, perda e desistência
 // ---------------------------------------------------------------------------
 
-test('M3-12: fechar como CLOSED_WON sem wonReason é rejeitado (422)', async () => {
+test('M3-12: fechar como WON sem wonReason é rejeitado (422)', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await createLead(transaction, `Lead M312 A ${suffix}`);
     const opportunity = await createActiveOpportunity(transaction, person.id);
 
     await assert.rejects(
-      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'CLOSED_WON' }, tenant.userId, transaction),
+      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'WON' }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.statusCode, 422);
@@ -92,14 +95,14 @@ test('M3-12: fechar como CLOSED_WON sem wonReason é rejeitado (422)', async () 
   });
 });
 
-test('M3-12: fechar como CLOSED_LOST sem lostReason é rejeitado (422)', async () => {
+test('M3-12: fechar como LOST sem lostReason é rejeitado (422)', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await createLead(transaction, `Lead M312 B ${suffix}`);
     const opportunity = await createActiveOpportunity(transaction, person.id);
 
     await assert.rejects(
-      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'CLOSED_LOST' }, tenant.userId, transaction),
+      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'LOST' }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'OPPORTUNITY_OUTCOME_REASON_REQUIRED');
         return true;
@@ -114,8 +117,8 @@ test('M3-12: motivo fora do enum é rejeitado (422) — em ganho, perda e desist
     const person = await createLead(transaction, `Lead M312 C ${suffix}`);
 
     const cases = [
-      { stage: 'CLOSED_WON', payload: { wonReason: 'PORQUE_SIM' } },
-      { stage: 'CLOSED_LOST', payload: { lostReason: 'ACHOU_CARO_DEMAIS' } },
+      { stage: 'WON', payload: { wonReason: 'PORQUE_SIM' } },
+      { stage: 'LOST', payload: { lostReason: 'ACHOU_CARO_DEMAIS' } },
       { stage: 'WITHDRAWN', payload: { withdrawnReason: 'SUMIU' } },
     ];
 
@@ -147,25 +150,25 @@ test('M3-12: motivos válidos do enum são aceitos e normalizados (WON / LOST / 
     const won = await createActiveOpportunity(transaction, person.id);
     const wonClosed = await opportunitiesService.updateOpportunity(
       won.id,
-      { stage: 'CLOSED_WON', wonReason: 'price_accepted' },
+      { stage: 'WON', wonReason: 'price_accepted' },
       tenant.userId,
       transaction
     );
-    assert.equal(wonClosed.stage, 'CLOSED_WON');
+    assert.equal(wonClosed.stage, 'WON');
     assert.equal(wonClosed.wonReason, 'PRICE_ACCEPTED'); // normalizado em upper case
     assert.ok(wonClosed.closedAt);
 
     const lost = await createActiveOpportunity(transaction, person.id);
     const lostClosed = await opportunitiesService.updateOpportunity(
       lost.id,
-      { stage: 'CLOSED_LOST', lostReason: 'COMPETITOR' },
+      { stage: 'LOST', lostReason: 'COMPETITOR' },
       tenant.userId,
       transaction
     );
     assert.equal(lostClosed.lostReason, 'COMPETITOR');
 
-    // Desistência: stage terminal próprio, com motivo próprio obrigatório, e SEM exigir
-    // nextAction (WITHDRAWN entra em CLOSED_STAGES).
+    // Desistência (DI-M3CA-3): WITHDRAWN na entrada vira LOST com o motivo de desistência marcado em withdrawnReason,
+    // sem exigir nextAction (estágio terminal do livro §10).
     const withdrawn = await createActiveOpportunity(transaction, person.id);
     const withdrawnClosed = await opportunitiesService.updateOpportunity(
       withdrawn.id,
@@ -173,7 +176,8 @@ test('M3-12: motivos válidos do enum são aceitos e normalizados (WON / LOST / 
       tenant.userId,
       transaction
     );
-    assert.equal(withdrawnClosed.stage, 'WITHDRAWN');
+    assert.equal(withdrawnClosed.stage, 'LOST');
+    assert.equal(withdrawnClosed.lostReason, 'NO_RESPONSE');
     assert.equal(withdrawnClosed.withdrawnReason, 'NO_RESPONSE');
     assert.ok(withdrawnClosed.closedAt);
   });
@@ -295,12 +299,12 @@ test('M3-13: transição de status respeita a máquina de estados', async () => 
   });
 });
 
-test('M3-25: jornada mínima — oportunidade -> proposta -> aceite -> CLOSED_WON', async () => {
+test('M3-25: jornada mínima — oportunidade -> proposta -> aceite -> WON', async () => {
   /**
    * FRONTEIRA COBERTA POR ESTE PACOTE (declarada explicitamente): o requisito M3-25 descreve a
    * jornada completa "lead, Radar, visita, proposta, contrato, recebimento e comissão". ESTE
    * TESTE COBRE SOMENTE O TRECHO DE CRM: lead -> Radar (com explicação de match) -> proposta
-   * -> aceite da proposta -> oportunidade fechada como CLOSED_WON com motivo estruturado.
+   * -> aceite da proposta -> oportunidade fechada como WON com motivo estruturado.
    * Contrato (legal), recebimento (finance) e comissão (finance) NÃO são exercitados aqui —
    * são domínio de outros pacotes e continuam sendo a lacuna conhecida desta jornada E2E.
    */
@@ -372,11 +376,11 @@ test('M3-25: jornada mínima — oportunidade -> proposta -> aceite -> CLOSED_WO
     // 6. Oportunidade fechada como ganha, com motivo estruturado obrigatório
     const won = await opportunitiesService.updateOpportunity(
       opportunity.id,
-      { stage: 'CLOSED_WON', wonReason: 'PRICE_ACCEPTED' },
+      { stage: 'WON', wonReason: 'PRICE_ACCEPTED' },
       tenant.userId,
       transaction
     );
-    assert.equal(won.stage, 'CLOSED_WON');
+    assert.equal(won.stage, 'WON');
     assert.equal(won.wonReason, 'PRICE_ACCEPTED');
     assert.ok(won.closedAt);
   });
@@ -516,7 +520,7 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
     const ganha = await createActiveOpportunity(transaction, person.id);
     await opportunitiesService.updateOpportunity(
       ganha.id,
-      { stage: 'CLOSED_WON', wonReason: 'REFERRAL' },
+      { stage: 'WON', wonReason: 'REFERRAL' },
       tenant.userId,
       transaction
     );
@@ -524,7 +528,7 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
     const perdida = await createActiveOpportunity(transaction, person.id);
     await opportunitiesService.updateOpportunity(
       perdida.id,
-      { stage: 'CLOSED_LOST', lostReason: 'PRICE_TOO_HIGH' },
+      { stage: 'LOST', lostReason: 'PRICE_TOO_HIGH' },
       tenant.userId,
       transaction
     );
@@ -543,8 +547,8 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
     assert.equal(dashboard.opportunities.total, listed.length);
     assert.equal(dashboard.opportunities.total, 3);
     assert.deepEqual(dashboard.opportunities.byStage, manual);
-    assert.equal(dashboard.opportunities.closed.won, manual.CLOSED_WON || 0);
-    assert.equal(dashboard.opportunities.closed.lost, manual.CLOSED_LOST || 0);
+    assert.equal(dashboard.opportunities.closed.won, manual.WON || 0);
+    assert.equal(dashboard.opportunities.closed.lost, manual.LOST || 0);
     assert.equal(dashboard.opportunities.open, 1);
 
     // 1 ganha de 2 fechadas = 50%.

@@ -80,7 +80,7 @@ test('opportunity ativa com nextAction/nextActionDueAt é criada e publica domai
   });
 });
 
-test('opportunity fechada (CLOSED_WON/CLOSED_LOST) não exige nextAction', async () => {
+test('opportunity fechada (WON/LOST) não exige nextAction', async () => {
   const suffix = uniqueSuffix();
 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
@@ -91,11 +91,11 @@ test('opportunity fechada (CLOSED_WON/CLOSED_LOST) não exige nextAction', async
     );
 
     const opportunity = await opportunitiesService.createOpportunity(
-      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'CLOSED_LOST', lostReason: 'FINANCING_DENIED' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'LOST', lostReason: 'FINANCING_DENIED' },
       tenant.userId,
       transaction
     );
-    assert.equal(opportunity.stage, 'CLOSED_LOST');
+    assert.equal(opportunity.stage, 'LOST');
     assert.ok(opportunity.closedAt);
   });
 });

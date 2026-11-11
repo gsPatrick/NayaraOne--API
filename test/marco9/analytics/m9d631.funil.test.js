@@ -28,18 +28,18 @@ test('m9d631 reproduz crm.opportunities_by_stage a partir dos registros-fonte', 
   await src.message(env, t, { opportunity: visit, direction: 'INBOUND', author: 'CLIENT', created: at(27) }); // mensagem recente tira a oportunidade da lista de paradas
   await add({ owner: b1, stage: 'VISIT_SCHEDULED', created: at(1), updated: at(14) });
   // fechadas em outubro (entram), em setembro (fora) e excluída (fora)
-  await add({ owner: b1, stage: 'CLOSED_WON', created: at(1), closedAt: at(10) }, 'won');
-  await add({ owner: b2, stage: 'CLOSED_WON', created: at(1), closedAt: at(12) }, 'won');
-  await add({ owner: b2, stage: 'CLOSED_LOST', created: at(1), closedAt: at(13), lostReason: 'PRICE' }, 'lost');
+  await add({ owner: b1, stage: 'WON', created: at(1), closedAt: at(10) }, 'won');
+  await add({ owner: b2, stage: 'WON', created: at(1), closedAt: at(12) }, 'won');
+  await add({ owner: b2, stage: 'LOST', created: at(1), closedAt: at(13), lostReason: 'PRICE' }, 'lost');
   await add({ owner: b1, stage: 'WITHDRAWN', created: at(1), closedAt: at(14) }, 'lost');
-  await add({ owner: b1, stage: 'CLOSED_WON', created: '2026-08-01T15:00:00Z', closedAt: '2026-09-15T15:00:00Z' }, 'won');
+  await add({ owner: b1, stage: 'WON', created: '2026-08-01T15:00:00Z', closedAt: '2026-09-15T15:00:00Z' }, 'won');
   const gone = await opp(env, t, { owner: b1, stage: 'NEW', created: at(1), updated: at(28) });
   await src.update(env, 'crm.opportunities', gone, { deleted_at: at(28) });
   await kit.refreshAll(t, ids, closed);
   await kit.kpis(t);
 
   const want = await stagesFromSource(env, t, TODAY);
-  assert.deepEqual(want.counts, { NEW: 3, VISIT_SCHEDULED: 2, CLOSED_WON: 2, CLOSED_LOST: 1, WITHDRAWN: 1 });
+  assert.deepEqual(want.counts, { NEW: 3, VISIT_SCHEDULED: 2, WON: 2, LOST: 1, WITHDRAWN: 1 });
   const kpi = await kit.readKpi(t, 'crm.opportunities_by_stage');
   assert.deepEqual([kpi.status, kpi.unit, kpi.version, kpi.metricCode], ['OK', 'COUNT', 1, 'crm.opportunities_by_stage']);
   assert.equal(Number(kpi.value), Number(want.total), 'total igual ao da fonte (em aberto mais fechadas no mês)');
@@ -85,7 +85,7 @@ test('m9d631 crm.conversion_rate fica DEGRADED com valor nulo quando a regra de 
   const t = env.cY;
   const ids = [];
   const closed = {};
-  for (let i = 0; i < 4; i += 1) { const id = await opp(env, t, { owner: src.uuid(), stage: i === 0 ? 'CLOSED_WON' : 'CLOSED_LOST', created: at(1), closedAt: at(5 + i), lostReason: 'PRICE' }); ids.push(id); closed[id] = i === 0 ? 'won' : 'lost'; }
+  for (let i = 0; i < 4; i += 1) { const id = await opp(env, t, { owner: src.uuid(), stage: i === 0 ? 'WON' : 'LOST', created: at(1), closedAt: at(5 + i), lostReason: 'PRICE' }); ids.push(id); closed[id] = i === 0 ? 'won' : 'lost'; }
   await kit.refreshAll(t, ids, closed);
   await kit.kpis(t);
   let kpi = await kit.readKpi(t, 'crm.conversion_rate');
@@ -102,9 +102,9 @@ test('m9d631 timezone: lançamento às 23:30 de São Paulo cai no dia certo', as
   const t = env.cY;
   const ids = [];
   const closed = {};
-  const edge = async (stage, closedAt) => { const id = await opp(env, t, { owner: src.uuid(), stage, created: '2026-08-01T15:00:00Z', closedAt, lostReason: 'PRICE' }); ids.push(id); closed[id] = stage === 'CLOSED_WON' ? 'won' : 'lost'; };
-  await edge('CLOSED_LOST', '2026-11-01T02:30:00Z'); // 23:30 de 31/10 em SP: ainda outubro (em UTC já é novembro)
-  await edge('CLOSED_WON', '2026-10-01T02:30:00Z'); // 23:30 de 30/09 em SP: setembro (em UTC já é outubro)
+  const edge = async (stage, closedAt) => { const id = await opp(env, t, { owner: src.uuid(), stage, created: '2026-08-01T15:00:00Z', closedAt, lostReason: 'PRICE' }); ids.push(id); closed[id] = stage === 'WON' ? 'won' : 'lost'; };
+  await edge('LOST', '2026-11-01T02:30:00Z'); // 23:30 de 31/10 em SP: ainda outubro (em UTC já é novembro)
+  await edge('WON', '2026-10-01T02:30:00Z'); // 23:30 de 30/09 em SP: setembro (em UTC já é outubro)
   await kit.refreshAll(t, ids, closed);
   const want = await outcomesFromSource(env, t, '2026-10-31');
   assert.deepEqual([want.won, want.lost], [1, 4], 'a fonte de outubro: a ganha de 4 e a perdida de 23:30 do dia 31; a de 23:30 de 30/09 é de setembro');

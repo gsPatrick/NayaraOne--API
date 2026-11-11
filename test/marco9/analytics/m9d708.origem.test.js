@@ -27,8 +27,8 @@ test('m9d708 KPI do CRM é conferido contra a lista de oportunidades da origem r
   await add({ owner: b1, stage: 'NEW', created: at(1), updated: at(28) });
   await add({ owner: b1, stage: 'NEW', created: at(1), updated: at(26) });
   await add({ owner: b2, stage: 'VISIT_SCHEDULED', created: at(1), updated: at(14) });
-  await add({ owner: b1, stage: 'CLOSED_WON', created: at(1), closedAt: at(10) }, 'won');
-  await add({ owner: b2, stage: 'CLOSED_LOST', created: at(1), closedAt: at(13), lostReason: 'PRICE' }, 'lost');
+  await add({ owner: b1, stage: 'WON', created: at(1), closedAt: at(10) }, 'won');
+  await add({ owner: b2, stage: 'LOST', created: at(1), closedAt: at(13), lostReason: 'PRICE' }, 'lost');
   await kit.refreshAll(t, ids, closed);
   await kit.kpis(t);
   const stages = await reconcileOne(t, 'crm.opportunities_by_stage');

@@ -14,6 +14,7 @@ process.env.PORT = process.env.M3_LIVRO_ANTIFRAUDE_HTTP_PORT || '21615';
 
 require('../app');
 const { getSeedTenant, withTenantTransaction, uniqueSuffix, sequelize } = require('./testHelpers');
+const { createMember } = require('./helpers/m3caCrm');
 const { signAccessToken } = require('../src/utils/jwt');
 const { AuditLog, OutboxEvent, PropertyMedia } = require('../src/models');
 
@@ -210,7 +211,9 @@ test('§18/CRM-TS-012: corretor (escopo próprio) não abre, não edita nem vê 
   const corretor = signAccessToken({ ...claims, permissions: ['people:create', 'people:read', 'crm:opportunities:create', 'crm:opportunities:read', 'crm:opportunities:read:own', 'crm:opportunities:update', 'crm:messages:create'] });
   const personId = await pessoa('Carteira escopo');
   const minha = await oportunidade(personId, { ownerUserId: tenant.userId });
-  const alheia = await oportunidade(personId, { ownerUserId: null });
+  // CRMX-006 (DI-M3CA-1): toda oportunidade tem responsável; a "alheia" é de outro corretor ativo da empresa.
+  const outroCorretor = await withTenantTransaction(tenant, (t) => createMember(tenant, t, { label: 'outro-corretor' }));
+  const alheia = await oportunidade(personId, { ownerUserId: outroCorretor });
   assert.equal((await http('GET', `/opportunities/${minha.id}`, undefined, corretor)).status, 200);
   for (const [metodo, rota, corpo] of [['GET', `/opportunities/${alheia.id}`], ['PATCH', `/opportunities/${alheia.id}`, { nextAction: 'x' }], ['GET', `/opportunities/${alheia.id}/timeline`], ['POST', `/crm/opportunities/${alheia.id}/interactions`, { channel: 'PHONE', direction: 'OUT', summary: 'x' }]]) {
     const r = await http(metodo, rota, corpo, corretor);

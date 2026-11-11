@@ -24,7 +24,7 @@ async function insertOpp(t, c) {
     next_action_due_at: c.nextActionDueAt || null, created_at: at(2), updated_at: c.updated || at(20),
   });
   ids.push(id);
-  const event = { id: biSources.uuid(), eventType: c.closedAt ? `crm.opportunity.${c.stage === 'CLOSED_WON' ? 'won' : 'lost'}` : 'crm.opportunity.created', companyId: t.companyId, groupId: t.groupId, aggregateId: id, payloadJson: { id }, occurredAt: NOW, retryCount: 0 };
+  const event = { id: biSources.uuid(), eventType: c.closedAt ? `crm.opportunity.${c.stage === 'WON' ? 'won' : 'lost'}` : 'crm.opportunity.created', companyId: t.companyId, groupId: t.groupId, aggregateId: id, payloadJson: { id }, occurredAt: NOW, retryCount: 0 };
   await http.inTx(t, { commit: true }, (tx) => readModels.applyEvent(event, tx, { now: NOW }));
 }
 
@@ -35,8 +35,8 @@ before(async () => {
   const broker = biSources.uuid();
   for (let i = 0; i < 4; i += 1) await insertOpp(t, { owner: broker, stage: 'NEW', nextAction: 'Ligar', nextActionDueAt: '2026-11-05T15:00:00Z' });
   for (let i = 0; i < 2; i += 1) await insertOpp(t, { owner: broker, stage: 'VISIT_SCHEDULED' });
-  for (let i = 0; i < 4; i += 1) await insertOpp(t, { owner: broker, stage: 'CLOSED_WON', closedAt: at(10 + i) });
-  for (let i = 0; i < 4; i += 1) await insertOpp(t, { owner: broker, stage: 'CLOSED_LOST', closedAt: at(14 + i), lostReason: i < 3 ? 'PRICE' : 'CLIENT_GAVE_UP' });
+  for (let i = 0; i < 4; i += 1) await insertOpp(t, { owner: broker, stage: 'WON', closedAt: at(10 + i) });
+  for (let i = 0; i < 4; i += 1) await insertOpp(t, { owner: broker, stage: 'LOST', closedAt: at(14 + i), lostReason: i < 3 ? 'PRICE' : 'CLIENT_GAVE_UP' });
   await http.inTx(t, { commit: true }, (tx) => materializeCrmKpis({ companyId: t.companyId, groupId: t.groupId }, AS_OF, tx));
 });
 after(async () => {
