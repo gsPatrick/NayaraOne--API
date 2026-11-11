@@ -83,6 +83,8 @@ test('AUD-017: getContractTimeline reúne aditivo, notificação e inadimplênci
       tenant.userId,
       transaction
     );
+    // Matriz M5 (§13): o aditivo referencia a versão base do contrato.
+    await require('../src/features/legal/contractVersions.service').createContractVersion(contract.id, { content: `Contrato base ${uniqueSuffix()}`, requireDocument: false }, tenant.userId, transaction);
 
     const amendment = await contractAmendmentsService.createAmendment(
       contract.id,

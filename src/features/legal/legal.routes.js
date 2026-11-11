@@ -4,6 +4,11 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const legalController = require('./legal.controller');
+const { deliverKeysForContract } = require('./deliverKeys.controller');
+const guaranteeActionsController = require('./guaranteeActions.controller');
+const legalCasesController = require('./legalCases.controller');
+const contractVersionActionsController = require('./contractVersionActions.controller');
+const contractTemplateVersionsController = require('./contractTemplateVersions.controller');
 const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 1 do inventário)
 
 const legalRouter = Router();
@@ -54,6 +59,9 @@ legalRouter.post('/legal/requirements/:requirementId/waive', requirePermission('
 legalRouter.post('/legal/notices', requirePermission('legal:create'), legalController.createNotice);
 legalRouter.get('/legal/notices', requirePermission('legal:read'), legalController.listNotices);
 legalRouter.get('/legal/notices/:id', requirePermission('legal:read'), legalController.getNotice);
+// DoD M5 "Aditivos/notificações versionados": nova versão preserva a anterior (legal.notice_versions).
+legalRouter.post('/legal/notices/:id/versions', requirePermission('legal:update'), legalCasesController.createNoticeVersion);
+legalRouter.get('/legal/notices/:id/versions', requirePermission('legal:read'), legalCasesController.listNoticeVersions);
 legalRouter.post('/legal/notices/:id/submit-for-review', requirePermission('legal:update'), legalController.submitNoticeForReview);
 legalRouter.post('/legal/notices/:id/approve', requirePermission('legal:approve'), legalController.approveNotice);
 legalRouter.post('/legal/notices/:id/reject', requirePermission('legal:approve'), legalController.rejectNotice);
@@ -63,6 +71,11 @@ legalRouter.post('/legal/notices/:id/delivery-evidence', requirePermission('lega
 
 // Contract versions
 legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
+// Matriz M5 — rotas literais do Guia §14 (APIs mínimas): mesmo controller, permissão e serviço das rotas /legal/...
+legalRouter.post('/contracts', requirePermission('legal:create'), legalController.createContract);
+legalRouter.post('/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
+legalRouter.post('/contract-versions/:id/approve', requirePermission('legal:approve'), contractVersionActionsController.approveContractVersion);
+legalRouter.post('/contract-versions/:id/send-signature', requirePermission('legal:sign'), contractVersionActionsController.sendContractVersionForSignature);
 legalRouter.get('/legal/contracts/:id/versions', requirePermission('legal:read'), legalController.listContractVersions);
 // GET, não POST: sem efeito colateral (nada é persistido) — ver comentário em
 // legal.controller.js#generateContractVersionPdf. "legal:read" basta porque é só uma
@@ -75,6 +88,9 @@ legalRouter.get('/legal/contract-templates', requirePermission('legal:read'), le
 legalRouter.get('/legal/contract-templates/:id', requirePermission('legal:read'), legalController.getContractTemplate);
 legalRouter.post('/legal/contract-templates/:id/clauses', requirePermission('legal:create'), legalController.addClauseToContractTemplate);
 legalRouter.post('/legal/contract-templates/:id/clauses/:clauseId/upgrade', requirePermission('legal:create'), legalController.upgradeContractTemplateClause);
+// Matriz M5 (§6/§19): publicar a versão do modelo exige a alçada jurídica; publicado não se edita (nova versão).
+legalRouter.post('/legal/contract-templates/:id/publish', requirePermission('legal:approve'), contractTemplateVersionsController.publishContractTemplate);
+legalRouter.get('/legal/contract-templates/:id/versions', requirePermission('legal:read'), contractTemplateVersionsController.listContractTemplateVersions);
 // Biblioteca de cláusulas (JUR-002) — ordem importa: /legal/clauses/:code/versions antes de
 // qualquer coisa que capture :id, mesmo padrão já usado para classification-pendings no Marco 4.
 legalRouter.post('/legal/clauses', requirePermission('legal:create'), legalController.createClause);
@@ -109,6 +125,8 @@ legalRouter.get('/legal/guarantees', requirePermission('legal:read'), legalContr
 legalRouter.get('/legal/guarantees/:id', requirePermission('legal:read'), legalController.getGuarantee);
 legalRouter.patch('/legal/guarantees/:id', requirePermission('legal:update'), legalController.updateGuarantee);
 legalRouter.delete('/legal/guarantees/:id', requirePermission('legal:update'), legalController.removeGuarantee);
+// Fechamento M5 (Caderno §9): substituição de garantia pela API, sem perder o histórico.
+legalRouter.post('/legal/guarantees/:id/replace', requirePermission('legal:update'), guaranteeActionsController.replaceGuarantee);
 
 // Inspections
 legalRouter.post('/legal/inspections', requirePermission('legal:create'), legalController.createInspection);
@@ -130,13 +148,20 @@ legalRouter.get('/legal/inspections/:id/signatures', requirePermission('legal:re
 legalRouter.post('/legal/inspections/:id/report', requirePermission('legal:update'), legalController.generateInspectionReport);
 legalRouter.get('/legal/inspections/:id/report', requirePermission('legal:read'), legalController.getInspectionReport);
 
-// Key deliveries
+// Key deliveries — permissão do livro (Guia §11 assertPermission(ctx, 'lease.keys.deliver')), migration 20260101009993.
 legalRouter.post('/legal/key-deliveries', requirePermission('legal:create'), legalController.createKeyDelivery);
 legalRouter.get('/legal/key-deliveries', requirePermission('legal:read'), legalController.listKeyDeliveries);
 legalRouter.get('/legal/key-deliveries/:id', requirePermission('legal:read'), legalController.getKeyDelivery);
 legalRouter.get('/legal/key-deliveries/:id/term-preview', requirePermission('legal:read'), legalController.previewKeyDeliveryTerm);
-legalRouter.post('/legal/key-deliveries/:id/release', requirePermission('legal:deliverKeys'), legalController.releaseKeyDelivery);
-legalRouter.post('/legal/key-deliveries/:id/cancel', requirePermission('legal:deliverKeys'), legalController.cancelKeyDelivery);
+legalRouter.post('/legal/key-deliveries/:id/release', requirePermission('lease.keys.deliver'), legalController.releaseKeyDelivery);
+legalRouter.post('/legal/key-deliveries/:id/cancel', requirePermission('lease.keys.deliver'), legalController.cancelKeyDelivery);
+// Fechamento M5 (Guia §14 "POST /contracts/:id/key-delivery"): abre e libera na mesma transação, mesmos gates.
+legalRouter.post('/legal/contracts/:id/key-delivery', requirePermission('legal:create'), requirePermission('lease.keys.deliver'), deliverKeysForContract);
+// Fechamento M5 — rotas literais do Guia §14 da Locação: mesmo controller, permissão, MFA e serviço das rotas /legal/...
+legalRouter.post('/contracts/:id/key-delivery', requirePermission('legal:create'), requirePermission('lease.keys.deliver'), deliverKeysForContract);
+legalRouter.post('/contracts/:contractId/guarantees', requirePermission('legal:create'), legalController.createGuarantee);
+legalRouter.post('/inspections', requirePermission('legal:create'), legalController.createInspection);
+legalRouter.post('/inspections/:id/sign', requirePermission('legal:update'), requireRecentMfa, legalController.signInspection);
 
 // Legal cases
 legalRouter.post('/legal/cases', requirePermission('legal:create'), legalController.createLegalCase);
@@ -145,6 +170,15 @@ legalRouter.get('/legal/cases/:id', requirePermission('legal:read'), legalContro
 legalRouter.patch('/legal/cases/:id', requirePermission('legal:update'), legalController.updateLegalCase);
 legalRouter.post('/legal/cases/:id/link-task', requirePermission('legal:update'), legalController.linkCaseToTask);
 legalRouter.post('/legal/cases/:id/legal-hold', requirePermission('legal:update'), legalController.setLegalHold);
+// Caderno M5 §14: partes formais, documentos/provas por file_links e linha do tempo do processo.
+legalRouter.post('/legal/cases/:id/parties', requirePermission('legal:create'), legalCasesController.addLegalCaseParty);
+legalRouter.get('/legal/cases/:id/parties', requirePermission('legal:read'), legalCasesController.listLegalCaseParties);
+legalRouter.post('/legal/cases/:id/documents', requirePermission('legal:create'), legalCasesController.linkLegalCaseDocument);
+legalRouter.get('/legal/cases/:id/documents', requirePermission('legal:read'), legalCasesController.listLegalCaseDocuments);
+legalRouter.get('/legal/cases/:id/timeline', requirePermission('legal:read'), legalCasesController.getLegalCaseTimeline);
+// §14 "vinculados ao Financeiro somente quando juridicamente cabível": decisão jurídica (legal:approve) + lançamento (finance:create).
+legalRouter.post('/legal/cases/:id/receivables', requirePermission('legal:approve'), requirePermission('finance:create'), legalCasesController.linkLegalCaseReceivable);
+legalRouter.get('/legal/cases/:id/receivables', requirePermission('legal:read'), legalCasesController.listLegalCaseReceivables);
 
 // Legal deadlines
 legalRouter.post('/legal/cases/:id/deadlines', requirePermission('legal:create'), legalController.createLegalDeadline);
@@ -153,13 +187,16 @@ legalRouter.patch('/legal/deadlines/:id', requirePermission('legal:update'), leg
 
 // Evidence packages
 legalRouter.post('/legal/cases/:id/evidence-packages', requirePermission('legal:create'), legalController.createEvidencePackage);
+// Guia do Marcelo §14 "POST /legal/cases/:id/evidence-package | Gerar dossiê": a grafia literal do livro (singular) é a mesma rota.
+legalRouter.post('/legal/cases/:id/evidence-package', requirePermission('legal:create'), legalController.createEvidencePackage);
 // AUD-016 (JUR-010): monta o manifesto automaticamente a partir de todo anexo conhecido do
 // contrato — ordem antes de qualquer rota que capture :id solto, mesmo padrão já usado alhures.
 legalRouter.post('/legal/cases/:id/evidence-packages/auto', requirePermission('legal:create'), legalController.createEvidencePackageFromContractAttachments);
 legalRouter.get('/legal/cases/:id/evidence-packages', requirePermission('legal:read'), legalController.listEvidencePackages);
 legalRouter.get('/legal/evidence-packages/:id', requirePermission('legal:read'), legalController.getEvidencePackage);
 // M5-28/M5-29: export verificável do dossiê e leitura da cadeia de custódia.
-legalRouter.get('/legal/evidence-packages/:id/export', requirePermission('legal:read'), legalController.exportEvidencePackage);
+// Caderno M5 §19 "Exportar dossiê | Permissão específica + audit/MFA conforme risco": permissão própria (migration 9999); a DLP continua por cima.
+legalRouter.get('/legal/evidence-packages/:id/export', requirePermission('legal:evidence:export'), legalController.exportEvidencePackage);
 legalRouter.get('/legal/evidence-packages/:id/access-log', requirePermission('legal:read'), legalController.listEvidencePackageAccessLog);
 
 // NAY Jurídica (Caderno M5 §17, JUR-008, JUR-TS-012): resume, compara e sugere — somente leitura.

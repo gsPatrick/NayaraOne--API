@@ -6,7 +6,7 @@ const bi = require('./biObrasJuridicoEnv');
 
 const iso = (day, hour = 15, minute = 0) => `2026-${day}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00Z`; // 15:00Z = 12:00 em São Paulo
 const contract = (env, t, c = {}) => bi.seed(env, t, 'legal.contracts', { contract_type: 'LEASE', status: 'ACTIVE', starts_at: iso('09-01'), ends_at: iso('12-31'), ...c });
-const guarantee = (env, t, contractId, type, endsAt, status = 'ACTIVE') => bi.seed(env, t, 'legal.guarantees', { contract_id: contractId, guarantee_type: type, status, starts_at: '2026-01-01', ends_at: endsAt });
+const guarantee = (env, t, contractId, type, endsAt, status = 'ACTIVE') => bi.seed(env, t, 'legal.guarantees', { contract_id: contractId, guarantee_type: ({ DEPOSIT: 'SECURITY_DEPOSIT', CAPITALIZATION_TITLE: 'CAPITALIZATION' })[type] || type, status, starts_at: '2026-01-01', ends_at: endsAt });
 
 /** Garantias de contratos ACTIVE: vencendo em 30 d (hoje a hoje+29): 3; em 60 d (hoje a hoje+59): 5; vencida: 1. Sem data só o caução (tipo sem vencimento). */
 async function garantias(env, t) {
@@ -27,7 +27,7 @@ async function garantias(env, t) {
 const requirement = (env, t, contractId, status = 'PENDING') => bi.seed(env, t, 'legal.contract_requirements', {
   contract_id: contractId, requirement_code: `REQ-${bi.uuid().slice(0, 6)}`, description: 'Exigência', requirement_type: 'DOCUMENT', status, created_at: iso('10-01'), updated_at: iso('10-01'),
 });
-const utility = (env, t, contractId, evidence = null) => bi.seed(env, t, 'finance.utility_obligations', {
+const utility = (env, t, contractId, evidence = null) => bi.seed(env, t, 'legal.lease_obligations', {
   contract_id: contractId, utility_type: 'WATER', responsible_party: 'TENANT', transfer_required: true, evidence_file_id: evidence, status: 'ACTIVE',
 });
 
@@ -42,7 +42,7 @@ async function obrigacoes(env, t) {
   await requirement(env, t, await contract(env, t, { status: 'TERMINATED', starts_at: iso('01-01') })); // contrato encerrado: fora
 }
 
-const inspection = (env, t, contractId, status, scheduledAt) => bi.seed(env, t, 'legal.inspections', { property_id: bi.uuid(), contract_id: contractId, inspection_type: 'CHECK_IN', status, scheduled_at: scheduledAt });
+const inspection = (env, t, contractId, status, scheduledAt) => bi.seed(env, t, 'legal.inspections', { property_id: bi.uuid(), contract_id: contractId, inspection_type: 'ENTRY', status, scheduled_at: scheduledAt });
 const key = (env, t, contractId, status) => bi.seed(env, t, 'legal.key_deliveries', { contract_id: contractId, delivered_to_person_id: bi.uuid(), status });
 
 /** Vistorias pendentes 5 (atrasadas 2: 20/10 e 26/10 23:30 SP); chaves fora 4 (atrasadas 2: contratos que acabaram em 20/10 e em 27/10 23:30 SP). */

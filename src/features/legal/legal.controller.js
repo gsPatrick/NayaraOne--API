@@ -509,7 +509,8 @@ const listGuarantees = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const getGuarantee = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => guaranteesService.getGuarantee(req.params.id, t));
+  // Fechamento M5: leitura com o que falta para ativar e a trilha da caução no Financeiro.
+  const item = await req.withTenantTransaction((t) => require('./guaranteeDetail.service').getGuaranteeDetail(guaranteesService, req.params.id, t));
   return success(res, { data: item });
 });
 const updateGuarantee = catchAsync(async (req, res) => {
@@ -712,7 +713,7 @@ const listLegalDeadlines = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const updateLegalDeadline = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => legalDeadlinesService.updateLegalDeadline(req.params.id, req.body, req.auth.userId, t));
+  const item = await req.withTenantTransaction((t) => legalDeadlinesService.updateLegalDeadline(req.params.id, req.body, req.auth.userId, t, { actorPermissions: req.auth.permissions || [] }));
   return success(res, { data: item });
 });
 

@@ -19,7 +19,7 @@ const slice = () => `
      WHERE r.company_id = :companyId AND r.status = 'PENDING' AND c.deleted_at IS NULL AND c.contract_type IN (:leaseTypes) AND c.status NOT IN ('TERMINATED', 'CLOSED')
     UNION ALL
     SELECT 'UTILITY', ${due}
-      FROM finance.utility_obligations u JOIN legal.contracts c ON c.id = u.contract_id AND c.company_id = u.company_id
+      FROM legal.lease_obligations u JOIN legal.contracts c ON c.id = u.contract_id AND c.company_id = u.company_id
      WHERE u.company_id = :companyId AND u.deleted_at IS NULL AND u.status = 'ACTIVE' AND u.transfer_required AND u.evidence_file_id IS NULL
        AND c.deleted_at IS NULL AND c.contract_type IN (:leaseTypes) AND c.status NOT IN ('TERMINATED', 'CLOSED')
   ) x GROUP BY 1`;

@@ -55,7 +55,7 @@ const PROFILES = [
     permissions: [
       'finance:read', 'finance:create', 'finance:update', 'finance:settle', 'finance:approve',
       'finance:reconcile', 'finance:bankAccounts', 'finance:chartOfAccounts',
-      'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'legal:deliverKeys', 'legal:waive',
+      'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'legal:deliverKeys', 'lease.keys.deliver', 'legal:waive', 'legal:evidence:export',
       'billing:read', 'billing:create', 'billing:update', 'billing:approve', 'billing:cadence:manage',
       'people:read', 'people:create', 'people:update', 'properties:read', 'properties:create', 'properties:update',
     ],

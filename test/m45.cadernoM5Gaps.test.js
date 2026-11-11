@@ -11,6 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const peopleService = require('../src/features/people/people.service');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
@@ -28,6 +29,7 @@ const { File, TenantSetting, OutboxEvent, Signature, Task, FinancialEntry, Inspe
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -128,11 +130,11 @@ test('M45-M5-01 JUR-TS-008: prazo jurídico sem origem (sourceDocument/sourceEve
     const dueAt = new Date(Date.now() + 5 * 86400000);
     await assert.rejects(
       () => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'M45 contestação', dueAt }, tenant.userId, transaction),
-      codeIs('LEGAL_DEADLINE_SOURCE_REQUIRED')
+      codeIs('DEADLINE_SOURCE_REQUIRED')
     );
     const ok = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: 'M45 contestação', dueAt, sourceDocument: 'Citação recebida em 19/10/2026' },
+      { description: 'M45 contestação', dueAt, sourceDocument: 'Citação recebida em 19/10/2026', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );
@@ -216,10 +218,11 @@ test('M45-M5-04 §8: conteúdo mudou depois do envio — envelope pendente é ca
   });
 });
 
-test('M45-M5-05 §11: tipos ENTRY/EXIT/INTERMEDIATE/FINAL do Caderno são aceitos (sinônimos gravados como CHECK_IN/CHECK_OUT/PERIODIC); tipo inventado é recusado', async () => {
+test('M45-M5-05 §11: tipos ENTRY/EXIT/INTERMEDIATE/FINAL do Caderno são gravados com o código do livro (CHECK_IN/CHECK_OUT/PERIODIC só como apelido de entrada); tipo inventado é recusado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const property = await createProperty(transaction);
-    const expected = { ENTRY: 'CHECK_IN', EXIT: 'CHECK_OUT', INTERMEDIATE: 'PERIODIC', FINAL: 'FINAL' };
+    // Fechamento M5: o código do livro é o gravado; o antigo entra como apelido.
+    const expected = { ENTRY: 'ENTRY', EXIT: 'EXIT', INTERMEDIATE: 'INTERMEDIATE', FINAL: 'FINAL', CHECK_IN: 'ENTRY', CHECK_OUT: 'EXIT', PERIODIC: 'INTERMEDIATE' };
     for (const [type, stored] of Object.entries(expected)) {
       const insp = await inspectionsService.createInspection(
         { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, inspectionType: type },
@@ -310,18 +313,18 @@ test('M45-M5-09 §15: prazo CRITICAL vencido abre UMA ocorrência CRITICAL e pub
     const legalCase = await createCase(transaction, { escalationUserId: tenant.userId });
     const past = new Date(Date.now() - 3 * 86400000);
     await assert.rejects(
-      () => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'x', dueAt: past, sourceEvent: 'm45', responsibleUserId: tenant.userId, criticality: 'URGENTE' }, tenant.userId, transaction),
+      () => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'x', dueAt: past, sourceEvent: 'm45', sourceFileId: origem(tenant), responsibleUserId: tenant.userId, criticality: 'URGENTE' }, tenant.userId, transaction),
       codeIs('LEGAL_DEADLINE_VALIDATION')
     );
     const critical = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: 'M45 recurso', dueAt: past, sourceEvent: 'Intimação M45', responsibleUserId: tenant.userId, criticality: 'CRITICAL' },
+      { description: 'M45 recurso', dueAt: past, sourceEvent: 'Intimação M45', sourceFileId: origem(tenant), responsibleUserId: tenant.userId, criticality: 'CRITICAL' },
       tenant.userId,
       transaction
     );
     const medium = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: 'M45 juntada', dueAt: past, sourceEvent: 'Despacho M45', responsibleUserId: tenant.userId },
+      { description: 'M45 juntada', dueAt: past, sourceEvent: 'Despacho M45', sourceFileId: origem(tenant), responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );

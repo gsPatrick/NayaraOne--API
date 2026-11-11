@@ -17,7 +17,11 @@ const CONTRACT_TYPES = [
   'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL',
   'PROPERTY_ADMIN', 'SERVICE', 'CONSTRUCTION',
 ];
-const GUARANTEE_TYPES = ['GUARANTOR', 'INSURANCE', 'DEPOSIT', 'CAPITALIZATION_TITLE', 'OTHER', 'NONE'];
+// Fechamento M5: códigos do livro (Caderno §9) + os antigos, aceitos e tratados como o código do livro (as regras
+// já gravadas são append-only e continuam valendo: DEPOSIT = SECURITY_DEPOSIT, CAPITALIZATION_TITLE = CAPITALIZATION).
+const GUARANTEE_TYPES = ['GUARANTOR', 'INSURANCE', 'SECURITY_DEPOSIT', 'CAPITALIZATION', 'OTHER', 'NONE', 'DEPOSIT', 'CAPITALIZATION_TITLE'];
+const GUARANTEE_ALIASES = { DEPOSIT: 'SECURITY_DEPOSIT', CAPITALIZATION_TITLE: 'CAPITALIZATION' };
+const canon = (variable, v) => (variable === 'guaranteeType' && typeof v === 'string' ? GUARANTEE_ALIASES[v] || v : v);
 
 const CONDITION_VARIABLES = {
   contractType: { type: 'enum', values: CONTRACT_TYPES, label: 'Tipo de contrato' },
@@ -149,13 +153,14 @@ function validateContext(context) {
 
 function evaluateRule(rule, context) {
   const present = Object.prototype.hasOwnProperty.call(context, rule.variable);
-  const actual = context[rule.variable];
+  const actual = canon(rule.variable, context[rule.variable]);
+  const expected = Array.isArray(rule.value) ? rule.value.map((v) => canon(rule.variable, v)) : canon(rule.variable, rule.value);
   switch (rule.operator) {
     case 'exists': return present === rule.value;
-    case 'eq': return actual === rule.value;
-    case 'neq': return actual !== rule.value;
-    case 'in': return rule.value.includes(actual);
-    case 'not_in': return !rule.value.includes(actual);
+    case 'eq': return actual === expected;
+    case 'neq': return actual !== expected;
+    case 'in': return expected.includes(actual);
+    case 'not_in': return !expected.includes(actual);
     case 'gt': return actual > rule.value;
     case 'gte': return actual >= rule.value;
     case 'lt': return actual < rule.value;

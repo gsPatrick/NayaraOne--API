@@ -13,6 +13,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const contractsService = require('../src/features/legal/contracts.service');
@@ -31,6 +32,7 @@ let tenant;
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 
 after(async () => {
@@ -39,8 +41,8 @@ after(async () => {
 
 async function createFakeDocumentFile(transaction) {
   const suffix = uniqueSuffix();
-  return File.create(
-    {
+  return File.create({ checksumSha256: require('crypto').randomBytes(32).toString('hex'), // fechamento M5: arquivo com hash (Caderno §11)
+      
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       storageKey: `m5-legal/${suffix}.pdf`,
@@ -60,6 +62,19 @@ async function createContract(transaction) {
     tenant.userId,
     transaction
   );
+}
+
+// Matriz M5 (Caderno §13): o aditivo referencia a versão base e é assinado por signatário (partes do contrato).
+async function createContractForAmendment(transaction) {
+  const contract = await createContract(transaction);
+  await contractVersionsService.createContractVersion(contract.id, { content: `Contrato base ${uniqueSuffix()}`, requireDocument: false }, tenant.userId, transaction);
+  const parties = {};
+  for (const role of ['LANDLORD', 'TENANT']) {
+    const person = await peopleService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `M5-25 ${role} ${uniqueSuffix()}` }, tenant.userId, transaction);
+    await contractsService.addContractParty(contract.id, { personId: person.id, partyRole: role }, tenant.userId, transaction);
+    parties[role] = person;
+  }
+  return { contract, parties };
 }
 
 // ---------------------------------------------------------------------------
@@ -274,8 +289,8 @@ test('M5-07: override explícito requireDocument:false permite rascunho sem docu
 
 test('M5-25: aditivos têm numeração sequencial por contrato e histórico nunca é editado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const contractA = await createContract(transaction);
-    const contractB = await createContract(transaction);
+    const { contract: contractA, parties } = await createContractForAmendment(transaction);
+    const { contract: contractB } = await createContractForAmendment(transaction);
 
     const a1 = await contractAmendmentsService.createAmendment(
       contractA.id,
@@ -310,7 +325,9 @@ test('M5-25: aditivos têm numeração sequencial por contrato e histórico nunc
     assert.equal(typeof contractAmendmentsService.deleteAmendment, 'undefined');
 
     const file = await createFakeDocumentFile(transaction);
-    await contractAmendmentsService.signAmendment(a2.id, { documentFileId: file.id }, tenant.userId, transaction);
+    const parcial = await contractAmendmentsService.signAmendment(a2.id, { personId: parties.LANDLORD.id, documentFileId: file.id }, tenant.userId, transaction);
+    assert.equal(parcial.status, 'DRAFT', 'com uma das duas assinaturas exigidas o aditivo ainda não está assinado');
+    await contractAmendmentsService.signAmendment(a2.id, { personId: parties.TENANT.id, documentFileId: file.id }, tenant.userId, transaction);
 
     const persistedA1 = await ContractAmendment.findByPk(a1.id, { transaction });
     assert.equal(persistedA1.reason, 'Reajuste anual IGPM');
@@ -325,7 +342,7 @@ test('M5-25: aditivos têm numeração sequencial por contrato e histórico nunc
 
 test('M5-25: aditivo SIGNED sem documento assinado é rejeitado, e aditivo sem "changes" também', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const contract = await createContract(transaction);
+    const { contract } = await createContractForAmendment(transaction);
     await assert.rejects(
       () =>
         contractAmendmentsService.createAmendment(
@@ -335,7 +352,8 @@ test('M5-25: aditivo SIGNED sem documento assinado é rejeitado, e aditivo sem "
           transaction
         ),
       (err) => {
-        assert.equal(err.code, 'LEGAL_CONTRACT_AMENDMENT_DOCUMENT_REQUIRED');
+        // Matriz M5: o aditivo não nasce SIGNED — as assinaturas são registradas por signatário.
+        assert.equal(err.code, 'LEGAL_CONTRACT_AMENDMENT_SIGNATURES_REQUIRED');
         return true;
       }
     );
@@ -451,7 +469,7 @@ test('M5-27: prazo OVERDUE há mais de 24h sem ação escala para o escalationUs
 
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', responsibleUserId: tenant.userId },
+      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant), responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );
@@ -782,7 +800,7 @@ test('Eventos mínimos: legal.deadline.created é publicado ao criar um prazo ju
 
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Prazo teste de evento ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
+      { description: `Prazo teste de evento ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );

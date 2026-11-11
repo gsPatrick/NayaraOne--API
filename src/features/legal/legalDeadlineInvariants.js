@@ -2,7 +2,7 @@
 
 const AppError = require('../../utils/AppError');
 const { normalizeOptionalText } = require('./legalText');
-const { assertCriticalDeadlineAccountability } = require('./legalDeadlineAccountability');
+const { assertCriticalDeadlineAccountability, assertHasResponsible } = require('./legalDeadlineAccountability');
 
 const DEADLINE_CRITICALITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
@@ -43,6 +43,8 @@ async function assertFinalDeadlineState({ final, touched, getLockedCase, now = D
     const legalCase = await getLockedCase();
     assertCriticalDeadlineAccountability({ responsibleUserId: final.responsibleUserId || null }, legalCase);
   }
+  // (c) Caderno §15: todo prazo pendente tem responsavel (o proprio ou o do processo).
+  if (!final.responsibleUserId) assertHasResponsible({ responsibleUserId: null }, await getLockedCase());
 }
 
 module.exports = { DEADLINE_CRITICALITIES, normalizeCriticality, assertFinalDeadlineState };

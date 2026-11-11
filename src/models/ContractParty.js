@@ -36,6 +36,8 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'person_id',
       },
+      // Matriz M5 (Caderno §7): procurador que representa a parte — característica que exige procuração no checklist.
+      representedByPersonId: { type: DataTypes.UUID, allowNull: true, field: 'represented_by_person_id' },
       partyRole: {
         type: DataTypes.STRING(32),
         allowNull: false,

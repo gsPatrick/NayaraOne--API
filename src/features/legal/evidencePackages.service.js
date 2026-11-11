@@ -31,13 +31,38 @@ function computePackageHash(manifest) {
  * createEvidencePackage já montava os itens — ou seja, os hashes de pacotes já gravados
  * continuam válidos; o que muda é que a releitura do banco passa a produzir o mesmo hash.
  */
+// §16 "Manifesto do dossiê lista arquivos, hashes, origem, datas, relações e versão": itens de
+// arquivo trazem também fileId, nome original, data do arquivo, origem e versão do documento.
+// Esses campos entram no hash na ordem fixa abaixo e SÓ quando existem no item, de modo que os
+// pacotes antigos (4 campos) continuam com o mesmo hash.
+const OPTIONAL_KEYS = ['fileId', 'originalName', 'createdAt', 'source', 'version'];
+
 function normalizeManifest(manifest) {
-  return (manifest || []).map((item) => ({
-    type: item.type,
-    description: item.description,
-    referenceId: item.referenceId !== undefined ? item.referenceId : null,
-    hash: item.hash !== undefined ? item.hash : null,
-  }));
+  return (manifest || []).map((item) => {
+    const out = {
+      type: item.type,
+      description: item.description,
+      referenceId: item.referenceId !== undefined ? item.referenceId : null,
+      hash: item.hash !== undefined ? item.hash : null,
+    };
+    for (const key of OPTIONAL_KEYS) if (item[key] !== undefined && item[key] !== null) out[key] = item[key];
+    return out;
+  });
+}
+
+const isoOf = (value) => (value ? new Date(value).toISOString() : null);
+
+/** Metadados imutáveis do arquivo (Guia §13 getImmutableMetadata): sempre do servidor, nunca do chamador. */
+function fileMetadata(file, source, extra = {}) {
+  return { fileId: file.id, originalName: file.fileName, createdAt: isoOf(file.get('created_at') || file.get('createdAt')), source, ...extra };
+}
+
+/** Item que cita um arquivo (fileId): hash, nome e data vêm do people.files da empresa (RLS); arquivo inexistente é 400. */
+async function resolveFileItem(item, companyId, transaction) {
+  if (!item.fileId) return item;
+  const file = await File.findOne({ where: { id: item.fileId, companyId }, transaction });
+  if (!file) throw AppError.badRequest(`Arquivo ${item.fileId} citado no manifesto não existe nesta empresa.`, 'LEGAL_EVIDENCE_PACKAGE_FILE_NOT_FOUND');
+  return { ...item, hash: file.checksumSha256 || null, ...fileMetadata(file, item.source || 'people.files', item.version !== undefined ? { version: item.version } : {}) };
 }
 
 /**
@@ -58,12 +83,14 @@ async function createEvidencePackage(legalCaseId, manifestItems, actorUserId, tr
     }
   }
 
-  const manifest = manifestItems.map((item) => ({
-    type: item.type,
-    description: item.description,
-    referenceId: item.referenceId || null,
-    hash: item.hash || null,
-  }));
+  const manifest = [];
+  for (const item of manifestItems) {
+    // Item sem fileId (nota, referência externa) segue com os 4 campos de sempre, como veio.
+    const resolved = item.fileId
+      ? await resolveFileItem(item, legalCase.companyId, transaction)
+      : { type: item.type, description: item.description, referenceId: item.referenceId, hash: item.hash };
+    manifest.push(normalizeManifest([{ ...resolved, referenceId: resolved.referenceId || null, hash: resolved.hash || null }])[0]);
+  }
   const packageHash = computePackageHash(manifest);
 
   const evidencePackage = await EvidencePackage.create(
@@ -116,15 +143,24 @@ async function createEvidencePackage(legalCaseId, manifestItems, actorUserId, tr
  * e monta o manifesto com o hash REAL do arquivo (File.checksumSha256, calculado no upload —
  * nunca um hash informado pelo chamador), fechando a lacuna "custódia de todos os anexos".
  */
-async function assembleManifestFromContractAttachments(contractId, transaction) {
+async function assembleManifestFromContractAttachments(contractId, transaction, { legalCaseId = null } = {}) {
   const manifest = [];
   const seenFileIds = new Set();
 
-  function pushFile(file, type, description, relatedId) {
+  function pushFile(file, type, description, relatedId, source, extra) {
     if (!file || seenFileIds.has(file.id)) return;
     seenFileIds.add(file.id);
-    manifest.push({ type, description, referenceId: relatedId || file.id, hash: file.checksumSha256 || null });
+    manifest.push({ type, description, referenceId: relatedId || file.id, hash: file.checksumSha256 || null, ...fileMetadata(file, source, extra) });
   }
+
+  // Documentos e provas ligados ao PRÓPRIO processo (people.file_links, LegalCase).
+  if (legalCaseId) {
+    const caseLinks = await FileLink.findAll({ where: { relatedEntityType: 'LegalCase', relatedEntityId: legalCaseId }, include: [{ model: File, as: 'file' }], transaction });
+    for (const link of caseLinks) {
+      if (link.file) pushFile(link.file, 'CASE_DOCUMENT', `Documento do processo (${link.purpose || 'DOCUMENT'}): ${link.file.fileName}`, link.id, 'people.file_links');
+    }
+  }
+  if (!contractId) return manifest;
 
   const versions = await ContractVersion.findAll({ where: { contractId }, include: [{ model: File, as: 'documentFile' }], transaction });
   for (const version of versions) {
@@ -135,14 +171,16 @@ async function assembleManifestFromContractAttachments(contractId, transaction) 
         version.documentFile,
         'CONTRACT_VERSION_DOCUMENT',
         `Documento da versão ${version.versionNumber} do contrato${signedBy ? ` (assinado por ${signedBy} parte(s))` : ''}`,
-        version.id
+        version.id,
+        'legal.contract_versions',
+        { version: version.versionNumber }
       );
     }
   }
 
   const requirements = await ContractRequirement.findAll({ where: { contractId }, include: [{ model: File, as: 'satisfiedByFile' }], transaction });
   for (const requirement of requirements) {
-    if (requirement.satisfiedByFile) pushFile(requirement.satisfiedByFile, 'REQUIREMENT_DOCUMENT', `Checklist "${requirement.requirementCode}" satisfeito`, requirement.id);
+    if (requirement.satisfiedByFile) pushFile(requirement.satisfiedByFile, 'REQUIREMENT_DOCUMENT', `Checklist "${requirement.requirementCode}" satisfeito`, requirement.id, 'legal.contract_requirements');
   }
 
   const inspections = await Inspection.findAll({ where: { contractId }, transaction });
@@ -151,7 +189,7 @@ async function assembleManifestFromContractAttachments(contractId, transaction) 
     for (const item of items) {
       const links = await FileLink.findAll({ where: { relatedEntityType: 'InspectionItem', relatedEntityId: item.id }, include: [{ model: File, as: 'file' }], transaction });
       for (const link of links) {
-        if (link.file) pushFile(link.file, 'INSPECTION_MEDIA', `${link.purpose === 'VIDEO' ? 'Vídeo' : 'Foto'} do item "${item.itemName}" (vistoria ${inspection.inspectionType})`, link.id);
+        if (link.file) pushFile(link.file, 'INSPECTION_MEDIA', `${link.purpose === 'VIDEO' ? 'Vídeo' : 'Foto'} do item "${item.itemName}" (vistoria ${inspection.inspectionType})`, link.id, 'legal.inspection_items');
       }
     }
   }
@@ -168,13 +206,14 @@ async function assembleManifestFromContractAttachments(contractId, transaction) 
  */
 async function createEvidencePackageFromContractAttachments(legalCaseId, actorUserId, transaction, { extraManifestItems = [] } = {}) {
   const legalCase = await getLegalCase(legalCaseId, transaction);
-  if (!legalCase.contractId) {
+  const caseDocuments = await FileLink.count({ where: { relatedEntityType: 'LegalCase', relatedEntityId: legalCase.id }, transaction });
+  if (!legalCase.contractId && caseDocuments === 0) {
     throw AppError.badRequest(
       'Este processo jurídico não está vinculado a um contrato — não há anexos para montar automaticamente.',
       'LEGAL_EVIDENCE_PACKAGE_NO_CONTRACT'
     );
   }
-  const autoManifest = await assembleManifestFromContractAttachments(legalCase.contractId, transaction);
+  const autoManifest = await assembleManifestFromContractAttachments(legalCase.contractId, transaction, { legalCaseId: legalCase.id });
   const manifestItems = [...autoManifest, ...extraManifestItems];
   if (manifestItems.length === 0) {
     throw AppError.conflict(

@@ -1,11 +1,12 @@
 'use strict';
 
-const { LegalCase, LegalCaseParty, Person, Task } = require('../../models');
+const { sequelize, LegalCase, LegalCaseParty, Person, Task } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishLegalCaseCreated } = require('./legalEvents.service');
 const { publishLegalCaseUpdated } = require('./legalBiEvents.service');
 const { assertCaseKeepsCriticalAccountability } = require('./legalDeadlineAccountability');
+const { reassignCaseDeadlineTasks } = require('./legalDeadlineTask');
 
 const CASE_TYPES = ['LITIGATION', 'CONSULTATIVE', 'COLLECTION'];
 
@@ -228,9 +229,17 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
   if (responsibleUserId !== undefined) legalCase.responsibleUserId = responsibleUserId;
   if (escalationUserId !== undefined) legalCase.escalationUserId = escalationUserId;
   if (phase !== undefined) legalCase.phase = phase;
-  Object.assign(legalCase, readCaseDetails(payload));
+  const details = readCaseDetails(payload);
+  // §14: depois de vinculado ao Financeiro, o valor confirmado não muda por aqui (o lançamento já existe).
+  if (details.confirmedAmount !== undefined && String(details.confirmedAmount) !== String(legalCase.confirmedAmount)) {
+    const [[linked]] = await sequelize.query('SELECT count(*)::int AS n FROM legal.case_receivables WHERE legal_case_id = :id', { replacements: { id: legalCase.id }, transaction });
+    if (linked.n > 0) throw AppError.conflict('O valor confirmado já gerou recebível no Financeiro e não pode ser alterado aqui.', 'LEGAL_CASE_RECEIVABLE_LOCKED');
+  }
+  Object.assign(legalCase, details);
   legalCase.updatedBy = actorUserId || null;
   await legalCase.save({ transaction });
+  // Guia §12: a tarefa dos prazos pendentes que dependem do responsável do processo segue o novo responsável.
+  if ((beforeJson.responsibleUserId || null) !== (legalCase.responsibleUserId || null)) await reassignCaseDeadlineTasks(legalCase, actorUserId, transaction);
   await publishLegalCaseUpdated(legalCase, transaction); // M9-D619: o BI recalcula risco, valores e processos ativos
 
   const phaseChanged = phase !== undefined && phase !== previousPhase;

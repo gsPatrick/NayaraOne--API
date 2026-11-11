@@ -12,6 +12,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const AppError = require('../src/utils/AppError');
@@ -21,6 +22,7 @@ let tenant;
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 
 after(async () => {
@@ -60,7 +62,7 @@ test('A07: prazo que já nasce vencido sem responsável é bloqueado', async () 
       () =>
         legalDeadlinesService.createLegalDeadline(
           legalCase.id,
-          { description: `Prazo fictício vencido ${suffix}`, dueAt: new Date('2020-01-01'), sourceDocument: 'decisão fictícia' },
+          { description: `Prazo fictício vencido ${suffix}`, dueAt: new Date('2020-01-01'), sourceDocument: 'decisão fictícia', sourceFileId: origem(tenant) },
           tenant.userId,
           transaction
         ),
@@ -74,7 +76,7 @@ test('A07: prazo que já nasce vencido sem responsável é bloqueado', async () 
     // Controle positivo: com responsável, o mesmo prazo vencido é aceito normalmente.
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Prazo fictício vencido ${suffix}`, dueAt: new Date('2020-01-01'), sourceDocument: 'decisão fictícia', responsibleUserId: tenant.userId },
+      { description: `Prazo fictício vencido ${suffix}`, dueAt: new Date('2020-01-01'), sourceDocument: 'decisão fictícia', sourceFileId: origem(tenant), responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );
@@ -88,7 +90,7 @@ test('A07 (controle): prazo com vencimento futuro não exige responsável', asyn
     const legalCase = await createCase(transaction, suffix);
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Prazo futuro ${suffix}`, dueAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado' },
+      { description: `Prazo futuro ${suffix}`, dueAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );
@@ -102,7 +104,7 @@ test('A08: concluir prazo (status DONE) sem evidência nem nota é bloqueado', a
     const legalCase = await createCase(transaction, suffix);
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Prazo a concluir ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado' },
+      { description: `Prazo a concluir ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );
@@ -134,7 +136,7 @@ test('A08 (controle): concluir com evidência de arquivo válido é aceito', asy
     const legalCase = await createCase(transaction, suffix);
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Prazo a concluir com evidência ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado' },
+      { description: `Prazo a concluir com evidência ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );
@@ -157,7 +159,7 @@ test('A09: mudar o vencimento sem justificativa é bloqueado', async () => {
     const legalCase = await createCase(transaction, suffix);
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Prazo a mudar ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado' },
+      { description: `Prazo a mudar ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );
@@ -194,7 +196,7 @@ test('A09 (controle): atualizar só a descrição, sem mudar dueAt, não exige j
     const legalCase = await createCase(transaction, suffix);
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Prazo original ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado' },
+      { description: `Prazo original ${suffix}`, dueAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );

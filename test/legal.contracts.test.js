@@ -120,10 +120,11 @@ test('HOM-001: contrato não avança para SIGNING sem nenhuma versão de documen
     await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
-    await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
 
+    // Matriz M5 (Guia §6): aprovar é aprovar a versão — sem versão de documento o contrato já não chega a APPROVED,
+    // e por isso também não chega a SIGNING.
     await assert.rejects(
-      () => contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction),
+      () => contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_CONTRACT_DOCUMENT_GATE');
@@ -285,7 +286,7 @@ test('máquina de estados: terminateContract é bloqueado com garantia ACTIVE pe
     const tenantParty = parties.find((p) => p.partyRole === 'TENANT');
     await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE' },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 1000, status: 'ACTIVE' }),
       tenant.userId,
       transaction
     );

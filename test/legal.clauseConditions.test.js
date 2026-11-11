@@ -258,7 +258,7 @@ test('F01: mudar a condição cria nova versão; a versão anterior e o document
     );
     await require('../src/features/legal/guarantees.service').createGuarantee(
       contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, endsAt: '2030-12-31' },
+      await require('./m5fech.locacao.helpers').completeGuarantor(tenant, transaction, guarantor.id),
       tenant.userId,
       transaction
     );

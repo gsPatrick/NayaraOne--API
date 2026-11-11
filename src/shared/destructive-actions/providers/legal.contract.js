@@ -18,7 +18,9 @@ function targetOf(req) {
 async function legalContract({ id, transaction, preview, req, query, itemsMax }) {
   // Simulação: `?targetStatus=CANCELLED` simula o cancelamento (sem o gate de encerramento); sem o parâmetro é a rescisão.
   const target = preview ? String(query.targetStatus || 'TERMINATED').toUpperCase() : targetOf(req);
-  if (!preview && !['TERMINATED', 'CANCELLED'].includes(target)) return { skip: true };
+  // Matriz M5 (Guia §3): CANCELLED deixou de ser alvo de transição do contrato — a chamada segue direto para a
+  // máquina de estados, que recusa (409); só a rescisão pede confirmação.
+  if (!preview && target !== 'TERMINATED') return { skip: true };
   const contract = await one(transaction, 'SELECT id, contract_number, status FROM legal.contracts WHERE id = :id AND deleted_at IS NULL', { id }, 'Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
   const [billing] = await rows(transaction, `SELECT COUNT(*)::int AS n, ${centsSql('balance')} AS cents FROM finance.billing_schedules WHERE contract_id = :id AND deleted_at IS NULL AND status IN ('OPEN','PARTIALLY_PAID')`, { id });
   const items = await rows(transaction, `SELECT id, period, balance FROM finance.billing_schedules WHERE contract_id = :id AND deleted_at IS NULL AND status IN ('OPEN','PARTIALLY_PAID') ORDER BY due_date LIMIT :limit`, { id, limit: itemsMax });

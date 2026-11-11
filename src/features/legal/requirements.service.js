@@ -1,6 +1,6 @@
 'use strict';
 
-const { ContractRequirement } = require('../../models');
+const { ContractRequirement, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getContract, isLeaseLikeContractType } = require('./contracts.service');
@@ -65,79 +65,15 @@ const REQUIREMENT_TYPES = [
   'BUDGET_SCHEDULE',
 ];
 
-// Templates por contractType (Contract.contractType usa SALE|LEASE|SERVICE|CONSTRUCTION — ver
-// CONTRACT_TYPES em contracts.service.js) + por termType (para os termos de entrega descritos
-// no Caderno "3. Tipos de contrato": KEY_DELIVERY/USED_PROPERTY_DELIVERY, usados em
-// keyDeliveries.service.js).
-function SALE_BASE_TEMPLATE(prefix) {
-  return [
-    { requirementCode: `${prefix}_BUYER_DOCS`, requirementType: 'BUYER_DOCUMENT', description: 'Documentos do comprador.' },
-    { requirementCode: `${prefix}_SELLER_DOCS`, requirementType: 'SELLER_DOCUMENT', description: 'Documentos do vendedor.' },
-    { requirementCode: `${prefix}_REGISTRATION`, requirementType: 'PROPERTY_REGISTRATION', description: 'Matrícula do imóvel.' },
-    { requirementCode: `${prefix}_CERTIFICATES`, requirementType: 'CERTIFICATES', description: 'Certidões (negativas, ônus etc.).' },
-    { requirementCode: `${prefix}_PAYMENT_DATA`, requirementType: 'PAYMENT_DATA', description: 'Dados de pagamento (à vista, parcelas ou torna).' },
-  ];
-}
+// Matriz M5: os modelos de checklist saíram do código e são a política da regra REG-JUR-001 do Motor de Regras
+// (requirementRules.service.js). O padrão do Caderno §7 está em requirementRules.defaults.js e é a semente da
+// regra; REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE continua exportado só como leitura desse padrão.
+const { TEMPLATES: REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE, TYPE_TO_TEMPLATE } = require('./requirementRules.defaults');
+const { resolveRequirementItems, STAGES } = require('./requirementRules.service');
 
 function resolveTemplateKey(contractType) {
-  return isLeaseLikeContractType(contractType) ? 'LEASE' : contractType;
+  return TYPE_TO_TEMPLATE[contractType] || (isLeaseLikeContractType(contractType) ? 'LEASE' : contractType);
 }
-
-const REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE = {
-  LEASE: [
-    { requirementCode: 'LEASE_PF_PJ_DOCS', requirementType: 'PF_DOCUMENT', description: 'Documentos PF/PJ das partes (locador/locatário).' },
-    { requirementCode: 'LEASE_GUARANTEE', requirementType: 'GUARANTEE', description: 'Garantia locatícia (fiador, seguro-fiança, caução ou título de capitalização).' },
-    { requirementCode: 'LEASE_POWER_OF_ATTORNEY', requirementType: 'POWER_OF_ATTORNEY', description: 'Procuração, quando alguma parte for representada por terceiro.', optional: true },
-    { requirementCode: 'LEASE_INSPECTION', requirementType: 'INSPECTION', description: 'Vistoria de entrada do imóvel.' },
-    { requirementCode: 'LEASE_OWNERSHIP', requirementType: 'OWNERSHIP_PROOF', description: 'Comprovação de titularidade do imóvel.' },
-    { requirementCode: 'LEASE_OBLIGATIONS', requirementType: 'OBLIGATIONS', description: 'Definição de responsáveis pelas obrigações locatícias (IPTU/condomínio/água/luz/gás).' },
-  ],
-  SALE_FINANCED: [
-    { requirementCode: 'SALE_FIN_BUYER_DOCS', requirementType: 'BUYER_DOCUMENT', description: 'Documentos do comprador.' },
-    { requirementCode: 'SALE_FIN_SELLER_DOCS', requirementType: 'SELLER_DOCUMENT', description: 'Documentos do vendedor.' },
-    { requirementCode: 'SALE_FIN_REGISTRATION', requirementType: 'PROPERTY_REGISTRATION', description: 'Matrícula do imóvel.' },
-    { requirementCode: 'SALE_FIN_CERTIFICATES', requirementType: 'CERTIFICATES', description: 'Certidões (negativas, ônus etc.).' },
-    { requirementCode: 'SALE_FIN_FINANCING', requirementType: 'FINANCING', description: 'Documentação de financiamento.' },
-    { requirementCode: 'SALE_FIN_PAYMENT_DATA', requirementType: 'PAYMENT_DATA', description: 'Dados de pagamento.' },
-  ],
-  // Frente 5 (conferência 18/10/2026 item 9): venda à vista/permuta/parcelada, SERVICE e
-  // CONSTRUCTION passavam o gate com ZERO documentos (não havia template e o gate deixava
-  // passar). Agora todo CONTRACT_TYPES tem template — e tipo sem template BLOQUEIA (ver
-  // assertRequirementsSatisfied).
-  SALE: SALE_BASE_TEMPLATE('SALE'),
-  SALE_CASH: SALE_BASE_TEMPLATE('SALE_CASH'),
-  SALE_INSTALLMENTS: [
-    ...SALE_BASE_TEMPLATE('SALE_INST'),
-  ],
-  SALE_TRADE: [
-    ...SALE_BASE_TEMPLATE('SALE_TRADE'),
-    { requirementCode: 'SALE_TRADE_ASSET', requirementType: 'TRADE_ASSET', description: 'Documentação do bem dado em permuta (matrícula/registro e avaliação).' },
-  ],
-  SERVICE: [
-    { requirementCode: 'SERVICE_PARTIES_DOCS', requirementType: 'PF_DOCUMENT', description: 'Documentos PF/PJ do contratante e do prestador.' },
-    { requirementCode: 'SERVICE_SCOPE', requirementType: 'SERVICE_SCOPE', description: 'Escopo/proposta do serviço com preço e prazo.' },
-  ],
-  CONSTRUCTION: [
-    { requirementCode: 'CONSTR_PARTIES_DOCS', requirementType: 'PJ_DOCUMENT', description: 'Documentos do contratante e da construtora/empreiteira.' },
-    { requirementCode: 'CONSTR_PERMIT', requirementType: 'CONSTRUCTION_PERMIT', description: 'Projeto aprovado / alvará de construção.' },
-    { requirementCode: 'CONSTR_ART_RRT', requirementType: 'TECHNICAL_RESPONSIBILITY', description: 'ART/RRT do responsável técnico.' },
-    { requirementCode: 'CONSTR_BUDGET_SCHEDULE', requirementType: 'BUDGET_SCHEDULE', description: 'Orçamento e cronograma físico-financeiro.' },
-  ],
-  NEW_PROPERTY_DELIVERY: [
-    { requirementCode: 'NEW_DELIVERY_TERM', requirementType: 'DELIVERY_TERM', description: 'Termo de entrega.' },
-    { requirementCode: 'NEW_FINAL_INSPECTION', requirementType: 'FINAL_INSPECTION', description: 'Vistoria final.' },
-    { requirementCode: 'NEW_OWNER_MANUAL', requirementType: 'OWNER_MANUAL', description: 'Manual do proprietário.' },
-    { requirementCode: 'NEW_PHOTOS', requirementType: 'PHOTOS', description: 'Fotos.' },
-    { requirementCode: 'NEW_KEYS', requirementType: 'KEYS', description: 'Chaves.' },
-  ],
-  USED_PROPERTY_DELIVERY: [
-    {
-      requirementCode: 'USED_PROPERTY_TERM',
-      requirementType: 'USED_PROPERTY_TERM',
-      description: 'Termo específico deixando clara a natureza/estado do imóvel usado, conforme modelo jurídico aprovado.',
-    },
-  ],
-};
 
 /**
  * generateRequirementsForContract — gera os requirements de um contrato a partir do seu
@@ -149,7 +85,7 @@ const REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE = {
  */
 async function generateRequirementsForContract(contractId, options, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
-  const { templateKey, hasRepresentedParty } = options || {};
+  const { templateKey } = options || {};
 
   // BUG REAL CORRIGIDO (varredura completa Marco 5, 12/10/2026, achado por teste HTTP novo):
   // esta tabela só tinha a chave literal "LEASE", mas os subtipos LEASE_RESIDENTIAL/
@@ -160,11 +96,12 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
   // JUR-015) que esses subtipos deveriam estar protegidos por. Mesmo padrão de bug já corrigido
   // em rentAdvance.service.js/billingScheduleAutoGenerateJob — usar isLeaseLikeContractType()
   // em vez de comparar contractType literalmente.
-  const key = templateKey || resolveTemplateKey(contract.contractType);
-  const template = REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE[key];
+  // Matriz M5 (Caderno §7): itens = política vigente do Motor de Regras (REG-JUR-001) para o tipo (ou o fluxo
+  // `templateKey`), filtrados pelas características das partes/imóvel lidas do cadastro (não do corpo da requisição).
+  const { key, items: template, ruleVersionId } = await resolveRequirementItems(contract, { templateKey }, actorUserId, transaction);
   if (!template) {
     throw AppError.badRequest(
-      `Não há template de requirements configurado para "${contract.contractType}". Templates disponíveis: ${Object.keys(REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE).join(', ')} (ou informe "templateKey" explicitamente).`,
+      `Não há modelo de checklist configurado para "${contract.contractType}" na regra do checklist documental (ou informe "templateKey").`,
       'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND'
     );
   }
@@ -174,7 +111,6 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
 
   const created = [];
   for (const item of template) {
-    if (item.optional && !hasRepresentedParty) continue; // procuração só se aplicável.
     if (existingCodes.has(item.requirementCode)) continue;
 
     const requirement = await ContractRequirement.create(
@@ -186,6 +122,8 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
         description: item.description,
         requirementType: item.requirementType,
         status: 'PENDING',
+        requiredStage: item.stage || 'LEGAL_REVIEW',
+        ruleVersionId: ruleVersionId || null,
         createdBy: actorUserId || null,
         updatedBy: actorUserId || null,
       },
@@ -203,7 +141,7 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
       action: 'legal.contract_requirements.generate',
       entityType: 'Contract',
       entityId: contract.id,
-      afterJson: { templateKey: key, createdRequirementCodes: created.map((r) => r.requirementCode) },
+      afterJson: { templateKey: key, ruleVersionId, createdRequirementCodes: created.map((r) => r.requirementCode) },
       reason: `Requirements gerados para o contrato ${contract.id} a partir do template "${key}".`,
     },
     transaction
@@ -249,6 +187,12 @@ async function satisfyRequirement(requirementId, payload, actorUserId, transacti
     if (!satisfiedByFileId) {
       throw AppError.badRequest('Informe "satisfiedByFileId" (documento apresentado) ou "waivedReason" (dispensa justificada).', 'LEGAL_REQUIREMENT_VALIDATION');
     }
+    // Matriz M5 (JUR-003/JUR-013): o documento que satisfaz a exigência precisa existir NESTA
+    // empresa (leitura sob RLS). Antes qualquer uuid — inclusive inexistente ou de outra empresa —
+    // marcava a exigência como SATISFIED e liberava o gate sem documento nenhum.
+    if (!(await File.findByPk(satisfiedByFileId, { transaction, attributes: ['id'] }))) {
+      throw AppError.notFound('Documento informado em "satisfiedByFileId" não encontrado nesta empresa.', 'LEGAL_REQUIREMENT_FILE_NOT_FOUND');
+    }
     requirement.status = 'SATISFIED';
     requirement.satisfiedByFileId = satisfiedByFileId;
     requirement.satisfiedAt = new Date();
@@ -284,47 +228,53 @@ async function satisfyRequirement(requirementId, payload, actorUserId, transacti
  * topo do arquivo: isto é intencional para não travar contratos de tipos sem template
  * configurado ainda.
  */
-async function assertRequirementsSatisfied(contractId, transaction) {
-  let requirements = await ContractRequirement.findAll({ where: { contractId }, transaction });
+const STAGE_BY_TARGET = { LEGAL_REVIEW: 'LEGAL_REVIEW', APPROVED: 'LEGAL_APPROVAL', SIGNING: 'SIGNING', ACTIVE: 'ACTIVATION', KEY_DELIVERY: 'KEY_DELIVERY' };
 
-  // BUG REAL CORRIGIDO (ciclo de verificação cética independente, 12/10/2026): zero
-  // requirements gerados fazia este gate PASSAR silenciosamente (pending.length === 0), porque
-  // ninguém no backend gerava o checklist automaticamente — só um botão manual na tela
-  // (generateContractRequirements) fazia isso. Um contrato de locação/venda financiada cujo
-  // responsável nunca clicasse nesse botão atravessava TODA a máquina de estados sem nenhum
-  // documento verificado, reproduzindo exatamente o bug crítico original (JUR-003/JUR-015)
-  // numa camada mais funda. Fail closed de verdade: se o tipo de contrato tem um template de
-  // requirements aplicável e ainda não foi gerado, gera agora (idempotente, dentro da mesma
-  // transação) antes de checar pendências — em vez de deixar passar por omissão.
+/**
+ * Guia §5 assertRequirementsSatisfied(contractId, targetStage): resolve as exigências que valem para a etapa-alvo
+ * (as de `required_stage` até a etapa pedida, na ordem LEGAL_REVIEW < LEGAL_APPROVAL < SIGNING < ACTIVATION <
+ * KEY_DELIVERY) e recusa com a lista dos códigos que faltam. Aceita também o status-alvo do contrato
+ * (APPROVED -> LEGAL_APPROVAL, ACTIVE -> ACTIVATION). Sem etapa (chamada legada), toda pendência bloqueia.
+ * Fail closed: sem checklist gerado, gera agora; tipo sem modelo bloqueia.
+ */
+async function assertRequirementsSatisfied(contractId, targetStageOrTransaction, maybeTransaction) {
+  const legacy = targetStageOrTransaction && typeof targetStageOrTransaction === 'object';
+  const transaction = legacy ? targetStageOrTransaction : maybeTransaction;
+  const stage = legacy || !targetStageOrTransaction ? null : (STAGE_BY_TARGET[targetStageOrTransaction] || targetStageOrTransaction);
+  if (stage && !STAGES.includes(stage)) {
+    throw AppError.badRequest(`Etapa desconhecida para o checklist: "${stage}".`, 'LEGAL_REQUIREMENT_STAGE_INVALID');
+  }
+  let requirements = await ContractRequirement.findAll({ where: { contractId }, transaction });
   if (requirements.length === 0) {
-    // Frente 5 — FALHA FECHADO: tipo sem modelo de checklist BLOQUEIA (antes passava com zero
-    // documentos: SALE_CASH/SALE_TRADE/SALE_INSTALLMENTS/SERVICE/CONSTRUCTION).
-    const contract = await getContract(contractId, transaction);
-    const key = resolveTemplateKey(contract.contractType);
-    if (!REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE[key]) {
-      throw AppError.conflict(
-        `Não é possível avançar: o tipo de contrato "${contract.contractType}" não tem modelo de checklist documental configurado.`,
-        'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND'
-      );
+    try {
+      await generateRequirementsForContract(contractId, {}, null, transaction);
+    } catch (err) {
+      if (err && err.code === 'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND') {
+        throw AppError.conflict(`Não é possível avançar: ${err.message}`, 'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND');
+      }
+      throw err;
     }
-    // Sem try/catch: um erro aqui aborta a transação de qualquer forma; engolir só escondia a
-    // falha e deixava passar com zero documentos.
-    await generateRequirementsForContract(contractId, {}, null, transaction);
     requirements = await ContractRequirement.findAll({ where: { contractId }, transaction });
     if (requirements.length === 0) {
       throw AppError.conflict('Não é possível avançar: o checklist documental do contrato está vazio.', 'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND');
     }
   }
-
-  const pending = requirements.filter((r) => r.status === 'PENDING');
+  const limit = stage ? STAGES.indexOf(stage) : STAGES.length;
+  const pending = requirements.filter((r) => r.status === 'PENDING' && STAGES.indexOf(r.requiredStage || 'LEGAL_REVIEW') <= limit);
   if (pending.length > 0) {
     throw AppError.conflict(
-      `Não é possível avançar: há requirement(s) obrigatório(s) pendente(s): ${pending.map((r) => r.requirementCode).join(', ')}.`,
+      `Não é possível avançar${stage ? ` para ${stage}` : ''}: há requirement(s) obrigatório(s) pendente(s): ${pending.map((r) => r.requirementCode).join(', ')}.`,
       'LEGAL_REQUIREMENTS_PENDING',
-      { pending: pending.map((r) => ({ id: r.id, requirementCode: r.requirementCode, description: r.description })) }
+      { stage, pending: pending.map((r) => ({ id: r.id, requirementCode: r.requirementCode, description: r.description, requiredStage: r.requiredStage })) }
     );
   }
   return true;
+}
+
+/** Garante o checklist gerado (ao entrar em DOCUMENTS_PENDING): gera se ainda não existe, sem bloquear. */
+async function ensureRequirementsGenerated(contractId, actorUserId, transaction) {
+  const count = await ContractRequirement.count({ where: { contractId }, transaction });
+  if (count === 0) await generateRequirementsForContract(contractId, {}, actorUserId, transaction);
 }
 
 module.exports = {
@@ -332,6 +282,8 @@ module.exports = {
   listRequirements,
   satisfyRequirement,
   assertRequirementsSatisfied,
+  ensureRequirementsGenerated,
+  STAGE_BY_TARGET,
   resolveTemplateKey,
   REQUIREMENT_TYPES,
   REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE,

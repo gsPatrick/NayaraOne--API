@@ -2,6 +2,8 @@
 
 const crypto = require('crypto');
 const { KeyDelivery, Inspection, InspectionSignature, Guarantee, ContractParty, Person, Property, PropertyAddress } = require('../../models');
+const { assertPhotosAreRealImages } = require('./keyDeliveryPhotos');
+const { assertKeyDeliveryRequirements, resolveTermEvidence } = require('./keyDeliveryGates');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishKeyDeliveryReleased, publishKeysDelivered } = require('./legalEvents.service');
@@ -27,6 +29,12 @@ const KEY_DELIVERY_TERM_VERSION_V1 = 'KD-TERM-v1';
 // técnico no documento entregue à pessoa). v1/v2 já gravados continuam intactos (texto e hash).
 const KEY_DELIVERY_TERM_VERSION = 'KD-TERM-v3';
 const CLIENT_FORBIDDEN_FIELDS = ['photosRequired', 'photoPolicy', 'termText', 'termVersion', 'termHash', 'policy'];
+
+// Fechamento M5 (Caderno §10 "Exigir vistoria final/entrada assinada quando aplicável"): locação exige
+// a vistoria de ENTRADA (CHECK_IN); venda (entrega de casa nova) aceita a vistoria FINAL ou a de entrada.
+function deliveryInspectionTypes(contract) {
+  return isSaleLikeContractType(contract.contractType) ? ['FINAL', 'ENTRY'] : ['ENTRY'];
+}
 
 function resolveKeyDeliveryPhotoPolicy(contract, keyDelivery) {
   if (keyDelivery.termType === 'USED_PROPERTY_DELIVERY') return { code: 'REQUIRED_USED_PROPERTY', photosRequired: true };
@@ -287,8 +295,8 @@ async function previewKeyDeliveryTerm(id, query, transaction) {
   const q = query || {};
   let checkIn = null;
   const where = keyDelivery.inspectionId
-    ? { id: keyDelivery.inspectionId, contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' }
-    : { contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' };
+    ? { id: keyDelivery.inspectionId, contractId: contract.id, inspectionType: deliveryInspectionTypes(contract), status: 'COMPLETED' }
+    : { contractId: contract.id, inspectionType: deliveryInspectionTypes(contract), status: 'COMPLETED' };
   checkIn = await Inspection.findOne({ where, order: [['created_at', 'DESC']], transaction });
   const policy = resolveKeyDeliveryPhotoPolicy(contract, keyDelivery);
   const n = Number(q.keysCount);
@@ -331,7 +339,6 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
       'LEGAL_KEY_DELIVERY_BLOCKED'
     );
   }
-
   // Caderno Anexo I "10. Entrega de chaves": "Exigir documentos e garantias válidos." Até aqui
   // só o gate de ATIVAÇÃO do contrato (assertActivationGate) reconferia garantias — a entrega de
   // chaves em si não checava nada. Mesmo espírito do gate de ativação: se o contrato tem alguma
@@ -374,7 +381,7 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
   let checkIn = null;
   if (keyDelivery.inspectionId) {
     checkIn = await Inspection.findOne({
-      where: { id: keyDelivery.inspectionId, contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' },
+      where: { id: keyDelivery.inspectionId, contractId: contract.id, inspectionType: deliveryInspectionTypes(contract), status: 'COMPLETED' },
       transaction,
     });
     if (!checkIn) {
@@ -385,7 +392,7 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
     }
   } else {
     checkIn = await Inspection.findOne({
-      where: { contractId: contract.id, inspectionType: 'CHECK_IN', status: 'COMPLETED' },
+      where: { contractId: contract.id, inspectionType: deliveryInspectionTypes(contract), status: 'COMPLETED' },
       order: [
         ['completedAt', 'DESC'],
         ['created_at', 'DESC'],
@@ -397,8 +404,10 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
       // contrato (contract_id nullable em Inspection) — aceitamos também a vistoria concluída
       // MAIS RECENTE do mesmo imóvel. Decisão de engenharia: sem isso, contratos criados após a
       // vistoria (ou vistorias registradas antes do contrato existir) nunca liberariam a chave.
+      // Fechamento M5 (Caderno §10 / JUR-005): só vale a vistoria do imóvel SEM contrato — a
+      // vistoria de entrada de OUTRO contrato (ex.: do locatário anterior) não libera esta entrega.
       checkIn = await Inspection.findOne({
-        where: { propertyId: contract.propertyId, inspectionType: 'CHECK_IN', status: 'COMPLETED' },
+        where: { propertyId: contract.propertyId, contractId: null, inspectionType: deliveryInspectionTypes(contract), status: 'COMPLETED' },
         order: [
           ['completedAt', 'DESC'],
           ['created_at', 'DESC'],
@@ -430,6 +439,10 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
     );
   }
 
+  // Fechamento M5 (Caderno §10 "Checklist calculado por Motor de Regras"/"Exigir documentos"; Guia §11): checklist da
+  // etapa KEY_DELIVERY reconferido depois de contrato, garantia e vistoria (que têm mensagem própria).
+  await assertKeyDeliveryRequirements(contract.id, transaction);
+
   // Caderno Anexo I "10. Entrega de chaves": "Registrar quantidade/identificação de
   // chaves/controles", "Fotos obrigatórias quando política exigir", "Assinatura do termo de
   // entrega." Fail closed: exige quantidade E assinatura do termo (pessoa que coletou/assinou)
@@ -442,7 +455,7 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
       'LEGAL_KEY_DELIVERY_SERVER_POLICY'
     );
   }
-  const { keysCount, keysIdentification, photosFileIds, termSignedByPersonId } = body;
+  const { keysCount, keysIdentification, photosFileIds, termSignedByPersonId, termEvidenceFileId } = body;
   const policy = resolveKeyDeliveryPhotoPolicy(contract, keyDelivery);
   const photosRequired = policy.photosRequired;
   if (keysCount === undefined || keysCount === null || Number(keysCount) <= 0) {
@@ -463,10 +476,12 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
       'LEGAL_KEY_DELIVERY_PHOTOS_REQUIRED'
     );
   }
+  await assertPhotosAreRealImages(photosFileIds, contract, transaction);
 
   // Recebedor (entregas antigas, criadas antes da regra F6) e signatário precisam ser partes.
   await assertContractParty(contract.id, keyDelivery.deliveredToPersonId, transaction, RECIPIENT_NOT_PARTY);
   await assertContractParty(contract.id, termSignedByPersonId, transaction, SIGNER_NOT_PARTY);
+  const termEvidence = await resolveTermEvidence(termEvidenceFileId, contract, transaction);
   const signedAt = new Date();
   const ctx = await gatherTermV2Context({ contract, keyDelivery, termSignedByPersonId, checkIn }, transaction);
   const termText = buildKeyDeliveryTermV2({
@@ -492,6 +507,7 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
   keyDelivery.photosRequired = Boolean(photosRequired);
   keyDelivery.photosFileIds = Array.isArray(photosFileIds) ? photosFileIds : null;
   keyDelivery.termSignedByPersonId = termSignedByPersonId;
+  Object.assign(keyDelivery, termEvidence);
   keyDelivery.termSignedAt = signedAt;
   keyDelivery.termText = termText;
   keyDelivery.termVersion = KEY_DELIVERY_TERM_VERSION;

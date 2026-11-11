@@ -27,15 +27,34 @@ function assertCriticalDeadlineAccountability(deadlineLike, legalCase) {
 }
 
 /**
+ * Caderno M5 §15 "due_at em timezone correto + responsável + severidade": TODO prazo tem responsável — o próprio ou,
+ * sem ele, o do processo (é para quem vai o alerta e a tarefa). Sem nenhum dos dois: 400.
+ */
+function assertHasResponsible(deadlineLike, legalCase) {
+  if (!deadlineLike.responsibleUserId && !(legalCase && legalCase.responsibleUserId)) {
+    throw AppError.badRequest(
+      'Todo prazo precisa de um responsável: informe o responsável do prazo ou defina o responsável do processo.',
+      'LEGAL_DEADLINE_RESPONSIBLE_REQUIRED'
+    );
+  }
+}
+
+/**
  * Caminho vizinho: o processo nao pode perder responsavel/escalonamento enquanto houver prazo
- * CRITICAL pendente que dependa deles.
+ * CRITICAL pendente que dependa deles, nem perder o responsavel enquanto houver prazo pendente
+ * (de qualquer criticidade) sem responsavel proprio, que ficaria sem ninguem (422).
  */
 async function assertCaseKeepsCriticalAccountability(legalCase, transaction) {
-  const pending = await LegalDeadline.findAll({
-    where: { legalCaseId: legalCase.id, status: 'PENDING', criticality: 'CRITICAL' },
-    transaction,
-  });
-  for (const deadline of pending) assertCriticalDeadlineAccountability(deadline, legalCase);
+  const pending = await LegalDeadline.findAll({ where: { legalCaseId: legalCase.id, status: 'PENDING' }, transaction });
+  for (const deadline of pending) {
+    if (deadline.criticality === 'CRITICAL') assertCriticalDeadlineAccountability(deadline, legalCase);
+    else if (!deadline.responsibleUserId && !legalCase.responsibleUserId) {
+      throw AppError.unprocessable(
+        `O processo não pode ficar sem responsável: o prazo "${deadline.description}" está pendente e depende dele.`,
+        'LEGAL_DEADLINE_RESPONSIBLE_REQUIRED'
+      );
+    }
+  }
 }
 
 /** Normaliza a nota: tira espacos e caracteres invisiveis; vazio vira null; nao-texto e recusado (400). */
@@ -43,4 +62,4 @@ function normalizeNote(value) {
   return normalizeOptionalText(value, 'conclusionNote');
 }
 
-module.exports = { assertCriticalDeadlineAccountability, assertCaseKeepsCriticalAccountability, normalizeNote };
+module.exports = { assertCriticalDeadlineAccountability, assertCaseKeepsCriticalAccountability, assertHasResponsible, normalizeNote };

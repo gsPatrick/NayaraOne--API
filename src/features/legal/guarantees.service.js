@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishGuaranteeCreated, publishGuaranteeReplaced } = require('./legalEvents.service');
 const { publishGuaranteeUpdated, publishGuaranteeEnded } = require('./legalCalendarEvents.service');
 const { getContract } = require('./contracts.service');
+const { GUARANTEE_TYPES, normalizeGuaranteeType, resolveTypeData, missingMessage } = require('./guaranteeTypeData');
 
 // FIX AUD-014 (auditoria externa Nayara, 11/10/2026, JUR-006 "Garantia rastreável com
 // vigência/status próprios"): o Caderno (seção 9, "Garantias locatícias") lista 5 tipos —
@@ -14,12 +15,12 @@ const { getContract } = require('./contracts.service');
 // 4 existiam aqui, sem OTHER. Mantidos os nomes internos já em uso (DEPOSIT/CAPITALIZATION_TITLE
 // em vez de SECURITY_DEPOSIT/CAPITALIZATION) para não quebrar dados já gravados; adicionado só
 // o tipo que faltava de verdade.
-const GUARANTEE_TYPES = ['GUARANTOR', 'INSURANCE', 'DEPOSIT', 'CAPITALIZATION_TITLE', 'OTHER'];
+// Fechamento M5: os cinco códigos do livro vêm de guaranteeTypeData.js (DEPOSIT/CAPITALIZATION_TITLE só na entrada).
 // A mesma seção 9 exige "vigência" explicitamente só para GUARANTOR/INSURANCE/
 // CAPITALIZATION_TITLE ("Pessoas, documentos, vigência, aceite" / "Provider/apólice, vigência,
 // parcelas, renovação" / "Documento/provider/vigência") — DEPOSIT (caução) e OTHER não listam
 // vigência como dado obrigatório, então continuam com endsAt opcional.
-const GUARANTEE_TYPES_REQUIRING_VALIDITY = ['GUARANTOR', 'INSURANCE', 'CAPITALIZATION_TITLE'];
+const GUARANTEE_TYPES_REQUIRING_VALIDITY = ['GUARANTOR', 'INSURANCE', 'CAPITALIZATION'];
 // FIX (homologação 22/09/2026 — auditoria proativa): `status` era gravado como string livre
 // (sem ENUM/CHECK no model nem validação aqui), apesar de contracts.service.js/
 // assertActivationGate depender literalmente da string 'ACTIVE' pra decidir se a garantia conta
@@ -27,7 +28,8 @@ const GUARANTEE_TYPES_REQUIRING_VALIDITY = ['GUARANTOR', 'INSURANCE', 'CAPITALIZ
 // silenciosamente não contar, sem erro nenhum no cadastro — só aparecia depois, como bloqueio
 // inexplicado na ativação do contrato. Agora é validado contra um enum fechado, igual ao
 // restante do projeto.
-const GUARANTEE_STATUSES = ['ACTIVE', 'RELEASED', 'CANCELLED'];
+// PENDING (fechamento M5): garantia cadastrada sem todos os dados do tipo (Caderno §9) — não vale como garantia ativa.
+const GUARANTEE_STATUSES = ['PENDING', 'ACTIVE', 'RELEASED', 'CANCELLED'];
 
 function assertValidDateRange(startsAt, endsAt) {
   if (startsAt && endsAt && new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
@@ -45,7 +47,8 @@ function assertValidValue(value) {
 
 async function createGuarantee(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
-  const { guaranteeType, guarantorPersonId, value, status, startsAt, endsAt } = payload;
+  const { guarantorPersonId, value, status, startsAt, endsAt } = payload;
+  const guaranteeType = normalizeGuaranteeType(payload.guaranteeType);
 
   if (!guaranteeType) {
     throw AppError.badRequest('O campo "guaranteeType" é obrigatório.', 'LEGAL_GUARANTEE_VALIDATION');
@@ -67,6 +70,8 @@ async function createGuarantee(contractId, payload, actorUserId, transaction) {
   }
   assertValidValue(value);
   assertValidDateRange(startsAt, endsAt);
+  const typeData = await resolveTypeData(guaranteeType, payload, contract, transaction);
+  if (status === 'ACTIVE' && typeData.missing.length) throw AppError.badRequest(missingMessage(guaranteeType, typeData.missing), 'LEGAL_GUARANTEE_VALIDATION', { missing: typeData.missing });
 
   const guarantee = await Guarantee.create(
     {
@@ -76,9 +81,10 @@ async function createGuarantee(contractId, payload, actorUserId, transaction) {
       guaranteeType,
       guarantorPersonId: guaranteeType === 'GUARANTOR' ? guarantorPersonId : (guarantorPersonId || null),
       value: value !== undefined ? value : null,
-      status: status || 'ACTIVE',
+      status: status || (typeData.missing.length ? 'PENDING' : 'ACTIVE'),
       startsAt: startsAt || null,
       endsAt: endsAt || null,
+      ...typeData.fields,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -137,6 +143,13 @@ async function updateGuarantee(id, payload, actorUserId, transaction) {
   const previousStatus = guarantee.status;
   const previousEndsAt = guarantee.endsAt;
   const { status, startsAt, endsAt, value } = payload;
+  const contract = await getContract(guarantee.contractId, transaction);
+  const typeData = await resolveTypeData(guarantee.guaranteeType, payload, contract, transaction, guarantee);
+  Object.assign(guarantee, typeData.fields);
+  const targetStatus = status !== undefined ? status : guarantee.status;
+  if (targetStatus === 'ACTIVE' && typeData.missing.length && (status === 'ACTIVE' || Object.keys(typeData.fields).length)) {
+    throw AppError.badRequest(missingMessage(guarantee.guaranteeType, typeData.missing), 'LEGAL_GUARANTEE_VALIDATION', { missing: typeData.missing });
+  }
   if (status !== undefined) {
     if (!GUARANTEE_STATUSES.includes(status)) {
       throw AppError.badRequest(`"status" deve ser um de: ${GUARANTEE_STATUSES.join(', ')}.`, 'LEGAL_GUARANTEE_VALIDATION');

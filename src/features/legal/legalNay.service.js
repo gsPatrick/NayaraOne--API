@@ -12,6 +12,7 @@ const {
   LegalCaseParty,
   LegalDeadline,
   EvidencePackage,
+  FileLink,
   Person,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
@@ -155,6 +156,16 @@ async function summarizeCase(tenant, caseId, actorUserId, transaction) {
   const names = await personNames(parties.map((p) => p.personId), transaction);
   const now = new Date();
   const open = deadlines.filter((d) => d.status !== 'DONE');
+  // §17 "aponta documentos faltantes": checklist pendente do contrato do processo, processo sem documento e prazo concluído sem evidência anexada.
+  const [requirements, caseDocuments] = await Promise.all([
+    legalCase.contractId ? ContractRequirement.findAll({ where: { contractId: legalCase.contractId }, transaction }) : [],
+    FileLink.count({ where: { relatedEntityType: 'LegalCase', relatedEntityId: caseId }, transaction }),
+  ]);
+  const missing = requirements.filter((r) => r.status === 'PENDING');
+  const pontosDeAtencao = [];
+  if (missing.length) pontosDeAtencao.push(`${missing.length} documento(s) obrigatório(s) pendente(s) no checklist do contrato do processo.`);
+  if (!caseDocuments) pontosDeAtencao.push('Processo sem nenhum documento ou prova vinculado.');
+  for (const d of deadlines) if (d.status === 'DONE' && !d.conclusionEvidenceFileId) pontosDeAtencao.push(`Prazo "${d.description}" concluído só com nota, sem evidência anexada.`);
   const result = {
     agente: 'NAY Jurídica',
     metodo: 'RULE_BASED',
@@ -172,12 +183,17 @@ async function summarizeCase(tenant, caseId, actorUserId, transaction) {
     partes: parties.map((p) => ({ personId: p.personId, nome: names.get(p.personId) || null, papel: p.partyRole })),
     prazosAbertos: open.map((d) => ({ id: d.id, descricao: d.description, vencimento: iso(d.dueAt), vencido: new Date(d.dueAt) < now, responsavel: d.responsibleUserId })),
     prazosConcluidos: deadlines.length - open.length,
+    documentosVinculados: caseDocuments,
+    documentosFaltantes: missing.map((r) => ({ id: r.id, codigo: r.requirementCode, descricao: r.description })),
+    pontosDeAtencao,
     dossies: packages.map((p) => ({ id: p.id, packageHash: p.packageHash, criadoEm: iso(createdOf(p)), itens: Array.isArray(p.manifestJson) ? p.manifestJson.length : 0 })),
     fontes: [
       { tabela: 'legal.legal_cases', id: legalCase.id },
       { tabela: 'legal.case_parties', registros: parties.length },
       { tabela: 'legal.legal_deadlines', registros: deadlines.length },
       { tabela: 'legal.evidence_packages', registros: packages.length },
+      { tabela: 'legal.contract_requirements', registros: requirements.length },
+      { tabela: 'people.file_links', registros: caseDocuments },
     ],
   };
   result.aiRunId = await logRun(tenant, actorUserId, `Resumo do processo ${legalCase.id}.`, { legalCaseId: caseId }, `${open.length} prazo(s) aberto(s). Nada alterado (JUR-008).`, transaction);
@@ -257,7 +273,7 @@ async function suggestClauses(tenant, filters, actorUserId, transaction) {
     criterio: 'Somente cláusulas ativas da biblioteca; cláusula condicional só entra se a condição estiver aprovada por outra pessoa.',
     clausulasSugeridas: homologadas.map((c) => ({ id: c.id, codigo: c.code, titulo: c.title, categoria: c.category, versao: c.versionNumber, condicional: Boolean(c.conditionJson) })),
     clausulasNaoHomologadasOmitidas: foraDaSugestao,
-    fontes: [{ tabela: 'legal.contract_clauses', registros: clauses.length }],
+    fontes: [{ tabela: 'legal.clause_versions', registros: clauses.length }],
   };
   result.aiRunId = await logRun(tenant, actorUserId, 'Sugestão de minuta com a biblioteca homologada.', { category: where.category || null }, `${homologadas.length} cláusula(s) sugerida(s); ${foraDaSugestao} omitida(s) por não homologada(s).`, transaction);
   return result;
@@ -305,7 +321,7 @@ async function suggestDeadlines(tenant, payload, actorUserId, transaction) {
       ...s,
       status: 'PENDING_CONFIRMATION',
       critico: false,
-      confirmacao: 'Prazo só passa a existir quando uma pessoa o cadastra em POST /legal/cases/:id/deadlines com origem (sourceDocument/sourceEvent) e responsável.',
+      confirmacao: 'Prazo só passa a existir quando uma pessoa o cadastra em POST /legal/cases/:id/deadlines com origem verificável (sourceFileId/sourceEventId) e responsável.',
     })),
     prazosCriados: 0,
     fontes: [{ origem: 'texto informado', caracteres: text.length, legalCaseId: payload.legalCaseId || null }],
@@ -327,7 +343,7 @@ async function organizeDossier(tenant, caseId, actorUserId, transaction) {
   const fatos = [
     { data: iso(createdOf(legalCase)), fato: `Processo aberto (${legalCase.caseType}).`, fonte: { tabela: 'legal.legal_cases', id: legalCase.id } },
     ...versions.map((v) => ({ data: iso(createdOf(v)), fato: `Versão ${v.versionNumber} do contrato vinculado.`, fonte: { tabela: 'legal.contract_versions', id: v.id, sha256: v.contentHash } })),
-    ...deadlines.map((d) => ({ data: iso(createdOf(d)), fato: `Prazo cadastrado: ${d.description} (vence ${iso(d.dueAt).slice(0, 10)}, ${d.status}).`, fonte: { tabela: 'legal.legal_deadlines', id: d.id, origem: d.sourceDocument || d.sourceEvent || null } })),
+    ...deadlines.map((d) => ({ data: iso(createdOf(d)), fato: `Prazo cadastrado: ${d.description} (vence ${iso(d.dueAt).slice(0, 10)}, ${d.status}).`, fonte: { tabela: 'legal.legal_deadlines', id: d.id, origem: d.sourceFileId || d.sourceEventId || d.sourceDocument || d.sourceEvent || null } })),
     ...packages.map((p) => ({ data: iso(createdOf(p)), fato: `Dossiê gerado com ${Array.isArray(p.manifestJson) ? p.manifestJson.length : 0} item(ns).`, fonte: { tabela: 'legal.evidence_packages', id: p.id, sha256: p.packageHash } })),
   ].sort((x, y) => String(x.data).localeCompare(String(y.data)));
   const arquivos = [];

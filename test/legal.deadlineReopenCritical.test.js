@@ -9,6 +9,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const AppError = require('../src/utils/AppError');
@@ -17,6 +18,7 @@ const { LegalDeadline, LegalCase } = require('../src/models');
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -41,7 +43,7 @@ async function concludedCritical(transaction) {
   );
   const d = await legalDeadlinesService.createLegalDeadline(
     legalCase.id,
-    { description: `Critico ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', criticality: 'CRITICAL' },
+    { description: `Critico ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant), criticality: 'CRITICAL' },
     tenant.userId,
     transaction
   );
@@ -74,7 +76,8 @@ test('Fluxo legitimo: reabrir CRITICAL com responsavel e escalonamento mantidos 
     assert.equal(reopened.status, 'PENDING');
     // MEDIUM concluido, processo sem escalonamento: reabertura livre
     await LegalCase.update({ escalationUserId: null, responsibleUserId: null }, { where: { id: legalCase.id }, transaction });
-    const m = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste' }, tenant.userId, transaction);
+    // Caderno §15: todo prazo tem responsável (aqui o próprio, já que o processo ficou sem).
+    const m = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant), responsibleUserId: tenant.userId }, tenant.userId, transaction);
     await legalDeadlinesService.updateLegalDeadline(m.id, { status: 'DONE', conclusionNote: 'ok' }, tenant.userId, transaction);
     const mr = await legalDeadlinesService.updateLegalDeadline(m.id, { status: 'PENDING' }, tenant.userId, transaction);
     assert.equal(mr.status, 'PENDING');

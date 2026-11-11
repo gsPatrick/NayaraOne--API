@@ -23,7 +23,7 @@ async function execute({ tenant, actorUserId, operation, payload, transaction })
     notes: `Origem BCP ${operation.manualReference}. Recebedor: ${payload.recebedor}.${payload.estadoImovel ? ` Estado do imóvel: ${payload.estadoImovel}` : ''}`.slice(0, 2000),
   }, actorUserId, transaction);
   const released = await releaseKeyDelivery(created.id, {
-    keysCount: payload.quantidadeChaves, keysIdentification: `Formulário ${operation.manualReference}`, photosFileIds: [operation.evidenceFileId], termSignedByPersonId: recipient.id,
+    keysCount: payload.quantidadeChaves, keysIdentification: `Formulário ${operation.manualReference}`, photosFileIds: [operation.evidenceFileId], termSignedByPersonId: recipient.id, termEvidenceFileId: operation.evidenceFileId,
   }, actorUserId, transaction, { deliveredAt: delivered });
   const saved = await KeyDelivery.findByPk(released.id, { transaction });
   const savedContract = await Contract.findByPk(saved.contractId, { transaction });

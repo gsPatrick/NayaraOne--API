@@ -33,6 +33,8 @@ function createBase(tenant) {
     await inspectionsService.completeInspection(inspection.id, tenant.userId, tx);
     await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'bcp-qa-locador' }, tenant.userId, tx);
     await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'bcp-qa-locatario' }, tenant.userId, tx);
+    // Fechamento M5 (Caderno §10): a entrega de chaves exige o checklist da etapa KEY_DELIVERY cumprido.
+    await require('../../testHelpers').waiveAllContractRequirements(contract.id, tenant.userId, tx);
     const costCenter = await createTestCostCenter(tenant, tx, suffix);
     const resultCenter = await createTestResultCenter(tenant, tx, suffix);
     const project = await projectsService.createProject({ ...common, name: `Obra BCP ${suffix}`, code: `OBRA-${suffix}` }, tenant.userId, tx);

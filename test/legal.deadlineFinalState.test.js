@@ -9,6 +9,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const { sequelize, FUTURE, PAST, newUser, concludedCriticalWithoutCaseResponsible: setup, snapshot } = require('./legal.deadlineFinalState.helpers');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
@@ -18,6 +19,7 @@ const { LegalCase } = require('../src/models');
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -130,7 +132,7 @@ test('PENDING com dueAt vencido e responsavel removido na mesma requisicao -> 40
       tenant.userId,
       t
     );
-    const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste', responsibleUserId: a.id }, tenant.userId, t);
+    const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant), responsibleUserId: a.id }, tenant.userId, t);
     const before = await snapshot(d.id, t);
     await assert.rejects(
       () => patch(d.id, { dueAt: PAST(), changeReason: 'antecipado', responsibleUserId: null }, t),
@@ -155,7 +157,7 @@ test('Reabrir prazo vencido (DONE -> PENDING) retirando o responsavel -> 400', a
       tenant.userId,
       t
     );
-    const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste', responsibleUserId: a.id }, tenant.userId, t);
+    const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant), responsibleUserId: a.id }, tenant.userId, t);
     await patch(d.id, { status: 'DONE', conclusionNote: 'ok' }, t);
     await patch(d.id, { dueAt: PAST(), changeReason: 'ajuste' }, t);
     const before = await snapshot(d.id, t);
@@ -172,7 +174,7 @@ test('Mudar criticality para CRITICAL em PENDING sem responsavel efetivo -> 422;
       tenant.userId,
       t
     );
-    const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste' }, tenant.userId, t);
+    const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant) }, tenant.userId, t);
     await LegalCase.update({ responsibleUserId: null }, { where: { id: legalCase.id }, transaction: t });
     const before = await snapshot(d.id, t);
     await assert.rejects(() => patch(d.id, { criticality: 'critical' }, t), expectCode('LEGAL_DEADLINE_CRITICAL_RESPONSIBLE_REQUIRED', 422));
@@ -194,7 +196,7 @@ test('Criacao: CRITICAL sem responsavel efetivo -> 422; vencido sem responsavel 
       tenant.userId,
       t
     );
-    const create = (extra) => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'x', dueAt: FUTURE(), sourceEvent: 'teste', ...extra }, tenant.userId, t);
+    const create = (extra) => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'x', dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant), ...extra }, tenant.userId, t);
     await assert.rejects(() => create({ criticality: 'CRITICAL' }), expectCode('LEGAL_DEADLINE_CRITICAL_RESPONSIBLE_REQUIRED', 422));
     await assert.rejects(() => create({ dueAt: PAST() }), expectCode('LEGAL_DEADLINE_RESPONSIBLE_REQUIRED', 400));
     await assert.rejects(() => create({ criticality: 'X' }), expectCode('LEGAL_DEADLINE_VALIDATION', 400));

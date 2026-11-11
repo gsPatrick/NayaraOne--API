@@ -7,6 +7,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
+const { uploadTestFile } = require('./m5fech.locacao.helpers');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const guaranteesService = require('../src/features/legal/guarantees.service');
@@ -120,7 +121,8 @@ test('M5-17/M5-18 createGuarantee exige guarantorPersonId para GUARANTOR, persis
     const endsAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 5000, startsAt, endsAt },
+      // Fechamento M5 (Caderno §9 "Pessoas, documentos, vigência, aceite"): com os documentos e o aceite o fiador fica ACTIVE.
+      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 5000, startsAt, endsAt, documentFileIds: [(await uploadTestFile(tenant, transaction, 'rg-fiador.pdf')).id], acceptanceFileId: (await uploadTestFile(tenant, transaction, 'aceite-fiador.pdf')).id, acceptedAt: startsAt },
       tenant.userId,
       transaction
     );
@@ -191,7 +193,7 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
 
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId },
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId, termEvidenceFileId: (await uploadTestFile(tenant, transaction)).id },
       tenant.userId,
       transaction
     );
@@ -292,7 +294,7 @@ test('REGRESSÃO LOC-2026-0002: releaseKeyDelivery usa a vistoria vinculada à e
     await inspectionsService.signInspection(newInspection.id, { partyRole: 'TENANT', signaturePayload: 'nova-locatario' }, tenant.userId, transaction);
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId },
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: person.personId, termEvidenceFileId: (await uploadTestFile(tenant, transaction)).id },
       tenant.userId,
       transaction
     );

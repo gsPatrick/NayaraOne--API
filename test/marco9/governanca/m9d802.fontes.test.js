@@ -104,7 +104,7 @@ test('m9d802 LEGAL_DEADLINE: prazo criado, alterado, concluído e reaberto pelo 
   const deadlines = require('../../../src/features/legal/legalDeadlines.service');
   await run(async (tx) => {
     const lc = await origin.legalCase(T(), tx);
-    const deadline = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', responsibleUserId: T().userId }, T().userId, tx);
+    const deadline = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', sourceFileId: await require('../../helpers/prazoOrigem').origemNaTransacao(T(), tx), responsibleUserId: T().userId }, T().userId, tx);
     let item = await seen('LEGAL_DEADLINE', deadline.id, tx);
     assert.equal(item.status, 'OPEN'); assertLink(item);
     assert.equal(item.title, 'Contestação QA-M9');

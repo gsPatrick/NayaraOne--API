@@ -9,6 +9,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const AppError = require('../src/utils/AppError');
@@ -17,6 +18,7 @@ const { LegalDeadline } = require('../src/models');
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -39,7 +41,7 @@ async function pending(transaction) {
   );
   return legalDeadlinesService.createLegalDeadline(
     legalCase.id,
-    { description: `Prazo ${uniqueSuffix()}`, dueAt: new Date(Date.now() + 20 * 86400000), sourceEvent: 'teste' },
+    { description: `Prazo ${uniqueSuffix()}`, dueAt: new Date(Date.now() + 20 * 86400000), sourceEvent: 'teste', sourceFileId: origem(tenant) },
     tenant.userId,
     transaction
   );
@@ -61,7 +63,8 @@ test('Variacoes de DONE sem prova: recusadas (422) e o prazo continua PENDING', 
 test('Status desconhecido ou que nao e texto: recusado (400) e nada gravado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const d = await pending(transaction);
-    for (const status of ['XYZ', '', '   ', 'CANCELLED', null, 0, false, {}, ['DONE'], 7]) {
+    // CANCELLED passou a ser estado válido (cancelamento com motivo, m5fech.juridico.prazosLivro); ARCHIVED segue inventado.
+    for (const status of ['XYZ', '', '   ', 'ARCHIVED', null, 0, false, {}, ['DONE'], 7]) {
       await assert.rejects(
         () => legalDeadlinesService.updateLegalDeadline(d.id, { status }, tenant.userId, transaction),
         expectCode('LEGAL_DEADLINE_VALIDATION', 400)

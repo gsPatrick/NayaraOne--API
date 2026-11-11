@@ -23,6 +23,37 @@ async function checkCloseoutEligibility(contractId, transaction) {
 }
 
 /**
+ * recordCloseoutBlocked — evento `closeout.blocked` + auditoria do encerramento recusado. Fechamento M5
+ * (bloco "Correções pós-auditoria — Eventos"): a rota HTTP desfaz a transação ao devolver 409, então o
+ * controller chama esta função de novo numa transação própria para o evento e a trilha não sumirem
+ * junto com o rollback (ver billing.controller.js#closeoutContract).
+ */
+async function recordCloseoutBlocked(contract, reasons, actorUserId, transaction) {
+  await publishCloseoutBlocked(contract, reasons, transaction);
+  await registrarAuditoria(
+    {
+      groupId: contract.groupId,
+      companyId: contract.companyId,
+      actorUserId,
+      action: 'billing.closeout.blocked',
+      entityType: 'Contract',
+      entityId: contract.id,
+      beforeJson: { status: contract.status, encerramento: 'solicitado' },
+      afterJson: { status: contract.status, encerramento: 'bloqueado', reasons },
+      reason: `Encerramento do contrato ${contract.contractNumber || contract.id} bloqueado por ${reasons.length} pendência(s) crítica(s).`,
+    },
+    transaction
+  );
+}
+
+/** Versão para a rota HTTP: grava evento e auditoria do bloqueio numa transação que será confirmada. */
+async function recordCloseoutBlockedById(contractId, reasons, actorUserId, transaction) {
+  const contract = await Contract.findByPk(contractId, { transaction });
+  if (!contract || !Array.isArray(reasons) || reasons.length === 0) return;
+  await recordCloseoutBlocked(contract, reasons, actorUserId, transaction);
+}
+
+/**
  * closeoutContract — tenta encerrar (closeout) um contrato de locação. Se houver QUALQUER
  * pendência crítica retornada por `checkCloseoutEligibility`, bloqueia (409) e publica
  * `closeout.blocked` com os motivos. Se não houver pendência, libera e publica
@@ -36,21 +67,7 @@ async function closeoutContract(contractId, actorUserId, transaction) {
   const reasons = await checkCloseoutEligibility(contractId, transaction);
 
   if (reasons.length > 0) {
-    await publishCloseoutBlocked(contract, reasons, transaction);
-    await registrarAuditoria(
-      {
-        groupId: contract.groupId,
-        companyId: contract.companyId,
-        actorUserId,
-        action: 'billing.closeout.blocked',
-        entityType: 'Contract',
-        entityId: contract.id,
-        beforeJson: { status: contract.status, encerramento: 'solicitado' },
-        afterJson: { status: contract.status, encerramento: 'bloqueado', reasons },
-        reason: `Encerramento do contrato ${contract.contractNumber || contract.id} bloqueado por ${reasons.length} pendência(s) crítica(s).`,
-      },
-      transaction
-    );
+    await recordCloseoutBlocked(contract, reasons, actorUserId, transaction);
     throw AppError.conflict(
       `Não é possível encerrar a locação: ${reasons.length} pendência(s) — ${[...new Set(reasons.map((r) => PENDENCY_LABELS[r.type] || r.type))].join(', ')}.`,
       'CLOSEOUT_BLOCKED',
@@ -117,4 +134,4 @@ async function closeoutContract(contractId, actorUserId, transaction) {
   return { contractId: contract.id, status: 'COMPLETED', contractLifecycle };
 }
 
-module.exports = { checkCloseoutEligibility, closeoutContract };
+module.exports = { checkCloseoutEligibility, closeoutContract, recordCloseoutBlocked, recordCloseoutBlockedById };

@@ -49,6 +49,8 @@ async function sendNow(ctx, dispatchId, transaction) {
  */
 async function requestEnvelope(ctx, { contractVersion, contract, signerPersonIds, actorUserId }, transaction) {
   await assertSignableVersion(contractVersion, transaction);
+  // Matriz M5 (§19 "Enviar para assinatura | Permissão + versão APPROVED"): só a versão aprovada e homologada.
+  await require('../contractVersionApproval').assertApprovedCurrentVersion(contract, contractVersion, transaction);
   const connection = await ensureSignatureConnection(ctx, transaction);
   const signers = await loadSigners(signerPersonIds, contract.id, transaction);
   const { dispatch } = await dispatchService.enqueue({

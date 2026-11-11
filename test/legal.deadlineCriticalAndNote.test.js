@@ -11,6 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const AppError = require('../src/utils/AppError');
@@ -19,6 +20,7 @@ const { LegalDeadline } = require('../src/models');
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -35,7 +37,7 @@ function createCase(transaction, extra = {}) {
 }
 
 function criticalPayload(extra = {}) {
-  return { description: `Prazo critico ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', criticality: 'CRITICAL', ...extra };
+  return { description: `Prazo critico ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant), criticality: 'CRITICAL', ...extra };
 }
 
 function expectCode(code, status) {
@@ -78,7 +80,8 @@ test('CRITICAL com responsavel do processo + escalonamento, ou responsavel do pr
     const d2 = await legalDeadlinesService.createLegalDeadline(semResp.id, criticalPayload({ responsibleUserId: tenant.userId }), tenant.userId, transaction);
     assert.equal(d2.responsibleUserId, tenant.userId);
     const livre = await createCase(transaction);
-    const d3 = await legalDeadlinesService.createLegalDeadline(livre.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste' }, tenant.userId, transaction);
+    // Caderno §15: todo prazo tem responsável; o MEDIUM só não exige o ESCALONAMENTO do crítico.
+    const d3 = await legalDeadlinesService.createLegalDeadline(livre.id, { description: 'comum', dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant), responsibleUserId: tenant.userId }, tenant.userId, transaction);
     assert.equal(d3.criticality, 'MEDIUM');
   });
 });
@@ -104,7 +107,7 @@ async function pendingDeadline(transaction) {
   const legalCase = await createCase(transaction, { responsibleUserId: tenant.userId });
   return legalDeadlinesService.createLegalDeadline(
     legalCase.id,
-    { description: `Prazo ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste' },
+    { description: `Prazo ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant) },
     tenant.userId,
     transaction
   );

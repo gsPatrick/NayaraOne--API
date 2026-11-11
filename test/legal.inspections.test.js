@@ -77,8 +77,8 @@ test('vistoria: fotos/vídeos podem ser anexados a um item via File + FileLink',
     );
     const item = await inspectionsService.addInspectionItem(inspection.id, { itemName: 'Cozinha', condition: 'GOOD' }, tenant.userId, transaction);
 
-    const file = await File.create(
-      {
+    const file = await File.create({ checksumSha256: require('crypto').randomBytes(32).toString('hex'), // fechamento M5: arquivo com hash (Caderno §11)
+      
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         storageKey: `homo-qa/inspections/${uniqueSuffix()}.jpg`,
@@ -276,8 +276,8 @@ test('JUR-007: vistoria com QUALQUER assinatura fica imutável — nem item novo
       }
     );
 
-    const file = await File.create(
-      { groupId: tenant.groupId, companyId: tenant.companyId, fileName: 'foto.jpg', storageKey: `test/${uniqueSuffix()}.jpg`, mimeType: 'image/jpeg', sizeBytes: 100, createdBy: tenant.userId },
+    const file = await File.create({ checksumSha256: require('crypto').randomBytes(32).toString('hex'), // fechamento M5: arquivo com hash (Caderno §11)
+       groupId: tenant.groupId, companyId: tenant.companyId, fileName: 'foto.jpg', storageKey: `test/${uniqueSuffix()}.jpg`, mimeType: 'image/jpeg', sizeBytes: 100, createdBy: tenant.userId },
       { transaction }
     );
     await assert.rejects(

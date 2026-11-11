@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { validateCondition, validateContext, evaluateCondition } = require('./clauseConditions');
 const { buildConditionContext } = require('./clauseConditionContext');
+const templateVersions = require('./templateVersions.service');
 
 /**
  * contractTemplates.service — M5-01: modelos de contrato compostos por cláusulas da
@@ -13,7 +14,7 @@ const { buildConditionContext } = require('./clauseConditionContext');
  * DECISÃO DE MODELAGEM (documentada conforme pedido no Caderno): o vínculo template x cláusula
  * usa TABELA DE JUNÇÃO (legal.contract_template_clauses) em vez de uma coluna `clause_ids
  * UUID[]`. Razões: (a) a ordem das cláusulas no documento é dado de negócio e fica explícita
- * em `sort_order`; (b) a junção permite FK real para legal.contract_clauses — um array de UUID
+ * em `sort_order`; (b) a junção permite FK real para legal.clause_versions — um array de UUID
  * não tem integridade referencial no Postgres; (c) adicionar/remover uma cláusula não exige
  * reescrever o array inteiro. Ver também a migration 20260101000143.
  *
@@ -52,11 +53,14 @@ async function createTemplate(payload, actorUserId, transaction) {
       name,
       contractType,
       isActive: true,
+      // JUR-002: responsável jurídico do modelo (padrão: quem cria).
+      legalResponsibleUserId: payload.legalResponsibleUserId || actorUserId || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
     { transaction }
   );
+  await templateVersions.createInitialVersion(template, actorUserId, transaction);
 
   await registrarAuditoria(
     {
@@ -73,6 +77,17 @@ async function createTemplate(payload, actorUserId, transaction) {
   );
 
   return template;
+}
+
+async function publishTemplate(id, actorUserId, transaction) {
+  const template = await getTemplate(id, transaction);
+  return templateVersions.publishTemplate(template, actorUserId, transaction);
+}
+
+async function listTemplateVersions(id, transaction) {
+  const { TemplateVersion } = require('../../models');
+  await getTemplate(id, transaction);
+  return TemplateVersion.findAll({ where: { templateId: id }, order: [['version_number', 'ASC']], transaction });
 }
 
 async function getTemplate(id, transaction) {
@@ -129,10 +144,12 @@ async function addClauseToTemplate(templateId, payload, actorUserId, transaction
     throw AppError.notFound('Cláusula contratual não encontrada.', 'LEGAL_CONTRACT_CLAUSE_NOT_FOUND');
   }
 
+  // Matriz M5 (§6): o vínculo entra na versão DRAFT do modelo; publicado não se edita (nova versão é criada).
+  const draft = await templateVersions.getEditableVersion(template, actorUserId, transaction);
   let sortOrder = payload.sortOrder;
   if (sortOrder === undefined || sortOrder === null) {
     const current = await ContractTemplateClause.findAll({
-      where: { contractTemplateId: template.id },
+      where: { templateVersionId: draft.id },
       order: [['sort_order', 'DESC']],
       limit: 1,
       transaction,
@@ -146,6 +163,7 @@ async function addClauseToTemplate(templateId, payload, actorUserId, transaction
       companyId: template.companyId,
       contractTemplateId: template.id,
       contractClauseId: clause.id,
+      templateVersionId: draft.id,
       sortOrder,
       createdBy: actorUserId || null,
     },
@@ -170,9 +188,10 @@ async function addClauseToTemplate(templateId, payload, actorUserId, transaction
   return link;
 }
 
-async function listTemplateClauses(templateId, transaction) {
+async function listTemplateClauses(templateId, transaction, templateVersionId) {
+  const versionId = templateVersionId || (await templateVersions.getCurrentVersion(templateId, transaction)).id;
   const links = await ContractTemplateClause.findAll({
-    where: { contractTemplateId: templateId },
+    where: { contractTemplateId: templateId, templateVersionId: versionId },
     order: [['sort_order', 'ASC']],
     transaction,
   });
@@ -186,8 +205,9 @@ async function listTemplateClauses(templateId, transaction) {
 
 async function removeClauseFromTemplate(templateId, contractClauseId, actorUserId, transaction) {
   const template = await getTemplate(templateId, transaction);
+  const draft = await templateVersions.getEditableVersion(template, actorUserId, transaction);
   const link = await ContractTemplateClause.findOne({
-    where: { contractTemplateId: template.id, contractClauseId },
+    where: { templateVersionId: draft.id, contractClauseId },
     transaction,
   });
   if (!link) {
@@ -281,7 +301,10 @@ function ruleVariables(condition) {
  */
 async function renderTemplate(templateId, transaction, variables, conditionContext, options = {}) {
   const template = await getTemplate(templateId, transaction);
-  const entries = await listTemplateClauses(template.id, transaction);
+  const templateVersion = options.templateVersionId
+    ? { id: options.templateVersionId }
+    : await templateVersions.getCurrentVersion(template.id, transaction);
+  const entries = await listTemplateClauses(template.id, transaction, templateVersion.id);
   const context = validateContext(conditionContext);
   const unresolved = options.unresolved || {};
 
@@ -363,6 +386,9 @@ async function renderTemplate(templateId, transaction, variables, conditionConte
 
   return {
     templateId: template.id,
+    templateVersionId: templateVersion.id,
+    templateVersionNumber: templateVersion.versionNumber || null,
+    templateVersionStatus: templateVersion.status || null,
     name: template.name,
     contractType: template.contractType,
     content,
@@ -385,9 +411,17 @@ async function renderTemplate(templateId, transaction, variables, conditionConte
  * renderTemplateForContract — o único caminho usado para GERAR documento: o contexto das
  * condições é derivado do próprio contrato (partes, garantias, imóvel, valores, prazo).
  */
-async function renderTemplateForContract(templateId, contractOrId, transaction, variables) {
+async function renderTemplateForContract(templateId, contractOrId, transaction, variables, options = {}) {
   const { context, unresolved } = await buildConditionContext(contractOrId, transaction);
-  return renderTemplate(templateId, transaction, variables, context, { unresolved, contextSource: 'CONTRACT' });
+  const rendered = await renderTemplate(templateId, transaction, variables, context, { unresolved, contextSource: 'CONTRACT' });
+  if (options.freeze) {
+    // Geração de verdade: a versão do modelo usada fica congelada (publicada) e é a que a versão do contrato guarda.
+    const template = await getTemplate(templateId, transaction);
+    const { TemplateVersion } = require('../../models');
+    const version = await TemplateVersion.findByPk(rendered.templateVersionId, { transaction });
+    await templateVersions.freezeOnUse(template, version, options.actorUserId, transaction);
+  }
+  return rendered;
 }
 
 /**
@@ -397,8 +431,9 @@ async function renderTemplateForContract(templateId, contractOrId, transaction, 
  */
 async function upgradeTemplateClause(templateId, contractClauseId, actorUserId, transaction) {
   const template = await getTemplate(templateId, transaction);
+  const draft = await templateVersions.getEditableVersion(template, actorUserId, transaction);
   const link = await ContractTemplateClause.findOne({
-    where: { contractTemplateId: template.id, contractClauseId },
+    where: { templateVersionId: draft.id, contractClauseId },
     transaction,
   });
   if (!link) {
@@ -450,6 +485,9 @@ async function listClauseTemplateUsage(code, transaction) {
   });
   const usage = [];
   for (const link of links) {
+    // Só a versão vigente de cada modelo conta (versões publicadas antigas são histórico).
+    const current = await templateVersions.getCurrentVersion(link.contractTemplateId, transaction).catch(() => null);
+    if (!current || current.id !== link.templateVersionId) continue;
     const template = await ContractTemplate.findByPk(link.contractTemplateId, { transaction });
     const linked = versions.find((v) => v.id === link.contractClauseId);
     usage.push({
@@ -477,5 +515,7 @@ module.exports = {
   renderTemplateForContract,
   upgradeTemplateClause,
   listClauseTemplateUsage,
+  publishTemplate,
+  listTemplateVersions,
   TEMPLATE_CONTRACT_TYPES,
 };

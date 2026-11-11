@@ -1,6 +1,6 @@
 'use strict';
 
-const { ContractClause } = require('../../models');
+const { ContractClause, ClauseLibrary } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { validateCondition } = require('./clauseConditions');
@@ -58,10 +58,17 @@ async function createClause(payload, actorUserId, transaction) {
     );
   }
 
+  // Matriz M5 (Caderno §4 legal.clause_library; JUR-002): a cláusula entra na biblioteca com o responsável
+  // jurídico (padrão: quem cria) e cada versão (legal.clause_versions) aponta para ela.
+  const library = await ClauseLibrary.create(
+    { groupId, companyId, code, legalResponsibleUserId: payload.legalResponsibleUserId || actorUserId || null, createdBy: actorUserId || null },
+    { transaction }
+  );
   const clause = await ContractClause.create(
     {
       groupId,
       companyId,
+      clauseLibraryId: library.id,
       code,
       title,
       bodyText,
@@ -116,6 +123,7 @@ async function createClauseVersion(code, payload, actorUserId, transaction) {
     {
       groupId: latest.groupId,
       companyId: latest.companyId,
+      clauseLibraryId: latest.clauseLibraryId,
       code: latest.code,
       title: nextPayload.title,
       bodyText: nextPayload.bodyText,

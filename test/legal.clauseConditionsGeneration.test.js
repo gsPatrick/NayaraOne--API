@@ -11,7 +11,7 @@
  *  - B2: o contexto vem do contrato (partes, garantias, imóvel, valor, prazo), nunca do corpo; o
  *    contexto usado e as cláusulas excluídas ficam gravados na versão.
  *  - I1: versão de cláusula substituída bloqueia o modelo em vez de sumir em silêncio.
- *  - I3: trigger de imutabilidade em legal.contract_clauses (SQL cru).
+ *  - I3: trigger de imutabilidade em legal.clause_versions (antiga contract_clauses, SQL cru).
  *  - M1/M2: aprovação serializada, sem versão histórica e sem autor desconhecido.
  *  - HTTP: geração e aprovação pelas rotas reais (201/400/403/404).
  */
@@ -109,7 +109,7 @@ async function addGuarantor(t, contractId) {
   const guarantor = await createPerson(t, 'PF');
   return guaranteesService.createGuarantee(
     contractId,
-    { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, endsAt: '2030-12-31' },
+    await require('./m5fech.locacao.helpers').completeGuarantor(tenant, t, guarantor.id),
     tenant.userId,
     t
   );
@@ -275,7 +275,7 @@ test('F01-G6 (B2): duas modalidades de garantia ativas — a cláusula que depen
     const tpl = await template(t, [fianca]);
     const contract = await createLease(t);
     await addGuarantor(t, contract.id);
-    await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'DEPOSIT', value: 3000 }, tenant.userId, t);
+    await guaranteesService.createGuarantee(contract.id, await require('./m5fech.locacao.helpers').completeInsurance(tenant, t, { value: 3000 }), tenant.userId, t);
     await assert.rejects(
       () => generate(t, contract.id, { templateId: tpl.id }),
       (err) => err.code === 'LEGAL_CLAUSE_CONDITION_CONTEXT_AMBIGUOUS' && /8\.245/.test(err.message)
@@ -353,7 +353,7 @@ test('F01-G9 (I1): cláusula retirada de circulação sai do documento e fica re
 test('F01-G10 (I3): no BANCO, texto, regra, reativação e autoaprovação são recusados; a aprovação legítima passa', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const c = await clause(t, { title: 'DA FIANÇA', bodyText: 'Original', condition: FIANCA, approve: false });
-    const sql = (set) => `UPDATE legal.contract_clauses SET ${set} WHERE id = :id`;
+    const sql = (set) => `UPDATE legal.clause_versions SET ${set} WHERE id = :id`;
 
     await savepointRejects(t, sql("body_text = 'Adulterado'"), { id: c.id }, /append-only/, 'texto imutável');
     await savepointRejects(t, sql(`condition_json = '{"match":"all","rules":[{"variable":"guaranteeType","operator":"eq","value":"DEPOSIT"}]}'::jsonb`), { id: c.id }, /append-only/, 'regra imutável');

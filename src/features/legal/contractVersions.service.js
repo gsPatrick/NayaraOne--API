@@ -1,13 +1,19 @@
 'use strict';
 
 const crypto = require('crypto');
-const { Contract, ContractVersion } = require('../../models');
+const { Contract, ContractVersion, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractVersionCreated } = require('./legalEvents.service');
 const { getContract } = require('./contracts.service');
 const { getSetting } = require('../settings/settings.service');
 const { renderTemplateForContract } = require('./contractTemplates.service');
+const { storeVersionBytes } = require('./contractVersionFile');
+
+// Guia §4 assertEditableState: só se cria versão enquanto o contrato não foi assinado. Em APPROVED a versão nova
+// nasce DRAFT e exige nova aprovação; em SIGNING ela cancela o envelope e o contrato volta a APPROVED (Caderno §8).
+// Assinado em diante, a alteração é por aditivo.
+const EDITABLE_STATES = ['DRAFT', 'DOCUMENTS_PENDING', 'LEGAL_REVIEW', 'APPROVED', 'SIGNING'];
 
 /**
  * M5-07 (fechamento) — DECISÃO DOCUMENTADA: até aqui `documentFileId` era opcional na CRIAÇÃO
@@ -100,6 +106,12 @@ function clauseIdsOf(list) {
  */
 async function createContractVersion(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
+  if (!EDITABLE_STATES.includes(contract.status)) {
+    throw AppError.conflict(
+      `Contrato em "${contract.status}" não recebe nova versão: a alteração de contrato assinado é feita por aditivo.`,
+      'LEGAL_CONTRACT_VERSION_NOT_EDITABLE'
+    );
+  }
   const { documentFileId, effectiveFrom, templateId, variables } = payload;
   let { content } = payload;
   if (Object.prototype.hasOwnProperty.call(payload, 'conditionContext')) {
@@ -157,13 +169,22 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
     attributes: ['id'],
   });
 
+  // Matriz M5 (JUR-013/JUR-TS-013 "Documento empresa B -> Bloqueado"): sem esta leitura o id de um
+  // arquivo de OUTRA empresa era gravado na versão (a coluna não tem FK e o RLS não vale para um id
+  // solto) e a versão passava pelos gates de documento com o arquivo de outra empresa. A leitura
+  // roda sob o RLS da empresa: arquivo de outra empresa ou inexistente não é encontrado.
+  if (documentFileId && !(await File.findByPk(documentFileId, { transaction, attributes: ['id'] }))) {
+    throw AppError.notFound('Arquivo do documento não encontrado nesta empresa.', 'LEGAL_CONTRACT_VERSION_FILE_NOT_FOUND');
+  }
+
   // F01: com modelo, o servidor monta o documento — depois do lock do contrato, para que partes
   // e garantias lidas para o contexto sejam as mesmas do momento da gravação.
   let clauseVersionIds = null;
+  let templateVersionId = null;
   let conditionContext = null;
   let excludedClauses = null;
   if (templateId) {
-    const rendered = await renderTemplateForContract(templateId, contract, transaction, variables);
+    const rendered = await renderTemplateForContract(templateId, contract, transaction, variables, { freeze: true, actorUserId });
     if (hasValue(content) && serializeContent(content) !== rendered.content) {
       throw AppError.conflict(
         'O texto enviado não corresponde ao documento que o modelo gera para este contrato (cláusulas e condições aprovadas). Envie apenas "variables" e deixe o servidor montar o texto.',
@@ -179,6 +200,7 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       );
     }
     content = rendered.content;
+    templateVersionId = rendered.templateVersionId || null;
     clauseVersionIds = rendered.clauses.map((c) => ({ contractClauseId: c.contractClauseId, code: c.code, versionNumber: c.versionNumber }));
     conditionContext = { source: rendered.contextSource, values: rendered.conditionContext };
     excludedClauses = rendered.excludedClauses.map((c) => ({
@@ -197,6 +219,8 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
     transaction,
   });
   const nextVersionNumber = lastVersion ? lastVersion.versionNumber + 1 : 1;
+  // Guia §4: os bytes do documento viram o arquivo armazenado da versão e o hash é desses bytes.
+  const { file: contentFile, hash: contentHash } = await storeVersionBytes(contract, nextVersionNumber, Buffer.from(serializeContent(content), 'utf8'), actorUserId, transaction);
 
   const contractVersion = await ContractVersion.create(
     {
@@ -211,8 +235,11 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       // objeto/JSON (fluxos que não usam renderTemplate), serializa do mesmo jeito que
       // computeContentHash — mantém content_hash sempre coerente com o texto persistido.
       content: serializeContent(content),
-      contentHash: computeContentHash(content),
+      contentHash,
+      contentFileId: contentFile.id,
+      status: 'DRAFT',
       templateId: templateId || null,
+      templateVersionId,
       // Snapshot de rastreabilidade calculado pelo servidor (nunca pelo cliente): qual versão de
       // cada cláusula entrou, com que contexto, e quais ficaram de fora e por quê.
       clauseVersionIds: clauseVersionIds && clauseVersionIds.length ? clauseVersionIds : null,
@@ -232,6 +259,8 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
   // anteriores é cancelada (no provedor e aqui), e um contrato em SIGNING volta para APPROVED —
   // a nova versão precisa ser enviada de novo. Assinaturas já SIGNED nunca são tocadas.
   if (lastVersion) {
+    // Versões anteriores ainda vivas (DRAFT/APPROVED) ficam SUPERSEDED: a nova precisa de nova aprovação.
+    await ContractVersion.update({ status: 'SUPERSEDED', updatedBy: actorUserId || null }, { where: { contractId: contract.id, status: ['DRAFT', 'APPROVED'], id: { [require('sequelize').Op.ne]: contractVersion.id } }, transaction });
     const { Signature } = require('../../models');
     const { cancelSignature } = require('./signatures.service');
     const { transitionContractStatus } = require('./contracts.service');
@@ -287,4 +316,5 @@ module.exports = {
   getContractVersion,
   computeContentHash,
   REQUIRE_DOCUMENT_SETTING_KEY,
+  EDITABLE_STATES,
 };

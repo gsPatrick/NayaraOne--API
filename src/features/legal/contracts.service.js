@@ -31,7 +31,10 @@ const CONTRACT_TYPES = [
   'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL',
   'PROPERTY_ADMIN',
   'SERVICE', 'CONSTRUCTION',
+  // Matriz M5 (Caderno §3): tipos VINCULADOS ao contrato principal (exigem parentContractId).
+  'ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY',
 ];
+const LINKED_CONTRACT_TYPES = ['ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY'];
 
 // Subtipos de LOCAÇÃO/VENDA usam exatamente as mesmas regras de negócio (gate de partes,
 // billing, garantias, vistorias) do tipo genérico correspondente — só muda o código salvo e o
@@ -53,6 +56,7 @@ const CONTRACT_NUMBER_PREFIX = {
   PROPERTY_ADMIN: 'ADM',
   SALE: 'VEN', SALE_CASH: 'VEN', SALE_FINANCED: 'VEN', SALE_TRADE: 'VEN', SALE_INSTALLMENTS: 'VEN',
   SERVICE: 'SRV', CONSTRUCTION: 'OBR',
+  ADDENDUM: 'ADT', KEY_DELIVERY: 'CHV', USED_PROPERTY_DELIVERY: 'IMU',
 };
 
 /**
@@ -115,13 +119,14 @@ async function generateContractNumber(companyId, contractType, transaction) {
 // abaixo, com funções dedicadas (suspendContract/reactivateContract/terminateContract/
 // closeContract) que exigem motivo e preservam o histórico (nunca apagam a linha — só mudam
 // `status` com auditoria append-only, mesmo padrão de correctContractData acima).
+// Matriz M5: a tabela é EXATAMENTE a do Guia §3 (CANCELLED não é estado do livro: contratos antigos gravados
+// como CANCELLED continuam legíveis e terminais — nenhuma transição parte deles nem chega a eles).
 const VALID_TRANSITIONS = {
-  DRAFT: ['DOCUMENTS_PENDING', 'CANCELLED'],
-  DOCUMENTS_PENDING: ['LEGAL_REVIEW', 'CANCELLED'],
-  LEGAL_REVIEW: ['APPROVED', 'DOCUMENTS_PENDING', 'CANCELLED'],
-  APPROVED: ['SIGNING', 'CANCELLED'],
-  // M45: SIGNING -> APPROVED (Guia M5 §3) — documento mudou durante a assinatura; envelope cancelado.
-  SIGNING: ['SIGNED', 'APPROVED', 'CANCELLED'],
+  DRAFT: ['DOCUMENTS_PENDING', 'LEGAL_REVIEW'],
+  DOCUMENTS_PENDING: ['LEGAL_REVIEW'],
+  LEGAL_REVIEW: ['APPROVED', 'DRAFT'],
+  APPROVED: ['SIGNING'],
+  SIGNING: ['SIGNED', 'APPROVED'],
   SIGNED: ['ACTIVE'],
   ACTIVE: ['SUSPENDED', 'TERMINATED'],
   SUSPENDED: ['ACTIVE', 'TERMINATED'],
@@ -148,6 +153,7 @@ const REQUIRED_ROLES_BY_TYPE = {
   SALE_TRADE: ['SELLER', 'BUYER'],
   SALE_INSTALLMENTS: ['SELLER', 'BUYER'],
   SERVICE: [], // prestação de serviço não tem papéis fixos definidos no doc — sem gate de partes.
+  ADDENDUM: [], KEY_DELIVERY: [], USED_PROPERTY_DELIVERY: [], // partes vêm do contrato principal.
 };
 
 async function assertRequirementsGate(contract, transaction) {
@@ -179,9 +185,9 @@ async function assertRequirementsGate(contract, transaction) {
 // Chamado aqui, no INÍCIO de toda transição (antes dos demais gates, como a nota original de
 // requirements.service.js já previa) — usa `require` lazy para não criar dependência circular
 // com requirements.service.js -> contracts.service.js#getContract.
-async function assertDocumentRequirementsGate(contract, transaction) {
+async function assertDocumentRequirementsGate(contract, targetStatus, transaction) {
   const { assertRequirementsSatisfied } = require('./requirements.service');
-  await assertRequirementsSatisfied(contract.id, transaction);
+  await assertRequirementsSatisfied(contract.id, targetStatus, transaction);
 }
 
 // FIX HOM-001 (homologação 28/08/2026, reportado pela cliente): a transição de status era
@@ -329,7 +335,8 @@ async function assertActivationGate(contract, transaction) {
 }
 
 async function createContract(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt, constructionProjectId } = payload;
+  const { groupId, companyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt, constructionProjectId, parentContractId } = payload;
+  let { propertyId } = payload;
   if (!groupId || !companyId || !contractType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "contractType" são obrigatórios.', 'LEGAL_CONTRACT_VALIDATION');
   }
@@ -345,6 +352,22 @@ async function createContract(payload, actorUserId, transaction) {
     );
   }
 
+  // Matriz M5 (Caderno §3): ADDENDUM/KEY_DELIVERY/USED_PROPERTY_DELIVERY são vinculados ao contrato principal
+  // (mesma empresa, tipo não vinculado) e herdam o imóvel dele.
+  if (LINKED_CONTRACT_TYPES.includes(contractType)) {
+    if (!parentContractId) {
+      throw AppError.badRequest(`O tipo "${contractType}" é vinculado: informe o contrato principal ("parentContractId").`, 'LEGAL_CONTRACT_PARENT_REQUIRED');
+    }
+    const parent = await Contract.findByPk(parentContractId, { transaction, attributes: ['id', 'contractType', 'propertyId'] });
+    if (!parent) throw AppError.notFound('Contrato principal não encontrado nesta empresa.', 'LEGAL_CONTRACT_PARENT_NOT_FOUND');
+    if (LINKED_CONTRACT_TYPES.includes(parent.contractType)) {
+      throw AppError.conflict('O contrato principal não pode ser outro aditivo/termo vinculado.', 'LEGAL_CONTRACT_PARENT_INVALID');
+    }
+    if (!propertyId) propertyId = parent.propertyId;
+  } else if (parentContractId) {
+    throw AppError.badRequest(`"parentContractId" só vale para os tipos vinculados (${LINKED_CONTRACT_TYPES.join(', ')}).`, 'LEGAL_CONTRACT_VALIDATION');
+  }
+
   // Numeração automática: só gera se o chamador não informou um número explícito (correção
   // manual via correctContractData continua livre para sobrescrever depois, se necessário).
   const finalContractNumber = contractNumber || (await generateContractNumber(companyId, contractType, transaction));
@@ -356,6 +379,7 @@ async function createContract(payload, actorUserId, transaction) {
       propertyId: propertyId || null,
       opportunityId: opportunityId || null,
       constructionProjectId: constructionProjectId || null,
+      parentContractId: parentContractId || null,
       contractType,
       contractNumber: finalContractNumber,
       status: 'DRAFT',
@@ -440,18 +464,28 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
     );
   }
 
-  await assertDocumentRequirementsGate(contract, transaction);
-
-  if (fromStatus === 'DRAFT' && targetStatus === 'DOCUMENTS_PENDING') {
+  // Matriz M5 (Guia §5): gate de requirements POR ETAPA-ALVO. Entrar em DOCUMENTS_PENDING ("Faltam documentos")
+  // só exige as partes mínimas e gera o checklist; voltar para DRAFT e voltar de SIGNING para APPROVED (conteúdo
+  // mudou) não são bloqueados por documento. Aprovação = aprovação da versão vigente (Guia §6).
+  const { ensureRequirementsGenerated } = require('./requirements.service');
+  const { approveLatestVersion, assertApprovedCurrentVersion } = require('./contractVersionApproval');
+  if (targetStatus === 'DOCUMENTS_PENDING') {
     await assertRequirementsGate(contract, transaction);
-  }
-  if (targetStatus === 'SIGNING') {
+    await ensureRequirementsGenerated(contract.id, actorUserId, transaction);
+  } else if (targetStatus === 'LEGAL_REVIEW') {
+    await assertDocumentRequirementsGate(contract, 'LEGAL_REVIEW', transaction);
+    if (fromStatus === 'DRAFT') await assertRequirementsGate(contract, transaction);
+  } else if (targetStatus === 'APPROVED' && fromStatus === 'LEGAL_REVIEW') {
+    await assertDocumentRequirementsGate(contract, 'APPROVED', transaction);
+    await approveLatestVersion(contract, actorUserId, transaction);
+  } else if (targetStatus === 'SIGNING') {
+    await assertDocumentRequirementsGate(contract, 'SIGNING', transaction);
     await assertDocumentGate(contract, transaction);
-  }
-  if (targetStatus === 'SIGNED') {
+    await assertApprovedCurrentVersion(contract, null, transaction);
+  } else if (targetStatus === 'SIGNED') {
     await assertSignatureGate(contract, transaction);
-  }
-  if (targetStatus === 'ACTIVE') {
+  } else if (targetStatus === 'ACTIVE') {
+    await assertDocumentRequirementsGate(contract, 'ACTIVE', transaction);
     await assertActivationGate(contract, transaction);
   }
   // Frente 5: a transição genérica também encerra (ACTIVE -> TERMINATED, TERMINATED -> CLOSED)
@@ -626,7 +660,7 @@ async function closeContract(contractId, reason, actorUserId, transaction) {
 
 async function addContractParty(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
-  const { personId, partyRole } = payload;
+  const { personId, partyRole, representedByPersonId } = payload;
   const VALID_ROLES = ['LANDLORD', 'TENANT', 'GUARANTOR', 'BUYER', 'SELLER'];
   if (!personId || !partyRole) {
     throw AppError.badRequest('Os campos "personId" e "partyRole" são obrigatórios.', 'LEGAL_CONTRACT_PARTY_VALIDATION');
@@ -651,6 +685,15 @@ async function addContractParty(contractId, payload, actorUserId, transaction) {
     );
   }
 
+  // Matriz M5 (§7): parte representada por procurador — característica que faz o checklist exigir procuração.
+  if (representedByPersonId) {
+    if (representedByPersonId === personId) {
+      throw AppError.badRequest('O procurador precisa ser outra pessoa.', 'LEGAL_CONTRACT_PARTY_VALIDATION');
+    }
+    if (!(await Person.findByPk(representedByPersonId, { transaction, attributes: ['id'] }))) {
+      throw AppError.badRequest(`Procurador "${representedByPersonId}" não encontrado.`, 'LEGAL_CONTRACT_PARTY_PERSON_NOT_FOUND');
+    }
+  }
   const party = await ContractParty.create(
     {
       groupId: contract.groupId,
@@ -658,6 +701,7 @@ async function addContractParty(contractId, payload, actorUserId, transaction) {
       contractId: contract.id,
       personId,
       partyRole,
+      representedByPersonId: representedByPersonId || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -689,6 +733,8 @@ async function listContractParties(contractId, transaction) {
 // (isso é responsabilidade exclusiva de transitionContractStatus, que valida a máquina de
 // estados) nem `id`/`groupId`/`companyId` (identidade do registro, nunca "corrigida").
 const CORRECTABLE_FIELDS = ['startsAt', 'endsAt', 'totalValue', 'contractNumber', 'propertyId', 'opportunityId'];
+const TERMS_LOCKED_FIELDS = ['startsAt', 'endsAt', 'totalValue', 'contractNumber', 'propertyId'];
+const TERMS_LOCKED_STATUSES = ['APPROVED', 'SIGNING', 'SIGNED', 'ACTIVE', 'SUSPENDED', 'TERMINATED', 'CLOSED'];
 
 /**
  * correctContractData — AUD-004: a homologação apontou que não existia nenhuma forma
@@ -714,6 +760,15 @@ async function correctContractData(contractId, payload, actorUserId, transaction
   }
   if (contract.status === 'CANCELLED') {
     throw AppError.conflict('Contrato cancelado não pode ter dados corrigidos.', 'LEGAL_CONTRACT_CORRECTION_CANCELLED');
+  }
+  // Matriz M5 (JUR-001 "Contrato aprovado/assinado nunca é sobrescrito"): a partir de APPROVED, valor, vigência,
+  // imóvel e número não são reescritos — a alteração é registrada por aditivo (POST /legal/contracts/:id/amendments).
+  const lockedFields = Object.keys(fields).filter((key) => fields[key] !== undefined && TERMS_LOCKED_FIELDS.includes(key));
+  if (TERMS_LOCKED_STATUSES.includes(contract.status) && lockedFields.length > 0) {
+    throw AppError.conflict(
+      `Contrato ${contract.status}: ${lockedFields.join(', ')} não podem ser reescritos — registre a alteração por aditivo.`,
+      'LEGAL_CONTRACT_TERMS_LOCKED_USE_ADDENDUM'
+    );
   }
 
   const requestedFields = Object.keys(fields).filter((key) => fields[key] !== undefined);
@@ -770,6 +825,8 @@ module.exports = {
   generateContractNumber,
   CORRECTABLE_FIELDS,
   CONTRACT_TYPES,
+  LINKED_CONTRACT_TYPES,
+  TERMS_LOCKED_STATUSES,
   VALID_TRANSITIONS,
   REQUIRED_ROLES_BY_TYPE,
   CONTRACT_NUMBER_PREFIX,

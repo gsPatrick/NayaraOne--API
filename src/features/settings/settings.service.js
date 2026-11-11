@@ -443,6 +443,13 @@ const SETTINGS_SCHEMA = {
   ...ACCEPTANCE_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
+  // Fechamento M5 — Locação (o que o livro não fixa vira parâmetro; padrão = comportamento anterior/livro).
+  'legal.inspection_default_room_code': { type: 'string' },
+  'legal.guarantee_other_flows': { type: 'string' }, // JSON: [{ "code", "label", "requiredFields": [] }] — vazio = nenhuma "outra" homologada
+  'locacao.titularidade.prazo_dias': { type: 'integer', min: 1, max: 90 },
+  ...Object.fromEntries(['WATER', 'ELECTRICITY', 'GAS', 'CONDO', 'IPTU', 'SPU', 'OTHER'].map((t) => [
+    `locacao.obrigacoes.periodicidade.${t}`, { type: 'string', enum: ['MONTHLY', 'BIMONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL', 'ONE_TIME'] },
+  ])),
 };
 
 function validateAgainstSchema(key, value) {

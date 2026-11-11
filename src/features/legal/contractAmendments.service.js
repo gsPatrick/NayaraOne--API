@@ -1,9 +1,9 @@
 'use strict';
 
-const { ContractAmendment, File } = require('../../models');
+const { ContractAmendment, ContractVersion, ContractParty, AddendumSignature, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { getContract } = require('./contracts.service');
+const { getContract, REQUIRED_ROLES_BY_TYPE } = require('./contracts.service');
 
 /**
  * contractAmendments.service — M5-25: ADITIVO CONTRATUAL como entidade própria.
@@ -52,6 +52,42 @@ function validateChanges(changes) {
   }));
 }
 
+const today = () => new Date().toISOString().slice(0, 10);
+
+/** Versão base do aditivo (Caderno §13): a informada (do mesmo contrato), senão a homologada, senão a vigente. */
+async function resolveBaseVersion(contract, baseContractVersionId, transaction) {
+  if (baseContractVersionId) {
+    const v = await ContractVersion.findOne({ where: { id: baseContractVersionId, contractId: contract.id }, transaction });
+    if (!v) throw AppError.notFound('Versão base informada não pertence a este contrato.', 'LEGAL_CONTRACT_AMENDMENT_BASE_VERSION_NOT_FOUND');
+    return v;
+  }
+  if (contract.approvedVersionId) return ContractVersion.findByPk(contract.approvedVersionId, { transaction });
+  const latest = await ContractVersion.findOne({ where: { contractId: contract.id }, order: [['version_number', 'DESC']], transaction });
+  if (!latest) {
+    throw AppError.conflict('O aditivo referencia a versão base do contrato: o contrato ainda não tem versão.', 'LEGAL_CONTRACT_AMENDMENT_BASE_VERSION_REQUIRED');
+  }
+  return latest;
+}
+
+function validateChangedClauses(list) {
+  if (list === undefined || list === null) return [];
+  if (!Array.isArray(list)) throw AppError.badRequest('"changedClauses" deve ser uma lista de { code, change }.', 'LEGAL_CONTRACT_AMENDMENT_VALIDATION');
+  return list.map((c) => {
+    if (!c || typeof c !== 'object' || !c.code) throw AppError.badRequest('Cada cláusula alterada precisa de "code".', 'LEGAL_CONTRACT_AMENDMENT_VALIDATION');
+    return { code: String(c.code), change: c.change !== undefined ? String(c.change) : null, contractClauseId: c.contractClauseId || null };
+  });
+}
+
+function validateVigencia(effectiveFrom, effectiveUntil) {
+  const from = effectiveFrom || today();
+  const iso = /^\d{4}-\d{2}-\d{2}$/;
+  if (!iso.test(String(from)) || (effectiveUntil && !iso.test(String(effectiveUntil)))) {
+    throw AppError.badRequest('Vigência do aditivo em AAAA-MM-DD ("effectiveFrom"/"effectiveUntil").', 'LEGAL_CONTRACT_AMENDMENT_VALIDATION');
+  }
+  if (effectiveUntil && effectiveUntil < from) throw AppError.badRequest('O fim da vigência do aditivo não pode ser antes do início.', 'LEGAL_CONTRACT_AMENDMENT_VALIDATION');
+  return { from, until: effectiveUntil || null };
+}
+
 async function createAmendment(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
   const { reason, changes, documentFileId, status } = payload;
@@ -68,17 +104,18 @@ async function createAmendment(contractId, payload, actorUserId, transaction) {
       'LEGAL_CONTRACT_AMENDMENT_VALIDATION'
     );
   }
+  // Matriz M5 (§13 "assinaturas ficam registradas"): o aditivo nasce DRAFT e vira SIGNED pelas assinaturas
+  // de cada signatário (POST /legal/amendments/:id/sign), nunca por um status informado na criação.
+  if (requestedStatus === 'SIGNED') {
+    throw AppError.badRequest('O aditivo nasce em rascunho: registre a assinatura de cada signatário em POST /legal/amendments/:id/sign.', 'LEGAL_CONTRACT_AMENDMENT_SIGNATURES_REQUIRED');
+  }
+  const changedClauses = validateChangedClauses(payload.changedClauses);
+  const vigencia = validateVigencia(payload.effectiveFrom, payload.effectiveUntil);
+  const base = await resolveBaseVersion(contract, payload.baseContractVersionId, transaction);
 
   if (documentFileId) {
     const file = await File.findByPk(documentFileId, { transaction });
     if (!file) throw AppError.notFound('Arquivo do aditivo não encontrado.', 'LEGAL_CONTRACT_AMENDMENT_FILE_NOT_FOUND');
-  }
-  // Um aditivo já assinado sem o documento assinado anexado não é prova de nada.
-  if (requestedStatus === 'SIGNED' && !documentFileId) {
-    throw AppError.badRequest(
-      'Aditivo com status "SIGNED" exige "documentFileId" (o documento assinado).',
-      'LEGAL_CONTRACT_AMENDMENT_DOCUMENT_REQUIRED'
-    );
   }
 
   // Numeração sequencial POR CONTRATO. A UNIQUE (contract_id, amendment_number) no banco é a
@@ -99,6 +136,10 @@ async function createAmendment(contractId, payload, actorUserId, transaction) {
       amendmentNumber,
       reason,
       changesJson: normalizedChanges,
+      changedClauses,
+      baseContractVersionId: base.id,
+      effectiveFrom: vigencia.from,
+      effectiveUntil: vigencia.until,
       documentFileId: documentFileId || null,
       status: requestedStatus,
       createdBy: actorUserId || null,
@@ -134,6 +175,7 @@ async function listAmendments(contractId, transaction) {
 async function getAmendment(id, transaction) {
   const amendment = await ContractAmendment.findByPk(id, { transaction });
   if (!amendment) throw AppError.notFound('Aditivo contratual não encontrado.', 'LEGAL_CONTRACT_AMENDMENT_NOT_FOUND');
+  amendment.dataValues.signatures = await AddendumSignature.findAll({ where: { addendumId: amendment.id }, order: [['signed_at', 'ASC']], transaction });
   return amendment;
 }
 
@@ -141,33 +183,55 @@ async function getAmendment(id, transaction) {
  * signAmendment — única mutação permitida: DRAFT -> SIGNED, exigindo o arquivo do documento
  * assinado. Conteúdo (reason/changes/numeração) permanece imutável.
  */
+/** Signatários exigidos: os papéis obrigatórios do tipo do contrato; sem papel fixo, todas as partes. */
+async function requiredSigners(amendment, transaction) {
+  const contract = await getContract(amendment.contractId, transaction);
+  const parties = await ContractParty.findAll({ where: { contractId: contract.id }, transaction });
+  const roles = REQUIRED_ROLES_BY_TYPE[contract.contractType] || [];
+  return roles.length ? parties.filter((p) => roles.includes(p.partyRole)) : parties;
+}
+
+/**
+ * signAmendment — registra a assinatura de UM signatário (pessoa parte do contrato, via assinada e coletor) em
+ * legal.addendum_signatures; o aditivo vira SIGNED quando todos os signatários exigidos assinaram. Conteúdo do
+ * aditivo (motivo, alterações, vigência, versão base) permanece imutável.
+ */
 async function signAmendment(id, payload, actorUserId, transaction) {
-  // Lock pessimista: duas chamadas concorrentes de assinatura pro mesmo aditivo (duplo clique,
-  // retry) não podem ambas ler status != SIGNED antes de qualquer uma commitar — sem isso,
-  // ambas passavam e gravavam auditoria duplicada da mesma assinatura.
-  const amendment = await ContractAmendment.findByPk(id, {
-    transaction,
-    lock: transaction ? transaction.LOCK.UPDATE : undefined,
-  });
+  const amendment = await ContractAmendment.findByPk(id, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!amendment) throw AppError.notFound('Aditivo contratual não encontrado.', 'LEGAL_CONTRACT_AMENDMENT_NOT_FOUND');
   if (amendment.status === 'SIGNED') {
     throw AppError.conflict('Aditivo já está assinado.', 'LEGAL_CONTRACT_AMENDMENT_ALREADY_SIGNED');
   }
-
-  const documentFileId = (payload && payload.documentFileId) || amendment.documentFileId;
-  if (!documentFileId) {
-    throw AppError.badRequest(
-      'Para assinar o aditivo é obrigatório informar "documentFileId" (documento assinado).',
-      'LEGAL_CONTRACT_AMENDMENT_DOCUMENT_REQUIRED'
-    );
+  const { personId } = payload || {};
+  const evidenceFileId = (payload && (payload.evidenceFileId || payload.documentFileId)) || null;
+  if (!personId) {
+    throw AppError.badRequest('Informe o signatário ("personId") — a assinatura do aditivo é registrada por signatário.', 'LEGAL_CONTRACT_AMENDMENT_SIGNER_REQUIRED');
   }
-  const file = await File.findByPk(documentFileId, { transaction });
+  if (!evidenceFileId) {
+    throw AppError.badRequest('Para assinar o aditivo é obrigatório informar a via assinada ("evidenceFileId" ou "documentFileId").', 'LEGAL_CONTRACT_AMENDMENT_DOCUMENT_REQUIRED');
+  }
+  if (!actorUserId) throw AppError.badRequest('A assinatura do aditivo exige o responsável pela coleta.', 'LEGAL_CONTRACT_AMENDMENT_COLLECTOR_REQUIRED');
+  const file = await File.findByPk(evidenceFileId, { transaction });
   if (!file) throw AppError.notFound('Arquivo do aditivo não encontrado.', 'LEGAL_CONTRACT_AMENDMENT_FILE_NOT_FOUND');
+  const party = await ContractParty.findOne({ where: { contractId: amendment.contractId, personId }, transaction });
+  if (!party) throw AppError.badRequest('O signatário precisa ser parte do contrato.', 'LEGAL_CONTRACT_AMENDMENT_SIGNER_NOT_PARTY');
+  if (await AddendumSignature.findOne({ where: { addendumId: amendment.id, personId }, transaction })) {
+    throw AppError.conflict('Este signatário já assinou o aditivo.', 'LEGAL_CONTRACT_AMENDMENT_SIGNER_ALREADY_SIGNED');
+  }
+  const signature = await AddendumSignature.create({
+    groupId: amendment.groupId, companyId: amendment.companyId, addendumId: amendment.id, personId, partyRole: party.partyRole,
+    evidenceFileId, collectedByUserId: actorUserId, signedAt: new Date(),
+  }, { transaction });
 
+  const signers = await requiredSigners(amendment, transaction);
+  const signedIds = new Set((await AddendumSignature.findAll({ where: { addendumId: amendment.id }, transaction })).map((x) => x.personId));
+  const complete = signers.length ? signers.every((p) => signedIds.has(p.personId)) : signedIds.size > 0;
   const beforeJson = amendment.toJSON();
-  amendment.status = 'SIGNED';
-  amendment.documentFileId = documentFileId;
-  await amendment.save({ transaction });
+  if (complete) {
+    amendment.status = 'SIGNED';
+    amendment.documentFileId = amendment.documentFileId || evidenceFileId;
+    await amendment.save({ transaction });
+  }
 
   await registrarAuditoria(
     {
@@ -178,12 +242,13 @@ async function signAmendment(id, payload, actorUserId, transaction) {
       entityType: 'ContractAmendment',
       entityId: amendment.id,
       beforeJson,
-      afterJson: amendment.toJSON(),
-      reason: `${amendment.amendmentNumber}º aditivo do contrato ${amendment.contractId} assinado.`,
+      afterJson: { ...amendment.toJSON(), signature: signature.toJSON() },
+      reason: `${amendment.amendmentNumber}º aditivo do contrato ${amendment.contractId}: assinatura de ${personId} (${party.partyRole})${complete ? ' — todas as assinaturas exigidas concluídas' : ''}.`,
     },
     transaction
   );
 
+  amendment.dataValues.signatures = await AddendumSignature.findAll({ where: { addendumId: amendment.id }, order: [['signed_at', 'ASC']], transaction });
   return amendment;
 }
 

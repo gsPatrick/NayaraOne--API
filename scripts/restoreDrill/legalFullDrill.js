@@ -61,7 +61,9 @@ const REPORT_DIR = argValue('--report-dir');
 const SUPER = 'drill_super';
 const APP_ROLE = 'nayara_runtime';
 const APP_PASSWORD = 'drill_runtime_local_only';
-const HTTP_PORT = 21611;
+// Porta HTTP da API do drill: derivada da porta do cluster (5537 -> 25537) ou DRILL_HTTP_PORT. Antes era
+// fixa (21611), a mesma de vários testes HTTP, e um teste rodando em paralelo derrubava o drill (EADDRINUSE).
+const HTTP_PORT = Number(process.env.DRILL_HTTP_PORT) || 20000 + PORT_SOURCE;
 
 const logLines = [];
 function log(line = '') {
@@ -211,11 +213,15 @@ async function main() {
     log(`      → ${firstAttempt.ok ? 'concluiu (ERRADO: restore sem GRANTs para a aplicação)' : 'falhou'}${missingRoleDetected ? ` apontando as roles ausentes ✅ (${(firstAttempt.output.match(/servidor de destino: ([^.]+)\./) || [])[1] || ''})` : ''}`);
     if (!missingRoleDetected) throw new Error(`o restore sem a role deveria falhar apontando a role ausente:\n${firstAttempt.output.split('\n').slice(-10).join('\n')}`);
 
-    log('  4b. Procedimento do runbook: cria as roles que o dump referencia (nayara_runtime e nayara_migration), recria o banco vazio, refaz o restore:');
+    log('  4b. Procedimento do runbook: cria as roles que o dump referencia (nayara_runtime, nayara_migration e nayara_analytics_reader), recria o banco vazio, refaz o restore:');
     createRuntimeRole(PORT_TARGET);
     // nayara_migration: role NOLOGIN criada pela migration 336 (dona de default privileges) —
     // o dump referencia essa role; num cluster novo ela também precisa existir antes do restore.
     psql(PORT_TARGET, 'postgres', 'CREATE ROLE nayara_migration');
+    // nayara_analytics_reader: role NOLOGIN só de leitura criada pela migration 9612 (M9-D612, BI);
+    // o dump traz os GRANTs dela, então o restore num cluster novo também a exige (achado do
+    // drill de 10/11/2026: sem ela o pg_restore parava em "role(s) ausente(s)").
+    psql(PORT_TARGET, 'postgres', 'CREATE ROLE nayara_analytics_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION');
     psql(PORT_TARGET, 'postgres', 'DROP DATABASE drill_target');
     psql(PORT_TARGET, 'postgres', 'CREATE DATABASE drill_target');
     log(`      → ${mustRun('npm run restore', 'npm', ['run', '--silent', 'restore', '--', '--file', dumpFile, '--target-db', 'drill_target'], restoreEnv).split('\n').filter(Boolean).pop()}`);

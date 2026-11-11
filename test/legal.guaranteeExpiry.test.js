@@ -36,7 +36,7 @@ test('JUR-TS-005: garantia dentro da janela de antecedência dispara lease.guara
     soon.setDate(soon.getDate() + 5); // dentro do default de 30 dias de antecedência.
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE', endsAt: soon.toISOString().slice(0, 10) },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 1000, status: 'ACTIVE', startsAt: '2025-01-01', endsAt: soon.toISOString().slice(0, 10), renewalDueAt: soon.toISOString().slice(0, 10) }),
       tenant.userId,
       transaction
     );
@@ -59,7 +59,7 @@ test('JUR-TS-005: garantia já vencida também é alertada (não só "prestes a 
     past.setDate(past.getDate() - 2);
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'INSURANCE', value: 1000, status: 'ACTIVE', endsAt: past.toISOString().slice(0, 10) },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 1000, status: 'ACTIVE', startsAt: '2024-01-01', endsAt: past.toISOString().slice(0, 10), renewalDueAt: past.toISOString().slice(0, 10) }),
       tenant.userId,
       transaction
     );
@@ -81,7 +81,7 @@ test('garantia com vencimento distante (fora da janela) não gera alerta', async
     far.setDate(far.getDate() + DEFAULT_ALERT_DAYS + 90);
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'CAPITALIZATION_TITLE', value: 1000, status: 'ACTIVE', endsAt: far.toISOString().slice(0, 10) },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 1000, status: 'ACTIVE', endsAt: far.toISOString().slice(0, 10) }),
       tenant.userId,
       transaction
     );
@@ -102,14 +102,14 @@ test('replaceGuarantee: garantia antiga vira registro histórico (nunca apagada)
     const contract = await createLeaseContract(transaction);
     const oldGuarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE' },
+      { guaranteeType: 'SECURITY_DEPOSIT', value: 1000 },
       tenant.userId,
       transaction
     );
 
     const { oldGuarantee: updatedOld, newGuarantee } = await guaranteesService.replaceGuarantee(
       oldGuarantee.id,
-      { guaranteeType: 'INSURANCE', value: 1200, status: 'ACTIVE', endsAt: new Date(Date.now() + 365 * 86400000) },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 1200, status: 'ACTIVE', endsAt: new Date(Date.now() + 365 * 86400000) }),
       tenant.userId,
       transaction
     );
@@ -122,6 +122,6 @@ test('replaceGuarantee: garantia antiga vira registro histórico (nunca apagada)
     // Nunca apagada: ainda existe e é lida normalmente.
     const stillThere = await guaranteesService.getGuarantee(oldGuarantee.id, transaction);
     assert.equal(stillThere.id, oldGuarantee.id);
-    assert.equal(stillThere.guaranteeType, 'DEPOSIT'); // tipo/valor originais preservados.
+    assert.equal(stillThere.guaranteeType, 'SECURITY_DEPOSIT'); // tipo/valor originais preservados.
   });
 });

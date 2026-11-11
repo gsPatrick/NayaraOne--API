@@ -32,4 +32,21 @@ async function assertResponsibleInTenant(responsibleUserId, { groupId, companyId
   return normalizedId;
 }
 
-module.exports = { assertResponsibleInTenant };
+/**
+ * Quem pode concluir o prazo (Caderno M5 §19 "Marcar prazo concluído | Responsável/permissão +
+ * evidência"): o responsável efetivo do prazo (o do prazo ou, sem ele, o do processo) OU quem tem
+ * a permissão de aprovação jurídica (`legal:approve`). O responsável considerado é o de ANTES da
+ * requisição, para que ninguém se atribua o prazo e o conclua na mesma chamada. A rota já exige
+ * `legal:update`; a prova (evidência/nota) é cobrada à parte em updateLegalDeadline.
+ */
+function assertMayConclude({ actorUserId, permissions, deadline, legalCase }) {
+  if ((permissions || []).includes('legal:approve')) return;
+  const responsible = deadline.responsibleUserId || (legalCase && legalCase.responsibleUserId) || null;
+  if (responsible && actorUserId && String(responsible).toLowerCase() === String(actorUserId).toLowerCase()) return;
+  throw AppError.forbidden(
+    'Somente o responsável pelo prazo ou quem tem a permissão de aprovação jurídica (legal:approve) pode concluí-lo.',
+    'LEGAL_DEADLINE_NOT_RESPONSIBLE'
+  );
+}
+
+module.exports = { assertResponsibleInTenant, assertMayConclude };

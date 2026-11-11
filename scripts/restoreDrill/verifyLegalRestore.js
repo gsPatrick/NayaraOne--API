@@ -146,8 +146,8 @@ async function main() {
     await compareTable(source, target, 'core.users (atores do drill)',
       'SELECT * FROM core.users WHERE id = ANY($1) ORDER BY id', [A.userIds],
       ['name', 'email', 'password_hash', 'status', 'mfa_enabled'], { minRecords: 2 });
-    await compareTable(source, target, 'legal.contract_clauses',
-      'SELECT * FROM legal.contract_clauses WHERE id = ANY($1) ORDER BY id', [Object.values(A.clauseIds)],
+    await compareTable(source, target, 'legal.clause_versions',
+      'SELECT * FROM legal.clause_versions WHERE id = ANY($1) ORDER BY id', [Object.values(A.clauseIds)],
       ['code', 'title', 'body_text', 'category', 'version_number', 'is_active', 'condition_json', 'condition_status', 'condition_approved_by', 'condition_approved_at', 'created_by'], { minRecords: 3 });
     const versions = await compareTable(source, target, 'legal.contract_versions',
       'SELECT * FROM legal.contract_versions WHERE company_id = $1 ORDER BY id', byCompany,
@@ -404,12 +404,30 @@ async function verifyExportAndPermissions(A, B, targetSuper) {
 
   const noPerm = await get(exportPath, tokenFor(A, ['contracts:read']));
   check('permissões pós-restore', `perfil do tenant A SEM legal:read exportando o dossiê → HTTP ${noPerm.status}`, noPerm.status === 403);
-  const otherTenant = await get(exportPath, tokenFor(B, ['legal:read']));
-  check('permissões pós-restore', `tenant B COM legal:read exportando o dossiê de A → HTTP ${otherTenant.status}`, otherTenant.status === 404);
-  const allowed = await get(exportPath, tokenFor(A, ['legal:read']));
-  const allowedBody = allowed.status === 200 ? await allowed.json() : null;
-  const allowedIntegrity = allowedBody ? evidencePackagesService.verifyEvidencePackageIntegrity(allowedBody.data, A.evidencePackageHash) : { valid: false };
-  check('permissões pós-restore', `controle positivo: tenant A COM legal:read → HTTP ${allowed.status}, export íntegro contra o hash pré-backup`, allowed.status === 200 && allowedIntegrity.valid);
+  const readOnly = await get(exportPath, tokenFor(A, ['legal:read']));
+  check('permissões pós-restore', `perfil do tenant A só com legal:read (sem legal:evidence:export) exportando o dossiê → HTTP ${readOnly.status}`, readOnly.status === 403);
+  const EXPORT_PERMS = ['legal:read', 'legal:evidence:export'];
+  const otherTenant = await get(exportPath, tokenFor(B, EXPORT_PERMS));
+  check('permissões pós-restore', `tenant B COM legal:evidence:export exportando o dossiê de A → HTTP ${otherTenant.status}`, otherTenant.status === 404);
+  // Desde a M9-D920 a exportação do dossiê passa pelo guard da DLP: o dossiê herda a classe dos
+  // anexos (os do contrato são HIGH), e EXPORT de HIGH exige finalidade, justificativa e MFA
+  // recente. O drill não forja MFA: prova que, no banco restaurado, a guarda continua valendo
+  // (sem finalidade 422; com finalidade e justificativa, só falta o MFA humano: 403) e o conteúdo
+  // exportado íntegro é provado pelo serviço real na seção "Exportação do dossiê" acima.
+  const { inheritedClass } = require('../../src/features/core-governance/dlp/downloads/dossier.guard');
+  const exportClass = await inTenant(A, async (t) => inheritedClass((await evidencePackagesService.getEvidencePackage(A.evidencePackageId, t)).manifestJson, t));
+  const noPurpose = await get(exportPath, tokenFor(A, EXPORT_PERMS));
+  const noPurposeBody = await noPurpose.json().catch(() => null);
+  const noPurposeCode = noPurposeBody && noPurposeBody.error ? noPurposeBody.error.code : null;
+  const highClass = ['HIGH', 'RESTRICTED'].includes(exportClass);
+  check('permissões pós-restore', `tenant A COM legal:evidence:export, dossiê de classe ${exportClass || 'padrão'}, sem finalidade → HTTP ${noPurpose.status} ${noPurposeCode || ''}`,
+    highClass ? noPurpose.status === 422 && noPurposeCode === 'GOV_DLP_PURPOSE_REQUIRED' : noPurpose.status === 200);
+  const withPurpose = await get(`${exportPath}?purpose=JURIDICO&justification=${encodeURIComponent('Conferência do drill de restore do dossiê jurídico')}`, tokenFor(A, EXPORT_PERMS));
+  const withPurposeBody = await withPurpose.json().catch(() => null);
+  const withPurposeCode = withPurposeBody && withPurposeBody.error ? withPurposeBody.error.code : null;
+  const allowedIntegrity = withPurpose.status === 200 ? evidencePackagesService.verifyEvidencePackageIntegrity(withPurposeBody.data, A.evidencePackageHash) : { valid: false };
+  check('permissões pós-restore', `tenant A COM legal:evidence:export, finalidade e justificativa → HTTP ${withPurpose.status} ${withPurposeCode || ''}${highClass ? ' (falta só o MFA humano)' : ', export íntegro contra o hash pré-backup'}`,
+    highClass ? withPurpose.status === 403 && withPurposeCode === 'MFA_STEP_UP_REQUIRED' : withPurpose.status === 200 && allowedIntegrity.valid);
 
   const signedPath = `/files/${A.signedDocumentFileId}/content`;
   const dlNoPerm = await get(signedPath, tokenFor(A, ['finance:read', 'inventory:read'], readerUserId));
@@ -422,7 +440,9 @@ async function verifyExportAndPermissions(A, B, targetSuper) {
     dlOk.status === 200 && sha256(dlBytes) === A.expectedFileSha256[A.signedDocumentFileId]);
 
   const logAfter = Number((await targetSuper.query('SELECT COUNT(*)::int AS n FROM legal.evidence_package_access_log WHERE evidence_package_id = $1 AND action = $2', [A.evidencePackageId, 'EXPORTED'])).rows[0].n);
-  check('permissões pós-restore', `cadeia de custódia: só o export permitido gerou registro EXPORTED (${logBefore} → ${logAfter})`, logAfter === logBefore + 1);
+  check('permissões pós-restore', highClass
+    ? `cadeia de custódia: nenhuma exportação recusada gerou registro EXPORTED (${logBefore} → ${logAfter})`
+    : `cadeia de custódia: só o export permitido gerou registro EXPORTED (${logBefore} → ${logAfter})`, logAfter === logBefore + (highClass ? 0 : 1));
 
   // 5. Replay pós-restore do callback bancário já processado antes do backup (F06), pela ROTA
   // pública do webhook com HMAC. O tenant é configurado com provedor não-sandbox e segredo de

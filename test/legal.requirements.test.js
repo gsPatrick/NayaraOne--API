@@ -57,11 +57,17 @@ test('satisfyRequirement (SATISFIED/WAIVED) libera assertRequirementsSatisfied',
       transaction
     );
     const created = await requirementsService.generateRequirementsForContract(contract.id, {}, tenant.userId, transaction);
+    // Matriz M5: o documento que satisfaz precisa existir na empresa (antes um uuid inventado bastava).
+    const { File } = require('../src/models');
+    const doc = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `test/requirements/${Date.now()}.pdf`, fileName: 'documento.pdf', mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
+      { transaction }
+    );
 
     for (const req of created) {
       await requirementsService.satisfyRequirement(
         req.id,
-        req.requirementCode === 'LEASE_OWNERSHIP' ? { waivedReason: 'Titularidade já comprovada em cadastro anterior.' } : { satisfiedByFileId: '11111111-1111-1111-1111-111111111111' },
+        req.requirementCode === 'LEASE_OWNERSHIP' ? { waivedReason: 'Titularidade já comprovada em cadastro anterior.' } : { satisfiedByFileId: doc.id },
         tenant.userId,
         transaction
       );
@@ -105,10 +111,11 @@ test('AUD-009: transitionContractStatus BLOQUEIA avanço de status com requireme
 
     await requirementsService.generateRequirementsForContract(contract.id, {}, tenant.userId, transaction);
 
-    // Antes do fix: isto passava silenciosamente e o contrato virava DOCUMENTS_PENDING com
-    // checklist documental inteiro em PENDING.
+    // Matriz M5 (Caderno §5 "DOCUMENTS_PENDING | Faltam documentos"; Guia §5 gate por etapa): entrar em
+    // DOCUMENTS_PENDING com documento faltando é permitido; avançar para LEGAL_REVIEW é bloqueado.
+    await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await assert.rejects(
-      () => contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction),
+      () => contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_REQUIREMENTS_PENDING');
@@ -117,7 +124,7 @@ test('AUD-009: transitionContractStatus BLOQUEIA avanço de status com requireme
     );
 
     const refreshed = await contractsService.getContract(contract.id, transaction);
-    assert.equal(refreshed.status, 'DRAFT', 'contrato não deve ter avançado de status com requirement pendente.');
+    assert.equal(refreshed.status, 'DOCUMENTS_PENDING', 'contrato não deve ter avançado para LEGAL_REVIEW com requirement pendente.');
   });
 });
 

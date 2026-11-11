@@ -72,6 +72,17 @@ const SIGNED_PDF = Buffer.from(
 SandboxSignatureAdapter.prototype.downloadSignedDocument = async function drillSignedDocument() {
   return { buffer: SIGNED_PDF, fileName: 'drill-contrato-assinado.pdf' };
 };
+// Desde o M9-D236 o fechamento do envelope passa pelo provedor de laboratório da camada de
+// integrações (signature.sandbox.base.js#downloadSigned), não mais pelo SandboxSignatureAdapter
+// acima: sem esta troca o arquivo gravado era o texto determinístico do sandbox e o SHA-256
+// independente das fixtures (calculado sobre SIGNED_PDF) nunca batia (achado do drill de
+// 10/11/2026). A saída normalizada do provedor é preservada; só os bytes passam a ser os conhecidos.
+const { SignatureSandboxBase } = require('../../src/features/integrations/providers/signature/sandbox/signature.sandbox.base');
+const sandboxDownloadSigned = SignatureSandboxBase.prototype.downloadSigned;
+SignatureSandboxBase.prototype.downloadSigned = async function drillDownloadSigned(ctx, request) {
+  const out = await sandboxDownloadSigned.call(this, ctx, request);
+  return { ...out, document: { buffer: SIGNED_PDF, fileName: 'drill-contrato-assinado.pdf' } };
+};
 
 const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
 
@@ -223,6 +234,13 @@ async function seedTenantA(tenant, approverId) {
       t
     );
     ids.contractVersionId = version.id;
+    // Desde a migration 9981 (Contratos) os bytes da versão viram um arquivo próprio (content_file_id). O SHA-256
+    // independente é calculado AQUI sobre o texto da versão (o mesmo que o serviço grava), não lido do storage.
+    if (version.contentFileId) {
+      const versionText = typeof version.content === 'string' ? version.content : JSON.stringify(version.content);
+      ids.files.push(version.contentFileId);
+      ids.expectedFileSha256[version.contentFileId] = sha256(Buffer.from(versionText, 'utf8'));
+    }
 
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, t);
     await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, t);
@@ -241,9 +259,16 @@ async function seedTenantA(tenant, approverId) {
     ids.expectedFileSha256[closed.fileId] = sha256(SIGNED_PDF);
 
     // Garantia ativa (entra no contexto da condição e no encerramento).
+    // Desde a área de Locação (garantia por tipo, migration 9990) o seguro-fiança ativo exige apólice (com arquivo),
+    // seguradora, parcelas do prêmio e data de renovação: a apólice entra no storage e no conjunto de bytes conferidos.
+    const policyFile = await upload(t, 'drill-apolice-seguro-fianca.pdf', 'application/pdf', pdfBytes('apolice-seguro-fianca'), 'contracts');
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'INSURANCE', value: 10500, status: 'ACTIVE', startsAt: '2026-11-01', endsAt: '2027-10-31' },
+      {
+        guaranteeType: 'INSURANCE', value: 10500, status: 'ACTIVE', startsAt: '2026-11-01', endsAt: '2027-10-31',
+        providerName: 'Seguradora Fictícia do Drill', policyNumber: 'DRILL-APOLICE-0001', policyFileId: policyFile.id, renewalDueAt: '2027-10-01',
+        premiumInstallments: [{ number: 1, dueDate: '2026-11-10', amount: 875 }, { number: 2, dueDate: '2026-12-10', amount: 875 }],
+      },
       tenant.userId,
       t
     );

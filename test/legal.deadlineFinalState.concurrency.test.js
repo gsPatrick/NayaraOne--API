@@ -10,6 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { getSeedTenant, withTenantTransaction } = require('./testHelpers');
+const { prepararOrigem } = require('./helpers/prazoOrigem');
 const { sequelize, newUser, concludedCriticalWithoutCaseResponsible: setup } = require('./legal.deadlineFinalState.helpers');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const { LegalDeadline, AuditLog } = require('../src/models');
@@ -18,6 +19,7 @@ const { createRaceLog } = require('./legal.raceSessionLog.helpers');
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();

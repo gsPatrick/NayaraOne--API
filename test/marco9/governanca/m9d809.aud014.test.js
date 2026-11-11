@@ -19,7 +19,7 @@ test('m9d809 AUD-014 garantia substituída mantém histórico e o vencimento apa
   const t = tenants.A;
   await env.withRollbackTenantTransaction(t, async (tx) => {
     const { contract } = await locacaoAtiva(t, tx);
-    const antiga = await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'INSURANCE', value: 1000, startsAt: '2026-01-01', endsAt: '2027-02-28', status: 'ACTIVE' }, t.userId, tx);
+    const antiga = await guaranteesService.createGuarantee(contract.id, await require('../../m5fech.locacao.helpers').completeInsurance(t, tx, { value: 1000, startsAt: '2026-01-01', endsAt: '2027-02-28', renewalDueAt: '2027-01-31', status: 'ACTIVE' }), t.userId, tx);
     await env.drain(t, tx);
     const itemAntigo = await env.itemOf(t, 'GUARANTEE', antiga.id, tx);
     assert.equal(itemAntigo.status, 'OPEN', 'a garantia vigente abre o item de vencimento no calendário');

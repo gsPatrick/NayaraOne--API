@@ -31,7 +31,7 @@ async function seedSources(tx) {
   const project = await projectsService.createProject({ ...base(), name: `Obra M9D803 ${Date.now()}`, responsibleUserId: tenant.userId, endsAtPlanned: '2026-12-15T12:00:00Z' }, tenant.userId, tx);
   const stage = await stagesService.createProjectStage(project.id, { ...base(), name: 'Reboco', endsAt: '2026-11-12T20:00:00Z' }, tenant.userId, tx);
   const contract = await env.leaseContract(tenant, tx);
-  const guarantee = await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'DEPOSIT', value: 1000, endsAt: '2026-11-30' }, tenant.userId, tx);
+  const guarantee = await guaranteesService.createGuarantee(contract.id, await require('../../m5fech.locacao.helpers').completeInsurance(tenant, tx, { value: 1000, startsAt: '2026-01-01', endsAt: '2026-11-30', renewalDueAt: '2026-11-01' }), tenant.userId, tx);
   const prop = await env.property(tenant, tx);
   const kase = await casesService.createMaintenanceCase({ ...base(), propertyId: prop.id, description: 'Infiltração', responsibleUserId: tenant.userId, warrantyDeadlineAt: '2026-11-20T15:30:00Z' }, tenant.userId, tx);
   return { project, stage, contract, guarantee, kase };

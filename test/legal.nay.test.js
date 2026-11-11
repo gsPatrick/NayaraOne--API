@@ -11,6 +11,7 @@ process.env.PORT = process.env.NAY_JUR_HTTP_TEST_PORT || '21642';
 
 const app = require('../app'); // eslint-disable-line no-unused-vars
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Company, Person } = require('../src/models');
 const contractsService = require('../src/features/legal/contracts.service');
@@ -38,6 +39,7 @@ async function realCompany(groupId, name) {
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
   const company = await realCompany(tenant.groupId, 'NAY-JUR empresa vizinha (teste)');
   otherCompany = { groupId: tenant.groupId, companyId: company.id };
   baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
@@ -69,7 +71,7 @@ async function scenario(t) {
   const v2 = await contractVersionsService.createContractVersion(contract.id, { content: 'Cláusula 1 — objeto\nCláusula 2 — aluguel de R$ 2.500\nCláusula 3 — foro\nCláusula 4 — reajuste anual pelo IPCA', requireDocument: false }, tenant.userId, t);
   await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, startsAt: new Date(Date.now() - DAY), endsAt: new Date(Date.now() + 365 * DAY) }, tenant.userId, t);
   const legalCase = await legalCasesService.createLegalCase({ ...ctx(), contractId: contract.id, caseType: 'LITIGATION', caseNumber: `NAY-JUR-${uniqueSuffix()}`, summary: 'Despejo por falta de pagamento' }, tenant.userId, t);
-  const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt: new Date(Date.now() + 10 * DAY), sourceDocument: 'Mandado de citação' }, tenant.userId, t);
+  const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt: new Date(Date.now() + 10 * DAY), sourceDocument: 'Mandado de citação', sourceFileId: origem(tenant), responsibleUserId: tenant.userId }, tenant.userId, t);
   const pkg = await evidencePackagesService.createEvidencePackage(legalCase.id, [{ type: 'FILE', description: 'Contrato assinado', referenceId: v2.id, hash: v2.contentHash }], tenant.userId, t);
   return { contract, locatario, fiador, requirements, v1, v2, legalCase, deadline, pkg };
 }
@@ -81,7 +83,7 @@ async function fingerprint(t) {
       (SELECT md5(COALESCE(string_agg(id::text || status, ',' ORDER BY id), '')) FROM legal.contracts) AS contracts,
       (SELECT md5(COALESCE(string_agg(id::text || status || due_at::text, ',' ORDER BY id), '')) FROM legal.legal_deadlines) AS deadlines,
       (SELECT md5(COALESCE(string_agg(id::text || status, ',' ORDER BY id), '')) FROM legal.contract_requirements) AS requirements,
-      (SELECT md5(COALESCE(string_agg(id::text || COALESCE(condition_status,'') || is_active::text, ',' ORDER BY id), '')) FROM legal.contract_clauses) AS clauses,
+      (SELECT md5(COALESCE(string_agg(id::text || COALESCE(condition_status,'') || is_active::text, ',' ORDER BY id), '')) FROM legal.clause_versions) AS clauses,
       (SELECT md5(COALESCE(string_agg(id::text || package_hash, ',' ORDER BY id), '')) FROM legal.evidence_packages) AS packages`,
     { transaction: t, type: sequelize.QueryTypes.SELECT }
   );

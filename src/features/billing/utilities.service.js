@@ -24,6 +24,7 @@ const {
 } = require('./billingEvents.service');
 
 const UTILITY_TYPES = ['WATER', 'ELECTRICITY', 'GAS', 'CONDO', 'IPTU', 'SPU', 'OTHER'];
+const { resolvePeriodicity } = require('./leaseObligationSchedule');
 const RESPONSIBLE_PARTIES = ['LANDLORD', 'TENANT'];
 // M45: rótulos para o texto do lançamento (a descrição é vista pelo usuário — nunca o código).
 const UTILITY_TYPE_LABELS = { WATER: 'água', ELECTRICITY: 'energia elétrica', GAS: 'gás', CONDO: 'condomínio', IPTU: 'IPTU', SPU: 'SPU (laudêmio/foro)', OTHER: 'outra despesa' };
@@ -47,6 +48,8 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
   }
   const contract = await Contract.findByPk(contractId, { transaction });
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'UTILITY_OBLIGATION_CONTRACT_NOT_FOUND');
+  // Fechamento M5 (Caderno §12): toda obrigação tem periodicidade (informada ou o padrão configurado por tipo).
+  const schedule = await resolvePeriodicity(normalizedType, payload, { groupId, companyId }, transaction);
 
   const obligation = await UtilityObligation.create(
     {
@@ -59,6 +62,8 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
       accountNumber: accountNumber || null,
       transferRequired: Boolean(transferRequired),
       evidenceFileId: evidenceFileId || null,
+      periodicity: schedule.periodicity,
+      dueDay: schedule.dueDay,
       status: transferRequired ? 'TRANSFER_PENDING' : 'ACTIVE',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -422,7 +427,12 @@ async function flagOverdueLeaseObligations(transaction, { now = new Date(), over
   const { publishDomainEvent } = require('../../engines/events/outbox');
   const { OutboxEvent } = require('../../models');
   const limit = new Date(now.getTime() - overdueDays * 24 * 60 * 60 * 1000);
-  const tasks = await OwnershipTransferTask.findAll({ where: { status: 'PENDING', created_at: { [Op.lt]: limit } }, transaction });
+  const today = now.toISOString().slice(0, 10);
+  // Fechamento M5 (M5-D103): com prazo definido (contado da entrega das chaves), vence no prazo; sem prazo, o critério antigo.
+  const tasks = await OwnershipTransferTask.findAll({
+    where: { status: 'PENDING', [Op.or]: [{ dueDate: { [Op.lt]: today } }, { dueDate: null, created_at: { [Op.lt]: limit } }] },
+    transaction,
+  });
   let flagged = 0;
   for (const task of tasks) {
     const idempotencyKey = `lease.obligation.overdue:${task.id}`;

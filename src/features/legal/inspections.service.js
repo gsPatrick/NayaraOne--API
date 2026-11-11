@@ -2,23 +2,28 @@
 
 const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
-const { Inspection, InspectionItem, InspectionSignature, File, FileLink } = require('../../models');
+const { Inspection, InspectionItem, InspectionSignature, InspectionMedia, File, FileLink } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishInspectionCompleted, publishInspectionDifferenceDetected, publishCadernoEvent } = require('./legalEvents.service');
+const { buildComparedItems } = require('./inspectionCompare');
+const { resolveItemCodes, pairKey } = require('./inspectionItemCodes');
+const { inspectionSnapshotHash } = require('./inspectionSnapshot');
+const { getSetting } = require('../settings/settings.service');
 
 // M45 (Caderno M5 §11 "Inspection possui type ENTRY/EXIT/INTERMEDIATE/FINAL"): FINAL entra como
 // tipo próprio (vistoria final da entrega de casa nova); ENTRY/EXIT/INTERMEDIATE do Caderno são
-// aceitos como sinônimos dos códigos já gravados (CHECK_IN/CHECK_OUT/PERIODIC), para não
-// reescrever o histórico nem quebrar o gate de chaves que procura CHECK_IN.
-const INSPECTION_TYPES = ['CHECK_IN', 'CHECK_OUT', 'PERIODIC', 'FINAL'];
-const INSPECTION_TYPE_ALIASES = { ENTRY: 'CHECK_IN', EXIT: 'CHECK_OUT', INTERMEDIATE: 'PERIODIC' };
+// eram aceitos como sinônimos de CHECK_IN/CHECK_OUT/PERIODIC; desde o fechamento do M5 o livro é o código gravado.
+// Fechamento M5: o banco e a API guardam/devolvem os códigos do livro; os antigos são só apelido de entrada
+// (migration 20260101009991 migrou os dados e traduz gravadores legados).
+const INSPECTION_TYPES = ['ENTRY', 'EXIT', 'INTERMEDIATE', 'FINAL'];
+const INSPECTION_TYPE_ALIASES = { CHECK_IN: 'ENTRY', CHECK_OUT: 'EXIT', PERIODIC: 'INTERMEDIATE' };
 function normalizeInspectionType(value) {
   if (!value) return value;
   const upper = String(value).toUpperCase();
   return INSPECTION_TYPE_ALIASES[upper] || upper;
 }
-const CONDITIONS = ['GOOD', 'REGULAR', 'DAMAGED'];
+const CONDITIONS = ['NEW', 'GOOD', 'REGULAR', 'DAMAGED'];
 const MEDIA_TYPES = ['PHOTO', 'VIDEO'];
 const PARTY_ROLES = ['LANDLORD', 'TENANT', 'INSPECTOR'];
 // M5-21: de quem é a responsabilidade pelo dano encontrado na vistoria.
@@ -174,7 +179,7 @@ async function completeInspection(id, actorUserId, transaction, options = {}) {
 async function addInspectionItem(inspectionId, payload, actorUserId, transaction) {
   const inspection = await getInspection(inspectionId, transaction);
   await assertInspectionNotSigned(inspectionId, transaction);
-  const { itemName, condition, notes, damageDescription, estimatedBudget, responsibleParty } = payload;
+  const { itemName, condition, notes, damageDescription, estimatedBudget, responsibleParty, description } = payload;
   if (!itemName) {
     throw AppError.badRequest('O campo "itemName" é obrigatório.', 'LEGAL_INSPECTION_ITEM_VALIDATION');
   }
@@ -220,12 +225,17 @@ async function addInspectionItem(inspectionId, payload, actorUserId, transaction
     );
   }
 
+  const defaultRoom = await getSetting('legal.inspection_default_room_code', { groupId: inspection.groupId, companyId: inspection.companyId }, transaction, 'GERAL');
+  const codes = resolveItemCodes({ itemName, roomCode: payload.roomCode, itemCode: payload.itemCode }, defaultRoom || 'GERAL');
   const item = await InspectionItem.create(
     {
       groupId: inspection.groupId,
       companyId: inspection.companyId,
       inspectionId: inspection.id,
       itemName,
+      roomCode: codes.roomCode,
+      itemCode: codes.itemCode,
+      description: description ? String(description) : (damageDescription || null),
       condition: condition || null,
       notes: notes || null,
       damageDescription: damageDescription || null,
@@ -277,8 +287,9 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
   const entryItems = await listInspectionItems(entryInspectionId, transaction);
   const exitItems = await listInspectionItems(exitInspectionId, transaction);
 
-  const entryByName = new Map(entryItems.map((i) => [i.itemName, i]));
-  const exitByName = new Map(exitItems.map((i) => [i.itemName, i]));
+  // Fechamento M5 (Guia §10): pareia por ambiente + código do item (roomCode/itemCode).
+  const entryByName = new Map(entryItems.map((i) => [pairKey(i), i]));
+  const exitByName = new Map(exitItems.map((i) => [pairKey(i), i]));
 
   const divergences = [];
   const onlyInEntry = [];
@@ -296,13 +307,15 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
   for (const [name, entryItem] of entryByName.entries()) {
     const exitItem = exitByName.get(name);
     if (!exitItem) {
-      onlyInEntry.push({ itemName: name, entryCondition: entryItem.condition });
-      divergences.push({ itemName: name, entryCondition: entryItem.condition, exitCondition: null, reason: 'MISSING_IN_EXIT' });
+      onlyInEntry.push({ itemName: entryItem.itemName, roomCode: entryItem.roomCode, itemCode: entryItem.itemCode, entryCondition: entryItem.condition });
+      divergences.push({ itemName: entryItem.itemName, roomCode: entryItem.roomCode, itemCode: entryItem.itemCode, entryCondition: entryItem.condition, exitCondition: null, reason: 'MISSING_IN_EXIT' });
       continue;
     }
     if (entryItem.condition !== exitItem.condition) {
       divergences.push({
-        itemName: name,
+        itemName: entryItem.itemName,
+        roomCode: entryItem.roomCode,
+        itemCode: entryItem.itemCode,
         entryCondition: entryItem.condition,
         exitCondition: exitItem.condition,
         reason: 'CONDITION_CHANGED',
@@ -311,8 +324,8 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
   }
   for (const [name, exitItem] of exitByName.entries()) {
     if (!entryByName.has(name)) {
-      onlyInExit.push({ itemName: name, exitCondition: exitItem.condition });
-      divergences.push({ itemName: name, entryCondition: null, exitCondition: exitItem.condition, reason: 'MISSING_IN_ENTRY' });
+      onlyInExit.push({ itemName: exitItem.itemName, roomCode: exitItem.roomCode, itemCode: exitItem.itemCode, exitCondition: exitItem.condition });
+      divergences.push({ itemName: exitItem.itemName, roomCode: exitItem.roomCode, itemCode: exitItem.itemCode, entryCondition: null, exitCondition: exitItem.condition, reason: 'MISSING_IN_ENTRY' });
     }
   }
 
@@ -322,6 +335,9 @@ async function compareInspections(entryInspectionId, exitInspectionId, transacti
     divergences,
     onlyInEntry,
     onlyInExit,
+    // Fechamento M5 (Guia §10): before/after/changed/mediaRefs por item; validação humana explícita.
+    items: await buildComparedItems(entryItems, exitItems, transaction),
+    requiresHumanValidation: true,
   };
 }
 
@@ -347,6 +363,9 @@ async function attachInspectionItemMedia(itemId, payload, actorUserId, transacti
 
   const file = await File.findByPk(fileId, { transaction });
   if (!file) throw AppError.notFound('Arquivo não encontrado.', 'LEGAL_INSPECTION_MEDIA_FILE_NOT_FOUND');
+  if (!file.checksumSha256) {
+    throw AppError.conflict('O arquivo não tem o hash SHA-256 do conteúdo e não pode virar mídia de vistoria.', 'LEGAL_INSPECTION_MEDIA_HASH_MISSING');
+  }
 
   const link = await FileLink.create(
     {
@@ -361,6 +380,26 @@ async function attachInspectionItemMedia(itemId, payload, actorUserId, transacti
     },
     { transaction }
   );
+  // Fechamento M5 (Caderno §4 legal.inspection_media, §11): a mídia do livro com hash, data/hora e vínculo ao item.
+  const media = await InspectionMedia.create(
+    {
+      groupId: item.groupId,
+      companyId: item.companyId,
+      inspectionId: item.inspectionId,
+      itemId: item.id,
+      fileId,
+      sha256: file.checksumSha256,
+      capturedAt: new Date(),
+      mediaType: normalizedMediaType,
+      fileLinkId: link.id,
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+  link.setDataValue('inspectionMediaId', media.id);
+  link.setDataValue('sha256', media.sha256);
+  link.setDataValue('capturedAt', media.capturedAt);
 
   await registrarAuditoria(
     {
@@ -420,10 +459,17 @@ async function signInspection(inspectionId, payload, actorUserId, transaction) {
     throw AppError.conflict(`A parte "${normalizedRole}" já assinou esta vistoria.`, 'LEGAL_INSPECTION_ALREADY_SIGNED');
   }
 
+  // Fechamento M5 (Guia §9): a assinatura congela a versão — o hash do JSON canônico do conteúdo entra na assinatura,
+  // e todas as assinaturas da mesma vistoria precisam ter sido feitas sobre o MESMO conteúdo.
+  const snapshotHash = await inspectionSnapshotHash(inspection, transaction);
+  const previous = await InspectionSignature.findOne({ where: { inspectionId: inspection.id }, order: [['signed_at', 'ASC']], transaction });
+  if (previous && previous.snapshotHash && previous.snapshotHash !== snapshotHash) {
+    throw AppError.conflict('O conteúdo da vistoria mudou depois da primeira assinatura — a vistoria assinada não pode ser alterada.', 'LEGAL_INSPECTION_SNAPSHOT_CHANGED');
+  }
   const signedAt = new Date();
   const signatureHash = crypto
     .createHash('sha256')
-    .update(`${inspection.id}:${normalizedRole}:${signedByUserId || actorUserId || 'anon'}:${signedAt.toISOString()}:${signaturePayload}`)
+    .update(`${inspection.id}:${snapshotHash}:${normalizedRole}:${signedByUserId || actorUserId || 'anon'}:${signedAt.toISOString()}:${signaturePayload}`)
     .digest('hex');
 
   const signature = await InspectionSignature.create(
@@ -434,6 +480,7 @@ async function signInspection(inspectionId, payload, actorUserId, transaction) {
       partyRole: normalizedRole,
       signedByUserId: signedByUserId || actorUserId || null,
       signatureHash,
+      snapshotHash,
       signedAt,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -461,19 +508,19 @@ async function signInspection(inspectionId, payload, actorUserId, transaction) {
     'inspection.signed',
     'Inspection',
     inspection,
-    { id: inspection.id, contractId: inspection.contractId, partyRole: normalizedRole, signatureHash },
+    { id: inspection.id, contractId: inspection.contractId, partyRole: normalizedRole, signatureHash, snapshotHash },
     normalizedRole,
     transaction
   );
 
-  // GAP REAL (verificação final Marco 5, §11/§18): assinar uma vistoria de SAÍDA (CHECK_OUT)
-  // com uma de ENTRADA (CHECK_IN) já registrada pro mesmo contrato é o gatilho natural pra
+  // GAP REAL (verificação final Marco 5, §11/§18): assinar uma vistoria de SAÍDA (EXIT)
+  // com uma de ENTRADA (ENTRY) já registrada pro mesmo contrato é o gatilho natural pra
   // comparar entrada x saída e alertar diferença — compareInspections() já existia e calculava
   // certo, só nunca era chamado automaticamente nem publicava evento. idempotencyKey pelo par
   // entrada+saída evita duplicar o alerta se a vistoria for assinada por mais de uma parte.
-  if (inspection.inspectionType === 'CHECK_OUT' && inspection.contractId) {
+  if (inspection.inspectionType === 'EXIT' && inspection.contractId) {
     const entryInspection = await Inspection.findOne({
-      where: { contractId: inspection.contractId, inspectionType: 'CHECK_IN' },
+      where: { contractId: inspection.contractId, inspectionType: 'ENTRY' },
       order: [['completedAt', 'DESC']],
       transaction,
     });
@@ -650,11 +697,14 @@ async function createInspectionRevision(inspectionId, payload, actorUserId, tran
   );
   const items = await InspectionItem.findAll({ where: { inspectionId: original.id }, order: [['created_at', 'ASC']], transaction });
   for (const item of items) {
-    await InspectionItem.create(
+    const copy = await InspectionItem.create(
       {
         groupId: item.groupId,
         companyId: item.companyId,
         itemName: item.itemName,
+        roomCode: item.roomCode,
+        itemCode: item.itemCode,
+        description: item.description,
         condition: item.condition,
         notes: item.notes,
         damageDescription: item.damageDescription,
@@ -666,6 +716,14 @@ async function createInspectionRevision(inspectionId, payload, actorUserId, tran
       },
       { transaction }
     );
+    // Fechamento M5: a revisão leva as mesmas mídias (mesmo arquivo e hash) para os itens copiados.
+    const medias = await InspectionMedia.findAll({ where: { itemId: item.id }, transaction });
+    for (const m of medias) {
+      await InspectionMedia.create(
+        { groupId: m.groupId, companyId: m.companyId, inspectionId: revision.id, itemId: copy.id, fileId: m.fileId, sha256: m.sha256, capturedAt: m.capturedAt, mediaType: m.mediaType, createdBy: actorUserId || null, updatedBy: actorUserId || null },
+        { transaction }
+      );
+    }
   }
   await registrarAuditoria(
     {

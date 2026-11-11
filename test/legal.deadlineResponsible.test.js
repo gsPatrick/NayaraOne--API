@@ -10,6 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const AppError = require('../src/utils/AppError');
@@ -18,6 +19,7 @@ const { LegalDeadline, LegalCase, AuditLog, User, UserMembership } = require('..
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -55,7 +57,7 @@ async function newCase(transaction) {
 function newDeadline(legalCase, transaction, extra = {}) {
   return legalDeadlinesService.createLegalDeadline(
     legalCase.id,
-    { description: `Prazo ${uniqueSuffix()}`, dueAt: new Date(Date.now() + 20 * 86400000), sourceEvent: 'teste', ...extra },
+    { description: `Prazo ${uniqueSuffix()}`, dueAt: new Date(Date.now() + 20 * 86400000), sourceEvent: 'teste', sourceFileId: origem(tenant), ...extra },
     tenant.userId,
     transaction
   );

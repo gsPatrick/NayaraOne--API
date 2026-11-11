@@ -78,8 +78,8 @@ after(async () => {
 
 async function createFakeDocumentFile(transaction) {
   const suffix = uniqueSuffix();
-  return File.create(
-    {
+  return File.create({ checksumSha256: require('crypto').randomBytes(32).toString('hex'), // fechamento M5: arquivo com hash (Caderno §11)
+      
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       storageKey: `homo-qa/marco5-gap/${suffix}.pdf`,
@@ -424,8 +424,10 @@ test('G4: contrato de locação sem requirements gerados manualmente é auto-ger
     assert.equal(existingBefore.length, 0, 'nenhum requirement gerado manualmente ainda');
 
     let reloaded = await contractsService.getContract(contract.id, transaction);
+    // Matriz M5: entrar em DOCUMENTS_PENDING gera o checklist; o primeiro gate que cobra é o de LEGAL_REVIEW.
+    await contractsService.transitionContractStatus(reloaded, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await assert.rejects(
-      () => contractsService.transitionContractStatus(reloaded, 'DOCUMENTS_PENDING', tenant.userId, transaction),
+      () => contractsService.transitionContractStatus(reloaded, 'LEGAL_REVIEW', tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_REQUIREMENTS_PENDING');

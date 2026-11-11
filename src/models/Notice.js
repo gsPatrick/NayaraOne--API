@@ -42,6 +42,10 @@ module.exports = (sequelize) => {
       deliveredAt: { type: DataTypes.DATE, allowNull: true, field: 'delivered_at' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
+      // DoD M5 "Aditivos/notificações versionados" (migration 9998): versão vigente do conteúdo e a versão aprovada
+      // (só a aprovada pode ser enviada); o histórico fica em legal.notice_versions (append-only).
+      currentVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, field: 'current_version' },
+      approvedVersion: { type: DataTypes.INTEGER, allowNull: true, field: 'approved_version' },
     },
     {
       schema: 'legal',

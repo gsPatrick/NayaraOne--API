@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, waiveAllContractRequirements, createCommissionSource } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const contractsService = require('../src/features/legal/contracts.service');
 const contractVersionsService = require('../src/features/legal/contractVersions.service');
 const signaturesService = require('../src/features/legal/signatures.service');
@@ -81,6 +82,7 @@ let tenant;
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 
 after(async () => {
@@ -749,7 +751,7 @@ test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e nã
     deadline = await withCommittedTenantTransaction(tenant, (t) =>
       legalDeadlinesService.createLegalDeadline(
         legalCase.id,
-        { description: `HOMO QA prazo vencido ${uniqueSuffix()}`, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', responsibleUserId: tenant.userId },
+        { description: `HOMO QA prazo vencido ${uniqueSuffix()}`, dueAt: new Date(Date.now() - 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant), responsibleUserId: tenant.userId },
         tenant.userId,
         t
       )

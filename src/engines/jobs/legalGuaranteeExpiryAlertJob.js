@@ -1,6 +1,6 @@
 'use strict';
 
-const { sequelize, Group, Company, Guarantee, LegalCase, Notification, Contract } = require('../../models');
+const { sequelize, Group, Company, Guarantee, LegalCase, Notification, Contract, Task } = require('../../models');
 const { publishGuaranteeExpiring } = require('../../features/legal/legalEvents.service');
 const { getSetting } = require('../../features/settings/settings.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
@@ -24,7 +24,7 @@ const { registrarAuditoria } = require('../audit/auditLog.service');
 const DEFAULT_ALERT_DAYS = 30;
 // M45-RECONF varredura: a notificação mostrava o tipo cru ("DEPOSIT") e o UUID do contrato.
 const GUARANTEE_TYPE_LABELS = {
-  GUARANTOR: 'Fiador', INSURANCE: 'Seguro-fiança', DEPOSIT: 'Caução', CAPITALIZATION_TITLE: 'Título de capitalização', OTHER: 'Outra garantia',
+  GUARANTOR: 'Fiador', INSURANCE: 'Seguro-fiança', SECURITY_DEPOSIT: 'Caução', CAPITALIZATION: 'Título de capitalização', OTHER: 'Outra garantia',
 };
 
 async function processGuaranteesInTransaction(transaction, nowOverride) {
@@ -50,11 +50,31 @@ async function processGuaranteesInTransaction(transaction, nowOverride) {
     if (daysUntilExpiry > tenantAlertDays) continue;
 
     await publishGuaranteeExpiring(guarantee, daysUntilExpiry, transaction);
-    const contractRow = guarantee.contractId ? await Contract.findByPk(guarantee.contractId, { attributes: ['contractNumber'], transaction }) : null;
+    const contractRow = guarantee.contractId ? await Contract.findByPk(guarantee.contractId, { attributes: ['contractNumber', 'createdBy'], transaction }) : null;
     const contractLabel = contractRow && contractRow.contractNumber ? contractRow.contractNumber : 'sem número';
     const typeLabel = GUARANTEE_TYPE_LABELS[guarantee.guaranteeType] || 'Garantia';
 
     const legalCase = await LegalCase.findOne({ where: { contractId: guarantee.contractId }, transaction });
+    // Fechamento M5 (Caderno §9 "Garantia vencendo gera tarefas/eventos"): uma TAREFA aberta por garantia vencendo
+    // (não repete enquanto a anterior estiver aberta), para o responsável do processo ou, sem processo, quem cadastrou o contrato.
+    const openTask = await Task.findOne({ where: { relatedEntityType: 'legal.guarantees', relatedEntityId: guarantee.id, status: 'OPEN' }, transaction });
+    if (!openTask) {
+      await Task.create(
+        {
+          groupId: guarantee.groupId,
+          companyId: guarantee.companyId,
+          assignedToUserId: (legalCase && legalCase.responsibleUserId) || (contractRow && contractRow.createdBy) || null,
+          title: daysUntilExpiry < 0 ? `Garantia vencida — contrato ${contractLabel}` : `Renovar ou substituir a garantia — contrato ${contractLabel}`,
+          description: `Garantia "${typeLabel}" do contrato ${contractLabel} ${daysUntilExpiry < 0 ? 'venceu' : 'vence'} em ${endsAt.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}. Renove ou substitua (POST /legal/guarantees/:id/replace).`,
+          relatedEntityType: 'legal.guarantees',
+          relatedEntityId: guarantee.id,
+          dueAt: endsAt,
+          status: 'OPEN',
+          priority: daysUntilExpiry < 0 ? 'URGENT' : 'HIGH',
+        },
+        { transaction }
+      );
+    }
     if (legalCase && legalCase.responsibleUserId) {
       await Notification.create(
         {

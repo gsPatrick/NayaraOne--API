@@ -4,6 +4,7 @@ const { Notice, Contract, LegalCase } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishDomainEvent } = require('../../engines/events/outbox');
+const { recordInitialVersion } = require('./noticeVersions.service');
 
 /**
  * notices.service.js — auditoria externa (contrato bruto, Anexo I "4. Entidades/tabelas
@@ -86,6 +87,8 @@ async function createNotice(payload, actorUserId, transaction) {
     },
     { transaction }
   );
+  // DoD M5 "notificações versionadas": a versão 1 do conteúdo nasce junto (legal.notice_versions, append-only).
+  await recordInitialVersion(notice, actorUserId, transaction);
 
   await registrarAuditoria(
     {
@@ -169,6 +172,7 @@ async function approveNotice(id, actorUserId, transaction) {
 
   const beforeJson = notice.toJSON();
   notice.status = 'APPROVED';
+  notice.approvedVersion = notice.currentVersion; // a versão revisada é a que pode ser enviada
   notice.reviewedByUserId = actorUserId || null;
   notice.reviewedAt = new Date();
   notice.updatedBy = actorUserId || null;
@@ -217,6 +221,10 @@ async function sendNotice(id, actorUserId, transaction) {
     );
   }
 
+  // Só sai a versão que foi aprovada (uma nova versão volta a notificação a DRAFT e exige nova revisão).
+  if (notice.approvedVersion !== notice.currentVersion) {
+    throw AppError.conflict(`A versão ${notice.currentVersion} da notificação não é a aprovada; aprove-a antes do envio.`, 'LEGAL_NOTICE_SEND_BLOCKED');
+  }
   const beforeJson = notice.toJSON();
   notice.status = 'SENT';
   notice.sentAt = new Date();
@@ -231,7 +239,7 @@ async function sendNotice(id, actorUserId, transaction) {
       aggregateType: 'Notice',
       aggregateId: notice.id,
       eventType: 'legal.notice.sent',
-      payload: { id: notice.id, contractId: notice.contractId, legalCaseId: notice.legalCaseId, channel: notice.channel },
+      payload: { id: notice.id, contractId: notice.contractId, legalCaseId: notice.legalCaseId, channel: notice.channel, version: notice.currentVersion },
       idempotencyKey: `legal.notice.sent:${notice.id}`,
     },
     transaction

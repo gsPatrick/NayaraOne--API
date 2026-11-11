@@ -10,6 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const { LegalDeadline, LegalCase, AuditLog, User, UserMembership } = require('../src/models');
@@ -17,6 +18,7 @@ const { LegalDeadline, LegalCase, AuditLog, User, UserMembership } = require('..
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -55,7 +57,7 @@ test('Dois PATCH simultaneos de responsavel no mesmo prazo: auditoria encadeada,
       );
       const deadline = await legalDeadlinesService.createLegalDeadline(
         legalCase.id,
-        { description: `Prazo conc ${uniqueSuffix()}`, dueAt: new Date(Date.now() + 20 * 86400000), sourceEvent: 'teste', responsibleUserId: users[0].id },
+        { description: `Prazo conc ${uniqueSuffix()}`, dueAt: new Date(Date.now() + 20 * 86400000), sourceEvent: 'teste', sourceFileId: origem(tenant), responsibleUserId: users[0].id },
         tenant.userId,
         transaction
       );

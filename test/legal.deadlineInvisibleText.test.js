@@ -9,6 +9,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/features/legal/legalCases.service');
 const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
 const AppError = require('../src/utils/AppError');
@@ -17,6 +18,7 @@ const { LegalDeadline } = require('../src/models');
 let tenant;
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 after(async () => {
   await sequelize.close();
@@ -43,7 +45,7 @@ async function newCase(transaction) {
 
 async function pending(transaction) {
   const legalCase = await newCase(transaction);
-  const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: `Prazo ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste' }, tenant.userId, transaction);
+  const d = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: `Prazo ${uniqueSuffix()}`, dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant) }, tenant.userId, transaction);
   return { legalCase, d };
 }
 
@@ -103,11 +105,11 @@ test('Mesma classe nos vizinhos: descricao, origem e motivo so com invisivel/nao
     await assert.rejects(() => create({ description: '​  ' }), expectCode('LEGAL_DEADLINE_VALIDATION', 400));
     await assert.rejects(() => create({ description: { a: 1 } }), expectCode('LEGAL_DEADLINE_VALIDATION', 400));
     await assert.rejects(() => create({ description: 'x'.repeat(256) }), expectCode('LEGAL_DEADLINE_VALIDATION', 400));
-    await assert.rejects(() => create({ sourceEvent: '​' }), expectCode('LEGAL_DEADLINE_SOURCE_REQUIRED', 400));
+    await assert.rejects(() => create({ sourceEvent: '​' }), expectCode('DEADLINE_SOURCE_REQUIRED', 400));
     await assert.rejects(() => create({ sourceEvent: ['x'] }), expectCode('LEGAL_DEADLINE_VALIDATION', 400));
     await assert.rejects(() => create({ dueAt: 'nao-e-data' }), expectCode('LEGAL_DEADLINE_VALIDATION', 400));
     await assert.rejects(() => create({ criticality: { x: 1 } }), expectCode('LEGAL_DEADLINE_VALIDATION', 400));
-    const ok = await create({ description: '​ Prazo valido  ', sourceEvent: undefined, sourceDocument: ' Intimacao ' });
+    const ok = await create({ description: '​ Prazo valido  ', sourceEvent: undefined, sourceDocument: ' Intimacao ', sourceFileId: origem(tenant) });
     assert.equal(ok.description, 'Prazo valido');
     assert.equal(ok.sourceDocument, 'Intimacao');
 
@@ -150,7 +152,7 @@ test('Positivo: nota com texto visivel cercada de U+2800/fillers e aceita e apar
     const done = await legalDeadlinesService.updateLegalDeadline(d.id, { status: 'DONE', conclusionNote: '⠀ㅤ Peticao protocolada. ᅟ⠀' }, tenant.userId, transaction);
     assert.equal(done.conclusionNote, 'Peticao protocolada.');
     await assert.rejects(
-      () => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: '⠀⠀', dueAt: FUTURE(), sourceEvent: 'teste' }, tenant.userId, transaction),
+      () => legalDeadlinesService.createLegalDeadline(legalCase.id, { description: '⠀⠀', dueAt: FUTURE(), sourceEvent: 'teste', sourceFileId: origem(tenant) }, tenant.userId, transaction),
       expectCode('LEGAL_DEADLINE_VALIDATION', 400)
     );
   });

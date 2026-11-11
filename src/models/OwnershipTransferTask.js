@@ -22,6 +22,8 @@ module.exports = (sequelize) => {
       evidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_file_id' },
       status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'PENDING', field: 'status' },
       completedAt: { type: DataTypes.DATE, allowNull: true, field: 'completed_at' },
+      // Fechamento M5 (M5-D103): prazo da troca de titularidade, contado da entrega das chaves.
+      dueDate: { type: DataTypes.DATEONLY, allowNull: true, field: 'due_date' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
