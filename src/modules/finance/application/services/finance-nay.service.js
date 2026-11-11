@@ -5,6 +5,7 @@ const { recordRuleRun } = require('../../../../features/ai/orchestrator/runs');
 const { getWeeklyHealthReport } = require('./finance-health.service');
 const { resolveAntifraudThresholds } = require('./finance-antifraud.service');
 const { startOfBusinessDay } = require('../../../../utils/businessDate');
+const { REALIZED_BY_CHILDREN } = require('../../infrastructure/repositories/ledger-sql'); // saldo em aberto = valor - realizado pelas baixas (M4LR)
 
 /**
  * NAY Financeira — Caderno Marco 4 §18 ("NAY Financeira"), Guia §13 ("Relatório semanal da NAY":
@@ -43,14 +44,16 @@ function monthBounds(now) {
   return { current: fmt(y, m), previous: fmt(prevY, prevM) };
 }
 
+// M4LR (verificação 11/11/2026, sonda P10): o realizado vem da view finance.ledger — o recebimento quitado em baixas
+// parciais conta uma vez (as baixas são as linhas; o pai não) e o estorno entra com o sinal contrário no mês em que ocorreu.
 async function realizedByMonth(transaction, months) {
   const rows = await sequelize.query(
-    `SELECT to_char(settled_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS month, nature,
-            COUNT(*)::int AS count, COALESCE(SUM(amount), 0)::numeric AS total
-       FROM finance.financial_entries
-      WHERE status = 'SETTLED' AND is_third_party_funds = false AND nature IN ('PAYABLE','RECEIVABLE')
-        AND settled_at IS NOT NULL
-        AND to_char(settled_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') IN (:months)
+    `SELECT to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS month, business_nature AS nature,
+            COUNT(*)::int AS count,
+            COALESCE(SUM(CASE WHEN business_nature = 'PAYABLE' THEN -cash_amount ELSE cash_amount END), 0)::numeric AS total
+       FROM finance.ledger
+      WHERE NOT is_third_party_funds AND business_nature IN ('PAYABLE','RECEIVABLE')
+        AND to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') IN (:months)
       GROUP BY 1, 2`,
     { transaction, type: sequelize.QueryTypes.SELECT, replacements: { months } }
   );
@@ -62,12 +65,11 @@ async function realizedByMonth(transaction, months) {
 
 async function costCenterGrowth(transaction, months) {
   const rows = await sequelize.query(
-    `SELECT cost_center_id, to_char(settled_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS month,
-            COALESCE(SUM(amount), 0)::numeric AS total
-       FROM finance.financial_entries
-      WHERE status = 'SETTLED' AND is_third_party_funds = false AND nature = 'PAYABLE'
-        AND cost_center_id IS NOT NULL AND settled_at IS NOT NULL
-        AND to_char(settled_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') IN (:months)
+    `SELECT cost_center_id, to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS month,
+            COALESCE(-SUM(cash_amount), 0)::numeric AS total
+       FROM finance.ledger
+      WHERE NOT is_third_party_funds AND business_nature = 'PAYABLE' AND cost_center_id IS NOT NULL
+        AND to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') IN (:months)
       GROUP BY 1, 2`,
     { transaction, type: sequelize.QueryTypes.SELECT, replacements: { months } }
   );
@@ -88,11 +90,13 @@ async function costCenterGrowth(transaction, months) {
 
 async function openEntries(transaction, nature, startToday) {
   return sequelize.query(
-    `SELECT id, description, amount::numeric AS amount, due_at, contract_id, cost_center_id
-       FROM finance.financial_entries
-      WHERE status = 'PENDING' AND is_third_party_funds = false AND nature = :nature
-        ${nature === 'RECEIVABLE' ? 'AND due_at < :startToday' : ''}
-      ORDER BY due_at ASC NULLS LAST
+    `SELECT * FROM (
+       SELECT e.id, e.description, (e.amount - ${REALIZED_BY_CHILDREN('e')})::numeric AS amount, e.due_at, e.contract_id, e.cost_center_id
+         FROM finance.financial_entries e
+        WHERE e.status IN ('PENDING', 'PARTIALLY_SETTLED') AND e.is_third_party_funds = false AND e.nature = :nature AND e.ledger_exclusion_reason IS NULL
+          ${nature === 'RECEIVABLE' ? 'AND e.due_at < :startToday' : ''}) o
+      WHERE o.amount > 0
+      ORDER BY o.due_at ASC NULLS LAST
       LIMIT 200`,
     { transaction, type: sequelize.QueryTypes.SELECT, replacements: { nature, startToday } }
   );

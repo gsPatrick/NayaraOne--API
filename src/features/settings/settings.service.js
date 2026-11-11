@@ -83,6 +83,8 @@ const { REBUILD_SETTINGS_SCHEMA } = require('../../features/analytics/read-model
 const { SOURCE_REFS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/sourceRefs.settings');
 const { DRILLDOWN_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/drilldown.settings');
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
+const { FINANCE_HEALTH_REPORT_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/finance-health-settings'); // M4LR: pesos do relatório semanal (§19)
+const { LEDGER_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/ledger-settings'); // M4LR: conta bancária na baixa (§7)
 const { FINANCE_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/financeKpi.settings');
 const { CASH_SETTINGS_SCHEMA } = require('../analytics/read-models/cash.settings');
 const { FINANCE_WINDOW_SETTINGS_SCHEMA } = require('../analytics/read-models/financeWindow.settings');
@@ -365,6 +367,10 @@ const SETTINGS_SCHEMA = {
   ...DRILLDOWN_SETTINGS_SCHEMA, // M9-D690: tamanho de página do detalhe (drill-down)
   // Marco 9, M9-D615 — read model financeiro: janela, em dias, do vencido que entra na taxa de inadimplência.
   ...FINANCE_HEALTH_SETTINGS_SCHEMA,
+  // Relatório semanal de saúde do Financeiro (Caderno M4 §19): pesos dos recebíveis por status (DI-M4LR-2).
+  ...FINANCE_HEALTH_REPORT_SETTINGS_SCHEMA,
+  // Ledger do Financeiro (Caderno M4 §7): exigir a conta bancária em toda baixa (DI-M4LR-1).
+  ...LEDGER_SETTINGS_SCHEMA,
   // Marco 9, M9-D624 — KPIs de conciliações pendentes e anomalias: idade máxima do extrato, faixas de idade e owner de cada KPI.
   ...FINANCE_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D620 — KPIs de caixa livre e dinheiro de terceiros: saldo de abertura, termos de origem (caução, repasse), mapa de status do ledger e owners.

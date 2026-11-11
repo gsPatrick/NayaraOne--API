@@ -8,19 +8,25 @@
  */
 const { sequelize } = require('../../../models');
 const { calendarDaysBetween } = require('../metrics/period.calendar');
+// M4LR: regra do saldo e da linha do ledger nas funções do banco (migration 20260101010520), a mesma do Financeiro — sem importar o módulo.
+const OPEN_AMOUNT = (alias) => `(${alias}.amount - finance.entry_realized_by_children(${alias}.id))`;
 
 const SP = "AT TIME ZONE 'America/Sao_Paulo'";
-const OVERDUE = "company_id = :companyId AND status = 'PENDING' AND nature = 'RECEIVABLE' AND NOT is_third_party_funds AND reversal_of_entry_id IS NULL AND due_at IS NOT NULL AND due_at < :today";
+// M4LR: vencido com saldo em aberto (PENDING ou PARTIALLY_SETTLED), pelo saldo — a mesma regra do relatório semanal do Financeiro.
+const OVERDUE = "company_id = :companyId AND status IN ('PENDING', 'PARTIALLY_SETTLED') AND nature = 'RECEIVABLE' AND NOT is_third_party_funds AND reversal_of_entry_id IS NULL AND due_at IS NOT NULL AND due_at < :today AND amount > 0";
+// "amount" das consultas abaixo é o saldo em aberto de cada lançamento.
+const SOURCE = `(SELECT e.id, e.company_id, e.status, e.nature, e.is_third_party_funds, e.reversal_of_entry_id, e.due_at, e.contract_id, ${OPEN_AMOUNT('e')} AS amount
+                   FROM finance.financial_entries e WHERE e.company_id = :companyId AND e.ledger_exclusion_reason IS NULL) o`;
 const rows = async (sql, replacements, transaction) => (await sequelize.query(sql, { replacements, transaction }))[0];
 
 async function readOverdueReceivablesDetail(companyId, { today, windowStart }, windowDays, asOf, transaction) {
   const r = { companyId, today: today.toISOString(), windowStart: windowStart.toISOString() };
-  const [total] = await rows(`SELECT COALESCE(SUM(amount), 0)::text AS total, count(*)::int AS n FROM finance.financial_entries WHERE ${OVERDUE}`, r, transaction);
+  const [total] = await rows(`SELECT COALESCE(SUM(amount), 0)::text AS total, count(*)::int AS n FROM ${SOURCE} WHERE ${OVERDUE}`, r, transaction);
   const byDay = await rows(
-    `SELECT (due_at ${SP})::date::text AS day, count(*)::int AS n, SUM(amount)::text AS total FROM finance.financial_entries WHERE ${OVERDUE} GROUP BY 1 ORDER BY 1`, r, transaction);
+    `SELECT (due_at ${SP})::date::text AS day, count(*)::int AS n, SUM(amount)::text AS total FROM ${SOURCE} WHERE ${OVERDUE} GROUP BY 1 ORDER BY 1`, r, transaction);
   const byContract = await rows(
     `SELECT contract_id::text AS k, SUM(amount)::text AS total, COALESCE(SUM(amount) FILTER (WHERE due_at >= :windowStart), 0)::text AS in_window
-       FROM finance.financial_entries WHERE ${OVERDUE} GROUP BY 1 ORDER BY 1`, r, transaction);
+       FROM ${SOURCE} WHERE ${OVERDUE} GROUP BY 1 ORDER BY 1`, r, transaction);
   const contracts = {};
   let withoutContract = { amount: '0', inWindow: '0' };
   for (const c of byContract) {

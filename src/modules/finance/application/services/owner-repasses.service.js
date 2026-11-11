@@ -10,8 +10,7 @@ const { resolveRepasseDestination } = require('./owner-repasse-destination.servi
 const {
   assertEligibleSources,
   assertSourcesInScope,
-  eligibleAmountOf,
-  getAlreadyAllocatedAmount,
+  availableCentsOf,
   getOwnerRepasseComposition,
   listEligibleRepasseSources,
 } = require('./owner-repasse-eligibility.service');
@@ -110,8 +109,8 @@ async function createOwnerRepasse(payload, actorUserId, transaction) {
   const remainingCentsByEntry = new Map();
   let eligibleCents = 0;
   for (const entry of sourceEntries) {
-    const alreadyAllocated = await getAlreadyAllocatedAmount(entry.id, transaction);
-    const remainingCents = Math.max(0, Math.round((eligibleAmountOf(entry) - alreadyAllocated) * 100));
+    // M4LR (sonda P8): teto = o que o recebimento realizou no ledger (baixas parciais somadas, estornos descontados) menos o já alocado.
+    const remainingCents = await availableCentsOf(entry, transaction);
     remainingCentsByEntry.set(entry.id, remainingCents);
     eligibleCents += remainingCents;
   }

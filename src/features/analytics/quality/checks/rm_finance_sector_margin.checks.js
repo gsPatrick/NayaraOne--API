@@ -4,6 +4,8 @@
 const { registerChecks } = require('../quality.catalog');
 const sql = require('../quality.sql');
 const t = require('../types');
+// M4LR: regra do saldo e da linha do ledger nas funções do banco (migration 20260101010520), a mesma do Financeiro — sem importar o módulo.
+const IS_LEDGER_ROW = (alias) => `(${alias}.ledger_exclusion_reason IS NULL AND NOT finance.entry_has_settlement_children(${alias}.id))`;
 
 const MODEL = 'rm_finance_sector_margin';
 const NO_CENTER = '00000000-0000-0000-0000-000000000000';
@@ -16,6 +18,7 @@ function totalReconciliation(code, nature, column, metric) {
     // Fonte: o que o ledger liquidou, só nos setores e meses que o read model já projetou (um par ainda não projetado não é divergência).
     observed: (ctx) => sql.value(ctx, `SELECT COALESCE(SUM(fe.amount), 0)::text AS v FROM finance.financial_entries fe
       WHERE fe.company_id = :companyId AND fe.status = 'SETTLED' AND fe.nature = '${nature}' AND NOT fe.is_third_party_funds AND fe.reversal_of_entry_id IS NULL
+        AND ${IS_LEDGER_ROW('fe')}
         AND EXISTS (SELECT 1 FROM ${sql.tableOf(ctx)} m WHERE m.company_id = fe.company_id AND m.competence_month = fe.competence_month
           AND m.result_center_id::text = COALESCE(fe.result_center_id, CAST(:nil AS uuid))::text)`, { nil: NO_CENTER }),
   });

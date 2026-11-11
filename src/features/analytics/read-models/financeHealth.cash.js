@@ -13,6 +13,8 @@
 const { sequelize } = require('../../../models');
 const money = require('../metrics/formulas/money');
 const { iso } = require('./financeHealth.dates');
+// M4LR: regra do saldo e da linha do ledger nas funções do banco (migration 20260101010520), a mesma do Financeiro — sem importar o módulo.
+const IS_LEDGER_ROW = (alias) => `(${alias}.ledger_exclusion_reason IS NULL AND NOT finance.entry_has_settlement_children(${alias}.id))`;
 
 const NO_ACCOUNT = 'sem_conta';
 const NO_CENTER = 'sem_centro';
@@ -27,7 +29,8 @@ const like = (terms) => terms.map((t) => `%${t}%`);
 const total = (values) => money.money(money.sum(values));
 const minus = (a, b) => money.money(money.toString(money.sub(a, b)));
 
-const BASE = 'e.company_id = :companyId AND e.status IN (:realized) AND e.settled_at < :dayEnd AND e.reversal_of_entry_id IS NULL';
+// M4LR (sonda P12): só linha do ledger — a caução recebida em baixas parciais conta pelas baixas, nunca pelas baixas e pelo pai.
+const BASE = `e.company_id = :companyId AND e.status IN (:realized) AND e.settled_at < :dayEnd AND e.reversal_of_entry_id IS NULL AND ${IS_LEDGER_ROW('e')}`;
 
 async function readThirdParty(r, transaction) {
   const found = await rows(

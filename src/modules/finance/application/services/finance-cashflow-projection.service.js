@@ -10,11 +10,12 @@ const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 
 async function settledThisMonth(transaction) {
   const rows = await sequelize.query(
-    `SELECT nature, COALESCE(SUM(amount), 0)::numeric AS total
-       FROM finance.financial_entries
-      WHERE status = 'SETTLED' AND is_third_party_funds = false AND nature IN ('PAYABLE','RECEIVABLE') AND settled_at IS NOT NULL
-        AND to_char(settled_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') = to_char(now() AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM')
-      GROUP BY nature`,
+    // M4LR: o realizado do mês sai da view finance.ledger (baixas parciais contam uma vez; estorno com sinal contrário).
+    `SELECT business_nature AS nature, COALESCE(SUM(CASE WHEN business_nature = 'PAYABLE' THEN -cash_amount ELSE cash_amount END), 0)::numeric AS total
+       FROM finance.ledger
+      WHERE NOT is_third_party_funds AND business_nature IN ('PAYABLE','RECEIVABLE')
+        AND to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') = to_char(now() AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM')
+      GROUP BY business_nature`,
     { transaction, type: sequelize.QueryTypes.SELECT }
   );
   const by = { RECEIVABLE: 0, PAYABLE: 0 };
@@ -29,7 +30,7 @@ async function getCashflowProjection(transaction) {
   const settled = await settledThisMonth(transaction);
   const windows = [['7d', 'na próxima semana', report.dueNextSevenDays], ['30d', 'em até um mês', report.dueNext30Days], ['60d', 'em até dois meses', report.dueNext60Days]];
   const items = [
-    item('caixa_livre', 'Caixa livre (extrato menos dinheiro de terceiros)', 'REALIZADO', report.freeCash.value),
+    item('caixa_livre', 'Caixa livre (extrato conciliado menos dinheiro de terceiros)', 'REALIZADO', report.freeCash.value),
     item('recebido_mes', 'Recebido no mês', 'REALIZADO', settled.RECEIVABLE),
     item('pago_mes', 'Pago no mês', 'REALIZADO', settled.PAYABLE),
     ...windows.flatMap(([key, label, w]) => [
