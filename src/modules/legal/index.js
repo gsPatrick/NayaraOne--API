@@ -19,7 +19,7 @@ const ORDEM_DO_GUIA = [
   ['11. legal_deadlines + escalonamento', './cases/deadline.service'],
   ['12. evidence_packages', './cases/evidence-package.service'],
   ['13. eventos', './shared/legalEvents.service'],
-  ['14. NAY jurídica read/suggest', './cases/legalNay.service'],
+  ['14. assistente jurídico: leitura e sugestão (Guia §1 passo 14)', './cases/legalNay.service'],
 ];
 
 /** Carrega os serviços na ordem do Guia e devolve { passo, servico }. As rotas ficam em shared/legal.routes.js. */
