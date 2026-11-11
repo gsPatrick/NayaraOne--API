@@ -17,6 +17,8 @@ async function inspectionItem(_vars, { tenants }) {
     const item = await inspectionsService.addInspectionItem(inspection.id, { itemName: 'Cozinha', condition: 'GOOD' }, A.userId, transaction);
     const file = await File.create({
       groupId: A.groupId, companyId: A.companyId, storageKey: `qa-m9/contrato/${suffix()}.jpg`, fileName: 'cozinha.jpg', mimeType: 'image/jpeg', sizeBytes: 10, uploadedByUserId: A.userId, createdBy: A.userId, updatedBy: A.userId,
+      // Caderno M5 §11: foto de vistoria tem hash do conteúdo (todo upload real grava o SHA-256).
+      checksumSha256: require('node:crypto').createHash('sha256').update(`cozinha-${suffix()}`).digest('hex'),
     }, { transaction });
     return { inspectionItemId: item.id, mediaFileId: file.id };
   });

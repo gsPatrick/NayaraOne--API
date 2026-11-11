@@ -65,6 +65,15 @@ test('legado_nenhuma_das_migrations_650_656_658_cria_gatilho_de_somente_leitura'
 });
 
 test('legado_9964_e_a_ultima_migration', () => {
+  // A 9964 é a última migration do plano do Marco 9 (docs/DEPLOY_MARCO_9.md). As que vêm depois são dos fechamentos dos
+  // marcos seguintes, com deploy próprio documentado (ex.: docs/DEPLOY_FECHAMENTO_MARCO_5.md), e nenhuma toca os
+  // gatilhos de somente leitura do legado nem as três tabelas do legado.
   const todas = fs.readdirSync(DIR).filter((f) => /^\d{14}-.*\.js$/.test(f)).sort();
-  assert.match(todas[todas.length - 1], /^20260101009964-/);
+  const i = todas.findIndex((f) => /^20260101009964-/.test(f));
+  assert.ok(i >= 0, 'a 9964 existe');
+  for (const f of todas.slice(i + 1)) {
+    const texto = fs.readFileSync(path.join(DIR, f), 'utf8');
+    assert.doesNotMatch(texto, /read_only|provider_accounts|integration_errors|webhook_inbox/, `${f} não pode mexer no legado nem nos gatilhos da 9964`);
+  }
+  if (todas.length > i + 1) assert.ok(fs.existsSync(path.join(__dirname, '../../../docs/DEPLOY_FECHAMENTO_MARCO_5.md')), 'migrations depois da 9964 têm deploy documentado');
 });

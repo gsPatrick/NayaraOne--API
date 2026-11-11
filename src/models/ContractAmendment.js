@@ -3,7 +3,7 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * ContractAmendment — tabela "legal"."addenda" (antiga contract_amendments, migration 9984)
+ * ContractAmendment — tabela "legal"."addenda" (antiga contract_amendments, migration 9986)
  * Aditivo contratual numerado sequencialmente por contrato. Append-only: sem updated_at e sem
  * soft delete; o único campo mutável é `status` (DRAFT -> SIGNED).
  */

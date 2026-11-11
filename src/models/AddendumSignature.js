@@ -2,7 +2,7 @@
 
 const { DataTypes } = require('sequelize');
 
-/** AddendumSignature — tabela "legal"."addendum_signatures" (Caderno M5 §13, migration 9984): assinatura por signatário do aditivo. Imutável. */
+/** AddendumSignature — tabela "legal"."addendum_signatures" (Caderno M5 §13, migration 9986): assinatura por signatário do aditivo. Imutável. */
 module.exports = (sequelize) => sequelize.define(
   'AddendumSignature',
   {
