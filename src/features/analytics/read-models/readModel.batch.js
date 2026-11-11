@@ -29,13 +29,20 @@ function onBatchFlushed(fn) {
   listeners.push(fn);
 }
 
+/**
+ * Conta o upsert de um evento no lote. DI-BI-4: read model cujo agregado é a EMPRESA INTEIRA (aggregateColumns vazio, ex.: os de Tecnologia e IA) tem um só agregado, que
+ * todo evento recalcula por inteiro: o lote conta 1, como a passada agendada. Contar um por evento fazia uma rajada de 3 execuções da NAY parecer o triplo de linhas e
+ * reprovar a checagem de contagem (ROW_COUNT_RANGE, CRITICAL), deixando os indicadores de IA "não confiáveis" até a passada seguinte.
+ */
 function recordUpsert(transaction, { companyId, groupId, readModel, sourceSnapshotAt, lastEventId }) {
   const root = rootOf(transaction);
   const map = pending.get(root) || new Map();
   pending.set(root, map);
   const id = `${companyId}|${readModel}`;
   const entry = map.get(id) || { companyId, groupId, readModel, rows: 0, sourceSnapshotAt: null, lastEventId: null };
-  entry.rows += 1;
+  const def = getReadModel(readModel);
+  const companyWide = !!def && Array.isArray(def.aggregateColumns) && def.aggregateColumns.length === 0;
+  entry.rows = companyWide ? 1 : entry.rows + 1;
   if (sourceSnapshotAt && (!entry.sourceSnapshotAt || new Date(sourceSnapshotAt) > new Date(entry.sourceSnapshotAt))) entry.sourceSnapshotAt = sourceSnapshotAt;
   entry.lastEventId = lastEventId || entry.lastEventId;
   map.set(id, entry);

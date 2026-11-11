@@ -10,12 +10,16 @@ const every = (cron, maxStalenessMinutes) => Object.freeze({ mode: 'SCHEDULE', c
 const EVENT = Object.freeze({ mode: 'EVENT', maxStalenessMinutes: 15 });
 const quality = (maxStalenessMinutes, requiredFields) => ({ referenceReport: REFERENCE_REPORT, maxStalenessMinutes, requiredFields, allowNull: true });
 
+// DI-BI-1 e DI-BI-3: a versão 1 valia 1 minuto, mas o read model é recalculado por passada (nunca a cada minuto), e contava como ausente o dia inteiro em que a série começou.
+const AVAILABILITY_V2_REASON = 'Versão 2: recálculo a cada 5 minutos (job próprio de Tecnologia) e esperadas contadas a partir da primeira medição da sonda no dia em que a série começa.';
+
 const DEFINITIONS = Object.freeze([
   {
-    metricCode: 'tec.availability', name: 'Disponibilidade', sourceReadModel: 'rm_tech_availability', unit: 'PERCENT', valueNature: 'ACTUAL', criticality: 'NORMAL', refreshPolicy: every('* * * * *', 1),
+    metricCode: 'tec.availability', name: 'Disponibilidade', sourceReadModel: 'rm_tech_availability', unit: 'PERCENT', valueNature: 'ACTUAL', criticality: 'NORMAL', refreshPolicy: every('*/5 * * * *', 5),
+    version: 2, changeReason: AVAILABILITY_V2_REASON,
     description: 'Quanto do tempo o ERP esteve de pé no mês, medido por sondas de saúde (API, banco, fila e storage) a cada minuto, e quantos minutos ficou fora do ar.',
-    formulaSemantic: 'Disponibilidade = sondas com sucesso ÷ sondas esperadas no mês de São Paulo × 100, arredondada uma vez para 2 casas (3 casas em details). Sonda ausente não conta como sucesso: entra em details.missingProbes. Minutos fora do ar = sondas falhas × intervalo. Mais de 5% de sondas ausentes deixa o KPI DEGRADED.',
-    dimensions: ['serviço', 'período'], qualityRule: quality(1, ['checks', 'up', 'expected']),
+    formulaSemantic: 'Disponibilidade = sondas com sucesso ÷ sondas esperadas no mês de São Paulo × 100, arredondada uma vez para 2 casas (3 casas em details). Esperadas: o dia inteiro dividido pelo intervalo da sonda (hoje, até agora); no dia em que a série da sonda começa, a partir da primeira medição. Sonda ausente não conta como sucesso: entra em details.missingProbes. Minutos fora do ar = sondas falhas × intervalo. Mais de 5% de sondas ausentes deixa o KPI DEGRADED.',
+    dimensions: ['serviço', 'período'], qualityRule: quality(5, ['checks', 'up', 'expected']),
   },
   {
     metricCode: 'tec.queues_dlq', name: 'Filas e DLQ', sourceReadModel: 'rm_tech_queues', unit: 'COUNT', valueNature: 'ACTUAL', criticality: 'NORMAL', refreshPolicy: every('*/5 * * * *', 5),

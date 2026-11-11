@@ -20,9 +20,10 @@ after(() => env628.teardown(env));
 const availability = async () => Object.fromEntries((await env628.content(env, 'rm_tech_availability', env.tenantA)).map((r) => [`${r.probe}/${r.day}`, r]));
 
 test('m9d628 agenda recalcula o que depende do relógio: o esperado de hoje cresce, sem nenhum evento', async () => {
-  assert.equal((await availability())['API/2026-10-28'].expected, '720');
+  // DI-BI-1: a série da API começa hoje às 10:51 (a primeira sonda do cenário): as esperadas contam dali, não da meia-noite (69 até 12:00, 129 até 13:00)
+  assert.equal((await availability())['API/2026-10-28'].expected, '69');
   await env628.runSchedule(env.tenantA, new Date(env628.NOW.getTime() + 60 * 60000)); // 13:00 em São Paulo
-  assert.equal((await availability())['API/2026-10-28'].expected, '780');
+  assert.equal((await availability())['API/2026-10-28'].expected, '129');
   await env628.signal(env, { kind: 'PROBE', probe: 'API', ok: false, occurredAt: new Date(env628.NOW.getTime() + 30 * 60000) });
   await env628.runSchedule(env.tenantA, new Date(env628.NOW.getTime() + 60 * 60000));
   const api = (await availability())['API/2026-10-28'];
@@ -33,8 +34,10 @@ test('m9d628 passada depois da meia-noite de São Paulo: o dia anterior fecha co
   const next = new Date('2026-10-29T03:30:00Z'); // 00:30 de 29/10 em São Paulo
   await env628.runSchedule(env.tenantA, next);
   const rows = await availability();
-  assert.equal(rows['API/2026-10-28'].expected, '1440');
-  assert.equal(rows['DATABASE/2026-10-27'].expected, '1440');
+  // DI-BI-1: dia em que a série começou fecha da primeira sonda até a meia-noite (API desde 10:51: 789; DATABASE desde 23:30 de 27/10: 30); o dia seguinte já conta inteiro
+  assert.equal(rows['API/2026-10-28'].expected, '789');
+  assert.equal(rows['DATABASE/2026-10-27'].expected, '30');
+  assert.equal(rows['DATABASE/2026-10-28'].expected, '1440');
 });
 
 test('m9d628 intervalo e janela são parâmetros do administrador', async () => {
@@ -43,7 +46,7 @@ test('m9d628 intervalo e janela são parâmetros do administrador', async () => 
   try {
     await env628.runSchedule(env.tenantA, env628.NOW);
     const rows = await availability();
-    assert.equal(rows['API/2026-10-28'].expected, '360', 'intervalo de 120 s: metade das sondas esperadas');
+    assert.equal(rows['API/2026-10-28'].expected, '35', 'intervalo de 120 s: metade das sondas esperadas (69 minutos desde o início da série = 34,5, arredondado para cima)');
     assert.equal(rows['DATABASE/2026-10-27'], undefined, 'histórico de 1 dia: o dia anterior sai');
     await env628.setSetting(env, env.tenantA, 'analytics.tec.sondas', 'API');
     await env628.runSchedule(env.tenantA, env628.NOW);

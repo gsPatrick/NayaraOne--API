@@ -21,6 +21,7 @@ const { registerSnapshotProvider } = require('../../snapshots.providers');
 const { onBatchFlushed, getReadModel } = require('../../../read-models');
 const { P } = require('../../../security/permissionCatalog');
 const { writeSnapshotInputs } = require('../finance.snapshots');
+const { upgradeDeclaredVersion } = require('./kpiUpgrade');
 
 const workerCtx = (scope) => ({ groupId: scope.groupId, companyId: scope.companyId, actorUserId: null, permissions: [P.MANAGE] });
 
@@ -55,7 +56,10 @@ function createKpiSet(set) {
 
   async function ensurePublished(scope, transaction) {
     for (const def of definitions) {
-      if (await isPublished(def.metricCode, scope, transaction)) continue;
+      if (await isPublished(def.metricCode, scope, transaction)) {
+        await upgradeDeclaredVersion(def, scope, workerCtx(scope), transaction); // DI-BI-3: versão declarada no código acima da publicada
+        continue;
+      }
       try {
         await sequelize.transaction({ transaction }, async (savepoint) => {
           const input = { ...def, scopeLevel: 'COMPANY', filters: {}, version: 1, validFrom: '2026-01-01', formulaId: def.metricCode, ownerRole: await set.readOwner(def.metricCode, scope, savepoint) };

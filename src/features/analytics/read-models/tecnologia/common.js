@@ -12,6 +12,9 @@ const { companyAggregateKey, companyKeys } = require('../companyAggregate.keys')
 const { shiftDay } = require('../aggregateModel.sql');
 const { readTechParams } = require('../tecnologia.settings');
 
+/** DI-BI-3: os read models de Tecnologia e IA são recalculados pelo job próprio (analyticsTechRefreshJob, a cada analytics.tec.recalculo_min) e não pela agenda geral. */
+const OWN_CADENCE = 'tech';
+
 const select = async (sql, replacements, transaction) => (await sequelize.query(sql, { replacements: { tz: BUSINESS_TIMEZONE, ...replacements }, transaction }))[0];
 
 /** { today, from } em datas de calendário de São Paulo: `historyDays` dias terminando hoje. */
@@ -35,7 +38,7 @@ function defineCompanyWideModel({ name, keyColumns, events = [], build, version 
   }
   return registerReadModel({
     name, version, keyColumns, aggregateColumns: [], eventTypes: [...events], reconcileAtRefresh, aggregateKey: companyAggregateKey, recompute,
-    scheduled: { keys: companyKeys }, rebuild: { keys: companyKeys },
+    scheduled: { keys: companyKeys }, rebuild: { keys: companyKeys }, ownCadence: OWN_CADENCE,
   });
 }
 
@@ -46,4 +49,4 @@ const toRow = (keyColumns) => (record) => {
   return { key, fields };
 };
 
-module.exports = { select, windowOf, monthStart, defineCompanyWideModel, toRow, BUSINESS_TIMEZONE };
+module.exports = { select, windowOf, monthStart, defineCompanyWideModel, toRow, BUSINESS_TIMEZONE, OWN_CADENCE };

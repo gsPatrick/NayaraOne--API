@@ -33,7 +33,9 @@ function createKit({ models, label, materialize }) {
     await env.admin.transaction(async (transaction) => {
       await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
       for (const { table, id } of [...env.created].reverse()) await env.admin.query(`DELETE FROM ${table} WHERE id = :id`, { replacements: { id }, transaction });
+      await env.admin.query('DELETE FROM analytics.metric_snapshot_confirmations WHERE company_id IN (:ids)', { replacements: { ids }, transaction }); // DI-BI-2
       await env.admin.query('DELETE FROM analytics.metric_snapshots WHERE company_id IN (:ids)', { replacements: { ids }, transaction });
+      await env.admin.query('DELETE FROM analytics.metric_acceptance WHERE company_id IN (:ids)', { replacements: { ids }, transaction }); // DI-BI-3: versão nova nasce com aceite PENDING
       await env.admin.query('DELETE FROM analytics.metric_versions WHERE metric_id IN (SELECT id FROM analytics.metric_definitions WHERE company_id IN (:ids))', { replacements: { ids }, transaction });
       await env.admin.query('UPDATE analytics.metric_definitions SET current_version_id = NULL WHERE company_id IN (:ids)', { replacements: { ids }, transaction });
       await env.admin.query('DELETE FROM analytics.metric_definitions WHERE company_id IN (:ids)', { replacements: { ids }, transaction });

@@ -4,7 +4,8 @@
 /**
  * Prepara a Empresa Dev (homologação) para o Briefing da NAY Diretoria funcionar (M9-D693), pela API pública. O briefing exige, nesta ordem:
  *   1. a IA ligada na empresa (ia.habilitada) e o provedor padrão do laboratório (ai-sandbox, sem chave e sem custo externo);
- *   2. o agente NAY_DIRETORIA com uma versão ATIVA (cadastrar, homologar por outra pessoa, ativar);
+ *   2. o agente NAY_DIRETORIA com uma versão ATIVA com o cadastro do livro (M9-D035: as 8 ferramentas de leitura, escopos só agregados e limites); se a ativa não
+ *      tem as ferramentas, cadastra a versão seguinte com elas (cadastrar, homologar por outra pessoa, ativar);
  *   3. a identidade de serviço somente leitura do agente (é ela que o job usa; sem ela o briefing fica "indisponível" por segurança);
  *   4. um orçamento de IA da empresa (já existente em homologação; criado só se faltar);
  *   5. o job do briefing rodar: ele roda sozinho à hora `analytics.brief.hora_diario` (padrão 06:30). Com --agora, a hora é antecipada para 00:00 para a
@@ -17,7 +18,13 @@
  * Quem cadastra o agente não pode homologá-lo (segregação de funções). Informe um segundo usuário com `ai:evaluate` ou use --relaxar-segregacao, que desliga
  * `ia.agente.segregacao_funcoes` SÓ nesta empresa de homologação (decisão de quem opera; fica no log de auditoria). Idempotente. Recusa endereço de produção.
  */
+const { DEFINITION } = require('../../src/features/ai/agents/nay_diretoria/diretoria.policy'); // o cadastro do livro (M9-D035): propósito, política, escopos, limites e as 8 tools de leitura
 const AGENT = 'NAY_DIRETORIA';
+const VERSION_BODY = Object.freeze({
+  purpose: DEFINITION.purpose, systemPolicy: DEFINITION.systemPolicy, modelPolicy: DEFINITION.modelPolicy, dataScopes: [...DEFINITION.dataScopes], limits: DEFINITION.limits,
+  criticality: DEFINITION.criticality, tools: DEFINITION.tools.map((t) => ({ ...t })),
+});
+const hasAllTools = (agent) => DEFINITION.tools.every((t) => (agent.tools || []).some((x) => x.toolName === t.toolName && x.enabled !== false));
 const READ_PERMISSIONS = ['finance:read', 'crm:opportunities:read', 'construction:read', 'legal:read', 'correspondent:read', 'inventory:read'];
 const BASE = (process.env.HOMO_API_BASE || '').replace(/\/$/, '');
 const argv = new Set(process.argv.slice(2));
@@ -66,11 +73,12 @@ async function main() {
   if (relax) must(await call(admin, 'PUT', '/settings/ia.agente.segregacao_funcoes', { value: false }), 'Parâmetro ia.agente.segregacao_funcoes');
   log('IA ligada na empresa (provedor padrão de laboratório).');
 
-  // 2. agente ativo
+  // 2. agente ativo, com as ferramentas de leitura do livro (sem elas a NAY não cita fonte e toda resposta factual sai "sem fonte suficiente")
   const active = (must(await call(admin, 'GET', '/ai/agents'), 'Lista de agentes').data || []).find((a) => a.code === AGENT);
-  if (active) log(`${AGENT} já tem a versão ${active.version} ativa.`);
+  if (active && hasAllTools(active)) log(`${AGENT} já tem a versão ${active.version} ativa, com as ${DEFINITION.tools.length} ferramentas de leitura.`);
   else {
-    const created = must(await call(admin, 'POST', `/ai/agents/${AGENT}/versions`, {}), 'Cadastro da versão do agente').data;
+    if (active) log(`${AGENT} versão ${active.version} ativa sem as ferramentas de leitura do livro: cadastrando a versão seguinte com elas.`);
+    const created = must(await call(admin, 'POST', `/ai/agents/${AGENT}/versions`, VERSION_BODY), 'Cadastro da versão do agente').data;
     const homologator = segundo || admin;
     must(await call(homologator, 'POST', `/ai/agents/${AGENT}/versions/${created.version}/homologate`, {}), `Homologação da versão ${created.version} (use HOMO_SEGUNDO_* ou --relaxar-segregacao)`);
     must(await call(admin, 'POST', `/ai/agents/${AGENT}/versions/${created.version}/activate`, {}), `Ativação da versão ${created.version}`);

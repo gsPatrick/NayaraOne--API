@@ -17,7 +17,9 @@ const { createBriefAgentRunner, CODE: AGENT_CODE } = require('../../features/ai/
  */
 const TICK_MS = 60 * 1000;
 const TYPES = ['DAILY', 'WEEKLY'];
-const noSourcesMemo = new Set();
+// DI-BI-6: "sem fontes" fica em memória só por analytics.brief.reintento_falha_min (antes, pela vida do processo: o indicador que ganhava registro depois da primeira tentativa
+// do dia nunca entrava no briefing daquele período até o servidor reiniciar)
+const noSourcesMemo = new Map();
 
 async function runType(group, company, briefType, { now, force, runAgent }, summary) {
   const scope = { groupId: group.id, companyId: company.id };
@@ -26,13 +28,14 @@ async function runType(group, company, briefType, { now, force, runAgent }, summ
     if (!force && !briefs.isBriefDue(briefType, now, params)) return 'NOT_DUE';
     const period = briefs.coveredPeriod(briefType, now);
     const memo = `${company.id}:${briefType}:${period.endDate}`;
-    if (!force && noSourcesMemo.has(memo)) return 'NO_SOURCES';
+    const memoAt = noSourcesMemo.get(memo);
+    if (!force && memoAt !== undefined && now.getTime() - memoAt < params.retryFailedMinutes * 60000) return 'NO_SOURCES';
     if (!(await isAiEnabled(scope, transaction)) || !(await isAgentEnabled(AGENT_CODE, scope, transaction))) return 'AI_OFF';
     try {
       const out = await briefs.generateBrief({ scope, briefType, now }, { runAgent }, transaction);
       return out.skipped ? 'EXISTS' : out.status;
     } catch (err) {
-      if (err && err.code === 'ANALYTICS_BRIEF_NO_SOURCES') { noSourcesMemo.add(memo); return 'NO_SOURCES'; }
+      if (err && err.code === 'ANALYTICS_BRIEF_NO_SOURCES') { noSourcesMemo.set(memo, now.getTime()); return 'NO_SOURCES'; }
       throw err;
     }
   });

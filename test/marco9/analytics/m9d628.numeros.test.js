@@ -19,8 +19,9 @@ const rows = (model) => env628.content(env, model, env.tenantA);
 
 test('m9d628 disponibilidade: sondas feitas, bem-sucedidas e esperadas por dia de São Paulo', async () => {
   assert.deepEqual(await rows('rm_tech_availability'), [
-    { probe: 'API', day: '2026-10-28', checks: '10', up: '10', expected: '720' }, // 12:00 em SP, uma sonda por minuto: 720 esperadas; a de 20:00Z (futura) e a sonda CACHE não entram
-    { probe: 'DATABASE', day: '2026-10-27', checks: '1', up: '1', expected: '1440' }, // 02:30Z de 28/10 é 23:30 de 27/10 em São Paulo
+    // DI-BI-1: no dia em que a série da sonda começa, as esperadas contam da primeira sonda (API desde 10:51 de hoje: 69 até 12:00); a de 20:00Z (futura) e a sonda CACHE não entram
+    { probe: 'API', day: '2026-10-28', checks: '10', up: '10', expected: '69' },
+    { probe: 'DATABASE', day: '2026-10-27', checks: '1', up: '1', expected: '30' }, // 02:30Z de 28/10 é 23:30 de 27/10 em São Paulo: a série começa ali, 30 minutos até a meia-noite
     { probe: 'DATABASE', day: '2026-10-28', checks: '5', up: '4', expected: '720' },
   ]);
 });
