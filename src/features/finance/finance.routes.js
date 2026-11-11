@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission, requireRecentMfa } = require('../../m
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const financeController = require('./finance.controller');
 const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 2 do inventário)
+const { rejectExcessDecimals: cents } = require('./moneyPrecision'); // FIN-008: dinheiro até o centavo, sem arredondar em silêncio
 
 const financeRouter = Router();
 
@@ -32,7 +33,7 @@ financeRouter.post('/finance/bank-accounts/:id/block', requirePermission('financ
 financeRouter.delete('/finance/bank-accounts/:id', requirePermission('finance:bankAccounts'), financeController.removeBankAccount);
 
 // Financial entries (ledger / contas a pagar e receber)
-financeRouter.post('/finance/entries', requirePermission('finance:create'), financeController.createFinancialEntry);
+financeRouter.post('/finance/entries', requirePermission('finance:create'), cents('amount'), financeController.createFinancialEntry);
 financeRouter.get('/finance/entries', requirePermission('finance:read'), financeController.listFinancialEntries);
 // Rotas estáticas ANTES de /:id — senão Express casa "classification-pendings" como :id.
 financeRouter.get('/finance/entries/classification-pendings', requirePermission('finance:read'), financeController.listFinancialEntryClassificationPendings);
@@ -47,10 +48,10 @@ financeRouter.post('/finance/entries/:id/settlement-evidence', requirePermission
 financeRouter.post('/finance/entries/:id/settlement-evidence/detach', requirePermission('finance:settle'), financeController.detachSettlementEvidence);
 financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), confirmAction('finance.entry.reverse', { reasonField: 'reason' }), financeController.reverseFinancialEntry);
 financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
-financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntryPartial);
+financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, cents('partialAmount'), financeController.settleFinancialEntryPartial);
 
 // Bank transactions (extrato)
-financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), financeController.createBankTransaction);
+financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), cents('amount'), financeController.createBankTransaction);
 financeRouter.get('/finance/bank-transactions', requirePermission('finance:read'), financeController.listBankTransactions);
 financeRouter.post('/finance/bank-transactions/import', requirePermission('finance:create'), financeController.importBankStatement);
 
@@ -84,7 +85,7 @@ financeRouter.post('/finance/anomaly-cases/:id/resolve', requirePermission('fina
 financeRouter.post('/finance/commission-installments/:installmentId/pay', requirePermission('finance:settle'), financeController.payCommissionInstallment);
 
 // Owner repasses
-financeRouter.post('/finance/owner-repasses', requirePermission('finance:create'), financeController.createOwnerRepasse);
+financeRouter.post('/finance/owner-repasses', requirePermission('finance:create'), cents('grossAmount', 'deductionsAmount'), financeController.createOwnerRepasse);
 financeRouter.get('/finance/owner-repasses', requirePermission('finance:read'), financeController.listOwnerRepasses);
 financeRouter.get('/finance/owner-repasses/eligible-sources', requirePermission('finance:read'), financeController.listEligibleRepasseSources);
 // Frente 3 (§12): aprovação por outra pessoa gera o lançamento a pagar; "pay" confirma o pagamento.
@@ -112,7 +113,7 @@ financeRouter.post('/finance/payment-intents/:id/resolve-uncertainty', requirePe
 financeRouter.post('/finance/payment-intents/:id/submit-to-bank', requirePermission('finance:settle'), requireRecentMfa, financeController.submitPaymentIntentToBank);
 
 // Intercompany transfers (M4-18) — criar move dinheiro entre empresas: step-up MFA.
-financeRouter.post('/finance/intercompany-transfers', requirePermission('finance:settle'), requireRecentMfa, financeController.createIntercompanyTransfer);
+financeRouter.post('/finance/intercompany-transfers', requirePermission('finance:settle'), requireRecentMfa, cents('amount'), financeController.createIntercompanyTransfer);
 financeRouter.get('/finance/intercompany-transfers', requirePermission('finance:read'), financeController.listIntercompanyTransfers);
 // Frente 3 (§15): maker-checker — outra pessoa aprova (cria os dois lados) ou recusa.
 financeRouter.post('/finance/intercompany-transfers/:id/approve', requirePermission('finance:approve'), requireRecentMfa, financeController.approveIntercompanyTransfer);
@@ -140,7 +141,7 @@ financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:r
 financeRouter.get('/finance/nay/insights', requirePermission('finance:read'), financeController.getFinanceInsights);
 
 // Budgets/forecasts (M4 — gap fechado na varredura completa, Caderno §5)
-financeRouter.post('/finance/budget-forecasts', requirePermission('finance:create'), financeController.createBudgetForecast);
+financeRouter.post('/finance/budget-forecasts', requirePermission('finance:create'), cents('forecastedAmount'), financeController.createBudgetForecast);
 financeRouter.get('/finance/budget-forecasts', requirePermission('finance:read'), financeController.listBudgetForecasts);
 financeRouter.get('/finance/budget-forecasts/compare', requirePermission('finance:read'), financeController.compareBudgetForecastToRealized);
 
