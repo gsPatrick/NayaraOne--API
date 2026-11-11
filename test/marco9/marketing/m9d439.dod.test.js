@@ -51,7 +51,8 @@ test('estrutura_de_pastas_confere_com_o_guia', () => {
       assert.ok(arquivos.some((f) => new RegExp(`(^|\\.)${parte}\\.js$`).test(f) || f.endsWith(`.${parte}.js`)), `${pasta}: falta arquivo ${parte}`);
     }
   }
-  assert.equal(fs.existsSync(path.join(fonte.RAIZ_API, 'src', 'modules')), false, 'src/modules não existe');
+  // src/modules/legal existe por decisão do Patrick para o Marco 5 (DEC-031, Guia M5 §2); o marketing continua em src/features.
+  assert.equal(fs.existsSync(path.join(fonte.RAIZ_API, 'src', 'modules', 'marketing')), false, 'src/modules/marketing não existe');
 });
 
 test('estrutura_sem_pasta_do_guia_reprova', () => {

@@ -66,8 +66,9 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
     }
   };
   const providerLeaks = [];
-  for (const sub of ['finance', 'legal', 'billing']) {
-    walk(path.join(srcDir, 'features', sub), (full, content) => {
+  // O Jurídico vive em src/modules/legal (árvore do Guia do Marco 5, §2).
+  for (const dir of [path.join(srcDir, 'features', 'finance'), path.join(srcDir, 'modules', 'legal'), path.join(srcDir, 'features', 'billing')]) {
+    walk(dir, (full, content) => {
       if (/openai|anthropic|@anthropic-ai/i.test(content)) providerLeaks.push(path.relative(srcDir, full));
     });
   }

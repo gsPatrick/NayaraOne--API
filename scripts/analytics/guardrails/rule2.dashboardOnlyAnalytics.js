@@ -13,7 +13,7 @@ const DASHBOARD_SCOPE = [
   path.join('src', 'features', 'analytics', 'dashboards'),
   path.join('src', 'features', 'analytics', 'dashboardReadStore.service.js'),
 ];
-const DOMAIN_FEATURE = /require\((['"])(?:\.\.\/)+(?:features\/)?(?!analytics\b|settings\b)(finance|crm|billing|contracts|legal|construction|inventory|procurement|properties|people|correspondent|marketing|radar|fiscal)\b[^'"]*\1\)/;
+const DOMAIN_FEATURE = /require\((['"])(?:\.\.\/)+(?:features\/|modules\/)?(?!analytics\b|settings\b)(finance|crm|billing|contracts|legal|construction|inventory|procurement|properties|people|correspondent|marketing|radar|fiscal)\b[^'"]*\1\)/;
 const OLTP_MODEL = /require\((['"])(?:\.\.\/)+models(?:\/[^'"]*)?\1\)/;
 const FOREIGN_SQL = /\b(?:FROM|JOIN)\s+"?([a-z_]+)"?\."?[a-z_]+/gi;
 
