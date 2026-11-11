@@ -12,24 +12,9 @@
  * verifyMfa) com um código real do autenticador gerado a partir do segredo devolvido pelo setup. O segredo e os
  * códigos ficam só em memória e nunca entram na saída.
  */
-const { Runner, redigir } = require('../captura-marco45/runner');
-
-const CHAVES_SECRETAS = /^(accessToken|refreshToken|token|password|passwordHash|senha|secret|secretEncrypted|webhookSecret|otpauthUri|otpauthUrl|recoveryCodes|contentBase64)$/i;
-
-function redigirFundo(valor) {
-  if (valor === null || valor === undefined) return valor;
-  if (Array.isArray(valor)) return valor.map(redigirFundo);
-  if (typeof valor === 'object' && !(valor instanceof Date)) {
-    const out = {};
-    for (const [k, v] of Object.entries(valor)) {
-      if (CHAVES_SECRETAS.test(k) && v !== null && v !== undefined && typeof v !== 'object') out[k] = '[REDACTED]';
-      else if (CHAVES_SECRETAS.test(k) && Array.isArray(v)) out[k] = '[REDACTED]';
-      else out[k] = redigirFundo(v);
-    }
-    return out;
-  }
-  return redigir(valor);
-}
+const { Runner } = require('../captura-marco45/runner');
+// Redação (inclusive do impactToken assinado da confirmação de nível 3): scripts/fechamento-m4/redacao.js.
+const { redigirFundo, REDACTED } = require('./redacao');
 
 class RunnerM4 extends Runner {
   constructor(opts) {
@@ -67,9 +52,9 @@ class RunnerM4 extends Runner {
       conferencia = { regra: confere.regra, passou };
     }
     const ok = statusOk && (esperado.codigo === undefined || esperado.codigo === codigo) && (!conferencia || conferencia.passou);
-    const cabecalhosEnviados = Object.fromEntries(Object.entries(extras).map(([k, v]) => [k, /signature/i.test(k) ? `${String(v).slice(0, 13)}…(assinatura HMAC calculada no envio)` : v]));
+    const cabecalhosEnviados = Object.fromEntries(Object.entries(extras).map(([k, v]) => [k, /signature/i.test(k) ? `${REDACTED} (assinatura HMAC calculada no envio)` : redigirFundo({ [k]: v })[k]]));
     const passo = {
-      id, tipo: 'http', linhas, titulo, perfil: quem || 'anonimo', metodo, rota: rotaFinal,
+      id, tipo: 'http', linhas, titulo, perfil: quem || 'anonimo', metodo, rota: redigirFundo(rotaFinal),
       cabecalhosEnviados: Object.keys(cabecalhosEnviados).length ? cabecalhosEnviados : 'somente Content-Type e Authorization (token omitido)',
       corpoEnviado: bruto !== undefined ? redigirFundo(JSON.parse(bruto)) : corpoFinal === undefined ? 'sem corpo' : redigirFundo(corpoFinal),
       esperado: conferencia ? { ...esperado, conteudo: conferencia.regra } : esperado, conferenciaDoConteudo: conferencia || 'só status/código', status: res.status, codigo: codigo || 'não se aplica (sem código de erro)', ok, ms,
