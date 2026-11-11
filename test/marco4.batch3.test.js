@@ -366,7 +366,9 @@ test('M4-21 pagamento 3x acima da média histórica da conta é flagado, notific
     assert.equal(semFlag.flagged, false, 'pagamento dentro do padrão não pode ser flagado (evita ruído)');
 
     const suspeito = await createEntry(transaction, { amount: 900, bankAccountId: account.id });
-    const flag = await antifraudService.flagAnomalousPayment(suspeito, transaction);
+    // Fechamento do Marco 4 (10/11/2026, §17): o antifraude roda na CRIAÇÃO do pagamento — o lançamento já
+    // nasce retido e chamar a regra de novo não duplica a retenção nem o caso.
+    const flag = { flagged: suspeito.requiresManualReview, reason: suspeito.manualReviewReason };
     assert.equal(flag.flagged, true);
     assert.match(flag.reason, /média histórica/);
 
@@ -417,7 +419,9 @@ test('M4-21 primeiro pagamento alto para conta sem histórico é flagado; revis�
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 25000, bankAccountId: account.id });
 
-    const flag = await antifraudService.flagAnomalousPayment(entry, transaction);
+    // Fechamento do Marco 4 (10/11/2026, §17): o antifraude roda na CRIAÇÃO do pagamento — o lançamento já
+    // nasce retido e chamar a regra de novo não duplica a retenção nem o caso.
+    const flag = { flagged: entry.requiresManualReview, reason: entry.manualReviewReason };
     assert.equal(flag.flagged, true);
     assert.match(flag.reason, /Primeiro pagamento/);
 

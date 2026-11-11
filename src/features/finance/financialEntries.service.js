@@ -26,6 +26,7 @@ function assertCompetenceOpen(companyId, competenceMonths, transaction) {
 const { isApprovalRequestApproved, listApprovedDeciders, markApprovalRequestsStale } = require('./approvals.service');
 const { getBankAccount } = require('./bankAccounts.service');
 const { deriveKey, findPartialReplay, findSettleReplay } = require('./settlementIdempotency');
+const { evaluatePayableAnomaly } = require('./paymentAnomalyGate'); // §17 valor fora do padrão / fornecedor novo de alto valor
 
 // finance.financial_entries É o ledger (não existe uma tabela "finance.ledger" separada — ver
 // nota em financeAntifraud.service.js e o relatório de schema real). Regras duras
@@ -832,8 +833,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
     { transaction }
   );
 
-  // D3 (revisão independente): o evento finance.third_party_funds.released era emitido na
-  // CRIAÇÃO da devolução (ainda PENDING, nenhum dinheiro saiu). Agora sai na liquidação.
+  await evaluatePayableAnomaly(entry, transaction, 'create'); // D3: o evento de terceiros sai na liquidação, não aqui
   await publishFinancialEntryCreated(entry, transaction);
 
   await registrarAuditoria(
@@ -1034,6 +1034,7 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   // não foi ao banco — ela deixa de ficar "Aprovada" sobre um dado que mudou — e a troca de
   // conta abre um caso de revisão (alerta) além da marca de revisão manual.
   await invalidateStaleOpenPaymentIntents(entry, actorUserId, transaction);
+  if (bankAccountId && !isBankAccountRedirect) await evaluatePayableAnomaly(entry, transaction, 'update');
   if (isBankAccountRedirect) {
     await createAnomalyCase(
       {
@@ -1050,11 +1051,7 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
     );
   }
 
-  // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 — variante do A10): qualquer
-  // edição do lançamento depois de uma aprovação invalida a aprovação (FIN-005 — a decisão foi
-  // tomada sobre a versão anterior). As ApprovalRequests APPROVED viram STALE e a liquidação
-  // volta a exigir uma rodada nova de revisão sobre a versão atual. Ver
-  // approvals.service.js#markApprovalRequestsStale.
+  // A10 (18/10/2026): edição depois da aprovação invalida a aprovação (FIN-005): APPROVED vira STALE.
   await markApprovalRequestsStale(
     'FinancialEntry',
     entry.id,

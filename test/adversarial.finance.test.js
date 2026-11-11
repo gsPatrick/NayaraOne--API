@@ -526,8 +526,12 @@ test('ADV-F19 tentar limpar o flag de revisão manual pelo update de agenda (sem
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 30000, bankAccountId: account.id });
+    // Fechamento do Marco 4 (10/11/2026, §17): o antifraude passou a ser chamado na CRIAÇÃO do
+    // pagamento — o lançamento de 30.000 numa conta sem histórico já nasce retido; chamar a regra de
+    // novo não duplica a retenção.
+    assert.equal(entry.requiresManualReview, true);
     const flag = await antifraudService.flagAnomalousPayment(entry, transaction);
-    assert.equal(flag.flagged, true);
+    assert.equal(flag.alreadyFlagged, true);
 
     // Payload hostil tentando desligar o antifraude por um endpoint "inofensivo".
     await financialEntriesService.updateFinancialEntry(
