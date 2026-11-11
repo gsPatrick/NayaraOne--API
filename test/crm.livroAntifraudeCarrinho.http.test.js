@@ -147,12 +147,18 @@ test('§7: foto enviada pela tela (IMAGE) só conta para publicar depois de APRO
   const casa = await imovel();
   const oferta = await http('POST', `/properties/${casa.id}/offers`, { offerType: 'RENT', askingPrice: 3500 });
   assert.equal(oferta.status, 201);
-  const video = await http('POST', `/properties/${casa.id}/media`, { mediaType: 'VIDEO', storageKey: `videos/tour-${uniqueSuffix()}.mp4`, mimeType: 'video/mp4' });
+  // Verificação de 11/11/2026 (M3-06): a mídia e o documento só entram com o arquivo real (POST /files, antivírus).
+  const arquivo = async (nome, mimeType, category) => {
+    const up = await http('POST', '/files', { fileName: nome, mimeType, category, contentBase64: Buffer.from(`m3 livro ${nome} ${uniqueSuffix()}`).toString('base64') });
+    assert.equal(up.status, 201, JSON.stringify(up.body));
+    return up.body.data.id;
+  };
+  const video = await http('POST', `/properties/${casa.id}/media`, { mediaType: 'VIDEO', fileId: await arquivo('tour.mp4', 'video/mp4', 'property-media') });
   assert.equal(video.status, 201, JSON.stringify(video.body));
   await http('PATCH', `/properties/${casa.id}/media/${video.body.data.id}/quality`, { qualityStatus: 'APPROVED' });
   const fotos = [];
   for (let i = 0; i < 5; i += 1) {
-    const f = await http('POST', `/properties/${casa.id}/media`, { mediaType: 'IMAGE', storageKey: `fotos/original-${i}-${uniqueSuffix()}.jpg`, originalName: `foto-${i}.jpg`, mimeType: 'image/jpeg' });
+    const f = await http('POST', `/properties/${casa.id}/media`, { mediaType: 'IMAGE', fileId: await arquivo(`original-${i}.jpg`, 'image/jpeg', 'property-media'), originalName: `foto-${i}.jpg` });
     assert.equal(f.status, 201, JSON.stringify(f.body));
     assert.equal(f.body.data.qualityStatus, 'PENDING', 'foto nasce pendente de revisão');
     fotos.push(f.body.data);
@@ -173,9 +179,14 @@ test('§7: foto enviada pela tela (IMAGE) só conta para publicar depois de APRO
   const tres = await http('POST', `/offers/${oferta.body.data.id}/publish`, {});
   assert.equal(tres.body.error.code, 'PROPERTY_PUBLISH_BLOCKED_REG_IMO_DOCS_001', 'com 3 fotos aprovadas o gate de fotos passa e o próximo é o de documentos');
   for (const documentType of ['REGISTRY', 'IPTU']) {
-    const d = await http('POST', `/properties/${casa.id}/documents`, { documentType, label: documentType, status: 'REGULARIZADO' });
+    const d = await http('POST', `/properties/${casa.id}/documents`, { documentType, label: documentType, status: 'REGULARIZADO', fileId: await arquivo(`${documentType}.pdf`, 'application/pdf', 'property-documents') });
     assert.equal(d.status, 201, JSON.stringify(d.body));
   }
+  // §7 campos obrigatórios (padrão: inclui ao menos um proprietário).
+  const semDono = await http('POST', `/offers/${oferta.body.data.id}/publish`, {});
+  assert.equal(semDono.body.error.code, 'PROPERTY_PUBLISH_BLOCKED_REG_IMO_FIELDS_001');
+  const dono = await http('POST', `/properties/${casa.id}/owners`, { personId: await pessoa('Proprietário') });
+  assert.equal(dono.status, 201, JSON.stringify(dono.body));
   const publicado = await http('POST', `/offers/${oferta.body.data.id}/publish`, {});
   assert.equal(publicado.status, 200, JSON.stringify(publicado.body));
   const depois = await withTenantTransaction(tenant, (t) => PropertyMedia.findAll({ where: { propertyId: casa.id, mediaType: 'IMAGE' }, transaction: t }));

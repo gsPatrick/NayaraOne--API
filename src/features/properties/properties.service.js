@@ -4,13 +4,12 @@ const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { Op } = require('sequelize');
 const { Property, PropertyOwner, PropertyOffer, PropertyAddress, PropertyMedia, PropertyDocument } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { publishPropertyCreated, publishPropertyUpdated, publishPropertyPublished, publishPropertySold, publishPropertyRented } = require('./propertyEvents.service');
+const { publishPropertyCreated, publishPropertyUpdated, publishPropertySold, publishPropertyRented } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { evaluateRule } = require('../../engines/rules/rulesEngine');
+const { publishProperty, revalidatePublication } = require('./publicationGate.service');
 const { ADDRESS_VISIBILITIES } = require('./publicReadModel/constants');
 const { assertAddressBelongsToCompany } = require('./propertyAddress.guard');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, propertyEntity } = require('../core-governance/data-quality/evidence');
-const { PHOTO_MEDIA_TYPES } = require('./propertyMediaQuality.service');
 
 const PROPERTY_TYPES = ['RESIDENTIAL', 'COMMERCIAL', 'LAND', 'RURAL'];
 // M9-D403: política de endereço em conteúdo público de Marketing (padrão do banco: SO_BAIRRO).
@@ -55,7 +54,7 @@ async function createOrReuseAddress(addressPayload, transaction) {
   return address.id;
 }
 
-async function createProperty(payload, actorUserId, transaction) {
+async function createProperty(payload, actorUserId, transaction, tenant) {
   const {
     groupId,
     companyId,
@@ -137,7 +136,9 @@ async function createProperty(payload, actorUserId, transaction) {
       bedrooms: bedrooms !== undefined && bedrooms !== '' ? bedrooms : null,
       parkingSpots: parkingSpots !== undefined && parkingSpots !== '' ? parkingSpots : null,
       attributesJson: attributesJson || null,
-      publicationStatus: publicationStatus ? String(publicationStatus).toUpperCase() : 'DRAFT',
+      // PUBLISHED nunca é gravado direto: o imóvel nasce DRAFT e, se pediram PUBLISHED, passa pelo gate único logo abaixo
+      // (verificação independente de 11/11/2026, M3-09: a criação já publicada contornava vídeo, fotos e documentos).
+      publicationStatus: publicationStatus && String(publicationStatus).toUpperCase() !== 'PUBLISHED' ? String(publicationStatus).toUpperCase() : 'DRAFT',
       availabilityStatus: availabilityStatus ? String(availabilityStatus).toUpperCase() : 'AVAILABLE',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -146,7 +147,6 @@ async function createProperty(payload, actorUserId, transaction) {
   );
 
   await publishPropertyCreated(property, transaction);
-  if (property.publicationStatus === 'PUBLISHED') await publishPropertyPublished(property, transaction); // M9-D409
 
   await registrarAuditoria(
     {
@@ -162,6 +162,10 @@ async function createProperty(payload, actorUserId, transaction) {
     transaction
   );
 
+  if (publicationStatus && String(publicationStatus).toUpperCase() === 'PUBLISHED') {
+    await publishProperty(property, tenant || { groupId, companyId }, actorUserId, transaction, { source: 'POST /properties' }); // M9-D409: emite property.published
+  }
+
   return property;
 }
 
@@ -171,37 +175,41 @@ async function createProperty(payload, actorUserId, transaction) {
 // PropertyInternalOccurrence NUNCA entra nesta lista: é conteúdo restrito, exposto só pelos
 // endpoints com a permissão dedicada 'properties:internal'
 // (ver propertyInternalOccurrences.service.js).
-const PROPERTY_INCLUDE = [
-  { model: PropertyOwner, as: 'owners' },
-  { model: PropertyOffer, as: 'offers' },
-  { model: PropertyAddress, as: 'address' },
-  { model: PropertyMedia, as: 'media' },
-  { model: PropertyDocument, as: 'documents' },
-];
+// O preço mínimo confidencial das ofertas só vem para quem tem properties:internal (M3-07, DI-M3IM-4): o escopo padrão de
+// PropertyOffer o exclui, inclusive dentro do include.
+function propertyInclude({ revealConfidential = false } = {}) {
+  return [
+    { model: PropertyOwner, as: 'owners' },
+    { model: revealConfidential ? PropertyOffer.scope('withConfidentialPrice') : PropertyOffer, as: 'offers' },
+    { model: PropertyAddress, as: 'address' },
+    { model: PropertyMedia, as: 'media' },
+    { model: PropertyDocument, as: 'documents' },
+  ];
+}
 
-async function listProperties(transaction, filters = {}) {
+async function listProperties(transaction, filters = {}, options = {}) {
   const where = {};
   if (filters.propertyType) where.propertyType = String(filters.propertyType).toUpperCase();
   if (filters.publicationStatus) where.publicationStatus = String(filters.publicationStatus).toUpperCase();
   if (filters.availabilityStatus) where.availabilityStatus = String(filters.availabilityStatus).toUpperCase();
   return Property.findAll({
     where,
-    include: PROPERTY_INCLUDE,
+    include: propertyInclude(options),
     order: [['created_at', 'DESC']],
     transaction,
   });
 }
 
-async function getProperty(id, transaction) {
+async function getProperty(id, transaction, options = {}) {
   const property = await Property.findByPk(id, {
-    include: PROPERTY_INCLUDE,
+    include: propertyInclude(options),
     transaction,
   });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
   return property;
 }
 
-async function updateProperty(id, payload, actorUserId, transaction, tenant) {
+async function updateProperty(id, payload, actorUserId, transaction, tenant, options = {}) {
   const property = await Property.findByPk(id, { transaction });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
   const beforeJson = property.toJSON();
@@ -284,69 +292,9 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
     if (!PUBLICATION_STATUSES.includes(normalized)) {
       throw AppError.badRequest(`O campo "publicationStatus" deve ser um de: ${PUBLICATION_STATUSES.join(', ')}.`, 'PROPERTY_VALIDATION');
     }
-    // FIX (reportado pela cliente 18/09/2026 — "Edifício Aurora — Apto 302" achado PUBLISHED
-    // sem NENHUMA offer, nem sequer uma inativa): este endpoint genérico de update permitia
-    // marcar publicationStatus=PUBLISHED sem checar oferta nenhuma, contornando tanto o gate
-    // de vídeo obrigatório (publish.service.js/REG-IMO-001) quanto a invariante "publicado
-    // exige oferta ativa" já corrigida em propertyOffers.service.js para o caso de encerrar a
-    // última oferta. Agora este caminho genérico também exige explicitamente uma offer ACTIVE.
-    if (normalized === 'PUBLISHED') {
-      const activeOfferCount = await PropertyOffer.count({ where: { propertyId: property.id, status: 'ACTIVE' }, transaction });
-      if (activeOfferCount === 0) {
-        throw AppError.conflict(
-          'Não é possível publicar um imóvel sem nenhuma oferta ativa vinculada.',
-          'PROPERTY_PUBLISH_REQUIRES_ACTIVE_OFFER'
-        );
-      }
-      // FIX (homologação 22/09/2026 — auditoria proativa): o comentário acima já prometia
-      // fechar "tanto o gate de vídeo obrigatório... quanto a invariante de oferta ativa", mas
-      // só a segunda checagem existia de fato — REG-IMO-001 nunca era avaliado aqui, então
-      // PATCH /properties/:id {publicationStatus: 'PUBLISHED'} publicava um imóvel sem vídeo
-      // contanto que tivesse uma oferta ACTIVE, contornando o mesmo gate que publish.service.js
-      // aplica corretamente pelo endpoint dedicado. Agora este caminho genérico também delega a
-      // decisão ao Motor de Regras (fail-closed) antes de publicar.
-      const videoCount = await PropertyMedia.count({ where: { propertyId: property.id, mediaType: 'VIDEO' }, transaction });
-      const evaluation = await evaluateRule('REG-IMO-001', { hasVideo: videoCount > 0 }, tenant, { transaction });
-      if (evaluation.decision !== 'APPLY') {
-        throw AppError.unprocessable(
-          'Publicação bloqueada: vídeo obrigatório ausente.',
-          'PROPERTY_PUBLISH_BLOCKED_REG_IMO_001',
-          { ruleDecision: evaluation.decision, reason: evaluation.reason }
-        );
-      }
-
-      // Mesmo gate aplicado em publish.service.js (REG-IMO-PHOTO-MIN / REG-IMO-DOCS-001) —
-      // este caminho genérico de PATCH não pode contornar as mesmas regras do Motor de Regras.
-      const approvedPhotoCount = await PropertyMedia.count({
-        where: { propertyId: property.id, mediaType: PHOTO_MEDIA_TYPES, qualityStatus: 'APPROVED' },
-        transaction,
-      });
-      const photoEvaluation = await evaluateRule('REG-IMO-PHOTO-MIN', { approvedPhotoCount }, tenant, { transaction });
-      if (photoEvaluation.decision !== 'APPLY') {
-        throw AppError.unprocessable(
-          'Publicação bloqueada: quantidade mínima de fotos aprovadas não atingida.',
-          'PROPERTY_PUBLISH_BLOCKED_REG_IMO_PHOTO_MIN',
-          { ruleDecision: photoEvaluation.decision, reason: photoEvaluation.reason, approvedPhotoCount }
-        );
-      }
-
-      const requiredDocTypes = ['REGISTRY', 'IPTU'];
-      const existingDocTypes = new Set(
-        (await PropertyDocument.findAll({ where: { propertyId: property.id, documentType: requiredDocTypes }, transaction })).map(
-          (doc) => doc.documentType
-        )
-      );
-      const hasRequiredDocuments = requiredDocTypes.every((type) => existingDocTypes.has(type));
-      const docsEvaluation = await evaluateRule('REG-IMO-DOCS-001', { hasRequiredDocuments }, tenant, { transaction });
-      if (docsEvaluation.decision !== 'APPLY') {
-        throw AppError.unprocessable(
-          'Publicação bloqueada: documentos mínimos (matrícula/IPTU) ausentes.',
-          'PROPERTY_PUBLISH_BLOCKED_REG_IMO_DOCS_001',
-          { ruleDecision: docsEvaluation.decision, reason: docsEvaluation.reason, missingDocTypes: requiredDocTypes.filter((t) => !existingDocTypes.has(t)) }
-        );
-      }
-    }
-    property.publicationStatus = normalized;
+    // PATCH não publica sozinho: a transição para PUBLISHED passa pelo gate único depois de aplicados os demais campos
+    // (o gate confere o imóvel como ele vai ficar). Ver publicationGate.service.js.
+    if (normalized !== 'PUBLISHED') property.publicationStatus = normalized;
   }
   if (availabilityStatus !== undefined) {
     const normalized = String(availabilityStatus).toUpperCase();
@@ -368,8 +316,13 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
   await property.save({ transaction });
   await recordFieldChangeEvidence(entity, assertion, { transaction, actorUserId });
   await publishPropertyUpdated(property, transaction);
-  // M9-D409: as transições que geram rascunho de Marketing (publicado, vendido, alugado) saem como evento próprio.
-  if (property.publicationStatus === 'PUBLISHED' && beforeJson.publicationStatus !== 'PUBLISHED') await publishPropertyPublished(property, transaction);
+  // M9-D409: a transição para publicado sai como evento próprio, emitido pelo gate único.
+  const askedToPublish = publicationStatus !== undefined && String(publicationStatus).toUpperCase() === 'PUBLISHED';
+  if (askedToPublish && beforeJson.publicationStatus !== 'PUBLISHED') {
+    await publishProperty(property, tenant || property, actorUserId, transaction, { source: 'PATCH /properties/:id' });
+  } else if (beforeJson.publicationStatus === 'PUBLISHED') {
+    await revalidatePublication(property.id, tenant || property, actorUserId, transaction, 'cadastro do imóvel alterado');
+  }
   if (property.availabilityStatus !== beforeJson.availabilityStatus) {
     if (property.availabilityStatus === 'SOLD') await publishPropertySold(property, transaction);
     if (property.availabilityStatus === 'RENTED') await publishPropertyRented(property, transaction);
@@ -390,7 +343,7 @@ async function updateProperty(id, payload, actorUserId, transaction, tenant) {
     transaction
   );
 
-  return getProperty(id, transaction);
+  return getProperty(id, transaction, options);
 }
 
 async function deleteProperty(id, actorUserId, transaction) {

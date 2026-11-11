@@ -6,10 +6,9 @@ const { DataTypes } = require('sequelize');
  * PropertyOffer — tabela "real_estate"."property_offers"
  * Oferta comercial vigente de um imóvel (venda, locação ou temporada).
  *
- * confidentialMinPrice NUNCA deve ser incluído em uma resposta servida a um contexto público
- * (site/portais/IA pública) — a omissão é responsabilidade do service/serializer que monta a
- * resposta pública, não deste model. Para o admin/mock atual (tudo interno) o campo é
- * retornado normalmente.
+ * confidentialMinPrice (preço mínimo confidencial) fica FORA da leitura padrão (defaultScope, que vale também nos `include`):
+ * só o escopo 'withConfidentialPrice' o lê, e os serviços só usam esse escopo para quem tem a permissão específica
+ * properties:internal (verificação independente de 11/11/2026, M3-07; DI-M3IM-4). Nunca vai ao site, portais ou IA pública.
  */
 module.exports = (sequelize) => {
   const PropertyOffer = sequelize.define(
@@ -82,6 +81,23 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'ends_at',
       },
+      // Livro do Marco 3 §6: "Offer: Venda/locação, preço, condições, status, financiamento, permuta".
+      conditions: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'conditions',
+      },
+      // Substituição controlada (M3-07): qual oferta substituiu esta e quando.
+      supersededByOfferId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'superseded_by_offer_id',
+      },
+      supersededAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'superseded_at',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -114,6 +130,8 @@ module.exports = (sequelize) => {
       deletedAt: 'deleted_at',
       version: 'lockVersion',
       underscored: true,
+      defaultScope: { attributes: { exclude: ['confidentialMinPrice'] } },
+      scopes: { withConfidentialPrice: { attributes: { include: ['confidentialMinPrice'] } } },
     }
   );
 

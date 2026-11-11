@@ -66,6 +66,9 @@ const FILE_REFERENCES = [
   { table: 'procurement.supplier_qualifications', column: 'document_file_ids', kind: 'jsonb_array', permissions: ['procurement:read'] },
   { table: 'correspondent.case_documents', column: 'file_id', kind: 'uuid', permissions: ['correspondent:read'] },
   { table: 'people.person_documents', column: 'file_id', kind: 'uuid', permissions: ['people:read'] },
+  // Marco 3 (M3-06): documento e mídia do imóvel com arquivo real (migration 20260101010310).
+  { table: 'real_estate.property_documents', column: 'file_id', kind: 'uuid', permissions: ['properties:read'] },
+  { table: 'real_estate.property_media', column: 'file_id', kind: 'uuid', permissions: ['properties:read'] },
   { table: 'construction.change_orders', column: 'evidence_file_ids', kind: 'uuid_array', permissions: ['construction:read'] },
   { table: 'construction.daily_reports', column: 'evidence_file_ids', kind: 'uuid_array', permissions: ['construction:read'] },
   { table: 'construction.daily_workers', column: 'document_file_ids', kind: 'uuid_array', permissions: ['construction:read'] },
@@ -92,6 +95,7 @@ const CATEGORY_PERMISSIONS = {
   inspections: ['legal:read'],
   'people-documents': ['people:read'],
   'property-documents': ['properties:read'],
+  'property-media': ['properties:read'],
   insurance: ['procurement:read'],
   'inventory-invoices': ['inventory:read'],
   correspondent: ['correspondent:read'],

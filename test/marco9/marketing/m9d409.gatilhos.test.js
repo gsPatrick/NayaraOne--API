@@ -198,13 +198,22 @@ test('o_cadastro_do_imovel_publica_os_eventos_property_published_sold_e_rented',
   });
 });
 
-test('imovel_criado_ja_publicado_emite_property_published', async () => {
+// Marco 3, M3-09 (verificação de 11/11/2026): criar já PUBLISHED passa pelo gate único de publicação (antes nascia publicado sem
+// vídeo, foto nem documento). Sem oferta ativa nada é publicado nem emitido; o property.published sai do gate quando ele passa.
+test('imovel_criado_ja_publicado_passa_pelo_gate_e_o_gate_emite_property_published', async () => {
+  const { tornarPublicavel, ENDERECO } = require('../../helpers/m3imPublicavel');
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const created = await createProperty({ groupId: tenant.groupId, companyId: tenant.companyId, propertyType: 'RESIDENTIAL', title: 'QA-M9 D409', internalCode: `QA-M9-${env.uid().slice(0, 8)}`, publicationStatus: 'PUBLISHED' }, tenant.userId, t);
-    const types = (await OutboxEvent.findAll({ where: { aggregateId: created.id }, transaction: t })).map((e) => e.eventType);
-    assert.ok(types.includes('property.created') && types.includes('property.published'));
-    const draft = await createProperty({ groupId: tenant.groupId, companyId: tenant.companyId, propertyType: 'RESIDENTIAL', title: 'QA-M9 D409 rascunho', internalCode: `QA-M9-${env.uid().slice(0, 8)}` }, tenant.userId, t);
+    await assert.rejects(
+      () => createProperty({ groupId: tenant.groupId, companyId: tenant.companyId, propertyType: 'RESIDENTIAL', title: 'QA-M9 D409', internalCode: `QA-M9-${env.uid().slice(0, 8)}`, publicationStatus: 'PUBLISHED' }, tenant.userId, t, tenant),
+      (err) => err.code === 'PROPERTY_PUBLISH_REQUIRES_ACTIVE_OFFER'
+    );
+    const draft = await createProperty({ groupId: tenant.groupId, companyId: tenant.companyId, propertyType: 'RESIDENTIAL', title: 'QA-M9 D409 rascunho', internalCode: `QA-M9-${env.uid().slice(0, 8)}`, ...ENDERECO }, tenant.userId, t, tenant);
     assert.ok(!(await OutboxEvent.findAll({ where: { aggregateId: draft.id }, transaction: t })).some((e) => e.eventType === 'property.published'));
+    await tornarPublicavel(tenant, t, draft);
+    await updateProperty(draft.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, t, tenant);
+    const types = (await OutboxEvent.findAll({ where: { aggregateId: draft.id }, transaction: t })).map((e) => e.eventType);
+    assert.ok(types.includes('property.created'));
+    assert.equal(types.filter((x) => x === 'property.published').length, 1);
   });
 });
 
