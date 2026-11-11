@@ -70,7 +70,7 @@ async function suggestDraft(tenant, contractId, actorUserId, transaction) {
   }, { transaction });
   await registrarAuditoria({
     groupId: contract.groupId, companyId: contract.companyId, actorUserId, action: 'legal.nay_draft.suggest', entityType: 'NayDraftSuggestion', entityId: suggestion.id,
-    afterJson: { contractId: contract.id, method: suggestion.method, modeReason: suggestion.modeReason, clauses: suggestion.clauseVersionIds.length, contentHash: suggestion.contentHash, aiRunId },
+    beforeJson: null, afterJson: { contractId: contract.id, method: suggestion.method, modeReason: suggestion.modeReason, clauses: suggestion.clauseVersionIds.length, contentHash: suggestion.contentHash, aiRunId },
     reason: `NAY sugeriu minuta para o contrato ${contract.contractNumber || contract.id} (${suggestion.method}); aguarda revisão humana.`,
   }, transaction);
   return toDto(suggestion);
