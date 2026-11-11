@@ -202,10 +202,10 @@ test('ADV-OBR-5 repetição da mesma requisição: aditivo, diário e perda devo
 
 test('ADV-OBR-4b efetivo absurdo no diário (workforceCount acima do inteiro da coluna) é recusado com 4xx e nada é gravado', {
   skip: pular,
-  todo: 'DEFEITO M6Q-DEF-1 (esteira de qualidade, 11/11/2026): POST /construction/projects/:id/daily-reports com workforceCount 1e12 devolve 500 INTERNAL_ERROR — dailyReports.service.js (validateWorkforceCount) não limita ao inteiro da coluna e o errorHandler não traduz "value out of range for type integer" (22003). Regra de Obras, fora desta entrega; o teste volta a valer quando a correção entrar.',
 }, async () => {
   const antes = await retratoA();
   const r = await http(token(A, TODAS), 'POST', `/construction/projects/${fx.projectId}/daily-reports`, { reportDate: '2026-11-09', workforceCount: 1e12, idempotencyKey: `adv-${crypto.randomUUID()}` });
   assert.deepEqual(await retratoA(), antes, 'nada gravado');
-  assert.ok(r.status >= 400 && r.status < 500, `workforceCount 1e12 -> ${r.status} ${r.codigo || ''}`);
+  assert.equal(r.status, 422, `workforceCount 1e12 -> ${r.status} ${r.codigo || ''}`);
+  assert.equal(r.codigo, 'DAILY_REPORT_WORKFORCE_OUT_OF_RANGE');
 });

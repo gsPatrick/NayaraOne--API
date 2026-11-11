@@ -165,6 +165,14 @@ async function errorHandler(err, req, res, next) { // eslint-disable-line no-unu
   // coluna DECIMAL (ex.: "999999" num campo DECIMAL(9,6), que só comporta 3 dígitos inteiros)
   // batia no Postgres como "numeric field overflow" e vazava cru pro usuário — mesma classe de
   // vazamento de erro de infraestrutura já corrigida acima pra UUID inválido.
+  // Mesma classe para inteiro (código 22003, "value ... is out of range for type integer"; M6Q-DEF-1): 422 em português, nunca 500.
+  if (err && err.name === 'SequelizeDatabaseError' && /out of range for type (integer|smallint|bigint)/i.test(err.message || '')) {
+    return failure(res, {
+      statusCode: 422,
+      code: 'VALUE_OUT_OF_RANGE',
+      message: 'O valor informado está fora da faixa permitida para este campo.',
+    });
+  }
   if (err && err.name === 'SequelizeDatabaseError' && /numeric field overflow/i.test(err.message || '')) {
     return failure(res, {
       statusCode: 400,

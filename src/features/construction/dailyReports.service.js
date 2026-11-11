@@ -54,11 +54,18 @@ function normalizeShiftCode(shiftCode) {
   return shiftCode ? String(shiftCode).toUpperCase() : DEFAULT_SHIFT_CODE;
 }
 
+// M6Q-DEF-1 (esteira de qualidade, 11/11/2026): 1e12 passava e estourava o INTEGER da coluna (500). O efetivo é um inteiro
+// entre 0 e o limite técnico da coluna; fora disso, 422 antes de qualquer gravação.
+const WORKFORCE_COLUMN_MAX = 2147483647; // scanner:allow — limite técnico do INTEGER do PostgreSQL, não regra de negócio
+
 function validateWorkforceCount(workforceCount) {
   if (workforceCount === undefined || workforceCount === null) return;
   const numericWorkforce = Number(workforceCount);
   if (!Number.isFinite(numericWorkforce) || numericWorkforce < 0) {
     throw AppError.badRequest('"workforceCount" deve ser um número maior ou igual a zero.', 'DAILY_REPORT_WORKFORCE_INVALID');
+  }
+  if (!Number.isInteger(numericWorkforce) || numericWorkforce > WORKFORCE_COLUMN_MAX) {
+    throw AppError.unprocessable('"workforceCount" deve ser um número inteiro de pessoas, dentro do limite do campo.', 'DAILY_REPORT_WORKFORCE_OUT_OF_RANGE', { max: WORKFORCE_COLUMN_MAX });
   }
 }
 
