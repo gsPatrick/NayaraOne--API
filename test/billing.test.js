@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { paymentProof } = require('./m5fech.locacao.helpers'); // Fechamento M5 (§12): pagamento é de um vencimento, com comprovante
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
@@ -214,7 +215,7 @@ test('billing: reembolso é criado quando a imobiliária paga utilidade da respo
     // Cenário 1: a própria parte responsável paga -> sem reembolso.
     const noReimbursement = await utilitiesService.recordUtilityPayment(
       obligation.id,
-      { amount: 120, paidByParty: 'TENANT' },
+      { amount: 120, paidByParty: 'TENANT', ...(await paymentProof(tenant, transaction, '2026-09-10')) },
       tenant.userId,
       transaction
     );
@@ -223,7 +224,7 @@ test('billing: reembolso é criado quando a imobiliária paga utilidade da respo
     // Cenário 2: a imobiliária paga uma conta que era do locatário -> gera reembolso + FinancialEntry.
     const withReimbursement = await utilitiesService.recordUtilityPayment(
       obligation.id,
-      { amount: 150, paidByParty: 'AGENCY' },
+      { amount: 150, paidByParty: 'AGENCY', ...(await paymentProof(tenant, transaction, '2026-10-10')) },
       tenant.userId,
       transaction
     );

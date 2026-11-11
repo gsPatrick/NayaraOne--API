@@ -80,15 +80,17 @@ test('fechamento M5 Guia §14/HTTP: POST /legal/contracts/:id/key-delivery recus
 });
 
 test('fechamento M5 DoD idempotência/HTTP: pagamento de utilidade repetido com a mesma Idempotency-Key devolve a resposta original e não cria segundo reembolso', async () => {
-  const obligation = await withTenantTransaction(tenant, async (t) => {
+  const { obligation, proof } = await withTenantTransaction(tenant, async (t) => {
     const c = await Contract.create({ ...base(), contractType: 'LEASE', contractNumber: `M5FI-${uniqueSuffix()}`, status: 'ACTIVE', createdBy: tenant.userId }, { transaction: t });
-    return UtilityObligation.create({ ...base(), contractId: c.id, utilityType: 'IPTU', responsibleParty: 'LANDLORD' }, { transaction: t });
+    const o = await UtilityObligation.create({ ...base(), contractId: c.id, utilityType: 'IPTU', responsibleParty: 'LANDLORD' }, { transaction: t });
+    // Fechamento M5 (§12): o pagamento é de um vencimento, com comprovante.
+    return { obligation: o, proof: await require('./m5fech.locacao.helpers').paymentProof(tenant, t, '2026-02-20') };
   });
   const key = `m5f-idem-${uniqueSuffix()}`;
   const send = () => fetch(`${baseUrl()}/billing/utility-obligations/${obligation.id}/payments`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenBilling}`, 'Idempotency-Key': key },
-    body: JSON.stringify({ amount: 321.09, paidByParty: 'COMPANY' }),
+    body: JSON.stringify({ amount: 321.09, paidByParty: 'COMPANY', ...proof }),
   });
   const r1 = await send();
   const b1 = await r1.json();

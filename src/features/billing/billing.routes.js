@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const billingController = require('./billing.controller');
+const obligationCyclesController = require('./obligations/obligationCycles.controller');
 require('./keysDeliveredObligations.consumer'); // Fechamento M5: keys.delivered inicia as obrigações da locação
 // Fechamento M5 (bloco "Correções pós-auditoria — DoD: idempotência"): toda criação/ação POST da cobrança aceita
 // `Idempotency-Key` (padrão de API M9-D843): repetir a chamada com a mesma chave devolve a resposta original sem
@@ -57,6 +58,9 @@ billingRouter.get('/billing/utility-obligations', requirePermission('billing:rea
 billingRouter.get('/billing/utility-obligations/:id', requirePermission('billing:read'), billingController.getUtilityObligation);
 billingRouter.post('/billing/utility-accounts', requirePermission('billing:create'), idempotency(), billingController.createUtilityAccount);
 billingRouter.post('/billing/utility-obligations/:id/payments', requirePermission('billing:update'), idempotency(), billingController.recordUtilityPayment);
+// Fechamento M5 (§12): vencimentos (ciclos) da obrigação e dispensa registrada de um vencimento.
+billingRouter.get('/billing/utility-obligations/:id/cycles', requirePermission('billing:read'), obligationCyclesController.listObligationCycles);
+billingRouter.post('/billing/utility-cycles/:id/waive', requirePermission('billing:approve'), idempotency(), obligationCyclesController.waiveObligationCycle);
 billingRouter.post('/billing/utility-obligations/:id/ownership-transfer', requirePermission('billing:update'), idempotency(), billingController.requestOwnershipTransfer);
 billingRouter.post('/billing/ownership-transfer-tasks/:id/complete', requirePermission('billing:update'), idempotency(), billingController.completeOwnershipTransfer);
 

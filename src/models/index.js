@@ -254,6 +254,7 @@ const modelDefiners = {
   UtilityObligation: require('./UtilityObligation'),
   UtilityAccount: require('./UtilityAccount'),
   UtilityReimbursement: require('./UtilityReimbursement'),
+  LeaseObligationCycle: require('./LeaseObligationCycle'), // Fechamento M5 (§12): ciclo de cada obrigação da locação
   OwnershipTransferTask: require('./OwnershipTransferTask'),
 };
 
