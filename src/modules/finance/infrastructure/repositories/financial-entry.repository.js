@@ -15,6 +15,16 @@ function findById(id, transaction) {
   return FinancialEntry.findByPk(id, { transaction });
 }
 
+/** Cadastros que o lançamento referencia, lidos sob a RLS da empresa do contexto (FIN-002). */
+function findCostCenter(id, transaction) {
+  const { CostCenter } = require('../../../../models');
+  return CostCenter.findByPk(id, { attributes: ['id', 'companyId'], transaction });
+}
+function findResultCenter(id, transaction) {
+  const { ResultCenter } = require('../../../../models');
+  return ResultCenter.findByPk(id, { attributes: ['id', 'companyId'], transaction });
+}
+
 /** Lock pessimista na linha do lançamento (serializa baixa, estorno, comprovante e intenção). */
 function findByIdForUpdate(id, transaction) {
   return FinancialEntry.findByPk(id, { transaction, lock: forUpdate(transaction) });
@@ -104,6 +114,8 @@ module.exports = {
   /** O modelo, para a checagem genérica de chave duplicada do antifraude (assertNoDuplicatePayment recebe o modelo). */
   model: FinancialEntry,
   findById,
+  findCostCenter,
+  findResultCenter,
   findByIdForUpdate,
   findInCompanyForUpdate,
   create,
