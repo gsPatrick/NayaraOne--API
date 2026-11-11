@@ -11,6 +11,8 @@ const {
   File,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
+const { assertCompanyPerson, assertCompanyFile } = require('./utilityInputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
@@ -24,6 +26,7 @@ const {
 } = require('./billingEvents.service');
 
 const UTILITY_TYPES = ['WATER', 'ELECTRICITY', 'GAS', 'CONDO', 'IPTU', 'SPU', 'OTHER'];
+const { resolvePeriodicity } = require('./leaseObligationSchedule');
 const RESPONSIBLE_PARTIES = ['LANDLORD', 'TENANT'];
 // M45: rótulos para o texto do lançamento (a descrição é vista pelo usuário — nunca o código).
 const UTILITY_TYPE_LABELS = { WATER: 'água', ELECTRICITY: 'energia elétrica', GAS: 'gás', CONDO: 'condomínio', IPTU: 'IPTU', SPU: 'SPU (laudêmio/foro)', OTHER: 'outra despesa' };
@@ -37,6 +40,14 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
       'UTILITY_OBLIGATION_VALIDATION'
     );
   }
+  assertUuid(contractId, 'contractId', 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(utilityType, 'utilityType', 32, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(responsibleParty, 'responsibleParty', 16, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(provider, 'provider', 120, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(accountNumber, 'accountNumber', 60, 'UTILITY_OBLIGATION_VALIDATION');
+  await assertCompanyFile(evidenceFileId, companyId, 'evidenceFileId', 'UTILITY_OBLIGATION_EVIDENCE_NOT_FOUND', transaction);
+  await assertCompanyPerson(payload.transferFromPersonId, 'transferFromPersonId', 'UTILITY_OBLIGATION_VALIDATION', transaction);
+  await assertCompanyPerson(payload.transferToPersonId, 'transferToPersonId', 'UTILITY_OBLIGATION_VALIDATION', transaction);
   const normalizedType = String(utilityType).toUpperCase();
   const normalizedParty = String(responsibleParty).toUpperCase();
   if (!UTILITY_TYPES.includes(normalizedType)) {
@@ -47,6 +58,8 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
   }
   const contract = await Contract.findByPk(contractId, { transaction });
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'UTILITY_OBLIGATION_CONTRACT_NOT_FOUND');
+  // Fechamento M5 (Caderno §12): toda obrigação tem periodicidade (informada ou o padrão configurado por tipo).
+  const schedule = await resolvePeriodicity(normalizedType, payload, { groupId, companyId }, transaction);
 
   const obligation = await UtilityObligation.create(
     {
@@ -59,6 +72,8 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
       accountNumber: accountNumber || null,
       transferRequired: Boolean(transferRequired),
       evidenceFileId: evidenceFileId || null,
+      periodicity: schedule.periodicity,
+      dueDay: schedule.dueDay,
       status: transferRequired ? 'TRANSFER_PENDING' : 'ACTIVE',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -130,6 +145,9 @@ async function listUtilityObligations(transaction, filters = {}) {
  * passa a TRANSFER_PENDING e o encerramento do contrato fica bloqueado até a conclusão.
  */
 async function requestOwnershipTransfer(utilityObligationId, payload, actorUserId, transaction) {
+  assertUuid(utilityObligationId, 'id', 'UTILITY_OBLIGATION_VALIDATION');
+  await assertCompanyPerson(payload && payload.fromPersonId, 'fromPersonId', 'OWNERSHIP_TRANSFER_VALIDATION', transaction);
+  await assertCompanyPerson(payload && payload.toPersonId, 'toPersonId', 'OWNERSHIP_TRANSFER_VALIDATION', transaction);
   const obligation = await UtilityObligation.findByPk(utilityObligationId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!obligation) throw AppError.notFound('Obrigação de utilidade não encontrada.', 'UTILITY_OBLIGATION_NOT_FOUND');
 
@@ -187,6 +205,10 @@ async function createUtilityAccount(payload, actorUserId, transaction) {
       'UTILITY_ACCOUNT_VALIDATION'
     );
   }
+  assertUuid(utilityObligationId, 'utilityObligationId', 'UTILITY_ACCOUNT_VALIDATION');
+  assertText(provider, 'provider', 120, 'UTILITY_ACCOUNT_VALIDATION');
+  assertText(accountNumber, 'accountNumber', 60, 'UTILITY_ACCOUNT_VALIDATION');
+  await assertCompanyPerson(holderPersonId, 'holderPersonId', 'UTILITY_ACCOUNT_VALIDATION', transaction);
   await getUtilityObligation(utilityObligationId, transaction);
 
   const account = await UtilityAccount.create(
@@ -238,6 +260,8 @@ async function completeOwnershipTransfer(taskId, payload, actorUserId, transacti
   // sem evidência nenhuma de que ela de fato aconteceu. Fail closed: exige os dois.
   const evidenceFileId = payload?.evidenceFileId || null;
   const toPersonId = payload?.toPersonId || task.toPersonId || null;
+  assertUuid(evidenceFileId, 'evidenceFileId', 'OWNERSHIP_TRANSFER_EVIDENCE_NOT_FOUND', { optional: true });
+  await assertCompanyPerson(payload?.toPersonId, 'toPersonId', 'OWNERSHIP_TRANSFER_RECIPIENT_REQUIRED', transaction);
   if (!evidenceFileId) {
     throw AppError.badRequest(
       'É preciso anexar o comprovante da transferência de titularidade antes de concluir.',
@@ -326,6 +350,10 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
   if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
     throw AppError.badRequest('"amount" deve ser um número positivo.', 'UTILITY_PAYMENT_VALIDATION');
   }
+  if (typeof paidByParty !== 'string' || !/^[A-Za-z_]{2,16}$/.test(paidByParty)) {
+    throw AppError.badRequest('"paidByParty" deve ser quem pagou (ex.: COMPANY, TENANT, LANDLORD), até 16 letras.', 'UTILITY_PAYMENT_VALIDATION');
+  }
+  if (typeof amount === 'object') throw AppError.badRequest('"amount" deve ser um número positivo.', 'UTILITY_PAYMENT_VALIDATION');
   const normalizedPaidBy = String(paidByParty).toUpperCase();
 
   if (normalizedPaidBy === obligation.responsibleParty) {
@@ -422,7 +450,12 @@ async function flagOverdueLeaseObligations(transaction, { now = new Date(), over
   const { publishDomainEvent } = require('../../engines/events/outbox');
   const { OutboxEvent } = require('../../models');
   const limit = new Date(now.getTime() - overdueDays * 24 * 60 * 60 * 1000);
-  const tasks = await OwnershipTransferTask.findAll({ where: { status: 'PENDING', created_at: { [Op.lt]: limit } }, transaction });
+  const today = now.toISOString().slice(0, 10);
+  // Fechamento M5 (M5-D103): com prazo definido (contado da entrega das chaves), vence no prazo; sem prazo, o critério antigo.
+  const tasks = await OwnershipTransferTask.findAll({
+    where: { status: 'PENDING', [Op.or]: [{ dueDate: { [Op.lt]: today } }, { dueDate: null, created_at: { [Op.lt]: limit } }] },
+    transaction,
+  });
   let flagged = 0;
   for (const task of tasks) {
     const idempotencyKey = `lease.obligation.overdue:${task.id}`;

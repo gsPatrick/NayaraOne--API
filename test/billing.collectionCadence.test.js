@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const cadenceService = require('../src/features/billing/collectionCadence.service');

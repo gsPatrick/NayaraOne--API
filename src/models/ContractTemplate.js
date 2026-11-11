@@ -17,6 +17,7 @@ module.exports = (sequelize) => {
       name: { type: DataTypes.STRING(255), allowNull: false, field: 'name' },
       contractType: { type: DataTypes.STRING(32), allowNull: false, field: 'contract_type' },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' },
+      legalResponsibleUserId: { type: DataTypes.UUID, allowNull: true, field: 'legal_responsible_user_id' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

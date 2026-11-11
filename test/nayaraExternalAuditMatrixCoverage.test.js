@@ -16,8 +16,8 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
 const rentAdjustmentService = require('../src/features/billing/rentAdjustment.service');
 const utilitiesService = require('../src/features/billing/utilities.service');
 const { File } = require('../src/models');
@@ -53,14 +53,14 @@ test('replaceGuarantee (banco real): garantia antiga vira RELEASED com vínculo 
     const contract = await createLeaseContract(transaction, suffix);
     const original = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE' },
+      { guaranteeType: 'SECURITY_DEPOSIT', value: 1000 },
       tenant.userId,
       transaction
     );
 
     const { oldGuarantee, newGuarantee } = await guaranteesService.replaceGuarantee(
       original.id,
-      { guaranteeType: 'INSURANCE', value: 1500, endsAt: '2027-01-01' },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 1500, endsAt: '2027-01-01' }),
       tenant.userId,
       transaction
     );
@@ -72,7 +72,7 @@ test('replaceGuarantee (banco real): garantia antiga vira RELEASED com vínculo 
     assert.equal(reloadedOld.status, 'RELEASED', 'garantia antiga persiste como RELEASED no banco, não só em memória');
     assert.equal(reloadedOld.replacedByGuaranteeId, newGuarantee.id);
     // Histórico íntegro: valor/tipo original da garantia antiga não foi apagado/reescrito.
-    assert.equal(reloadedOld.guaranteeType, 'DEPOSIT');
+    assert.equal(reloadedOld.guaranteeType, 'SECURITY_DEPOSIT');
     assert.equal(Number(reloadedOld.value), 1000);
 
     const all = await guaranteesService.listGuarantees(transaction, { contractId: contract.id });
@@ -86,7 +86,7 @@ test('replaceGuarantee (banco real): não permite substituir uma garantia já su
     const contract = await createLeaseContract(transaction, suffix);
     const original = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE' },
+      { guaranteeType: 'SECURITY_DEPOSIT', value: 1000 },
       tenant.userId,
       transaction
     );

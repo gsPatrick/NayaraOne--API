@@ -55,9 +55,10 @@ const PROFILES = [
     permissions: [
       'finance:read', 'finance:create', 'finance:update', 'finance:settle', 'finance:approve',
       'finance:reconcile', 'finance:bankAccounts', 'finance:chartOfAccounts',
-      'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'legal:deliverKeys', 'legal:waive',
+      'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'legal:deliverKeys', 'lease.keys.deliver', 'legal:waive', 'legal:evidence:export',
       'billing:read', 'billing:create', 'billing:update', 'billing:approve', 'billing:cadence:manage',
       'people:read', 'people:create', 'people:update', 'properties:read', 'properties:create', 'properties:update',
+      'users:read', // telas de responsável (escolher usuário) — só leitura, não muda nenhum 403 de ação
     ],
   },
   // Prova de máscara em tela (M9-D825, roteiro QA-M9): lê Pessoas, Imóveis e contas bancárias SEM a

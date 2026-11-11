@@ -50,6 +50,10 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'construction_project_id',
       },
+      // Matriz M5: versão homologada (aprovação por versão, Guia §6) e contrato principal dos tipos vinculados
+      // ADDENDUM/KEY_DELIVERY/USED_PROPERTY_DELIVERY (Caderno §3). Migration 9981.
+      approvedVersionId: { type: DataTypes.UUID, allowNull: true, field: 'approved_version_id' },
+      parentContractId: { type: DataTypes.UUID, allowNull: true, field: 'parent_contract_id' },
       contractNumber: {
         type: DataTypes.STRING(64),
         allowNull: true,

@@ -343,7 +343,7 @@ Fonte: `requirePermission(...)` em `src/**/*.routes.js` (`src/middlewares/auth.m
 | Arquivo | Ocorrências |
 |---|---|
 | src/features/finance/finance.routes.js | 14 |
-| src/features/legal/legal.routes.js | 3 |
+| src/modules/legal/shared/legal.routes.js | 3 |
 | src/features/memberships/memberships.routes.js | 2 |
 | src/features/roles/roles.routes.js | 3 |
 | src/features/users/users.routes.js | 1 |

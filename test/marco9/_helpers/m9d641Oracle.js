@@ -7,7 +7,7 @@ const { dayOf } = require('./m9d660Oracle');
 const dayNumber = (text) => Math.round(Date.parse(`${text}T00:00:00Z`) / 86400000);
 const LEASE = ['LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL', 'PROPERTY_ADMIN'];
 
-async function guaranteesFromSource(env, t, asOf, noExpiry = ['DEPOSIT']) {
+async function guaranteesFromSource(env, t, asOf, noExpiry = ['SECURITY_DEPOSIT']) {
   const [rows] = await env.admin.query(
     `SELECT g.guarantee_type AS type, g.ends_at::text AS ends FROM legal.guarantees g JOIN legal.contracts c ON c.id = g.contract_id
       WHERE g.company_id = :c AND g.deleted_at IS NULL AND g.status = 'ACTIVE' AND c.deleted_at IS NULL AND c.status = 'ACTIVE' AND c.contract_type IN (:lease)`, { replacements: { c: t.companyId, lease: LEASE } }
@@ -26,7 +26,7 @@ async function guaranteesFromSource(env, t, asOf, noExpiry = ['DEPOSIT']) {
 /** Abertas = exigência PENDING e troca de titularidade exigida e sem comprovante, de contratos de locação não encerrados; o prazo é o início do contrato (dia de SP). */
 async function obligationsFromSource(env, t, asOf) {
   const [req] = await env.admin.query("SELECT c.starts_at AS due FROM legal.contract_requirements r JOIN legal.contracts c ON c.id = r.contract_id WHERE r.company_id = :c AND r.status = 'PENDING' AND c.deleted_at IS NULL AND c.contract_type IN (:lease) AND c.status NOT IN ('TERMINATED', 'CLOSED')", { replacements: { c: t.companyId, lease: LEASE } });
-  const [uti] = await env.admin.query("SELECT c.starts_at AS due FROM finance.utility_obligations u JOIN legal.contracts c ON c.id = u.contract_id WHERE u.company_id = :c AND u.deleted_at IS NULL AND u.status = 'ACTIVE' AND u.transfer_required AND u.evidence_file_id IS NULL AND c.deleted_at IS NULL AND c.contract_type IN (:lease) AND c.status NOT IN ('TERMINATED', 'CLOSED')", { replacements: { c: t.companyId, lease: LEASE } });
+  const [uti] = await env.admin.query("SELECT c.starts_at AS due FROM legal.lease_obligations u JOIN legal.contracts c ON c.id = u.contract_id WHERE u.company_id = :c AND u.deleted_at IS NULL AND u.status = 'ACTIVE' AND u.transfer_required AND u.evidence_file_id IS NULL AND c.deleted_at IS NULL AND c.contract_type IN (:lease) AND c.status NOT IN ('TERMINATED', 'CLOSED')", { replacements: { c: t.companyId, lease: LEASE } });
   const today = dayNumber(asOf);
   const all = [...req, ...uti];
   const days = all.filter((r) => r.due).map((r) => today - dayNumber(dayOf(r.due))).filter((d) => d > 0);

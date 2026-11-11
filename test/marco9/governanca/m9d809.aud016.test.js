@@ -9,10 +9,10 @@ const { test, before, after, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { stopHttp } = require('../_helpers/m9d806Http');
 const env = require('../_helpers/m9d920Env');
-const evidenceService = require('../../../src/features/legal/evidencePackages.service');
-const legalCasesService = require('../../../src/features/legal/legalCases.service');
-const contractsService = require('../../../src/features/legal/contracts.service');
-const contractVersionsService = require('../../../src/features/legal/contractVersions.service');
+const evidenceService = require('../../../src/modules/legal/cases/evidence-package.service');
+const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
 const { withTenantTransaction } = require('../../testHelpers');
 
 let http; let A; let restore;

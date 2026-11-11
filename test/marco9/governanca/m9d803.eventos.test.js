@@ -10,7 +10,7 @@ const env = require('../_helpers/m9d803Env');
 const projectsService = require('../../../src/features/construction/projects.service');
 const stagesService = require('../../../src/features/construction/projectStages.service');
 const casesService = require('../../../src/features/construction/maintenanceCases.service');
-const guaranteesService = require('../../../src/features/legal/guarantees.service');
+const guaranteesService = require('../../../src/modules/legal/leasing/guarantee.service');
 const calendarEvents = require('../../../src/features/construction/constructionCalendarEvents.service');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const { dateKeyInZone, addMonthsToDateKey } = require('../../../src/features/core-governance/calendar/sources/time');
@@ -86,7 +86,7 @@ test('m9d803 etapa sem prazo e mudança de responsável da obra reemitem a etapa
 test('m9d803 legal.guarantee.updated e legal.guarantee.ended são publicados e idempotentes', { skip: skip() }, async () => {
   await run(async (tx) => {
     const contract = await env.leaseContract(tenant, tx);
-    const g = await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE', endsAt: '2026-11-30' }, tenant.userId, tx);
+    const g = await guaranteesService.createGuarantee(contract.id, await require('../../m5fech.locacao.helpers').completeInsurance(tenant, tx, { value: 1000, status: 'ACTIVE', startsAt: '2026-01-01', endsAt: '2026-11-30', renewalDueAt: '2026-11-01' }), tenant.userId, tx);
     const created = (await env.events(g.id, 'legal.guarantee.created', tx))[0];
     assert.equal(created.payloadJson.endsAt, '2026-11-30');
     assert.equal(created.payloadJson.status, 'ACTIVE');

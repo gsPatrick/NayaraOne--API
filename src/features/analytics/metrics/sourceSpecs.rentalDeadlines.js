@@ -4,7 +4,7 @@
  * M9-D641 / M9-D611 / M9-D690 — origem dos números dos KPIs de prazos da Locação: quais registros do módulo de Contratos reproduzem cada KPI (garantias ativas vencendo em 30 dias, exigências
  * pendentes e vistorias pendentes de contratos de locação). O filtro (assinado) é montado por kpis/locacao-prazos/filters. O detalhe (drill-down) abre os registros do filtro e só devolve
  * ids a quem tem analytics:drilldown e legal:read; nada de garantidor, valor nem texto da exigência nas colunas. Obrigações também contam trocas de titularidade de contas de consumo
- * (finance.utility_obligations) e o KPI de vistorias e chaves também conta chaves: a origem de uma tabela só abre o principal (exigências e vistorias), o resto fica no read model (DI-D641-4).
+ * (legal.lease_obligations) e o KPI de vistorias e chaves também conta chaves: a origem de uma tabela só abre o principal (exigências e vistorias), o resto fica no read model (DI-D641-4).
  */
 const { registerSourceSpec, getSourceSpec } = require('./sourceRefs.spec');
 const { registerDrilldownDetail } = require('./drilldown.details');

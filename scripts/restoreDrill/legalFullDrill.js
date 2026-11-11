@@ -61,7 +61,9 @@ const REPORT_DIR = argValue('--report-dir');
 const SUPER = 'drill_super';
 const APP_ROLE = 'nayara_runtime';
 const APP_PASSWORD = 'drill_runtime_local_only';
-const HTTP_PORT = 21611;
+// Porta HTTP da API do drill: derivada da porta do cluster (5537 -> 25537) ou DRILL_HTTP_PORT. Antes era
+// fixa (21611), a mesma de vários testes HTTP, e um teste rodando em paralelo derrubava o drill (EADDRINUSE).
+const HTTP_PORT = Number(process.env.DRILL_HTTP_PORT) || 20000 + PORT_SOURCE;
 
 const logLines = [];
 function log(line = '') {

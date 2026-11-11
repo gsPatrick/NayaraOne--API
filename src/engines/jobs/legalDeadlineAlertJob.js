@@ -1,8 +1,8 @@
 'use strict';
 
 const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification, Task } = require('../../models');
-const { computeSeverity } = require('../../features/legal/legalDeadlines.service');
-const { publishLegalDeadlineAlert, publishCadernoEvent } = require('../../features/legal/legalEvents.service');
+const { computeSeverity } = require('../../modules/legal/cases/deadline.service');
+const { publishLegalDeadlineAlert, publishCadernoEvent } = require('../../modules/legal/shared/legalEvents.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 
 /**
@@ -35,9 +35,12 @@ const ESCALATION_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
  * estouraram a janela sem terem sido escalados ainda.
  */
 async function processEscalations(transaction, now) {
+  // Failure drill M5 (J10): FOR UPDATE SKIP LOCKED — duas instâncias do job (ou o job x uma conclusão em curso) nunca
+  // escalam o mesmo prazo duas vezes; quem chega depois pula a linha travada e, na rodada seguinte, já vê escalated_at.
   const candidates = await LegalDeadline.findAll({
     where: { status: 'PENDING', lastAlertedSeverity: 'OVERDUE', escalatedAt: null },
     transaction,
+    ...(transaction ? { lock: transaction.LOCK.UPDATE, skipLocked: true } : {}),
   });
   let escalated = 0;
 
@@ -103,7 +106,9 @@ async function processEscalations(transaction, now) {
  * bypass nenhum de RLS — é exatamente o mesmo código que roda em produção.
  */
 async function processDeadlinesInTransaction(transaction, nowOverride) {
-    const deadlines = await LegalDeadline.findAll({ where: { status: 'PENDING' }, transaction });
+    // Failure drill M5 (J10): o prazo é lido com FOR UPDATE SKIP LOCKED — job concorrente ou prazo sendo concluído/remarcado
+    // agora não é alertado em duplicidade (ocorrência, evento e notificação uma vez só).
+    const deadlines = await LegalDeadline.findAll({ where: { status: 'PENDING' }, transaction, ...(transaction ? { lock: transaction.LOCK.UPDATE, skipLocked: true } : {}) });
     const now = nowOverride || new Date();
     let alerted = 0;
 

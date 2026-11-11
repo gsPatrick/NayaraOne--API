@@ -8,7 +8,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d236Env');
 const settingsService = require('../../../src/features/settings/settings.service');
-const signatureFlow = require('../../../src/features/legal/signature');
+const signatureFlow = require('../../../src/modules/legal/signatures/framework');
 
 let tenant;
 let desligarCofre;

@@ -43,10 +43,10 @@ const { submitPaymentIntentToBank, confirmBankPayment } = require('../src/featur
 const approvalsService = require('../src/features/finance/approvals.service');
 const filesService = require('../src/features/files/files.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { BankAccount, User, FinancialEntry, EvidencePackageAccessLog, Group, Company } = require('../src/models');
 
 let tenant;
@@ -338,12 +338,12 @@ async function grantRecentMfa(ctx) {
 test('F06-IDOR-01 outra empresa real com legal:read não exporta o dossiê de A pela rota (404) e não deixa rastro na cadeia de custódia', async () => {
   for (const [label, attacker] of attackers()) {
     const own = fixtures[attacker.companyId];
-    assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read']), 404, `${label} → dossiê de A`);
+    assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read', 'legal:evidence:export']), 404, `${label} → dossiê de A`);
     await grantRecentMfa(attacker);
-    assert.equal(await http(`/legal/evidence-packages/${own.evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read']), 200, `controle positivo: ${label} exporta o próprio dossiê`);
+    assert.equal(await http(`/legal/evidence-packages/${own.evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read', 'legal:evidence:export']), 200, `controle positivo: ${label} exporta o próprio dossiê`);
   }
   await grantRecentMfa(tenant);
-  assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, tenant, ['legal:read']), 200, 'controle positivo: A exporta o próprio dossiê');
+  assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, tenant, ['legal:read', 'legal:evidence:export']), 200, 'controle positivo: A exporta o próprio dossiê');
   const exported = await withTenantTransaction(tenant, (t) =>
     EvidencePackageAccessLog.count({ where: { evidencePackageId: A().evidencePackageId, action: 'EXPORTED' }, transaction: t })
   );

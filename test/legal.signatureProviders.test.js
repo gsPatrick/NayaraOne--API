@@ -6,11 +6,11 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements } = require('./testHelpers');
 const settingsService = require('../src/features/settings/settings.service');
-const signaturesService = require('../src/features/legal/signatures.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
 const { TenantSetting, File } = require('../src/models');
-const legalController = require('../src/features/legal/legal.controller');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
+const legalController = require('../src/modules/legal/shared/legal.controller');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
 const peopleService = require('../src/features/people/people.service');
 
 let tenant;

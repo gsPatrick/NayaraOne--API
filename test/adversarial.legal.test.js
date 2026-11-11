@@ -21,19 +21,20 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const contractAmendmentsService = require('../src/features/legal/contractAmendments.service');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../src/features/legal/contractTemplates.service');
-const signaturesService = require('../src/features/legal/signatures.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const contractAmendmentsService = require('../src/modules/legal/contracts/application/contractAmendments.service');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const {
   Company,
   Contract,
@@ -47,6 +48,7 @@ let tenant;
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 
 after(async () => {
@@ -89,8 +91,8 @@ async function createPerson(transaction, label) {
 
 async function createDocumentFile(transaction, prefix = 'adv-legal') {
   const suffix = uniqueSuffix();
-  return File.create(
-    {
+  return File.create({ checksumSha256: require('crypto').randomBytes(32).toString('hex'), // fechamento M5: arquivo com hash (Caderno §11)
+      
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       storageKey: `${prefix}/${suffix}.pdf`,
@@ -263,7 +265,9 @@ test('ADV-L05: contrato CANCELADO não pode ser mandado para assinatura nem ress
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const { contract, version, landlord } = await createContractWithVersion(transaction, `ADV-L05 corpo ${suffix}`);
-    await contractsService.transitionContractStatus(contract, 'CANCELLED', tenant.userId, transaction);
+    // Matriz M5: CANCELLED não é estado do Guia §3 — nenhuma transição leva a ele; só existe como legado já gravado.
+    await assert.rejects(() => contractsService.transitionContractStatus(contract, 'CANCELLED', tenant.userId, transaction), (err) => err.code === 'LEGAL_CONTRACT_INVALID_TRANSITION');
+    await contract.update({ status: 'CANCELLED' }, { transaction });
     assert.equal(contract.status, 'CANCELLED');
 
     // Ataque 1: solicitar assinatura de um documento de contrato já cancelado.
@@ -559,7 +563,7 @@ test('ADV-L13: prazo jurídico de outro tenant não pode ser lido nem "empurrado
     const dueAtOriginal = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: dueAtOriginal, sourceEvent: 'teste automatizado', responsibleUserId: tenant.userId },
+      { description: `Contestação ${suffix}`, dueAt: dueAtOriginal, sourceEvent: 'teste automatizado', sourceFileId: origem(tenant), responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );

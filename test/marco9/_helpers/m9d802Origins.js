@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const { Property, Person, InsurancePolicy, InsuranceRenewalTask } = require('../../../src/models');
 const peopleService = require('../../../src/features/people/people.service');
 const opportunitiesService = require('../../../src/features/crm/opportunities.service');
-const legalCasesService = require('../../../src/features/legal/legalCases.service');
+const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
 const assetsService = require('../../../src/features/inventory/assets.service');
 
 const sfx = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;

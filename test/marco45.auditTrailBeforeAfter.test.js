@@ -22,7 +22,7 @@ const financialEntriesService = require('../src/features/finance/financialEntrie
 const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
 const bankPaymentsService = require('../src/features/finance/bankPayments.service');
 const financeExportService = require('../src/features/finance/financeExport.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const closeoutService = require('../src/features/billing/closeout.service');
 const { formatCompetenceBR, formatMoneyBR } = require('../src/utils/formatBR');
 const { AuditLog, PaymentIntent, BankPaymentProviderRouting } = require('../src/models');
@@ -167,7 +167,7 @@ test('F8: competência e valores em formato brasileiro nos textos gerados', () =
 });
 
 test('varredura do código: toda auditoria dos Marcos 4/5 grava depois; não-criação grava antes e depois', () => {
-  const roots = ['src/features/finance', 'src/features/billing', 'src/features/legal', 'src/engines/jobs'].map((r) => path.join(__dirname, '..', r));
+  const roots = ['src/features/finance', 'src/features/billing', 'src/modules/legal', 'src/engines/jobs'].map((r) => path.join(__dirname, '..', r));
   const CREATION = /\.(create|generate|request|open|enroll|import|step|access|manual_collect)'$/;
   const problems = [];
   const walk = (dir) => {

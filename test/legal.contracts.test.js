@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const personContactsService = require('../src/features/people/personContacts.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const signaturesService = require('../src/features/legal/signatures.service');
-const requirementsService = require('../src/features/legal/requirements.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
+const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
 const AppError = require('../src/utils/AppError');
 const { File, TenantSetting, OutboxEvent } = require('../src/models');
 
@@ -120,10 +120,11 @@ test('HOM-001: contrato não avança para SIGNING sem nenhuma versão de documen
     await waiveAllRequirements(contract.id, tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'DOCUMENTS_PENDING', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
-    await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
 
+    // Matriz M5 (Guia §6): aprovar é aprovar a versão — sem versão de documento o contrato já não chega a APPROVED,
+    // e por isso também não chega a SIGNING.
     await assert.rejects(
-      () => contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction),
+      () => contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_CONTRACT_DOCUMENT_GATE');
@@ -277,7 +278,7 @@ test('máquina de estados: TERMINATED -> CLOSED (closeContract)', async () => {
 
 test('máquina de estados: terminateContract é bloqueado com garantia ACTIVE pendente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
     const contract = await createLeaseWithParties(transaction);
     contract.status = 'ACTIVE';
     await contract.save({ transaction });
@@ -285,7 +286,7 @@ test('máquina de estados: terminateContract é bloqueado com garantia ACTIVE pe
     const tenantParty = parties.find((p) => p.partyRole === 'TENANT');
     await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE' },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 1000, status: 'ACTIVE' }),
       tenant.userId,
       transaction
     );

@@ -12,7 +12,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, c
 const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const periodClosuresService = require('../src/features/finance/periodClosures.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const { requireRecentMfa } = require('../src/middlewares/auth.middleware');
 const { encryptSecret } = require('../src/utils/mfaCrypto');
 const { User, BankAccount, Person, Property, MfaCredential, MfaStepUp } = require('../src/models');

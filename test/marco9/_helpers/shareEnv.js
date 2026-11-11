@@ -3,7 +3,7 @@
 // Apoio dos testes M9-D823 (não é teste). Rodar SEMPRE em banco descartável (scripts/withDisposableDb.js). Links, pedidos e contratos de teste são gravados de verdade (commit).
 const env = require('./exportsEnv');
 const { Person, ContractParty } = require('../../../src/models');
-const contractsService = require('../../../src/features/legal/contracts.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
 const { createShareLink } = require('../../../src/features/core-governance/dlp/share/share.service');
 
 const tenantOf = (t) => ({ groupId: t.groupId, companyId: t.companyId });

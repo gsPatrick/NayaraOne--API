@@ -12,7 +12,7 @@ const env = require('../_helpers/m9d227Env');
 const hooks = require('../../../src/features/integrations/contingency/contingency.domainHooks');
 const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
 const { readContingencyMessagingParams } = require('../../../src/features/crm/messaging/contingency/mc.params');
-const { countingSignatures } = require('../../../src/features/legal/signatureRows');
+const { countingSignatures } = require('../../../src/modules/legal/signatures/signatureRows');
 
 let tenant;
 before(async () => { tenant = (await env.carregarTenants()).tenant; });
@@ -43,7 +43,7 @@ test('contingencia_parametros_declarados_no_dicionario_e_lidos_pelo_codigo', asy
 test('contingencia_ganchos_do_dominio_registrados_no_framework', async () => {
   require('../../../src/features/crm/messaging');
   require('../../../src/features/integrations/portal');
-  require('../../../src/features/legal/signature');
+  require('../../../src/modules/legal/signatures/framework');
   assert.match(hooks.alternateSqlFilter('MESSAGING'), /MARKETING/, 'o marketing fica fora da troca para o alternativo');
   assert.equal(hooks.alternateSqlFilter('PORTAL'), '');
   const quais = (dominio) => { const r = hooks.registered(dominio); return { sqlFilter: r.sqlFilter, agedHandler: r.agedHandler, taskBuilder: r.taskBuilder, step: r.step, moved: r.moved }; };

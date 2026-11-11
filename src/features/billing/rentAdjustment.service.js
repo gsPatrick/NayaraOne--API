@@ -2,6 +2,7 @@
 
 const { RentAdjustment, Contract } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishRentAdjusted } = require('./billingEvents.service');
 const { unavailableIndexSourceAdapter, IpcaIndexSourceAdapter, FgvIgpmIndexSourceAdapter } = require('./adapters/IndexSourceAdapter');
@@ -41,6 +42,12 @@ function resolveIndexSourceAdapter(indexCode, tenant, transaction) {
  */
 async function requestRentAdjustment(payload, actorUserId, transaction, indexSourceAdapter = null) {
   const { groupId, companyId, contractId, period, oldRentAmount, appliedPercentageOverride } = payload;
+  // Fechamento M5 (pentest): tipo e tamanho conferidos antes do banco.
+  if (contractId) assertUuid(contractId, 'contractId', 'RENT_ADJUSTMENT_VALIDATION');
+  assertText(payload.indexCode, 'indexCode', 32, 'RENT_ADJUSTMENT_VALIDATION');
+  for (const [f, v] of [['oldRentAmount', oldRentAmount], ['appliedPercentageOverride', appliedPercentageOverride]]) {
+    if (v !== undefined && v !== null && (typeof v === 'object' || !Number.isFinite(Number(v)))) throw AppError.badRequest(`"${f}" deve ser numérico.`, 'RENT_ADJUSTMENT_VALIDATION');
+  }
   let { indexCode } = payload;
 
   if (!indexCode && groupId && companyId) {

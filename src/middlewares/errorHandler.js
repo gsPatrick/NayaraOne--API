@@ -173,6 +173,17 @@ async function errorHandler(err, req, res, next) { // eslint-disable-line no-unu
     });
   }
 
+  // BUG REAL CORRIGIDO (pentest automatizado do Marco 5, 11/11/2026): texto maior que a coluna
+  // VARCHAR e objeto/array no lugar de identificador (ex.: {"$gt":""}) chegavam ao Sequelize/
+  // Postgres e viravam 500. Rede de proteção: entrada inválida do cliente é 400, nunca 500 (a
+  // validação de cada rota continua sendo a primeira barreira).
+  if (err && err.name === 'SequelizeDatabaseError' && /value too long for type character varying/i.test(err.message || '')) {
+    return failure(res, { statusCode: 400, code: 'VALUE_TOO_LONG', message: 'Um dos textos informados é maior do que o permitido para o campo.' });
+  }
+  if (err && !err.statusCode && /^(Invalid value |Argument passed to findByPk is invalid|WHERE parameter "[^"]+" has invalid)/.test(err.message || '')) {
+    return failure(res, { statusCode: 400, code: 'INVALID_FIELD_TYPE', message: 'Um dos campos informados tem tipo inválido (era esperado um texto ou identificador).' });
+  }
+
   // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): upload de arquivo
   // acima do limite do body parser (`express.json({ limit: '28mb' })` em app.js) é interceptado
   // ANTES de chegar no check limpo de MAX_BYTES em files.service.js, batendo como

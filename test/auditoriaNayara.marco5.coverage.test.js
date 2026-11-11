@@ -20,9 +20,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const { getSetting } = require('../src/features/settings/settings.service');
@@ -218,17 +218,22 @@ test('dossiê: outra empresa não enxerga o processo jurídico, o pacote de evid
 // ---------------------------------------------------------------------------
 
 test('JUR-012: não existe nenhum módulo de execução jurídica acessível por "NAY" fora das rotas HTTP protegidas; decisões/criações críticas sempre exigem ator humano autenticado', () => {
-  const legalDir = path.join(__dirname, '..', 'src', 'features', 'legal');
-  const files = fs.readdirSync(legalDir).filter((f) => f.endsWith('.js'));
+  // Árvore do Guia M5 §2 (src/modules/legal): a varredura percorre todas as subpastas do módulo.
+  const legalDir = path.join(__dirname, '..', 'src', 'modules', 'legal');
+  const listar = (d, base = '') => fs.readdirSync(path.join(legalDir, base)).flatMap((n) => {
+    const rel = base ? `${base}/${n}` : n;
+    return fs.statSync(path.join(legalDir, rel)).isDirectory() ? listar(d, rel) : (n.endsWith('.js') ? [rel] : []);
+  });
+  const files = listar(legalDir);
 
   // Exceção controlada (NAY Jurídica, Caderno §17, 19/10/2026): o módulo de leitura
   // legalNay.service.js (travado logo abaixo) e as linhas de rota /legal/nay/* — todas
   // exigindo legal:read, conferidas abaixo.
   const nayRouteRe = /^legalRouter\.(get|post)\('\/legal\/nay\/[^']+', requirePermission\('legal:read'\), legalController\.nay\w+\);$/;
   for (const file of files) {
-    if (file === 'legalNay.service.js') continue;
+    if (file === 'cases/legalNay.service.js') continue;
     let content = fs.readFileSync(path.join(legalDir, file), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    if (file === 'legal.routes.js') content = content.split('\n').filter((l) => !nayRouteRe.test(l)).join('\n');
+    if (file === 'shared/legal.routes.js') content = content.split('\n').filter((l) => !nayRouteRe.test(l)).join('\n');
     assert.ok(
       !/\bNAY\b/i.test(content),
       `${file} não deveria referenciar NAY fora de comentário — nenhum agente de IA tem caminho de execução no jurídico.`
@@ -237,11 +242,11 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
 
   // NAY Jurídica é SOMENTE LEITURA por construção: só importa modelos + AppError + o registrador de run por regra (M9-D005),
   // a única escrita é a auditoria da execução (recordRuleRun) e não usa SQL cru.
-  const nay = fs.readFileSync(path.join(legalDir, 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../models', '../../features/ai/orchestrator/runs', '../../utils/AppError'].sort());
+  const nay = fs.readFileSync(path.join(legalDir, 'cases', 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../../models', '../../../features/ai/orchestrator/runs', '../../../utils/AppError'].sort());
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
-  const routeLines = fs.readFileSync(path.join(legalDir, 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));
+  const routeLines = fs.readFileSync(path.join(legalDir, 'shared', 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));
   assert.equal(routeLines.length, 6);
   for (const l of routeLines) assert.match(l, nayRouteRe);
 

@@ -71,9 +71,12 @@ test('m9d825 nenhuma rota aceita parâmetro que desligue a máscara', async (t) 
   const root = path.join(__dirname, '..', '..', '..', 'src', 'features');
   const pattern = /req\.(query|headers)\.?\[?['"]?(raw|unmask|reveal|plain|clear|showRestricted|includeSensitive|x-dlp-bypass)\b/i;
   const offenders = [];
-  for (const dir of ['people', 'properties', 'procurement', 'legal', 'finance', 'files']) {
-    for (const file of fs.readdirSync(path.join(root, dir)).filter((name) => name.endsWith('.js'))) {
-      if (pattern.test(fs.readFileSync(path.join(root, dir, file), 'utf8'))) offenders.push(`${dir}/${file}`);
+  // O jurídico vive em src/modules/legal (árvore do Guia do Marco 5, §2): varrido com as subpastas.
+  const listar = (base) => fs.readdirSync(base).flatMap((n) => (fs.statSync(path.join(base, n)).isDirectory() ? listar(path.join(base, n)).map((x) => `${n}/${x}`) : [n]));
+  const pastas = [...['people', 'properties', 'procurement', 'finance', 'files'].map((d) => [d, path.join(root, d)]), ['legal', path.join(root, '..', 'modules', 'legal')]];
+  for (const [dir, base] of pastas) {
+    for (const file of listar(base).filter((name) => name.endsWith('.js'))) {
+      if (pattern.test(fs.readFileSync(path.join(base, file), 'utf8'))) offenders.push(`${dir}/${file}`);
     }
   }
   assert.deepEqual(offenders, [], 'varredura de parâmetros: nenhum controller lê um parâmetro de máscara');
