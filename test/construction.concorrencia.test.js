@@ -94,7 +94,6 @@ test(`Concorrência na baixa: ${P.baixasParciaisSimultaneas} parcelas iguais + 1
 
 test('Concorrência na baixa: cada parcela paga carrega a obra (construction_project_id) — relatório por obra não perde pagamento parcial', {
   skip: H.motivoPular,
-  todo: 'DEFEITO M6-97 (verificação 11/11/2026): a baixa parcial nasce sem construction_project_id (ledger-movement.js não copia a dimensão para a parcela). Regra do Financeiro/Obras, fora desta entrega; o teste volta a valer quando a correção entrar.',
 }, async () => {
   const { fx } = await rajadaDeParcelas();
   const filhas = await H.linhaAdmin("SELECT construction_project_id AS obra FROM finance.financial_entries WHERE parent_entry_id = $1 AND status = 'SETTLED'", [fx.entryId]);
