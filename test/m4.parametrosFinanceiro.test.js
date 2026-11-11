@@ -58,6 +58,9 @@ before(async () => {
   const outro = await createUser(tenant, 'sem-settings-update');
   semPermissao = tokenFor(tenant, outro.id, [...FINANCE_ALL, 'settings:read']);
   await inTenant(async (t) => {
+    // DEC-007: o gatilho "30% das conciliações do mês feitas à mão" dispararia na 1ª conciliação manual da empresa isolada; em 100 ele não interfere
+    // neste arquivo, que prova o gatilho por limiar/janela (o percentual tem o teste próprio em dec007.antifraudeParametros.test.js).
+    await require('../src/models').TenantSetting.create({ ...base(), key: 'antifraude.conciliacao_manual_percentual_mes', value: 100 }, { transaction: t });
     resultCenterId = (await T.createTestResultCenter(tenant, t)).id;
     account = await bankAccountsService.createBankAccount({ ...base(), bankCode: '104', agency: '0001', accountNumber: `${T.uniqueSuffix()}` }, tenant.userId, t);
   });

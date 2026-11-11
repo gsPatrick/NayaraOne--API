@@ -1678,7 +1678,8 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, o
   // anomalia (idempotente o bastante na prática: um caso por estorno que cruza o limiar; não é
   // um problema duplicar o alerta aqui, ao contrário de duplicar dinheiro).
   // Estorno de origem comercial (chargeback de comissão do banco) não é sinal de fraude: fica fora do alerta.
-  const reversalAlert = options.skipFrequentAlert ? { flagged: false } : await checkFrequentReversalAlert(original.companyId, transaction);
+  // DEC-007: por empresa e pela pessoa que estornou (antifraude.estorno_frequente_*_30d).
+  const reversalAlert = options.skipFrequentAlert ? { flagged: false } : await checkFrequentReversalAlert(original.companyId, transaction, actorUserId);
   if (reversalAlert.flagged) {
     await createAnomalyCase(
       {
@@ -1688,7 +1689,7 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, o
         riskLevel: 'HIGH',
         relatedEntityType: 'FinancialEntry',
         relatedEntityId: original.id,
-        reason: `${reversalAlert.count} estornos nos últimos ${reversalAlert.windowDays} dias — acima do limiar configurado.`,
+        reason: reversalAlert.reason,
       },
       actorUserId,
       transaction

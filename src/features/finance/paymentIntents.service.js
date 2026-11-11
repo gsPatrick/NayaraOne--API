@@ -122,7 +122,7 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
     );
   }
   // §17: pagamento ainda não avaliado pelo antifraude é avaliado aqui (fica retido até a revisão humana).
-  await require('./paymentAnomalyGate').evaluatePayableAnomaly(entry, transaction, 'prepare');
+  await require('./paymentAnomalyGate').evaluateAndAssertPreparable(entry, transaction); // DEC-007: achado bloqueante não vira intenção
 
   // F06-PAY-04/06 (conferência 18/10/2026): SUBMITTED também é intenção em aberto — o pagamento
   // está em trânsito no banco (inclusive com resposta incerta, que agora mantém SUBMITTED). Abrir

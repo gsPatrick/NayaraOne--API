@@ -52,6 +52,9 @@ before(async () => {
   });
   startCount = await manualCount();
   await inTenant((t) => TenantSetting.create({ ...base(), key: KEY, value: startCount + 3 }, { transaction: t }));
+  // DEC-007 acrescentou o gatilho "30% das conciliações do mês feitas à mão" (DI-DEC007-1). Este arquivo prova o gatilho por empresa (limiar/janela);
+  // com o percentual em 100 o gatilho do mês não interfere (o percentual tem o teste próprio em dec007.antifraudeParametros.test.js).
+  await inTenant((t) => TenantSetting.create({ ...base(), key: 'antifraude.conciliacao_manual_percentual_mes', value: 100 }, { transaction: t }));
   await new Promise((r) => setTimeout(r, 300));
 });
 

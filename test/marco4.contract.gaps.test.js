@@ -440,10 +440,10 @@ test('FIN-005 limiares de antifraude vêm do Motor de Regras (evaluateRule) quan
     await seedFinanceAntifraudRules(tenant, transaction);
     const thresholds = await antifraudService.resolveAntifraudThresholds(tenant, transaction);
     assert.ok(thresholds.ruleVersionId, 'com a regra publicada, a decisão fica rastreada por ruleVersionId');
-    // Sem override de settings, usa o actionJson da regra (os mesmos valores que eram
-    // hardcoded antes, preservados como default da regra — ver seedFinanceAntifraudRules.js).
+    // Sem override de settings, usa o padrão do catálogo apertado pelo actionJson da regra. DEC-007 (DI-DEC007-1): conta nova
+    // R$ 5.000,00 (antes 10.000) e múltiplo 3,0; uma versão antiga da regra publicada com 10.000 não afrouxa o padrão.
     assert.equal(thresholds.historyMultiplier, 3);
-    assert.equal(thresholds.newAccountThreshold, 10000);
+    assert.equal(thresholds.newAccountThreshold, 5000);
     assert.equal(thresholds.bankAccountCooldownHours ?? thresholds.cooldownHours, thresholds.cooldownHours);
   });
 });
@@ -465,11 +465,9 @@ test('FIN-005 flagAnomalousPayment continua detectando desvio histórico e prime
     // GAP REAL CORRIGIDO (Caderno §17/§19): flagAnomalousPayment agora também abre um
     // AnomalyCase HIGH (antes só marcava a flag requires_manual_review, sem registro próprio).
     const { AnomalyCase } = require('../src/models');
-    const cases = await AnomalyCase.findAll({ where: { relatedEntityId: entry.id, companyId: tenant.companyId }, transaction });
-    assert.equal(cases.length, 1);
-    assert.equal(cases[0].status, 'OPEN');
-    assert.equal(cases[0].riskLevel, 'HIGH');
-    assert.equal(cases[0].caseType, 'AMOUNT_OUTLIER');
+    // DEC-007: 50.000 numa conta recém-cadastrada também é "fornecedor novo de alto valor" (30 dias, a partir de R$ 20.000,00) — caso próprio.
+    const cases = await AnomalyCase.findAll({ where: { relatedEntityId: entry.id, companyId: tenant.companyId }, order: [['caseType', 'ASC']], transaction });
+    assert.deepEqual(cases.map((c) => [c.caseType, c.riskLevel, c.status]), [['AMOUNT_OUTLIER', 'HIGH', 'OPEN'], ['NEW_SUPPLIER_HIGH_VALUE', 'MEDIUM', 'OPEN']]);
   });
 });
 

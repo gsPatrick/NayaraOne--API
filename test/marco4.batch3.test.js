@@ -502,9 +502,17 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
     assert.equal(entry.status, 'PENDING');
     assert.equal(entry.competenceMonth, '2026-09');
 
-    // 1b) Antifraude avalia: conta sem histórico + valor < 10k => não retém.
-    const anomalia = await antifraudService.flagAnomalousPayment(entry, transaction);
-    assert.equal(anomalia.flagged, false);
+    // 1b) Antifraude avalia na criação: conta sem histórico + valor a partir de R$ 5.000,00 (DEC-007; antes 10.000) => retém para revisão
+    // (FIN-TS-013 "Conta nova + pagamento alto imediato: controle extra"); um revisor confere e libera, com trilha, antes de seguir a jornada.
+    assert.equal(entry.requiresManualReview, true);
+    assert.match(entry.manualReviewReason, /Primeiro pagamento desta conta bancária/);
+    assert.equal((await antifraudService.flagAnomalousPayment(entry, transaction)).alreadyFlagged, true);
+    const [revisorM428] = await User.findOrCreate({
+      where: { email: `homo-qa-m428-revisor-${suffix}@nayaraone.dev` },
+      defaults: { name: `HOMO QA — Revisor M4-28 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
+    });
+    await antifraudService.clearManualReview(entry.id, revisorM428.id, transaction, 'Fornecedor conferido por telefone e nota fiscal.');
+    await entry.reload({ transaction });
 
     // 1c) Revisão 18/10/2026 (A4): o pagamento será feito fora da integração bancária — o
     // comprovante é anexado ANTES da aprovação, para os aprovadores decidirem vendo o arquivo.

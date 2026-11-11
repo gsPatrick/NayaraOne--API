@@ -59,18 +59,17 @@ async function settledHistory(bankAccountId, amounts) {
 const payable = (amount, extra = {}) => http('POST', '/finance/entries', tk.maker, { entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId, description: `§17 ${amount} ${T.uniqueSuffix()}`, ...extra });
 const casesOf = async (entryId) => (await http('GET', '/finance/anomaly-cases', tk.maker)).body.data.filter((c) => c.relatedEntityId === entryId);
 
-test('M4-§17.5 valor fora do padrão: PAYABLE de 30.000 numa conta com histórico de 100 nasce retido para revisão e abre caso AMOUNT_OUTLIER HIGH em GET /finance/anomaly-cases; valor dentro do padrão não retém', async () => {
+// DEC-007 (DI-DEC007-1): 30.000 sobre média 100 é 300x, acima do múltiplo que bloqueia (10,0) => caso AMOUNT_OUTLIER CRITICAL (antes HIGH, sem nível de
+// bloqueio); a conta recém-cadastrada recebendo a partir de R$ 20.000,00 também abre NEW_SUPPLIER_HIGH_VALUE (fornecedor novo de alto valor).
+test('M4-§17.5 valor fora do padrão: PAYABLE de 30.000 numa conta com histórico de 100 nasce retido e bloqueado, com caso AMOUNT_OUTLIER CRITICAL (e fornecedor novo) em GET /finance/anomaly-cases; valor dentro do padrão não retém', async () => {
   const account = await newAccount();
   await settledHistory(account.id, ['100.00', '100.00']);
   const outlier = await payable(30000, { bankAccountId: account.id });
   assert.equal(outlier.status, 201, JSON.stringify(outlier.body));
   assert.equal(outlier.body.data.requiresManualReview, true);
   assert.match(outlier.body.data.manualReviewReason, /média histórica/);
-  const cases = await casesOf(outlier.body.data.id);
-  assert.equal(cases.length, 1);
-  assert.equal(cases[0].caseType, 'AMOUNT_OUTLIER');
-  assert.equal(cases[0].riskLevel, 'HIGH');
-  assert.equal(cases[0].status, 'OPEN');
+  const cases = (await casesOf(outlier.body.data.id)).sort((x, y) => x.caseType.localeCompare(y.caseType));
+  assert.deepEqual(cases.map((c) => [c.caseType, c.riskLevel, c.status]), [['AMOUNT_OUTLIER', 'CRITICAL', 'OPEN'], ['NEW_SUPPLIER_HIGH_VALUE', 'MEDIUM', 'OPEN']]);
   const normal = await payable(150, { bankAccountId: account.id });
   assert.equal(normal.status, 201);
   assert.equal(normal.body.data.requiresManualReview, false);
@@ -95,7 +94,7 @@ test('M4-§17.5 pagamento retido não liquida (409 FINANCE_ENTRY_REQUIRES_MANUAL
   assert.equal(prepared.status, 201, JSON.stringify(prepared.body));
   const after = await inTenant((t) => FinancialEntry.findByPk(entry.id, { transaction: t }));
   assert.equal(after.requiresManualReview, false, 'liberado pelo revisor não é retido de novo pelo mesmo fato');
-  assert.equal((await casesOf(entry.id)).length, 1);
+  assert.equal((await casesOf(entry.id)).length, 2, 'os dois casos da criação (valor fora do padrão e fornecedor novo), nenhum a mais');
 });
 
 test('M4-§17.5 (§17.6 fornecedor novo de alto valor): primeiro pagamento de 15.000 para conta sem histórico fica retido; conta definida depois (PATCH) também é avaliada', async () => {
@@ -111,7 +110,8 @@ test('M4-§17.5 (§17.6 fornecedor novo de alto valor): primeiro pagamento de 15
   assert.equal(patched.status, 200, JSON.stringify(patched.body));
   const reloaded = await inTenant((t) => FinancialEntry.findByPk(noAccount.body.data.id, { transaction: t }));
   assert.equal(reloaded.requiresManualReview, true);
-  assert.equal((await casesOf(reloaded.id)).map((c) => c.caseType).join(','), 'AMOUNT_OUTLIER');
+  // DEC-007: 20.000 numa conta recém-cadastrada também é fornecedor novo de alto valor (a partir de R$ 20.000,00).
+  assert.equal((await casesOf(reloaded.id)).map((c) => c.caseType).sort().join(','), 'AMOUNT_OUTLIER,NEW_SUPPLIER_HIGH_VALUE');
 });
 
 test('M4-§17.5 lançamento que nasceu sem avaliação (legado/outro módulo) é avaliado ao preparar a intenção, sem duplicar caso no pedido de aprovação, e o envio ao banco do pagamento retido é recusado', async () => {
