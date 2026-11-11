@@ -18,4 +18,5 @@ reports/offline-run.json
 reports/offline-run-ia.json
 # JUnit e registro de conexões da execução offline da suíte da NAY (M9-D047).
 reports/ai-ci/
+reports/obras-ci/
 !docs/evidencias/regressao/*.log
