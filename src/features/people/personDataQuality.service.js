@@ -63,4 +63,4 @@ function scorePersonDataQuality(person) {
   };
 }
 
-module.exports = { scorePersonDataQuality };
+module.exports = { scorePersonDataQuality, CHECKS };

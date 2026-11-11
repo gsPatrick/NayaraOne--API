@@ -12,7 +12,7 @@ const { applyAgentOutputRules } = require('../../agents/scope');
 const E = require('./flow.errors');
 const { evaluateOutput, answerTextOf, numberOrUndefined } = require('./flow.output');
 const { usageFields } = require('./flow.progress');
-const { applyAnswerHook } = require('./flow.serverTools');
+const { applyAnswerHook, applyReviewHook } = require('./flow.serverTools');
 
 /** As fontes do run no formato do GroundingValidator (D025): a posição na lista é o número [n] do marcador. */
 const forValidator = (state) => state.sources.map((s) => ({
@@ -68,7 +68,8 @@ async function validateAndFinish(state, text, regenerate) {
     evaluated = evaluateOutput(state.agent, current);
     if (!evaluated.schemaValid) throw E.outputInvalid();
   }
-  const numbered = await checkNumbers(state, answerTextOf(state.agent, current, evaluated.parsed), (info) => regenerate(`Corrija os números: ${info.violations.map((v) => v.raw).join(', ')} não vêm das fontes. Use apenas {{num:ref}} dos valores fornecidos.`));
+  const reviewed = await applyReviewHook(state, answerTextOf(state.agent, current, evaluated.parsed)); // revisão do agente antes do aterramento
+  const numbered = await checkNumbers(state, reviewed, (info) => regenerate(`Corrija os números: ${info.violations.map((v) => v.raw).join(', ')} não vêm das fontes. Use apenas {{num:ref}} dos valores fornecidos.`));
   const grounded = await groundAnswer(state, numbered);
   let answer = await sanitizeAnswer(state, await applyAnswerHook(state, grounded.answer));
   if (state.unmet.length && grounded.groundingStatus !== 'INSUFFICIENT_SOURCES') answer = `${answer}\n\n${state.unmet.map(unmetLine).join(' ')}`;

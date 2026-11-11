@@ -8,7 +8,11 @@
  *  - `requiredServerTools`: true = falha em alguma delas encerra o run com erro (nunca responder como se tivesse feito);
  *  - `serverGroundedTasks`: tarefas cujos números o SERVIDOR confere por conta própria com a fonte exata (ex.: briefing_executivo, M9-D693): o orquestrador não busca
  *    fontes de conhecimento nem reescreve a resposta pela checagem de fontes, que trocaria o JSON do briefing pela mensagem de "fonte insuficiente";
- *  - `checkAnswer(state, text)`: última palavra sobre o texto da resposta (substituir resposta proibida); devolve o texto.
+ *  - `checkAnswer(state, text)`: última palavra sobre o texto da resposta (substituir resposta proibida); devolve o texto;
+ *  - `serverSources(state)`: fontes que o SERVIDOR entrega ao modelo no caminho de modelo (passo 4), lidas com a permissão e o escopo de
+ *    quem pede (ex.: os fatos públicos aprovados do imóvel da NAY Comercial, Guia do Marco 3 §12); devolve [fonte];
+ *  - `reviewAnswer(state, text)`: revisão da saída ANTES do aterramento, nos caminhos de regra e de modelo (ex.: validateGeneratedDescription
+ *    e a guarda de atributo sensível da NAY Comercial, livro do Marco 3 §12/§16); devolve o texto revisado.
  */
 const hooks = new Map();
 
