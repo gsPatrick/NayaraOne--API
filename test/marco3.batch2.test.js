@@ -507,16 +507,9 @@ test('M3-16: rodar o job do Radar DUAS vezes seguidas não republica evento nem 
         await PropertyRadar.destroy({ where: { id: created.radarId }, force: true, transaction: t });
       }
       if (created.propertyId) {
-        // property_price_history referencia a oferta — precisa sair antes dela.
-        await sequelize.query(
-          'DELETE FROM "real_estate"."property_price_history" WHERE offer_id IN (SELECT id FROM "real_estate"."property_offers" WHERE property_id = :id)',
-          { replacements: { id: created.propertyId }, transaction: t }
-        );
-        await sequelize.query('DELETE FROM "real_estate"."property_offers" WHERE property_id = :id', {
-          replacements: { id: created.propertyId },
-          transaction: t,
-        });
-        await sequelize.query('DELETE FROM "real_estate"."properties" WHERE id = :id', {
+        // M3-08 (verificação de 11/11/2026): o histórico de preço é append-only no banco (gatilho + REVOKE), então a oferta
+        // e o histórico ficam; o imóvel sai por exclusão lógica (banco descartável).
+        await sequelize.query('UPDATE "real_estate"."properties" SET deleted_at = now() WHERE id = :id', {
           replacements: { id: created.propertyId },
           transaction: t,
         });

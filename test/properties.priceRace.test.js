@@ -106,16 +106,10 @@ test('CRM-TS-014: duas alterações de preço CONCORRENTES na mesma offer serial
     );
   } finally {
     if (created.propertyId) {
+      // M3-08 (verificação de 11/11/2026): o histórico de preço é append-only no banco — a limpeza não o apaga mais (nem a
+      // oferta que ele referencia); o imóvel sai por exclusão lógica (banco descartável).
       await withCommittedTenantTransaction(tenant, async (t) => {
-        await sequelize.query('DELETE FROM "real_estate"."property_price_history" WHERE offer_id = :id', {
-          replacements: { id: created.offerId },
-          transaction: t,
-        });
-        await sequelize.query('DELETE FROM "real_estate"."property_offers" WHERE id = :id', {
-          replacements: { id: created.offerId },
-          transaction: t,
-        });
-        await sequelize.query('DELETE FROM "real_estate"."properties" WHERE id = :id', {
+        await sequelize.query('UPDATE "real_estate"."properties" SET deleted_at = now() WHERE id = :id', {
           replacements: { id: created.propertyId },
           transaction: t,
         });
