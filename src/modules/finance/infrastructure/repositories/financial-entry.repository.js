@@ -7,7 +7,8 @@
  * e travas são as mesmas que estavam nos serviços.
  */
 const { Op } = require('sequelize');
-const { FinancialEntry, File, Person, ContractParty, sequelize } = require('../../../../models');
+const AppError = require('../../../../utils/AppError');
+const { FinancialEntry, File, Person, ContractParty, Project, sequelize } = require('../../../../models');
 
 const forUpdate = (transaction) => (transaction ? transaction.LOCK.UPDATE : undefined);
 
@@ -100,12 +101,31 @@ function findContractParties(contractId, personId, transaction) {
   return ContractParty.findAll({ where: { contractId, personId }, transaction });
 }
 
+/** Lançamento já criado a partir de um evento do outbox (source_event_id único — Caderno Obras §7). */
+function findBySourceEventId(sourceEventId, transaction) {
+  return FinancialEntry.findOne({ where: { sourceEventId }, transaction });
+}
+
+/** Lançamento com a chave de idempotência (contas criadas antes do consumidor de eventos). */
+function findByIdempotencyKey(idempotencyKey, companyId, transaction) {
+  return FinancialEntry.findOne({ where: { idempotencyKey, companyId }, transaction });
+}
+
+/** A obra (dimensão construction_project_id) precisa ser da mesma empresa (verificação do Marco 6: FK ignora RLS). */
+async function assertConstructionProjectInCompany(projectId, companyId, transaction) {
+  if (await Project.findOne({ where: { id: projectId, companyId }, attributes: ['id'], transaction })) return;
+  throw AppError.unprocessable('A obra informada não pertence a esta empresa.', 'CONSTRUCTION_REFERENCE_NOT_IN_COMPANY', { field: 'constructionProjectId' });
+}
+
 module.exports = {
   /** O modelo, para a checagem genérica de chave duplicada do antifraude (assertNoDuplicatePayment recebe o modelo). */
   model: FinancialEntry,
   findById,
   findByIdForUpdate,
   findInCompanyForUpdate,
+  findBySourceEventId,
+  findByIdempotencyKey,
+  assertConstructionProjectInCompany,
   create,
   save,
   list,

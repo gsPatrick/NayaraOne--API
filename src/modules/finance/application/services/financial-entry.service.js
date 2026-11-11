@@ -70,7 +70,7 @@ async function assertBankAccountOfCompany(bankAccountId, companyId, transaction)
  */
 async function createFinancialEntry(payload, actorUserId, transaction, options = {}) {
   const { groupId, companyId, bankAccountId, costCenterId, resultCenterId, constructionProjectId, originRef } = payload;
-  const { entryType, nature, amount, description, dueAt, competenceMonth, idempotencyKey, chartOfAccountId } = payload;
+  const { entryType, nature, amount, description, dueAt, competenceMonth, idempotencyKey, chartOfAccountId, sourceEventId } = payload;
 
   if (!groupId || !companyId || !entryType || !nature || amount === undefined || amount === null) {
     throw AppError.badRequest(
@@ -109,6 +109,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
   const chartVersion = await resolveAccountVersionForEntry(chartOfAccountId, companyId, payload.factDate || dueAt || new Date(), transaction);
 
   if (bankAccountId) await assertBankAccountOfCompany(bankAccountId, companyId, transaction);
+  if (constructionProjectId) await entries.assertConstructionProjectInCompany(constructionProjectId, companyId, transaction); // M6 verificação: FK ignora RLS
 
   // M4-19 — período fechado bloqueia lançamento novo naquele mês (competência do vencimento e
   // da própria criação). C1 (revisão independente): a COMPETÊNCIA informada também é conferida.
@@ -139,6 +140,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
       settledAt: null,
       status: 'PENDING',
       idempotencyKey: idempotencyKey || null,
+      sourceEventId: sourceEventId || null, // Caderno Obras §7: evento do outbox de origem (único)
       reversalOfEntryId: null,
       chartOfAccountId: chartOfAccountId || null,
       chartOfAccountVersionId: chartVersion ? chartVersion.id : null,
