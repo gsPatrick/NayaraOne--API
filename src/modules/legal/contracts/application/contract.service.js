@@ -5,7 +5,8 @@ const { publishContractRenewalChange } = require('../../cases/legalDeadlineCalen
 const { countingSignatures } = require('../../signatures/signatureRows');
 const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
-const { publishContractStatusChanged, publishContractActivated, publishContractTerminated, publishCadernoEvent } = require('../../shared/legalEvents.service');
+const { publishCadernoEvent } = require('../../shared/legalEvents.service');
+const { publishStatusEvents } = require('./contractStatusEvents');
 const { assertContractClosureAllowed, CLOSURE_TARGET_STATUSES } = require('../domain/contractClosureGate');
 const { assertUuidFields } = require('../../shared/legalIds');
 
@@ -458,6 +459,7 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   // mudou) não são bloqueados por documento. Aprovação = aprovação da versão vigente (Guia §6).
   const { ensureRequirementsGenerated } = require('./requirement.service');
   const { approveLatestVersion, assertApprovedCurrentVersion } = require('./contractVersionApproval');
+  let approvedVersion = null; // só a transição LEGAL_REVIEW -> APPROVED aprova uma versão (DI-M5CT-1)
   if (targetStatus === 'DOCUMENTS_PENDING') {
     await assertRequirementsGate(contract, transaction);
     await ensureRequirementsGenerated(contract.id, actorUserId, transaction);
@@ -466,7 +468,7 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
     if (fromStatus === 'DRAFT') await assertRequirementsGate(contract, transaction);
   } else if (targetStatus === 'APPROVED' && fromStatus === 'LEGAL_REVIEW') {
     await assertDocumentRequirementsGate(contract, 'APPROVED', transaction);
-    await approveLatestVersion(contract, actorUserId, transaction);
+    approvedVersion = await approveLatestVersion(contract, actorUserId, transaction);
   } else if (targetStatus === 'SIGNING') {
     await assertDocumentRequirementsGate(contract, 'SIGNING', transaction);
     await assertDocumentGate(contract, transaction);
@@ -488,24 +490,8 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   contract.updatedBy = actorUserId || null;
   await contract.save({ transaction });
 
-  await publishContractStatusChanged(contract, fromStatus, transaction);
-  await publishContractRenewalChange(contract, transaction);
-  if (targetStatus === 'ACTIVE') {
-    await publishContractActivated(contract, transaction);
-  }
-  // M45 (Caderno M5 §18): eventos nomeados do ciclo de assinatura.
-  const cadernoEventByTarget = { APPROVED: 'contract.version.approved', SIGNING: 'contract.sent_for_signature', SIGNED: 'contract.signed' };
-  if (cadernoEventByTarget[targetStatus]) {
-    const currentVersion = await ContractVersion.findOne({ where: { contractId: contract.id }, order: [['version_number', 'DESC']], transaction });
-    await publishCadernoEvent(
-      cadernoEventByTarget[targetStatus],
-      'Contract',
-      contract,
-      { id: contract.id, fromStatus, contractVersionId: currentVersion ? currentVersion.id : null, contentHash: currentVersion ? currentVersion.contentHash : null },
-      contract.lockVersion,
-      transaction
-    );
-  }
+  // Eventos do livro por status de destino (contractStatusEvents.js): o mesmo conjunto em todo caminho.
+  await publishStatusEvents(contract, fromStatus, { approvedVersion }, transaction);
 
   await registrarAuditoria(
     {
@@ -571,11 +557,8 @@ async function applyGatedTransition(contract, targetStatus, actorUserId, reason,
   contract.updatedBy = actorUserId || null;
   await contract.save({ transaction });
 
-  await publishContractStatusChanged(contract, fromStatus, transaction);
-  await publishContractRenewalChange(contract, transaction);
-  if (targetStatus === 'TERMINATED') {
-    await publishContractTerminated(contract, transaction);
-  }
+  // Mesmos eventos da transição genérica: reativar publica contract.activated e encerrar, contract.terminated.
+  await publishStatusEvents(contract, fromStatus, {}, transaction);
 
   await registrarAuditoria(
     {
