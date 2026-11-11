@@ -19,8 +19,9 @@ module.exports = async function marco4(R) {
   const sfx = String(Date.now()).slice(-7);
   const A = R.tenant('A:gestor');
   const svc = {
-    entries: require('../../src/features/finance/financialEntries.service'),
-    chart: require('../../src/features/finance/chartOfAccounts.service'),
+    entries: require('../../src/modules/finance/application/services/financial-entry.service'),
+    receipt: require('../../src/modules/finance/application/services/receipt.service'),
+    chart: require('../../src/modules/finance/application/services/chart-of-accounts.service'),
   };
 
   // ---------- preparação (fixtures por HTTP, perfil gestor do tenant A) ----------
@@ -43,8 +44,8 @@ module.exports = async function marco4(R) {
   // ---------- G2 Entries, installments, parciais e excedentes ----------
   await R.http({ id: 'G02-1', grupos: [2], titulo: 'Cria recebível de R$ 1.000,00', quem: 'A:gestor', metodo: 'POST', rota: '/finance/entries', corpo: (c) => ({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `Recebível parcial ${sfx}`, resultCenterId: c.rc }), esperado: { status: 201 }, guardar: (b, c) => { c.recv = b.data.id; } });
   await R.http({ id: 'G02-2', grupos: [2, 5], titulo: 'Baixa parcial pela rota exige MFA: recusada sem MFA habilitado', quem: 'A:gestor', metodo: 'POST', rota: (c) => `/finance/entries/${c.recv}/settle-partial`, corpo: { amount: 400 }, esperado: { status: 403, codigo: 'MFA_REQUIRED_NOT_ENABLED' } });
-  await R.servico({ id: 'G02-3', grupos: [2], titulo: 'Regra (serviço): 1ª baixa parcial de R$ 400,00', chamada: 'financialEntries.settleFinancialEntryPartial(recebível, 400)', fn: (c) => inTenant(A, (t) => svc.entries.settleFinancialEntryPartial(c.recv, 400, A.userId, t)).then((r) => JSON.parse(JSON.stringify(r))), esperado: {} });
-  await R.servico({ id: 'G02-4', grupos: [2], titulo: 'Regra (serviço): 2ª baixa de R$ 700,00 sobre saldo de R$ 600,00 — R$ 100,00 de excedente viram pendência de classificação', chamada: 'financialEntries.settleFinancialEntryPartial(recebível, 700)', fn: (c) => inTenant(A, (t) => svc.entries.settleFinancialEntryPartial(c.recv, 700, A.userId, t)).then((r) => JSON.parse(JSON.stringify(r))), esperado: {} });
+  await R.servico({ id: 'G02-3', grupos: [2], titulo: 'Regra (serviço): 1ª baixa parcial de R$ 400,00', chamada: 'financialEntries.settleFinancialEntryPartial(recebível, 400)', fn: (c) => inTenant(A, (t) => svc.receipt.settleFinancialEntryPartial(c.recv, 400, A.userId, t)).then((r) => JSON.parse(JSON.stringify(r))), esperado: {} });
+  await R.servico({ id: 'G02-4', grupos: [2], titulo: 'Regra (serviço): 2ª baixa de R$ 700,00 sobre saldo de R$ 600,00 — R$ 100,00 de excedente viram pendência de classificação', chamada: 'financialEntries.settleFinancialEntryPartial(recebível, 700)', fn: (c) => inTenant(A, (t) => svc.receipt.settleFinancialEntryPartial(c.recv, 700, A.userId, t)).then((r) => JSON.parse(JSON.stringify(r))), esperado: {} });
   await R.http({ id: 'G02-5', grupos: [2], titulo: 'Lista de pendências de classificação mostra o excedente (nunca receita automática)', quem: 'A:leitura', metodo: 'GET', rota: '/finance/entries/classification-pendings', esperado: { status: 200 } });
   await R.http({ id: 'G02-6', grupos: [2], titulo: 'Lançamento de valor negativo é recusado', quem: 'A:gestor', metodo: 'POST', rota: '/finance/entries', corpo: (c) => ({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: -5, description: 'negativo', resultCenterId: c.rc }), esperado: { status: 400 } });
   // ---------- G3 Ledger imutável, estorno e banco ----------

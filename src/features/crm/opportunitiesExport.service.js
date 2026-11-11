@@ -30,7 +30,7 @@ const { assertRecentMfa } = require('../users/mfa.service');
  * (d) MFA RECENTE + LIMITE DE VOLUME (CRM-TS-013 / item 14 do Caderno, seção 18 — pendência
  *     fechada nesta rodada, "nenhum parcial"): exportação em massa é uma ação de risco igual
  *     à liquidação financeira que já exige step-up MFA (Marco 4 — ver
- *     src/features/finance/approvals.service.js, mesmo `assertRecentMfa`). Reutiliza o MESMO
+ *     src/modules/finance/application/services/approvals.service.js, mesmo `assertRecentMfa`). Reutiliza o MESMO
  *     mecanismo de MFA, não um novo — usuário sem MFA habilitado ou sem verificação recente
  *     (janela configurável em mfa.service.js) é bloqueado ANTES de ler qualquer linha.
  *     Limite de volume: MAX_EXPORT_RECORDS (abaixo) — acima disso, a exportação é recusada

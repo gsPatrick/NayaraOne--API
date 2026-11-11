@@ -14,7 +14,8 @@ process.env.PORT = process.env.M4_IDEMP_TEST_PORT || '21611';
 require('../app');
 const { uniqueSuffix, withTenantTransaction, sequelize, createTestResultCenter } = require('./testHelpers');
 const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const ledgerBalance = require('../src/modules/finance/application/services/ledger-balance.service');
 const { FinancialEntry } = require('../src/models');
 
 let tenant;
@@ -80,7 +81,7 @@ test('FIN-004 settle-partial: R$ 0,30 em duas baixas (0,10 e 0,20): saldo 0,20 a
   assert.equal(b2.body.data.original.status, 'SETTLED');
   const filhas = await children(entry.id);
   assert.deepEqual(filhas.map((f) => f.amount).sort(), ['0.10', '0.20']);
-  assert.equal(await withTenantTransaction(tenant, (t) => financialEntriesService.computeRemainingAmount(entry.id, t)), '0.00');
+  assert.equal(await withTenantTransaction(tenant, (t) => ledgerBalance.computeRemainingAmount(entry.id, t)), '0.00');
 });
 
 test('FIN-004 settle-partial: repetir a MESMA chave com o mesmo valor devolve 200 com a baixa original (idempotentReplay) e não cria filha nova; saldo inalterado', async () => {
@@ -123,7 +124,7 @@ test('FIN-004 settle-partial: duas requisições SIMULTÂNEAS com a mesma chave 
   assert.equal(a.body.data.settlement.id, b.body.data.settlement.id);
   const filhas = await children(entry.id);
   assert.equal(filhas.length, 1);
-  assert.equal(await withTenantTransaction(tenant, (t) => financialEntriesService.computeRemainingAmount(entry.id, t)), '0.20');
+  assert.equal(await withTenantTransaction(tenant, (t) => ledgerBalance.computeRemainingAmount(entry.id, t)), '0.20');
 });
 
 test('FIN-004 settle (baixa integral): a 2ª chamada sem chave segue recusada por status (409 FINANCE_ENTRY_INVALID_STATUS); com a mesma chave devolve a baixa original (idempotentReplay); a chave em outro lançamento é 409 IDEMPOTENCY_KEY_REUSED', async () => {

@@ -11,7 +11,7 @@ const registry = require('../../../src/features/integrations/registry/registry.s
 const { readConnectionSecret } = require('../../../src/features/integrations/secrets');
 const { IntegrationConnection, IntegrationProvider } = require('../../../src/models');
 const { BankSantanderContractAdapter } = require('../../../src/features/integrations/adapters/legacy/bank.santander');
-const bank = require('../../../src/features/finance/bank');
+const bank = require('../../../src/modules/finance/application/services/bank-hub');
 
 const { sequelize, withTenantTransaction, uniqueSuffix } = env;
 let tenant;
@@ -83,7 +83,7 @@ test('banco_santander_registrado_no_registro_de_adapters', async () => {
   assert.deepEqual([...linha.capabilities].sort(), ['getPaymentStatus', 'getStatement', 'submitPayment', 'verifyWebhook']);
   assert.equal(new BankSantanderContractAdapter(null).providerCode(), 'bank-santander');
   // o objeto antigo (mTLS + OAuth2) continua sendo quem executa, com a credencial vinda do cofre
-  const { SantanderBankAdapter } = require('../../../src/features/finance/adapters/BankAdapter');
+  const { SantanderBankAdapter } = require('../../../src/modules/finance/infrastructure/bank/providers/santander.provider');
   const { getSecretStore } = require('../../../src/features/integrations/secrets');
   const desligar = useTempSecretStore();
   try {

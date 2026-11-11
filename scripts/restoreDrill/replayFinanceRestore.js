@@ -27,10 +27,11 @@ for (const r of ['fixtures', 'source-url', 'target-url', 'target-app-url', 'repo
 for (const url of [process.env.DATABASE_URL, args['source-url'], args['target-url'], args['target-app-url']]) assertDrillDatabase(url, 'replayFinanceRestore');
 
 const { sequelize } = require('../../src/models');
-const financialEntries = require('../../src/features/finance/financialEntries.service');
-const bankTransactions = require('../../src/features/finance/bankTransactions.service');
-const commissions = require('../../src/features/finance/commissions.service');
-const financeController = require('../../src/features/finance/finance.controller');
+const financialEntries = require('../../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../../src/modules/finance/application/services/receipt.service');
+const bankTransactions = require('../../src/modules/finance/application/services/bank-transactions.service');
+const commissions = require('../../src/modules/finance/application/services/commission.service');
+const financeController = require('../../src/modules/finance/presentation/http/finance.controller');
 
 const rec = L.createRecorder();
 const replays = [];
@@ -105,7 +106,7 @@ async function main() {
     const step2 = A.receivable030.steps[1];
     const keyStored = (await target.query('SELECT idempotency_key FROM finance.financial_entries WHERE id = $1', [step2.settlementEntryId])).rows[0].idempotency_key;
     const kids0 = await count(target, 'SELECT count(*)::int AS n FROM finance.financial_entries WHERE parent_entry_id = $1', [A.receivable030.parentId]);
-    const sp = await attempt(() => inTenant(A, (t) => financialEntries.settleFinancialEntryPartial(A.receivable030.parentId, step2.amount, A.userId, t, { idempotencyKey: step2.idempotencyKey })));
+    const sp = await attempt(() => inTenant(A, (t) => receiptService.settleFinancialEntryPartial(A.receivable030.parentId, step2.amount, A.userId, t, { idempotencyKey: step2.idempotencyKey })));
     const kids1 = await count(target, 'SELECT count(*)::int AS n FROM finance.financial_entries WHERE parent_entry_id = $1', [A.receivable030.parentId]);
     const supported = Boolean(keyStored);
     const spResult = sp.error ? `recusada ${sp.error.code}` : `devolvida a baixa original ${(sp.value.settlement || {}).id === step2.settlementEntryId ? '(mesmo id)' : '(id diferente)'}${sp.value.idempotentReplay ? ' idempotentReplay=true' : ''}`;

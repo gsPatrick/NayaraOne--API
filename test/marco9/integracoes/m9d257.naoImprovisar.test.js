@@ -84,12 +84,12 @@ test('nao_improvisar_6_http_sucesso_nao_e_fato_financeiro', () => {
   const frouxa = { BANK: { ...OP.BANK, submitPayment: { ...OP.BANK.submitPayment, confirmation: 'ON_RESPONSE' } } };
   assert.ok(g6.scan({ policy: frouxa }).some((x) => x.rule === 6 && x.file.endsWith('operationPolicy.js')), 'BANK perigoso confirmado pela resposta HTTP');
   const raiz = arvore({
-    'src/features/finance/falso.service.js': "'use strict';\nconst bank = require('./bank');\nasync function pagar(intent) {\n  await bank.callBankSubmit(intent);\n  intent.status = 'CONFIRMED';\n}\nmodule.exports = { pagar };\n",
-    'src/features/finance/bom.service.js': "'use strict';\nconst bank = require('./bank');\nasync function confirmar(intent) {\n  await bank.applyStatusToDispatch(intent, 'PAID');\n  intent.status = 'CONFIRMED';\n}\nmodule.exports = { confirmar };\n",
-    'src/features/finance/manual.service.js': "'use strict';\nasync function baixar(intent) {\n  intent.status = 'EXECUTED';\n}\nmodule.exports = { baixar };\n",
+    'src/modules/finance/application/services/falso.service.js': "'use strict';\nconst bank = require('./bank-hub');\nasync function pagar(intent) {\n  await bank.callBankSubmit(intent);\n  intent.status = 'CONFIRMED';\n}\nmodule.exports = { pagar };\n",
+    'src/modules/finance/application/services/bom.service.js': "'use strict';\nconst bank = require('./bank-hub');\nasync function confirmar(intent) {\n  await bank.applyStatusToDispatch(intent, 'PAID');\n  intent.status = 'CONFIRMED';\n}\nmodule.exports = { confirmar };\n",
+    'src/modules/finance/application/services/manual.service.js': "'use strict';\nasync function baixar(intent) {\n  intent.status = 'EXECUTED';\n}\nmodule.exports = { baixar };\n",
   });
   const v = g6.scan({ root: raiz });
-  assert.ok(acha(v, 'src/features/finance/falso.service.js', 5), 'pagamento marcado pago logo depois do HTTP do banco');
+  assert.ok(acha(v, 'src/modules/finance/application/services/falso.service.js', 5), 'pagamento marcado pago logo depois do HTTP do banco');
   assert.ok(!v.some((x) => x.file.endsWith('bom.service.js') || x.file.endsWith('manual.service.js')));
 });
 

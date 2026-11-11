@@ -2,7 +2,7 @@
 
 const { QueryTypes } = require('sequelize');
 const { sequelize, FinancialEntry } = require('../../../models');
-const { buildEntrySnapshot } = require('../../finance/paymentIntents.service');
+const { buildEntrySnapshot } = require('../../../modules/finance/domain/payment-intent');
 const { ENTITY_TABLES } = require('./entityOwnership.readmodel');
 
 /**

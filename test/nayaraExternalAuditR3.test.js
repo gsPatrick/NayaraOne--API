@@ -32,8 +32,9 @@ const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
@@ -178,7 +179,7 @@ test('R3-2: lançamento editado DEPOIS da aprovação invalida a aprovação —
     );
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
@@ -188,7 +189,7 @@ test('R3-2: lançamento editado DEPOIS da aprovação invalida a aprovação —
     );
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
@@ -205,7 +206,7 @@ test('R3-2 (controle): aprovação sem edição posterior continua liberando a b
     const entry = await createPayableEntry(transaction, suffix);
         // F03 (conferência 18/10/2026): baixa direta de pagamento bancário exige comprovante.
     const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
+    const settled = await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });
 });
@@ -225,7 +226,7 @@ test('R3-2 (reaprovação): depois de editar, uma NOVA aprovação sobre a vers�
 
     // Nova rodada de revisão sobre a versão ATUAL — caminho legítimo pós-edição.
         const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
+    const settled = await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });
 });

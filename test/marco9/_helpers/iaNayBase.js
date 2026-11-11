@@ -3,7 +3,7 @@
 // Leituras de referência dos testes dos agentes NAY (M9-D035 e M9-D036): o mesmo read model que o agente usa, lido por fora ANTES e DEPOIS
 // de os dados do teste serem criados. Assim a prova é "a resposta mostra o valor do read model" e "os meus dados mudaram o read model em
 // exatamente tanto", e continua valendo num banco que já tem dados de outros testes (o CI roda todos os arquivos no mesmo banco).
-const { getWeeklyHealthReport } = require('../../../src/features/finance/financialHealthReport.service');
+const { getWeeklyHealthReport } = require('../../../src/modules/finance/application/services/finance-health.service');
 const { getExpiringContracts } = require('../../../src/modules/legal/contracts/application/expiringContracts.service');
 const { getPipelineSummary } = require('../../../src/features/crm/pipelineSummary.service');
 

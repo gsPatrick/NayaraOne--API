@@ -5,8 +5,9 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const filesService = require('../src/features/files/files.service');
 
 let tenant;
@@ -49,16 +50,16 @@ test('M45-F2 comprovante com mesmo SHA-256 (reenvio do arquivo) é recusado em o
     const f2 = await upload(transaction, content, 'comprov_m45_1.png');
     assert.notEqual(f1.id, f2.id);
     const reason = 'Pagamento fora da integração';
-    await financialEntriesService.attachSettlementEvidence(e1.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(e1.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
     await assert.rejects(
-      financialEntriesService.attachSettlementEvidence(e2.id, { evidenceFileId: f2.id, reason }, tenant.userId, transaction),
+      settlementEvidence.attachSettlementEvidence(e2.id, { evidenceFileId: f2.id, reason }, tenant.userId, transaction),
       (err) => err.code === 'FINANCE_SETTLEMENT_EVIDENCE_ALREADY_USED' && err.details?.usedByEntryId === e1.id
     );
     // Conteúdo diferente continua aceito.
     const f3 = await upload(transaction, `${content}-outro`, 'outro.png');
-    await financialEntriesService.attachSettlementEvidence(e3.id, { evidenceFileId: f3.id, reason }, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(e3.id, { evidenceFileId: f3.id, reason }, tenant.userId, transaction);
     // Reanexar ao MESMO lançamento (mesmo conteúdo) é permitido.
-    await financialEntriesService.attachSettlementEvidence(e1.id, { evidenceFileId: f2.id, reason }, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(e1.id, { evidenceFileId: f2.id, reason }, tenant.userId, transaction);
   });
 });
 
@@ -78,16 +79,16 @@ test('M45 detachSettlementEvidence: exige motivo, só em lançamento em aberto, 
     const e2 = await newPayable(transaction, suffix, 12, cc.id, account.id);
     const f1 = await upload(transaction, `PNG-DETACH-${suffix}`, 'd.png');
     const reason = 'Pagamento fora da integração';
-    await financialEntriesService.attachSettlementEvidence(e1.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(e1.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
     await assert.rejects(
-      financialEntriesService.detachSettlementEvidence(e1.id, { reason: '' }, tenant.userId, transaction),
+      settlementEvidence.detachSettlementEvidence(e1.id, { reason: '' }, tenant.userId, transaction),
       (err) => err.code === 'FINANCE_SETTLEMENT_EVIDENCE_DETACH_REASON_REQUIRED'
     );
     await assert.rejects(
-      financialEntriesService.detachSettlementEvidence(e2.id, { reason: 'sem comprovante aqui' }, tenant.userId, transaction),
+      settlementEvidence.detachSettlementEvidence(e2.id, { reason: 'sem comprovante aqui' }, tenant.userId, transaction),
       (err) => err.code === 'FINANCE_SETTLEMENT_EVIDENCE_NOT_ATTACHED'
     );
-    const after = await financialEntriesService.detachSettlementEvidence(e1.id, { reason: 'Comprovante duplicado (auditoria)' }, tenant.userId, transaction);
+    const after = await settlementEvidence.detachSettlementEvidence(e1.id, { reason: 'Comprovante duplicado (auditoria)' }, tenant.userId, transaction);
     assert.equal(after.settlementEvidenceFileId, null);
     assert.equal(after.status, 'PENDING');
     const [rows] = await sequelize.query(
@@ -97,11 +98,11 @@ test('M45 detachSettlementEvidence: exige motivo, só em lançamento em aberto, 
     assert.equal(rows.length, 1);
     assert.match(rows[0].reason, /Comprovante duplicado/);
     // Comprovante liberado: agora pode ir para outro lançamento.
-    await financialEntriesService.attachSettlementEvidence(e2.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(e2.id, { evidenceFileId: f1.id, reason }, tenant.userId, transaction);
     // Lançamento não-PENDING recusa.
     await sequelize.query("UPDATE finance.financial_entries SET status = 'CANCELLED' WHERE id = :id", { replacements: { id: e2.id }, transaction });
     await assert.rejects(
-      financialEntriesService.detachSettlementEvidence(e2.id, { reason: 'tentativa indevida' }, tenant.userId, transaction),
+      settlementEvidence.detachSettlementEvidence(e2.id, { reason: 'tentativa indevida' }, tenant.userId, transaction),
       (err) => err.code === 'FINANCE_ENTRY_INVALID_STATUS'
     );
   });

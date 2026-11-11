@@ -12,7 +12,7 @@ const UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000000';
 function idempotenciaDaBaixaNoHead() {
   // A correção que torna a chave obrigatória na baixa parcial está em outro commit; o replay só é
   // capturado quando o arquivo da correção existe neste worktree.
-  return fs.existsSync(path.join(__dirname, '..', '..', 'src', 'features', 'finance', 'settlementIdempotency.js'));
+  return fs.existsSync(path.join(__dirname, '..', '..', 'src', 'modules', 'finance', 'application', 'services', 'settlement-idempotency.js'));
 }
 
 async function estornar(R, { id, linhasImpacto, linhasEstorno, quem, entradaCtx, titulo, guardar }) {

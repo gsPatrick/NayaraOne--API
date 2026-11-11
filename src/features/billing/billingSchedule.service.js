@@ -154,7 +154,7 @@ async function registerPayment(id, amountPaid, actorUserId, transaction) {
   // registerPayment para a mesma competência liam o mesmo paidAmount/balance e a segunda
   // sobrescrevia o resultado da primeira (lost update) — permitindo baixa duplicada não
   // contabilizada ou saldo final incorreto. Mesmo padrão de lock já usado em
-  // settleFinancialEntryPartial (financialEntries.service.js). O lock é pego numa consulta
+  // settleFinancialEntryPartial (receipt.service.js). O lock é pego numa consulta
   // separada, sem include, porque `SELECT ... FOR UPDATE` não é compatível com o LEFT JOIN
   // de `items` que getBillingSchedule usa.
   const lockedRow = await BillingSchedule.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });

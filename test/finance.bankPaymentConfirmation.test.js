@@ -4,7 +4,7 @@
 // bancária (FIN-TS-001/002/018/019)": "Não comprovado — Sandbox sem dinheiro real: timeout,
 // falha, resposta incerta, callback válido/duplicado/forjado e criação de ledger só após
 // confirmação." O adapter SandboxBankAdapter e o caminho submit->confirm já existiam
-// (bankPayments.service.js, adapters/BankAdapter.js) mas sem teste de integração real provando
+// (bank-submission.service.js e payment.service.js#confirmBankPayment; infrastructure/bank/providers/) mas sem teste de integração real provando
 // o comportamento contra Postgres — só testes de serviço isolado da própria auditoria.
 //
 // Este teste roda contra o banco real de dev (mesmo padrão de testHelpers.js, RLS ativo via
@@ -22,9 +22,10 @@ const {
   uniqueSuffix,
 } = require('./testHelpers');
 
-const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
-const { createPaymentIntent, approvePaymentIntent } = require('../src/features/finance/paymentIntents.service');
-const { submitPaymentIntentToBank, confirmBankPayment } = require('../src/features/finance/bankPayments.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
+const { createPaymentIntent, approvePaymentIntent } = require('../src/modules/finance/application/services/payment.service');
+const { submitPaymentIntentToBank } = require('../src/modules/finance/application/services/bank-submission.service');
+const { confirmBankPayment } = require('../src/modules/finance/application/services/payment.service');
 const { BankAccount, User } = require('../src/models');
 
 async function makeApproverUserId(transaction) {

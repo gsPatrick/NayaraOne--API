@@ -53,13 +53,13 @@ test('estornado_nao_conta: estorno total sai da soma e o parcial é subtraído',
   await withRollbackTenantTransaction(tenant, async (t) => {
     const camp = await fx.runningCampaign(t, tenant);
     const { c } = await exemplo(t, camp);
-    await fx.financial.reverseFinancialEntry(c.id, 'QA-M9 estorno do lançamento de 1.680', tenant.userId, t);
+    await fx.receipt.reverseFinancialEntry(c.id, 'QA-M9 estorno do lançamento de 1.680', tenant.userId, t);
     assert.equal((await recalc(t, camp.id)).costActual, 7500);
     const cancelled = await fx.expense(t, tenant, { amount: 300, ref: `campaign:${camp.id}`, settle: false });
     await fx.financial.cancelPendingFinancialEntry(cancelled.id, 'QA-M9 cancelado', tenant.userId, t);
     assert.equal((await recalc(t, camp.id)).costActual, 7500, 'cancelado não conta');
     const extra = await fx.expense(t, tenant, { amount: 1000, ref: `campaign:${camp.id}` });
-    await fx.financial.reverseFinancialEntry(extra.id, 'QA-M9 estorno parcial', tenant.userId, t, { amount: 400 });
+    await fx.receipt.reverseFinancialEntry(extra.id, 'QA-M9 estorno parcial', tenant.userId, t, { amount: 400 });
     assert.equal((await recalc(t, camp.id)).costActual, 8100);
   });
 });

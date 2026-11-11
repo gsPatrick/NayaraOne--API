@@ -7,7 +7,7 @@
  * área (BI-001): estes adaptadores ficam em scripts/ e são injetados em `reconcileMetric`.
  * Cada adaptador recebe { ctx, now, snapshot, transaction } e devolve { value, label }.
  */
-const { getWeeklyHealthReport } = require('../../../src/features/finance/financialHealthReport.service');
+const { getWeeklyHealthReport } = require('../../../src/modules/finance/application/services/finance-health.service');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 const { reconcileDetail } = require('../../../src/features/analytics/metrics/sourceRefs');
 

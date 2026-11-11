@@ -328,9 +328,10 @@ async function seedTenantA(tenant, approverId) {
 // submissão ao banco (adapter sandbox) → callback CONFIRMED.
 async function seedConfirmedBankPayment(tenant, approverId) {
   const { CostCenter, BankAccount } = require('../../src/models');
-  const { createFinancialEntry } = require('../../src/features/finance/financialEntries.service');
-  const { createPaymentIntent, approvePaymentIntent } = require('../../src/features/finance/paymentIntents.service');
-  const { submitPaymentIntentToBank, confirmBankPayment } = require('../../src/features/finance/bankPayments.service');
+  const { createFinancialEntry } = require('../../src/modules/finance/application/services/financial-entry.service');
+  const { createPaymentIntent, approvePaymentIntent } = require('../../src/modules/finance/application/services/payment.service');
+  const { submitPaymentIntentToBank } = require('../../src/modules/finance/application/services/bank-submission.service');
+  const { confirmBankPayment } = require('../../src/modules/finance/application/services/payment.service');
   return inTenant(tenant, async (t) => {
     const costCenter = await CostCenter.create({ groupId: tenant.groupId, companyId: tenant.companyId, code: `CC-DRILL-${Date.now()}`, name: 'DRILL Centro de custo' }, { transaction: t });
     const bankAccount = await BankAccount.create(

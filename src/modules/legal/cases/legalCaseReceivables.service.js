@@ -45,7 +45,7 @@ async function linkCaseReceivable(legalCaseId, payload, actorUserId, transaction
   const existing = await sequelize.query(listQuery, { type: QueryTypes.SELECT, transaction, replacements: { id: legalCase.id } });
   if (existing.length) throw AppError.conflict('Este processo já tem recebível vinculado ao Financeiro.', 'LEGAL_CASE_RECEIVABLE_DUPLICATE');
 
-  const financialEntries = require('../../../features/finance/financialEntries.service');
+  const financialEntries = require('../../finance/application/services/financial-entry.service');
   const entry = await financialEntries.createFinancialEntry(
     {
       groupId: legalCase.groupId,

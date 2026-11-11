@@ -12,7 +12,7 @@ const guaranteesService = require('../src/modules/legal/leasing/guarantee.servic
 const { getGuaranteeDetail } = require('../src/modules/legal/leasing/guaranteeDetail.service');
 const closureGate = require('../src/modules/legal/contracts/domain/contractClosureGate');
 const { upsertSetting } = require('../src/features/settings/settings.service');
-const { computeThirdPartyOriginBalance } = require('../src/features/finance/financialEntries.service');
+const { computeThirdPartyOriginBalance } = require('../src/modules/finance/application/services/ledger-balance.service');
 const { Contract, Person, ContractParty, FinancialEntry, Guarantee } = require('../src/models');
 const { uploadTestFile, completeInsurance } = require('./m5fech.locacao.helpers');
 

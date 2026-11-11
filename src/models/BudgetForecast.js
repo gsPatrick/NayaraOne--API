@@ -6,7 +6,7 @@ const { DataTypes } = require('sequelize');
  * BudgetForecast — tabela "finance"."budgets_forecasts"
  * Orçamento/projeção financeira (Caderno §5, "Entidades/tabelas obrigatórias") — uma linha por
  * grupo/empresa/mês-competência/centro, com o valor projetado. O realizado é comparado em
- * tempo de leitura contra finance.financial_entries (ver budgetsForecasts.service.js), nunca
+ * tempo de leitura contra finance.financial_entries (ver budgets-forecasts.service.js), nunca
  * duplicado aqui.
  */
 module.exports = (sequelize) => {

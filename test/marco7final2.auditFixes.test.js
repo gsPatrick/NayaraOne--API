@@ -19,8 +19,8 @@ const {
 } = require('./testHelpers');
 // Revisão Marco 7 (19/10/2026, B10): adjudicação exige fornecedor qualificado (documento + vigência).
 const { createQualifiedSupplier } = require('./procurementTestSupplier');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const { getWeeklyHealthReport, countOverdueEntries } = require('../src/features/finance/financialHealthReport.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const { getWeeklyHealthReport, countOverdueEntries } = require('../src/modules/finance/application/services/finance-health.service');
 const { startOfBusinessDay, isDueDateOverdue } = require('../src/utils/businessDate');
 const procurementService = require('../src/features/procurement/procurement.service');
 const itemsService = require('../src/features/inventory/items.service');

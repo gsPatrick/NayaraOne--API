@@ -10,7 +10,7 @@ const env = require('../_helpers/m9d237Env');
 const reacao = require('../_helpers/reacaoD220');
 const { erroHttp } = require('../_helpers/m9d214Scripted');
 const { IntegrationDispatch } = require('../../../src/models');
-const { SandboxBankAdapter } = require('../../../src/features/finance/adapters/BankAdapter');
+const { SandboxBankAdapter } = require('../../../src/modules/finance/infrastructure/bank/providers/sandbox.provider');
 const { publishDispatchEvent, EVENTS } = require('../../../src/features/integrations/dispatch/dispatch.events');
 const { compensateDispatch } = require('../../../src/features/integrations/domain');
 
@@ -111,8 +111,14 @@ test('banco_d220_pagamento_nao_tem_compensacao_automatica_e_o_envio_original_fic
 });
 
 test('banco_d220_modulo_nao_chama_o_banco_direto_para_ordenar_pagamento', () => {
-  const dir = path.join(__dirname, '../../../src/features/finance/bank');
-  const fontes = fs.readdirSync(dir).filter((f) => f.endsWith('.js')).map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')]);
+  // Guia M4 §2: o hub do banco fica em infrastructure/bank/hub; as reações, o webhook e a fachada, em application/services.
+  const fin = path.join(__dirname, '../../../src/modules/finance');
+  const hub = path.join(fin, 'infrastructure', 'bank', 'hub');
+  const arquivos = [
+    ...fs.readdirSync(hub).filter((f) => f.endsWith('.js')).map((f) => path.join(hub, f)),
+    ...['bank-hub.js', 'bank-reactions.js', 'bank-webhook.service.js'].map((f) => path.join(fin, 'application', 'services', f)),
+  ];
+  const fontes = arquivos.map((f) => [path.basename(f), fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')]);
   for (const [f, texto] of fontes) assert.equal(/\.submitPayment\(|new (Sandbox|Santander)BankAdapter/.test(texto), false, `${f} ordena pagamento por fora do Dispatch Service`);
   assert.ok(fontes.some(([, t]) => /registerDomainReaction/.test(t)));
 });

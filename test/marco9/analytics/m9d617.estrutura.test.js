@@ -57,7 +57,7 @@ test('m9d617 nenhum dado pessoal restrito é copiado para o read model', async (
 
 test('m9d617 eventos do read model conferem com os serviços de origem', () => {
   const root = path.join(__dirname, '../../../src/features');
-  const files = ['../modules/legal/shared/legalEvents.service.js', '../modules/legal/cases/legalCalendarEvents.service.js', '../modules/legal/contracts/application/requirement.service.js', 'finance/financeEvents.service.js', 'construction/constructionEvents.service.js', 'crm/feedbackCases.service.js',
+  const files = ['../modules/legal/shared/legalEvents.service.js', '../modules/legal/cases/legalCalendarEvents.service.js', '../modules/legal/contracts/application/requirement.service.js', '../modules/finance/application/services/finance-events.service.js', 'construction/constructionEvents.service.js', 'crm/feedbackCases.service.js',
     'properties/propertyEvents.service.js', 'properties/propertyMerge.service.js', 'properties/properties.service.js'].filter((f) => fs.existsSync(path.join(root, f)));
   const text = files.map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
   const types = new Set(readModels.listReadModels().filter((d) => d.name in TABLES).flatMap((d) => d.eventTypes));

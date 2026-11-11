@@ -13,7 +13,7 @@ const { createQualifiedSupplier, farFutureDateOnly } = require('./procurementTes
 const procurementService = require('../src/features/procurement/procurement.service');
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
-const financeAntifraud = require('../src/features/finance/financeAntifraud.service');
+const financeAntifraud = require('../src/modules/finance/application/services/finance-antifraud.service');
 const {
   User, Person, PurchaseRequest, PurchaseOrderItem, FinancialEntry, ReceiptDiscrepancy, SupplierEvaluation, SupplierQualification,
 } = require('../src/models');

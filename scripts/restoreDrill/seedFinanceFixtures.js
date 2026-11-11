@@ -33,20 +33,22 @@ const outArg = process.argv.indexOf('--out');
 const OUT = outArg !== -1 ? process.argv[outArg + 1] : null;
 
 const { sequelize, Group, Company, User, BankAccount, CostCenter, ResultCenter, Person, Property, FinancialEntry, PaymentIntent } = require('../../src/models');
-const financialEntries = require('../../src/features/finance/financialEntries.service');
-const paymentIntents = require('../../src/features/finance/paymentIntents.service');
-const bankPayments = require('../../src/features/finance/bankPayments.service');
-const bankTransactions = require('../../src/features/finance/bankTransactions.service');
-const reconciliation = require('../../src/features/finance/reconciliation.service');
-const approvals = require('../../src/features/finance/approvals.service');
-const ownerRepasses = require('../../src/features/finance/ownerRepasses.service');
-const commissions = require('../../src/features/finance/commissions.service');
-const intercompany = require('../../src/features/finance/intercompanyTransfers.service');
-const periodClosures = require('../../src/features/finance/periodClosures.service');
-const anomalyCases = require('../../src/features/finance/anomalyCases.service');
+const financialEntries = require('../../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../../src/modules/finance/application/services/settlement-evidence.service');
+const receiptService = require('../../src/modules/finance/application/services/receipt.service');
+const paymentIntents = require('../../src/modules/finance/application/services/payment.service');
+const bankPayments = require('../../src/modules/finance/application/services/bank-submission.service');
+const bankTransactions = require('../../src/modules/finance/application/services/bank-transactions.service');
+const reconciliation = require('../../src/modules/finance/application/services/reconciliation.service');
+const approvals = require('../../src/modules/finance/application/services/approvals.service');
+const ownerRepasses = require('../../src/modules/finance/application/services/owner-repasses.service');
+const commissions = require('../../src/modules/finance/application/services/commission.service');
+const intercompany = require('../../src/modules/finance/application/services/intercompany-transfers.service');
+const periodClosures = require('../../src/modules/finance/application/services/closing.service');
+const anomalyCases = require('../../src/modules/finance/application/services/anomaly-cases.service');
 const settingsService = require('../../src/features/settings/settings.service');
 const filesService = require('../../src/features/files/files.service');
-const financeController = require('../../src/features/finance/finance.controller');
+const financeController = require('../../src/modules/finance/presentation/http/finance.controller');
 
 const STAMP = Date.now();
 const CLOSED_MONTH = '2025-06';
@@ -75,11 +77,11 @@ async function settlePayableFormally(tenant, t, entryId, approverId, ids) {
   const { file, sha256 } = await evidenceFile(tenant, t, `comprovante-${entryId.slice(0, 8)}`);
   ids.files[file.id] = sha256;
   const manualSettlement = { evidenceFileId: file.id, reason: 'Drill: pagamento feito fora da integração bancária — comprovante anexado.' };
-  await financialEntries.attachSettlementEvidence(entryId, manualSettlement, tenant.userId, t);
+  await settlementEvidence.attachSettlementEvidence(entryId, manualSettlement, tenant.userId, t);
   const request = await approvals.createApprovalRequest(W(tenant, { relatedEntityType: 'FinancialEntry', relatedEntityId: entryId, riskLevel: 'LOW' }), tenant.userId, t);
   await approvals.decideApprovalStep(request.id, { decision: 'APPROVED' }, approverId, t);
   ids.approvalRequestIds.push(request.id);
-  return financialEntries.settleFinancialEntry(entryId, tenant.userId, t, { manualSettlement });
+  return receiptService.settleFinancialEntry(entryId, tenant.userId, t, { manualSettlement });
 }
 
 async function seedReceivable030(tenant, t, ids) {
@@ -92,7 +94,7 @@ async function seedReceivable030(tenant, t, ids) {
   const steps = [];
   for (const [amount, key] of [['0.10', `drill-rec030-b1-${STAMP}`], ['0.20', `drill-rec030-b2-${STAMP}`]]) {
     // Aceita os dois jeitos: com idempotencyKey (correção do FIN-004 em andamento) ou sem.
-    const res = await financialEntries.settleFinancialEntryPartial(parent.id, amount, tenant.userId, t, { idempotencyKey: key });
+    const res = await receiptService.settleFinancialEntryPartial(parent.id, amount, tenant.userId, t, { idempotencyKey: key });
     steps.push({ amount, idempotencyKey: key, settlementEntryId: res.settlement.id, remainingAmount: res.remainingAmount, parentStatus: res.original.status });
   }
   ids.receivable030 = { parentId: parent.id, amount: '0.30', steps };
@@ -147,7 +149,7 @@ async function seedDeposit(tenant, t, ids) {
     W(tenant, { entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '2000.00', description: 'DRILL caução recebida (dinheiro de terceiros)', resultCenterId: ids.resultCenterId, contractId: contract.id, isThirdPartyFunds: true, thirdPartyReference: `Caução contrato ${contract.id}`, thirdPartyHolderPersonId: holder.id }),
     tenant.userId, t
   );
-  await financialEntries.settleFinancialEntry(deposit.id, tenant.userId, t);
+  await receiptService.settleFinancialEntry(deposit.id, tenant.userId, t);
   ids.deposit = { entryId: deposit.id, contractId: contract.id, holderPersonId: holder.id };
 }
 
@@ -158,7 +160,7 @@ async function seedRepasse(tenant, t, ids, checkerId) {
     W(tenant, { entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '3000.00', resultCenterId: ids.resultCenterId, description: 'DRILL aluguel recebido (origem do repasse)' }),
     tenant.userId, t
   );
-  await financialEntries.settleFinancialEntry(rent.id, tenant.userId, t);
+  await receiptService.settleFinancialEntry(rent.id, tenant.userId, t);
   const repasse = await ownerRepasses.createOwnerRepasse(
     W(tenant, { propertyId: property.id, ownerPersonId: owner.id, bankAccountId: ids.bankAccountId, sourceEntryIds: [rent.id], grossAmount: 1000, deductionsAmount: 100, deductionsReason: 'Taxa de administração', referenceMonth: todayBR().slice(0, 7) }),
     tenant.userId, t
@@ -179,7 +181,7 @@ async function seedCommission(tenant, t, ids, approverId) {
     W(tenant, { beneficiaryUserId: tenant.userId, sourceEntryId: source.id, component: 'BROKER', installmentsCount: 2, idempotencyKey: `drill-commission-${STAMP}` }),
     tenant.userId, t
   );
-  await financialEntries.settleFinancialEntryPartial(source.id, '500.00', tenant.userId, t, { idempotencyKey: `drill-commission-src-${STAMP}` });
+  await receiptService.settleFinancialEntryPartial(source.id, '500.00', tenant.userId, t, { idempotencyKey: `drill-commission-src-${STAMP}` });
   const payable = await financialEntries.createFinancialEntry(
     W(tenant, { entryType: 'DEBIT', nature: 'PAYABLE', amount: '50.00', costCenterId: ids.costCenterId, description: 'DRILL pagamento da 1ª parcela da comissão' }),
     tenant.userId, t

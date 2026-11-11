@@ -11,8 +11,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestResultCenter, createCommissionSource } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const commissionsService = require('../src/features/finance/commissions.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
 const { OutboxEvent, User } = require('../src/models');
 
 let tenant;

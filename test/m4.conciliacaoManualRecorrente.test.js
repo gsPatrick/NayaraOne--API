@@ -14,9 +14,9 @@ process.env.PORT = process.env.M4_CONCIL_MANUAL_TEST_PORT || '21614';
 require('../app');
 const T = require('./testHelpers');
 const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
 const { AnomalyCase, TenantSetting, Reconciliation } = require('../src/models');
 
 const KEY = 'finance.antifraud_manual_reconciliation_min_count';

@@ -15,8 +15,8 @@ const {
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
-const { createFinancialEntry } = require('../finance/financialEntries.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
 const { publishAssetTransferred, publishAssetDisposed } = require('./inventoryEvents.service');
 
 // Status terminais: patrimônio que saiu da empresa (DISPOSED — venda/descarte/doação) ou foi

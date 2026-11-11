@@ -22,13 +22,18 @@ const {
   prepareManualSettlement,
 } = require('./testHelpers');
 const { User, BankAccount, Contract, Person, ContractParty, FinancialEntry, PaymentIntent, AnomalyCase, ApprovalRequest, OutboxEvent } = require('../src/models');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankPaymentsService = require('../src/features/finance/bankPayments.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const classificationPendings = require('../src/modules/finance/application/services/classification-pending.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const ledgerBalance = require('../src/modules/finance/application/services/ledger-balance.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankPaymentsService = require('../src/modules/finance/application/services/bank-submission.service');
+const paymentService = require('../src/modules/finance/application/services/payment.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const filesService = require('../src/features/files/files.service');
-const { resolveBankAdapter, setBankAdapterOverrideForTests } = require('../src/features/finance/adapters/resolveBankAdapter');
-const { SantanderBankAdapter } = require('../src/features/finance/adapters/BankAdapter');
+const { resolveBankAdapter, setBankAdapterOverrideForTests } = require('../src/modules/finance/infrastructure/bank/resolve-bank-adapter');
+const { SantanderBankAdapter } = require('../src/modules/finance/infrastructure/bank/providers/santander.provider');
 
 let tenant;
 let approver;
@@ -102,7 +107,7 @@ async function deposit(t, { contract, holder, amount = 1000, settle = true }) {
     tenant.userId,
     t
   );
-  if (settle) await financialEntriesService.settleFinancialEntry(d.id, tenant.userId, t);
+  if (settle) await receiptService.settleFinancialEntry(d.id, tenant.userId, t);
   return d;
 }
 
@@ -133,13 +138,13 @@ test('A1: a conta bancária de um PAYABLE não pode ser removida (era o atalho p
 test('A1: PAYABLE SEM conta não é mais liquidado direto — exige aprovação e comprovante; com eles vira MANUAL_WITH_EVIDENCE', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const entry = await payable(t, { withBank: false });
-    await expectCode(financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t), 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
+    await expectCode(receiptService.settleFinancialEntry(entry.id, tenant.userId, t), 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, t);
-    await expectCode(financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t), 'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION');
+    await expectCode(receiptService.settleFinancialEntry(entry.id, tenant.userId, t), 'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION');
 
     const other = await payable(t, { withBank: false });
     const manualSettlement = await prepareManualSettlement(tenant, other.id, tenant.userId, t);
-    const settled = await financialEntriesService.settleFinancialEntry(other.id, tenant.userId, t, { manualSettlement });
+    const settled = await receiptService.settleFinancialEntry(other.id, tenant.userId, t, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
     assert.equal(settled.settlementMethod, 'MANUAL_WITH_EVIDENCE');
   });
@@ -156,11 +161,11 @@ test('A2: baixa manual com intenção SUBMITTED no banco é recusada', async () 
     assert.equal(intent.status, 'SUBMITTED');
     const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, t);
     await expectCode(
-      financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
+      receiptService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
       'FINANCE_ENTRY_HAS_OPEN_PAYMENT_INTENT'
     );
     await expectCode(
-      financialEntriesService.settleFinancialEntryPartial(entry.id, 10, tenant.userId, t, { manualSettlement }),
+      receiptService.settleFinancialEntryPartial(entry.id, 10, tenant.userId, t, { manualSettlement }),
       'FINANCE_ENTRY_HAS_OPEN_PAYMENT_INTENT'
     );
   });
@@ -172,11 +177,11 @@ test('A2: CONFIRMED do banco para lançamento já liquidado vira anomalia (pagam
     const intent = await submittedIntent(t, entry);
     // Simula o legado: lançamento liquidado por outro caminho enquanto a intenção estava no banco.
     await FinancialEntry.update({ status: 'SETTLED', settledAt: new Date() }, { where: { id: entry.id }, transaction: t });
-    const result = await bankPaymentsService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
+    const result = await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
     assert.equal(result.status, 'EXECUTED');
     assert.equal((await anomalies(t, intent.id, 'DUPLICATE_SETTLEMENT')).length, 1);
     // Reentrega: idempotente, sem erro e sem segundo caso.
-    await bankPaymentsService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
+    await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
     assert.equal((await anomalies(t, intent.id, 'DUPLICATE_SETTLEMENT')).length, 1);
   });
 });
@@ -193,11 +198,11 @@ test('A3: excedente classificado como PAYABLE vira obrigação PENDENTE (com cen
       tenant.userId,
       t
     );
-    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 130, tenant.userId, t);
+    const result = await receiptService.settleFinancialEntryPartial(entry.id, 130, tenant.userId, t);
     const pendingId = result.classificationPending.id;
-    await expectCode(financialEntriesService.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t), 'FINANCE_ENTRY_COST_CENTER_REQUIRED');
+    await expectCode(classificationPendings.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t), 'FINANCE_ENTRY_COST_CENTER_REQUIRED');
     const cc = await createTestCostCenter(tenant, t);
-    const resolved = await financialEntriesService.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t, { costCenterId: cc.id });
+    const resolved = await classificationPendings.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t, { costCenterId: cc.id });
     assert.equal(resolved.nature, 'PAYABLE');
     assert.equal(resolved.status, 'PENDING', 'devolução do excedente segue o fluxo normal de pagamento');
     assert.equal(resolved.settledAt, null);
@@ -222,7 +227,7 @@ test('C1: competência de mês fechado não recebe nem perde lançamento (criaç
     const insideClosed = await financialEntriesService.createFinancialEntry(W({ ...base, competenceMonth: closedMonth }), tenant.userId, t);
     const inOpen = await financialEntriesService.createFinancialEntry(W({ ...base, competenceMonth: openMonth }), tenant.userId, t);
     const excessSource = await financialEntriesService.createFinancialEntry(W({ ...base, competenceMonth: closedMonth }), tenant.userId, t);
-    const { classificationPending } = await financialEntriesService.settleFinancialEntryPartial(excessSource.id, 80, tenant.userId, t);
+    const { classificationPending } = await receiptService.settleFinancialEntryPartial(excessSource.id, 80, tenant.userId, t);
     assert.equal(classificationPending.competenceMonth, closedMonth);
 
     await PeriodClosure.create(W({ referenceMonth: closedMonth, status: 'CLOSED', closedAt: new Date() }), { transaction: t });
@@ -234,7 +239,7 @@ test('C1: competência de mês fechado não recebe nem perde lançamento (criaç
     // Tirar DO mês fechado.
     await expectCode(financialEntriesService.updateFinancialEntry(insideClosed.id, { competenceMonth: openMonth }, tenant.userId, t), 'FINANCE_PERIOD_CLOSED');
     // Classificar o excedente que está na competência fechada.
-    await expectCode(financialEntriesService.resolveClassificationPending(classificationPending.id, 'ADJUSTMENT', tenant.userId, t), 'FINANCE_PERIOD_CLOSED');
+    await expectCode(classificationPendings.resolveClassificationPending(classificationPending.id, 'ADJUSTMENT', tenant.userId, t), 'FINANCE_PERIOD_CLOSED');
 
     const reread = await FinancialEntry.findByPk(inOpen.id, { transaction: t });
     assert.equal(reread.competenceMonth, openMonth);
@@ -251,7 +256,7 @@ test('A4: comprovante informado só na baixa (sem anexar antes da aprovação) �
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, t);
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
     await expectCode(
-      financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
+      receiptService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
       'FINANCE_SETTLEMENT_EVIDENCE_NOT_ATTACHED'
     );
   });
@@ -262,13 +267,13 @@ test('A4: anexar o comprovante invalida a aprovação anterior — aprovação p
     const entry = await payable(t);
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, t);
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
-    await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, t);
+    await settlementEvidence.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, t);
     await expectCode(
-      financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
+      receiptService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
       'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL'
     );
     await approveFinancialEntryForSettlement(tenant, entry.id, tenant.userId, t);
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement });
+    const settled = await receiptService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement });
     assert.equal(settled.settlementMethod, 'MANUAL_WITH_EVIDENCE');
   });
 });
@@ -278,8 +283,8 @@ test('A4: o mesmo comprovante não serve para duas baixas; comprovante precisa s
     const a = await payable(t);
     const b = await payable(t);
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
-    await financialEntriesService.attachSettlementEvidence(a.id, manualSettlement, tenant.userId, t);
-    await expectCode(financialEntriesService.attachSettlementEvidence(b.id, manualSettlement, tenant.userId, t), 'FINANCE_SETTLEMENT_EVIDENCE_ALREADY_USED');
+    await settlementEvidence.attachSettlementEvidence(a.id, manualSettlement, tenant.userId, t);
+    await expectCode(settlementEvidence.attachSettlementEvidence(b.id, manualSettlement, tenant.userId, t), 'FINANCE_SETTLEMENT_EVIDENCE_ALREADY_USED');
 
     const text = await filesService.uploadFile(
       W({ fileName: 'nota.txt', mimeType: 'text/plain', contentBase64: Buffer.from('x').toString('base64'), category: 'generic' }),
@@ -288,7 +293,7 @@ test('A4: o mesmo comprovante não serve para duas baixas; comprovante precisa s
     ).catch(() => null);
     if (text) {
       await expectCode(
-        financialEntriesService.attachSettlementEvidence(b.id, { evidenceFileId: text.id, reason: 'x' }, tenant.userId, t),
+        settlementEvidence.attachSettlementEvidence(b.id, { evidenceFileId: text.id, reason: 'x' }, tenant.userId, t),
         'FINANCE_SETTLEMENT_EVIDENCE_INVALID_TYPE'
       );
     }
@@ -299,7 +304,7 @@ test('A4: quem anexou o comprovante não pode ser quem aprovou a baixa manual', 
   await withRollbackTenantTransaction(tenant, async (t) => {
     const entry = await payable(t);
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
-    await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, approver.id, t);
+    await settlementEvidence.attachSettlementEvidence(entry.id, manualSettlement, approver.id, t);
     const request = await approvalsService.createApprovalRequest(
       W({ relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'LOW' }),
       tenant.userId,
@@ -307,7 +312,7 @@ test('A4: quem anexou o comprovante não pode ser quem aprovou a baixa manual', 
     );
     await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, t);
     await expectCode(
-      financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
+      receiptService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
       'FINANCE_SETTLEMENT_EVIDENCE_SELF_APPROVAL'
     );
   });
@@ -319,7 +324,7 @@ test('A4: execução manual de intenção aprovada ANTES do comprovante é recus
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, t);
     await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, t);
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
-    await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, t);
+    await settlementEvidence.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, t);
     await expectCode(
       paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, t, { manualSettlement }),
       'FINANCE_SETTLEMENT_EVIDENCE_NOT_REVIEWED'
@@ -400,7 +405,7 @@ test('B2: ERROR é transitório (continua SUBMITTED); RETURNED depois de pago vi
     await withRollbackTenantTransaction(tenant, async (t) => {
       const entry = await payable(t);
       const intent = await submittedIntent(t, entry);
-      const afterError = await bankPaymentsService.confirmBankPayment(intent.externalSubmissionId, 'error', t);
+      const afterError = await paymentService.confirmBankPayment(intent.externalSubmissionId, 'error', t);
       assert.equal(afterError.status, 'SUBMITTED', 'ERROR não encerra como falha');
 
       adapter.status = 'PROCESSING';
@@ -415,8 +420,8 @@ test('B2: ERROR é transitório (continua SUBMITTED); RETURNED depois de pago vi
 
       const entry2 = await payable(t);
       const intent2 = await submittedIntent(t, entry2);
-      await bankPaymentsService.confirmBankPayment(intent2.externalSubmissionId, 'CONFIRMED', t);
-      await bankPaymentsService.confirmBankPayment(intent2.externalSubmissionId, 'RETURNED', t);
+      await paymentService.confirmBankPayment(intent2.externalSubmissionId, 'CONFIRMED', t);
+      await paymentService.confirmBankPayment(intent2.externalSubmissionId, 'RETURNED', t);
       assert.equal((await anomalies(t, intent2.id, 'BANK_PAYMENT_RETURNED')).length, 1);
     });
   } finally {
@@ -432,8 +437,8 @@ test('B4: CONFIRMED depois de FAILED abre anomalia (dinheiro pode ter saído dua
   await withRollbackTenantTransaction(tenant, async (t) => {
     const entry = await payable(t);
     const intent = await submittedIntent(t, entry);
-    await bankPaymentsService.confirmBankPayment(intent.externalSubmissionId, 'REJECTED', t);
-    const late = await bankPaymentsService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
+    await paymentService.confirmBankPayment(intent.externalSubmissionId, 'REJECTED', t);
+    const late = await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
     assert.equal(late.status, 'FAILED');
     assert.equal((await anomalies(t, intent.id, 'LATE_BANK_CONFIRMATION')).length, 1);
   });
@@ -443,7 +448,7 @@ test('B5: confirmação via sandbox é SANDBOX_CONFIRMED; Santander incompleto f
   await withRollbackTenantTransaction(tenant, async (t) => {
     const entry = await payable(t);
     const intent = await submittedIntent(t, entry);
-    await bankPaymentsService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t, { sandbox: true });
+    await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t, { sandbox: true });
     const settled = await FinancialEntry.findByPk(entry.id, { transaction: t });
     assert.equal(settled.settlementMethod, 'SANDBOX_CONFIRMED');
 
@@ -466,7 +471,7 @@ test('B5: confirmação via sandbox é SANDBOX_CONFIRMED; Santander incompleto f
 });
 
 test('B5: webhook bancário exige assinatura HMAC também em sandbox (sem segredo configurado, falha fechado)', async () => {
-  const financeController = require('../src/features/finance/finance.controller');
+  const financeController = require('../src/modules/finance/presentation/http/finance.controller');
   const { BankPaymentProviderRouting } = require('../src/models');
   // O webhook é público e abre a própria transação, então precisa de uma linha de roteamento
   // COMMITADA. Para não deixar lançamento no ledger (append-only, não pode ser apagado), só a
@@ -507,7 +512,7 @@ test('B6: confirmação do banco não é recusada por controle de pré-pagamento
     const entry = await payable(t);
     const intent = await submittedIntent(t, entry);
     await FinancialEntry.update({ requiresManualReview: true, manualReviewReason: 'teste B6' }, { where: { id: entry.id }, transaction: t });
-    const result = await bankPaymentsService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
+    const result = await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
     assert.equal(result.status, 'EXECUTED');
     const settled = await FinancialEntry.findByPk(entry.id, { transaction: t });
     assert.equal(settled.status, 'SETTLED');
@@ -524,8 +529,8 @@ test('D1: estornar o recebimento da caução com devolução ativa é bloqueado'
     const { contract, holder } = await lease(t);
     const d = await deposit(t, { contract, holder, amount: 1000 });
     await release(t, { amount: 1000, thirdPartyOriginEntryId: d.id });
-    await expectCode(financialEntriesService.reverseFinancialEntry(d.id, 'estorno', tenant.userId, t), 'FINANCE_THIRD_PARTY_ORIGIN_HAS_RELEASES');
-    const balance = await financialEntriesService.computeThirdPartyOriginBalance(d.id, t);
+    await expectCode(receiptService.reverseFinancialEntry(d.id, 'estorno', tenant.userId, t), 'FINANCE_THIRD_PARTY_ORIGIN_HAS_RELEASES');
+    const balance = await ledgerBalance.computeThirdPartyOriginBalance(d.id, t);
     assert.equal(balance.available, '0.00');
   });
 });
@@ -549,7 +554,7 @@ test('D3: baixa parcial da caução mantém a marca de terceiro; evento de saíd
   await withRollbackTenantTransaction(tenant, async (t) => {
     const { contract, holder } = await lease(t);
     const d = await deposit(t, { contract, holder, amount: 1000, settle: false });
-    const r = await financialEntriesService.settleFinancialEntryPartial(d.id, 400, tenant.userId, t);
+    const r = await receiptService.settleFinancialEntryPartial(d.id, 400, tenant.userId, t);
     assert.equal(r.settlement.isThirdPartyFunds, true);
     assert.equal(r.settlement.thirdPartyHolderPersonId, holder.id);
 
@@ -557,7 +562,7 @@ test('D3: baixa parcial da caução mantém a marca de terceiro; evento de saíd
     const before = await OutboxEvent.findOne({ where: { idempotencyKey: `finance.third_party_funds.released:${rel.id}` }, transaction: t });
     assert.equal(before, null, 'devolução apenas criada (PENDING) não emite evento de saída');
     const manualSettlement = await prepareManualSettlement(tenant, rel.id, tenant.userId, t);
-    await financialEntriesService.settleFinancialEntry(rel.id, tenant.userId, t, { manualSettlement });
+    await receiptService.settleFinancialEntry(rel.id, tenant.userId, t, { manualSettlement });
     const afterEvent = await OutboxEvent.findOne({ where: { idempotencyKey: `finance.third_party_funds.released:${rel.id}` }, transaction: t });
     assert.ok(afterEvent, 'liquidação da devolução emite o evento');
   });
@@ -579,13 +584,13 @@ test('D3: compensação aponta a dívida do titular, exige aprovação, não mov
       'FINANCE_THIRD_PARTY_COMPENSATION_EXCEEDS_DEBT'
     );
     const comp = await release(t, { amount: 300, thirdPartyOriginEntryId: d.id, thirdPartyReleaseType: 'COMPENSATION', thirdPartyCompensatedEntryId: debt.id });
-    await expectCode(financialEntriesService.settleFinancialEntry(comp.id, tenant.userId, t), 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
+    await expectCode(receiptService.settleFinancialEntry(comp.id, tenant.userId, t), 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
     await approveFinancialEntryForSettlement(tenant, comp.id, tenant.userId, t);
-    const settled = await financialEntriesService.settleFinancialEntry(comp.id, tenant.userId, t);
+    const settled = await receiptService.settleFinancialEntry(comp.id, tenant.userId, t);
     assert.equal(settled.settlementMethod, 'COMPENSATION');
     const debtAfter = await FinancialEntry.findByPk(debt.id, { transaction: t });
     assert.equal(debtAfter.status, 'SETTLED', 'a dívida do titular foi abatida');
-    const balance = await financialEntriesService.computeThirdPartyOriginBalance(d.id, t);
+    const balance = await ledgerBalance.computeThirdPartyOriginBalance(d.id, t);
     assert.equal(balance.available, '700.00');
   });
 });
@@ -708,10 +713,10 @@ test('D4: duas devoluções SIMULTÂNEAS da mesma caução — a 2ª espera o lo
       tenant.userId,
       t
     );
-    await financialEntriesService.settleFinancialEntry(d.id, tenant.userId, t);
+    await receiptService.settleFinancialEntry(d.id, tenant.userId, t);
     return FinancialEntry.findByPk(d.id, { transaction: t });
   });
-  const startBalance = await withCommitted((t) => financialEntriesService.computeThirdPartyOriginBalance(origin.id, t));
+  const startBalance = await withCommitted((t) => ledgerBalance.computeThirdPartyOriginBalance(origin.id, t));
   assert.equal(startBalance.available, '1000.00', 'fixture estável do D4 precisa continuar com o saldo cheio');
 
   const t1 = await openTenantTx();
@@ -727,12 +732,12 @@ test('D4: duas devoluções SIMULTÂNEAS da mesma caução — a 2ª espera o lo
 
     // Serializada atrás da 1ª, a 2ª devolução vê o saldo já consumido.
     await expectCode(release(t1, { amount: 700, thirdPartyOriginEntryId: origin.id }), 'FINANCE_THIRD_PARTY_RELEASE_EXCEEDS_BALANCE');
-    const balance = await financialEntriesService.computeThirdPartyOriginBalance(origin.id, t1);
+    const balance = await ledgerBalance.computeThirdPartyOriginBalance(origin.id, t1);
     assert.equal(balance.available, '300.00');
   } finally {
     await t2.rollback().catch(() => {});
     await t1.rollback().catch(() => {});
   }
-  const endBalance = await withCommitted((t) => financialEntriesService.computeThirdPartyOriginBalance(origin.id, t));
+  const endBalance = await withCommitted((t) => ledgerBalance.computeThirdPartyOriginBalance(origin.id, t));
   assert.equal(endBalance.available, '1000.00', 'nada do teste ficou commitado');
 });

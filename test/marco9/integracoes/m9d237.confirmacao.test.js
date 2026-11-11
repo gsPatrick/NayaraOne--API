@@ -4,7 +4,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d237Env');
-const financeController = require('../../../src/features/finance/finance.controller');
+const financeController = require('../../../src/modules/finance/presentation/http/finance.controller');
 const { resolveError } = require('../../../src/features/integrations/errors');
 const { transitionDispatch } = require('../../../src/features/integrations/dispatch');
 
@@ -93,7 +93,7 @@ test('banco_confirmed_por_status_sem_exigir_extrato_e_mismatch_mantem_dispatch',
     const b = await env.intencaoEnviada(t, { amount: 80 });
     const [d] = await env.envios(t, b.intent.id);
     await sequelize.query("UPDATE integration.dispatches SET status = 'UNKNOWN', unknown_since = now() WHERE id = :id", { replacements: { id: d.id }, transaction: t });
-    const m = await env.bankPayments.confirmBankPayment(b.intent.externalSubmissionId, 'PAID', t, { amount: '8.00', source: 'WEBHOOK_SIGNED' });
+    const m = await env.paymentService.confirmBankPayment(b.intent.externalSubmissionId, 'PAID', t, { amount: '8.00', source: 'WEBHOOK_SIGNED' });
     assert.equal(m.status, 'SUBMITTED');
     assert.equal((await env.envios(t, b.intent.id))[0].status, 'UNKNOWN');
     const [erro] = await env.erros(t, 'INTEGRATION_BANK_AMOUNT_MISMATCH');

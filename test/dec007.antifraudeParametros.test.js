@@ -13,15 +13,16 @@ const T = require('./testHelpers');
 const { isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
 const { comMfaRecente } = require('./helpers/mfaRecente');
 const settingsService = require('../src/features/settings/settings.service');
-const antifraud = require('../src/features/finance/financeAntifraud.service');
-const gate = require('../src/features/finance/paymentAnomalyGate');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const approvalsService = require('../src/features/finance/approvals.service');
-const { KEYS, FINANCE_SETTINGS_DEFAULTS, FINANCE_SETTINGS_SCHEMA } = require('../src/features/finance/finance.settings');
+const antifraud = require('../src/modules/finance/application/services/finance-antifraud.service');
+const gate = require('../src/modules/finance/application/services/payment-anomaly-gate');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
+const { KEYS, FINANCE_SETTINGS_DEFAULTS, FINANCE_SETTINGS_SCHEMA } = require('../src/modules/finance/application/services/finance-settings');
 const { AnomalyCase, FinancialEntry, TenantSetting, Reconciliation, User } = require('../src/models');
 const { seedFinanceAntifraudRules } = require('../scripts/seedFinanceAntifraudRules');
 
@@ -202,9 +203,9 @@ const reversalCases = (t) => AnomalyCase.findAll({ where: { caseType: 'FREQUENT_
 test('dec007_estorno_frequente_usuario_3_empresa_3_em_30_dias: a 3ª pela mesma pessoa abre caso; 3 de pessoas diferentes também (empresa); o parâmetro da empresa muda o resultado', async () => {
   await rollback(async (t) => {
     await set(t, KEYS.frequentReversalCompany30d, 100);
-    for (let i = 0; i < 2; i += 1) await financialEntriesService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[0], t);
+    for (let i = 0; i < 2; i += 1) await receiptService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[0], t);
     assert.equal((await reversalCases(t)).length, 0);
-    await financialEntriesService.reverseFinancialEntry((await reversible(t)).id, 'estorno 3', users[0], t);
+    await receiptService.reverseFinancialEntry((await reversible(t)).id, 'estorno 3', users[0], t);
     const [one] = await reversalCases(t);
     assert.equal(one.riskLevel, 'HIGH');
     assert.match(one.reason, new RegExp(`3 estornos feitos pela mesma pessoa \\(usuário ${users[0]}\\) nos últimos 30 dias \\(limiar 3\\)`));
@@ -212,16 +213,16 @@ test('dec007_estorno_frequente_usuario_3_empresa_3_em_30_dias: a 3ª pela mesma 
   await rollback(async (t) => {
     await set(t, KEYS.frequentReversalUser30d, 100);
     await set(t, KEYS.frequentReversalCompany30d, 5);
-    for (let i = 0; i < 3; i += 1) await financialEntriesService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[i], t);
+    for (let i = 0; i < 3; i += 1) await receiptService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[i], t);
     assert.equal((await reversalCases(t)).length, 0, 'com a empresa em 5 (valor da DEC-007), 3 estornos de pessoas diferentes não abrem caso');
     await set(t, KEYS.frequentReversalCompany30d, 3);
-    await financialEntriesService.reverseFinancialEntry((await reversible(t)).id, 'estorno 4', users[1], t);
+    await receiptService.reverseFinancialEntry((await reversible(t)).id, 'estorno 4', users[1], t);
     const [company] = await reversalCases(t);
     assert.match(company.reason, /4 estornos na empresa nos últimos 30 dias \(limiar 3\)/);
   });
   await rollback(async (t) => {
     await set(t, KEYS.frequentReversalUser30d, 100);
-    for (let i = 0; i < 3; i += 1) await financialEntriesService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[i], t);
+    for (let i = 0; i < 3; i += 1) await receiptService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[i], t);
     assert.equal((await reversalCases(t)).length, 1, 'padrão da empresa = 3 (regra que já existia, falha segura)');
   });
 });

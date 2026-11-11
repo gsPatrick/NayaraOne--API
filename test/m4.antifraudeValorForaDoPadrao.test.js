@@ -13,7 +13,7 @@ process.env.PORT = process.env.M4_ANTIFRAUDE_TEST_PORT || '21613';
 require('../app');
 const T = require('./testHelpers');
 const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const { FinancialEntry, AnomalyCase } = require('../src/models');
 
 let tenant;

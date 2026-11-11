@@ -4,16 +4,17 @@
 // bankAccountId de um lançamento PENDING via updateFinancialEntry não passava por nenhuma
 // checagem extra — um payable podia ser redirecionado para uma conta diferente, já fora do
 // cooldown antifraude, e liquidado sem nenhum alerta. Também: `clearManualReview`
-// (financeAntifraud.service.js) já existia mas nunca foi exposta por rota HTTP nenhuma.
+// (finance-antifraud.service.js) já existia mas nunca foi exposta por rota HTTP nenhuma.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, prepareManualSettlement } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const antifraudService = require('../src/features/finance/financeAntifraud.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const antifraudService = require('../src/modules/finance/application/services/finance-antifraud.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const { User } = require('../src/models');
 
 let tenant;
@@ -85,7 +86,7 @@ test('FIN-REDIR-01: trocar bankAccountId de um lançamento PENDING já com conta
 
     // Liquidar continua bloqueado enquanto não for liberado por um revisor humano.
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW');
         return true;
@@ -97,7 +98,7 @@ test('FIN-REDIR-01: trocar bankAccountId de um lançamento PENDING já com conta
     // F03/A4 (conferência 18/10/2026 + revisão independente): baixa manual exige comprovante
     // anexado ANTES de uma nova aprovação (a liberação da revisão manual não substitui a aprovação).
     const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
+    const settled = await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });
 });

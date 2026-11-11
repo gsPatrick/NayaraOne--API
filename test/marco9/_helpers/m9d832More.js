@@ -3,7 +3,7 @@
 // Apoio dos testes M9-D832 (não é teste): lançamento a receber, processo jurídico e processo de financiamento (resultado manual) criados pelos serviços normais. Não é teste.
 const env = require('./bcpEnv');
 const { person } = require('./m9d832Base');
-const { createFinancialEntry } = require('../../../src/features/finance/financialEntries.service');
+const { createFinancialEntry } = require('../../../src/modules/finance/application/services/financial-entry.service');
 const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
 const financingCasesService = require('../../../src/features/correspondent/cases/financingCases.service');
 const { FinancingCase } = require('../../../src/models');

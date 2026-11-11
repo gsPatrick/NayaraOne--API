@@ -6,7 +6,7 @@ const { DataTypes } = require('sequelize');
  * CommissionEntitlement — tabela "correspondent"."commission_entitlements" (Marco 8 Fase 8).
  * Ciclo EXPECTED → CONFIRMED → RECEIVABLE → RECEIVED → ADJUSTED.
  * O estorno não apaga o fato original — mesmo padrão de Commission.cancelCommission
- * (src/features/finance/commissions.service.js).
+ * (src/modules/finance/application/services/commission.service.js).
  */
 module.exports = (sequelize) => {
   const CommissionEntitlement = sequelize.define(

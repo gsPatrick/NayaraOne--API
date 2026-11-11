@@ -11,9 +11,10 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestResultCenter, createTestCostCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const { Person, Contract, ContractParty } = require('../src/models');
 
@@ -74,7 +75,7 @@ test('Repasses §12: GAP CORRIGIDO — um segundo repasse NÃO pode reutilizar o
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
 
     // Primeiro repasse consome o valor CHEIO do recebimento (1000).
     const repasse1 = await ownerRepassesService.createOwnerRepasse(
@@ -126,7 +127,7 @@ test('Repasses §12: GAP CORRIGIDO — repasse parcial consome só a fração us
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
 
     // Repasse 1 usa só 400 dos 1000 elegíveis (ex.: repasse antecipado parcial).
     const repasse1 = await ownerRepassesService.createOwnerRepasse(
@@ -193,7 +194,7 @@ test('Repasses §12: um repasse CANCELLED devolve o saldo do recebimento para um
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
 
     const repasse1 = await ownerRepassesService.createOwnerRepasse(
       {
@@ -243,7 +244,7 @@ test('Caução §13: receber caução vinculada ao contrato, excluída do caixa 
       },
       tenant.userId, transaction
     );
-    await financialEntriesService.settleFinancialEntry(caucaoRecebida.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(caucaoRecebida.id, tenant.userId, transaction);
 
     // DEVOLVER: caução sai como PAYABLE isThirdPartyFunds=true, mesma referência/contrato —
     // nunca classificada como despesa própria (senão poluiria o resultado da empresa com um
@@ -313,7 +314,7 @@ test('Caução §13: devolução sem vínculo com a caução recebida, ou com co
       },
       tenant.userId, transaction
     );
-    await financialEntriesService.settleFinancialEntry(recebida.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(recebida.id, tenant.userId, transaction);
     await assert.rejects(
       () => financialEntriesService.createFinancialEntry(
         {

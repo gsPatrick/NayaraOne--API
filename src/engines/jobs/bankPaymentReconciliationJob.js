@@ -2,8 +2,10 @@
 
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, PaymentIntent } = require('../../models');
-const { reconcilePaymentIntent } = require('../../features/finance/bankPayments.service');
-const bank = require('../../features/finance/bank');
+const { reconcilePaymentIntent } = require('../../modules/finance/application/services/bank-submission.service');
+const bank = require('../../modules/finance/application/services/bank-hub');
+const { runBankImport } = require('../../modules/finance/workers/bank-import.worker');
+const { runReconciliation } = require('../../modules/finance/workers/reconciliation.worker');
 
 // B2 (revisão independente, conferência Nayara 18/10/2026): getPaymentStatus existia no adapter
 // mas nada o chamava — uma intenção com resposta incerta do banco (SUBMITTING) ou em trânsito
@@ -48,10 +50,11 @@ async function reconcileCompany(group, company) {
       console.error(`[BankPaymentReconciliationJob] Falha na intenção ${candidate.id}: ${err.message}`);
     }
   }
-  // M9-D237: depois de consultar o status de cada pagamento, lê o extrato do banco (cursor) e concilia as saídas com os pagamentos enviados.
+  // M9-D237: depois de consultar o status de cada pagamento, lê o extrato do banco (cursor) e concilia as saídas com os pagamentos enviados
+  // (pontos de entrada dos workers do Guia M4 §2: workers/bank-import.worker.js e workers/reconciliation.worker.js).
   try {
-    const extrato = await bank.sweepStatements({ group, company });
-    const conciliacao = await bank.reconcileStatements({ group, company });
+    const extrato = await runBankImport({ group, company });
+    const conciliacao = await runReconciliation({ group, company });
     Object.assign(summary, { statementImported: extrato.imported, statementReconciled: conciliacao.reconciled, statementMismatched: conciliacao.mismatched });
   } catch (err) {
     summary.errors += 1;

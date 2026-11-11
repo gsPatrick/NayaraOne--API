@@ -8,8 +8,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
-const anomalyCasesService = require('../src/features/finance/anomalyCases.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const anomalyCasesService = require('../src/modules/finance/application/services/anomaly-cases.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });

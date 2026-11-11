@@ -1,6 +1,6 @@
 'use strict';
 
-const { collectFinancialEntries, countFinancialEntries } = require('../../../../finance/financeExport.service');
+const { collectFinancialEntries, countFinancialEntries } = require('../../../../../modules/finance/application/services/finance-export.service');
 const { pick } = require('./filters');
 
 /**
@@ -14,7 +14,7 @@ module.exports = {
   formats: ['CSV', 'XLSX', 'PDF'],
   permission: 'finance:read',
   registryTable: 'finance.financial_entries',
-  sourceFiles: ['features/finance/financeExport.service.js', 'features/finance/financeExport.routes.js'],
+  sourceFiles: ['modules/finance/application/services/finance-export.service.js', 'modules/finance/presentation/http/finance-export.routes.js'],
   lineage: {
     area: 'MONEY', ownerDomain: 'FINANCEIRO', criticality: 'CRITICAL', description: 'Exportação dos lançamentos financeiros (CSV, XLSX ou PDF) pelo POST /exports, com finalidade, MFA, expiração e auditoria.',
     readModel: { code: 'finance.financial_entries', description: 'Tabela de lançamentos financeiros: o conjunto de onde a exportação é lida.' },

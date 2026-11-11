@@ -5,10 +5,10 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./constructionEvents.service');
 const { getApprovalThreshold } = require('./lossRecords.service');
-const financialEntriesService = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
-// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em costCenters.service.js.
+// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em cost-centers.service.js.
 const WARRANTY_COST_CENTER_CODE = 'OBRAS-GARANTIA';
 const { setTeamAndMaterial } = require('./warrantyActionTeamMaterialColumns');
 const { getActiveSlaDaysMap, DEFAULT_SLA_DAYS } = require('./slaRules.service');

@@ -6,7 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const OFICIAIS = fs.existsSync(path.join(__dirname, '..', '..', 'src', 'features', 'finance', 'financeOfficialRoutes.routes.js'));
+const OFICIAIS = fs.existsSync(path.join(__dirname, '..', '..', 'src', 'modules', 'finance', 'presentation', 'http', 'finance-official.routes.js'));
 const MOTIVO = 'Pagamento feito fora da integração bancária; comprovante fictício anexado.';
 
 async function oficiais(R) {

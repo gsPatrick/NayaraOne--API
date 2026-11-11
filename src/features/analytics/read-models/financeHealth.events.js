@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * M9-D615 (3.2) — eventos que atualizam os read models do Financeiro. Nomes conferidos em src/features/finance/financeEvents.service.js
+ * M9-D615 (3.2) — eventos que atualizam os read models do Financeiro. Nomes conferidos em src/modules/finance/application/services/finance-events.service.js
  * (técnicos e do caderno). `finance.entry.canceled` e `finance.intercompany.*` ainda não têm quem publique (DI-D615-3): o cancelamento e a
  * posição entre empresas entram pela agenda; assim que o Financeiro publicar o evento, o read model já o consome.
  */

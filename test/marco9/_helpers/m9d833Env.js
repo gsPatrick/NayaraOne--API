@@ -2,8 +2,8 @@
 
 // Apoio dos testes M9-D833 (não é teste): pagamento emergencial registrado por um usuário e importado por outro, linhas de extrato e leitura das tabelas da demanda.
 const env = require('./m9d832Env');
-const bankAccounts = require('../../../src/features/finance/bankAccounts.service');
-const bankTransactions = require('../../../src/features/finance/bankTransactions.service');
+const bankAccounts = require('../../../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactions = require('../../../src/modules/finance/application/services/bank-transactions.service');
 const { SPEC } = require('./m9d834Spec');
 
 const APPROVE = 'governance:bcp:approve';

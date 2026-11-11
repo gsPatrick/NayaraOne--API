@@ -24,15 +24,15 @@ const assert = require('node:assert/strict');
 const crypto = require('crypto');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankPaymentsService = require('../src/features/finance/bankPayments.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const healthReportService = require('../src/features/finance/financialHealthReport.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankPaymentsService = require('../src/modules/finance/application/services/bank-submission.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const healthReportService = require('../src/modules/finance/application/services/finance-health.service');
 const settingsService = require('../src/features/settings/settings.service');
-const financeController = require('../src/features/finance/finance.controller');
-const { setBankAdapterOverrideForTests } = require('../src/features/finance/adapters/resolveBankAdapter');
+const financeController = require('../src/modules/finance/presentation/http/finance.controller');
+const { setBankAdapterOverrideForTests } = require('../src/modules/finance/infrastructure/bank/resolve-bank-adapter');
 const { BankAccount, FinancialEntry, PaymentIntent, User, AuditLog } = require('../src/models');
 
 let tenant;

@@ -4,7 +4,7 @@ const { publishDomainEvent } = require('../../../engines/events/outbox');
 const { guaranteeCalendarFields } = require('../cases/legalCalendarEvents.service');
 
 // Publicação dos domain events do módulo legal (Transactional Outbox), seguindo o mesmo
-// padrão de src/features/finance/financeEvents.service.js — sempre dentro da MESMA
+// padrão de src/modules/finance/application/services/finance-events.service.js — sempre dentro da MESMA
 // transação da operação de negócio.
 
 function publishContractStatusChanged(contract, fromStatus, transaction) {

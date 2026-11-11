@@ -15,8 +15,8 @@ process.env.PORT = process.env.M4_EXTRATO_TEST_PORT || '21616';
 require('../app');
 const T = require('./testHelpers');
 const { tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const { bankTransactionFingerprint } = require('../src/features/finance/bankTransactionFingerprint');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const { bankTransactionFingerprint } = require('../src/modules/finance/infrastructure/db/bank-transaction-fingerprint');
 const { BankTransaction } = require('../src/models');
 
 const ctx = {};
@@ -116,8 +116,9 @@ test('M4-G§10 (mesmo defeito em financial_entries.idempotency_key): a empresa B
 });
 
 test('M4-G§10 (mesmo defeito em owner_repasses.idempotency_key): as empresas A e B criam repasse com a mesma chave de cliente (antes a segunda estourava a unicidade global); na mesma empresa a chave repetida segue 409 FINANCE_DUPLICATE_PAYMENT', async () => {
-  const financialEntriesService = require('../src/features/finance/financialEntries.service');
-  const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+  const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+  const receiptService = require('../src/modules/finance/application/services/receipt.service');
+  const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
   const propertiesService = require('../src/features/properties/properties.service');
   const { Person } = require('../src/models');
   const key = `repasse-cliente-${T.uniqueSuffix()}`;
@@ -129,7 +130,7 @@ test('M4-G§10 (mesmo defeito em owner_repasses.idempotency_key): as empresas A 
       const property = await propertiesService.createProperty({ groupId: tenant.groupId, companyId: tenant.companyId, title: `G§10 Imóvel ${sfx}`, internalCode: `G10-${sfx}`, propertyType: 'RESIDENTIAL' }, tenant.userId, t);
       const rc = await T.createTestResultCenter(tenant, t);
       const rec = await financialEntriesService.createFinancialEntry({ groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 100, resultCenterId: rc.id, description: `G§10 aluguel ${sfx}` }, tenant.userId, t);
-      await financialEntriesService.settleFinancialEntry(rec.id, tenant.userId, t);
+      await receiptService.settleFinancialEntry(rec.id, tenant.userId, t);
       return ownerRepassesService.createOwnerRepasse({ groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, sourceEntryIds: [rec.id], grossAmount: 100, deductionsAmount: 0, referenceMonth: '2026-11', idempotencyKey: key }, tenant.userId, t);
     });
   }

@@ -10,7 +10,7 @@ const { REQUIRED } = require('./guaranteeTypeData');
  */
 async function depositTrail(guarantee, transaction) {
   if (guarantee.guaranteeType !== 'SECURITY_DEPOSIT' || !guarantee.financeEntryId) return null;
-  const { computeThirdPartyOriginBalance } = require('../../../features/finance/financialEntries.service');
+  const { computeThirdPartyOriginBalance } = require('../../finance/application/services/ledger-balance.service');
   const origin = await FinancialEntry.findByPk(guarantee.financeEntryId, { transaction });
   if (!origin) return null;
   const balance = await computeThirdPartyOriginBalance(origin, transaction);

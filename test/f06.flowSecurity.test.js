@@ -37,10 +37,11 @@ const {
   uniqueSuffix,
 } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
-const { createPaymentIntent, approvePaymentIntent } = require('../src/features/finance/paymentIntents.service');
-const { submitPaymentIntentToBank, confirmBankPayment } = require('../src/features/finance/bankPayments.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
+const { createPaymentIntent, approvePaymentIntent } = require('../src/modules/finance/application/services/payment.service');
+const { submitPaymentIntentToBank } = require('../src/modules/finance/application/services/bank-submission.service');
+const { confirmBankPayment } = require('../src/modules/finance/application/services/payment.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const filesService = require('../src/features/files/files.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');

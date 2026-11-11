@@ -12,10 +12,10 @@ process.env.PORT = process.env.M4_PARAMETROS_FIN_TEST_PORT || '21615';
 require('../app');
 const T = require('./testHelpers');
 const { createUser, tokenFor, client, isolatedTenant, closeIsolated, FINANCE_ALL } = require('./helpers/m4FinanceHttp');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const { KEYS, FINANCE_SETTINGS_DEFAULTS } = require('../src/features/finance/finance.settings');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const { KEYS, FINANCE_SETTINGS_DEFAULTS } = require('../src/modules/finance/application/services/finance-settings');
 const { AnomalyCase } = require('../src/models');
 
 const MIN = KEYS.manualReconciliationMinCount;

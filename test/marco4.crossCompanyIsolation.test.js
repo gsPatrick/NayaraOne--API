@@ -15,10 +15,10 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createCommissionSource } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const commissionsService = require('../src/features/finance/commissions.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const companiesService = require('../src/features/companies/companies.service');
 
 let tenant;

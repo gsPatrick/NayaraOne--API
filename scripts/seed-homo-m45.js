@@ -3,10 +3,10 @@
 require('dotenv').config();
 
 const { sequelize, Company, UserMembership, BankAccount, FinancialEntry, PaymentIntent, CostCenter, BankPaymentProviderRouting } = require('../src/models');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const costCentersService = require('../src/features/finance/costCenters.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const costCentersService = require('../src/modules/finance/application/services/cost-centers.service');
 const { registrarAuditoria } = require('../src/engines/audit/auditLog.service');
 
 /**

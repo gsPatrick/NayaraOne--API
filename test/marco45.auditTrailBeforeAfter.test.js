@@ -12,16 +12,16 @@ const fs = require('fs');
 const path = require('path');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const commissionsService = require('../src/features/finance/commissions.service');
-const costCentersService = require('../src/features/finance/costCenters.service');
-const resultCentersService = require('../src/features/finance/resultCenters.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankPaymentsService = require('../src/features/finance/bankPayments.service');
-const financeExportService = require('../src/features/finance/financeExport.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
+const costCentersService = require('../src/modules/finance/application/services/cost-centers.service');
+const resultCentersService = require('../src/modules/finance/application/services/result-centers.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankPaymentsService = require('../src/modules/finance/application/services/bank-submission.service');
+const financeExportService = require('../src/modules/finance/application/services/finance-export.service');
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const closeoutService = require('../src/features/billing/closeout.service');
 const { formatCompetenceBR, formatMoneyBR } = require('../src/utils/formatBR');
@@ -167,7 +167,7 @@ test('F8: competência e valores em formato brasileiro nos textos gerados', () =
 });
 
 test('varredura do código: toda auditoria dos Marcos 4/5 grava depois; não-criação grava antes e depois', () => {
-  const roots = ['src/features/finance', 'src/features/billing', 'src/modules/legal', 'src/engines/jobs'].map((r) => path.join(__dirname, '..', r));
+  const roots = ['src/modules/finance', 'src/features/billing', 'src/modules/legal', 'src/engines/jobs'].map((r) => path.join(__dirname, '..', r));
   const CREATION = /\.(create|generate|request|open|enroll|import|step|access|manual_collect)'$/;
   const problems = [];
   const walk = (dir) => {

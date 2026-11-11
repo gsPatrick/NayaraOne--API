@@ -11,7 +11,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const ROOT = path.join(__dirname, '..', '..', '..');
-const PASTAS = ['src/features/finance', 'scripts/financeiro', 'scripts/restoreDrill'];
+const PASTAS = ['src/modules/finance', 'scripts/financeiro', 'scripts/restoreDrill'];
 const TESTES = /^(finance\.|marco4\.|m4\.|m45\.|adversarial\.finance|financeE2E|nayaraConferencia1810|nayaraExternalAuditMatrixM4|frente3\.financeRules|ciTwoTenantsFinanceLegal|bankPayment)/;
 
 function listar(dir) {
@@ -30,10 +30,11 @@ console.log(`[typecheck] node --check em ${arquivos.length} arquivos: ${arquivos
 
 // Carregamento real dos módulos do Financeiro (sem abrir banco: só require). PORT=0 evita ouvir porta se algum módulo subir app.
 process.env.PORT = process.env.PORT || '0';
-const modulos = listar('src/features/finance').filter((f) => !/\/adapters\/|\/bank\//.test(f) || /index\.js$|BankAdapter\.js$|resolveBankAdapter\.js$/.test(f));
+// Guia M4 §2: domínio, serviços, repositórios, porta/provedores do banco, HTTP e workers (o hub do banco e as migrations não são carregados soltos).
+const modulos = listar('src/modules/finance').filter((f) => !/\/infrastructure\/db\/migrations\/|\/infrastructure\/bank\/hub\//.test(f));
 let naoCarregou = 0;
 for (const f of modulos) {
   try { require(path.join(ROOT, f)); } catch (err) { naoCarregou += 1; console.error(`REPROVADO require ${f}: ${err.message}`); }
 }
-console.log(`[typecheck] require em ${modulos.length} módulos de src/features/finance: ${modulos.length - naoCarregou} carregaram, ${naoCarregou} falharam.`);
+console.log(`[typecheck] require em ${modulos.length} módulos de src/modules/finance: ${modulos.length - naoCarregou} carregaram, ${naoCarregou} falharam.`);
 process.exit(falhas || naoCarregou ? 1 : 0);

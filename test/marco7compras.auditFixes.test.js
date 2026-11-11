@@ -262,7 +262,7 @@ test('C5: cada parcela do prêmio nasce com o próprio lançamento PAYABLE vincu
 test('C5: baixa com um lançamento DIFERENTE do vinculado é rejeitada mesmo sendo PAYABLE/SETTLED de valor igual', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { settleFinancialEntryWithApproval, createTestCostCenter } = require('./testHelpers');
-    const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
+    const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
 
     const { installments } = await issuePolicyWithInstallments(transaction, 1);
     const inst = installments[0];

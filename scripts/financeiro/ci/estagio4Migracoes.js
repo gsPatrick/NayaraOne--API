@@ -16,6 +16,7 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const { listMigrationFiles } = require('../../../src/config/migrationDirs');
 const cluster = require('../../lib/disposableCluster');
 
 const ENTIDADES_DO_LIVRO = ['accounts_chart', 'cost_centers', 'result_centers', 'bank_accounts', 'financial_entries', 'entry_installments', 'ledger', 'bank_transactions',
@@ -68,7 +69,8 @@ async function main() {
   }
   const porta = Number(new URL(admin).port);
   const banco = `ci_fin_migr_${Date.now().toString(36)}`;
-  const arquivos = fs.readdirSync(path.join(cluster.API_ROOT, 'migrations')).filter((f) => f.endsWith('.js'));
+  // M4-D140: as migrations ficam em migrations/ e em src/modules/finance/infrastructure/db/migrations/ (as duas pastas).
+  const arquivos = listMigrationFiles().map((m) => m.name);
   cluster.psql(porta, 'postgres', `CREATE DATABASE ${banco}`);
   try {
     const url = cluster.superUrl(porta, banco);

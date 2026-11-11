@@ -7,8 +7,8 @@ const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engin
 const { recordMovement } = require('./movements.service');
 const { publishLossOpened } = require('./inventoryEvents.service');
 const { computeEstimatedCurrentValue } = require('./assets.service');
-const financialEntriesService = require('../finance/financialEntries.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
 // GAP 3 (fechamento de auditoria externa Nayara, Marco 6): alçada por VALOR, mesmo padrão já
 // aprovado/testado em construction/lossRecords.service.js (M6-14/M6-29/M6-60) — perda de
 // item/asset de Estoque hoje só tinha alçada por PERMISSÃO fixa (inventory:approve, igual pra

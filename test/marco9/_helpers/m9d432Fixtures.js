@@ -4,7 +4,8 @@
 // que é quem grava a referência e o centro de custo) e fotografia do ledger para provar que o Marketing só lê.
 const { QueryTypes } = require('sequelize');
 const { sequelize, CostCenter } = require('../../../src/models');
-const financial = require('../../../src/features/finance/financialEntries.service');
+const financial = require('../../../src/modules/finance/application/services/financial-entry.service');
+const receipt = require('../../../src/modules/finance/application/services/receipt.service');
 const { createTestCostCenter, uniqueSuffix } = require('../../testHelpers');
 const base = require('./m9d431Fixtures');
 
@@ -54,4 +55,4 @@ async function ledgerSnapshot(t, tenant) {
 
 const costOf = async (t, id) => (await q(t, 'SELECT cost_actual, cost_updated_at, cost_stale FROM marketing.campaigns WHERE id = :id', { id }))[0];
 
-module.exports = { ...base, q, runningCampaign, costCenter, expense, partialPayment, ledgerSnapshot, costOf, financial };
+module.exports = { ...base, q, runningCampaign, costCenter, expense, partialPayment, ledgerSnapshot, costOf, financial, receipt };

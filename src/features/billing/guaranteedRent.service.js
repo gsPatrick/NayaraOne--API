@@ -6,9 +6,9 @@ const { GuaranteedRentContract, Contract } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { assertUuid, assertPeriod } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { createFinancialEntry } = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
+const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4): ver getOrCreateDefaultCostCenter/getOrCreateDefaultResultCenter.
 const GUARANTEED_RENT_COST_CENTER_CODE = 'LOCACAO-ALUGUEL-GARANTIDO';

@@ -73,7 +73,8 @@ test('m9d825 nenhuma rota aceita parâmetro que desligue a máscara', async (t) 
   const offenders = [];
   // O jurídico vive em src/modules/legal (árvore do Guia do Marco 5, §2): varrido com as subpastas.
   const listar = (base) => fs.readdirSync(base).flatMap((n) => (fs.statSync(path.join(base, n)).isDirectory() ? listar(path.join(base, n)).map((x) => `${n}/${x}`) : [n]));
-  const pastas = [...['people', 'properties', 'procurement', 'finance', 'files'].map((d) => [d, path.join(root, d)]), ['legal', path.join(root, '..', 'modules', 'legal')]];
+  // O Financeiro vive em src/modules/finance (Guia do Marco 4, §2).
+  const pastas = [...['people', 'properties', 'procurement', 'files'].map((d) => [d, path.join(root, d)]), ['finance', path.join(root, '..', 'modules', 'finance')], ['legal', path.join(root, '..', 'modules', 'legal')]];
   for (const [dir, base] of pastas) {
     for (const file of listar(base).filter((name) => name.endsWith('.js'))) {
       if (pattern.test(fs.readFileSync(path.join(base, file), 'utf8'))) offenders.push(`${dir}/${file}`);

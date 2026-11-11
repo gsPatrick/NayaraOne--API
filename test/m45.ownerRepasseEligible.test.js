@@ -7,8 +7,9 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const { User, BankAccount, Person, Property } = require('../src/models');
 
@@ -31,7 +32,7 @@ async function setup(t) {
       { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId: rc.id, contractId: contract.id, competenceMonth, dueAt: new Date(`${competenceMonth}-10T12:00:00Z`), description: `Aluguel M45 ${competenceMonth} ${suffix}`, ...extra },
       tenant.userId, t
     );
-    if (extra.settle !== false) await financialEntriesService.settleFinancialEntry(e.id, tenant.userId, t);
+    if (extra.settle !== false) await receiptService.settleFinancialEntry(e.id, tenant.userId, t);
     return e;
   };
   return { owner, propA, propB, contractA, contractB, mkReceived };

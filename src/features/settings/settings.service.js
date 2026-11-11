@@ -56,8 +56,8 @@ const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.
 const { INSURANCE_SETTINGS_SCHEMA } = require('../procurement/insurance/insurance.settings');
 const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
-const { BANK_SETTINGS_SCHEMA } = require('../finance/bank/bank.settings');
-const { FINANCE_SETTINGS_SCHEMA } = require('../finance/finance.settings');
+const { BANK_SETTINGS_SCHEMA } = require('../../modules/finance/infrastructure/bank/hub/bank.settings');
+const { FINANCE_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/finance-settings');
 const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
 const { STORAGE_SETTINGS_SCHEMA } = require('../integrations/storage/storage.settings');
 const { IDENTITY_SETTINGS_SCHEMA } = require('../integrations/identity/identity.settings');
@@ -738,7 +738,7 @@ async function getIntegrationsStatus(tenant, transaction) {
 
   // Santander (PROVIDER_BANCARIO.md): autenticação exige mTLS (certificado A1) + OAuth2, não um
   // simples bearer token, então aqui só confirmamos que as 5 credenciais necessárias estão
-  // salvas — resolveBankAdapter.js já usa essa mesma lista pra decidir entre o adapter real e o
+  // salvas — resolve-bank-adapter.js já usa essa mesma lista pra decidir entre o adapter real e o
   // Sandbox. Não há "ping" de rede real (não vale abrir uma conexão mTLS só pra health-check
   // deste painel); "Conectado" aqui significa "configurado por completo", não "testado contra o
   // banco" — a mesma distinção que já vale pro resto desta função quando não há chamada de rede.

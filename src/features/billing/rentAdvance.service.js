@@ -4,14 +4,11 @@ const { RentAdvance, Contract, FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { assertUuid } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const {
-  createFinancialEntry,
-  settleFinancialEntry,
-  settleFinancialEntryPartial,
-  computeRemainingAmount,
-} = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
+const { settleFinancialEntry, settleFinancialEntryPartial } = require('../../modules/finance/application/services/receipt.service');
+const { computeRemainingAmount } = require('../../modules/finance/application/services/ledger-balance.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
+const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4): ver getOrCreateDefaultCostCenter/getOrCreateDefaultResultCenter.
 const RENT_ADVANCE_COST_CENTER_CODE = 'LOCACAO-ANTECIPACAO';

@@ -13,9 +13,9 @@ process.env.PORT = process.env.M4_PRECISAO_TEST_PORT || '21615';
 require('../app');
 const T = require('./testHelpers');
 const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
-const { hasAtMostTwoDecimals } = require('../src/features/finance/moneyPrecision');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const { hasAtMostTwoDecimals } = require('../src/modules/finance/presentation/http/money-precision.middleware');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const { FinancialEntry } = require('../src/models');
 
 let tenant;

@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
 
-const financeController = require('../src/features/finance/finance.controller');
+const financeController = require('../src/modules/finance/presentation/http/finance.controller');
 
 // Bug real corrigido nesta auditoria (rodada 38, 2026-10-05): bankPaymentPublicWebhook nunca
 // validava assinatura nenhuma — mesma falha de segurança corrigida no webhook de seguro (R37).

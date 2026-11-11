@@ -95,7 +95,7 @@ async function collectContractClosurePendencies(contractId, transaction) {
     transaction,
   });
   if (depositOrigins.length > 0) {
-    const { computeThirdPartyOriginBalance } = require('../../../../features/finance/financialEntries.service');
+    const { computeThirdPartyOriginBalance } = require('../../../finance/application/services/ledger-balance.service');
     const withBalance = [];
     for (const origin of depositOrigins) {
       const balance = await computeThirdPartyOriginBalance(origin, transaction);

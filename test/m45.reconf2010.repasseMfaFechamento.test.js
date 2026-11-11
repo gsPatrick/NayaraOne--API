@@ -9,9 +9,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const periodClosuresService = require('../src/features/finance/periodClosures.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const periodClosuresService = require('../src/modules/finance/application/services/closing.service');
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const { requireRecentMfa } = require('../src/middlewares/auth.middleware');
 const { encryptSecret } = require('../src/utils/mfaCrypto');
@@ -34,7 +35,7 @@ async function makeRepasse(t, { withBank }) {
     T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 2400, resultCenterId: rc.id, contractId: contract.id, competenceMonth: '2026-11', dueAt: new Date('2026-11-10T12:00:00Z'), description: `Aluguel R1 ${sfx}` }),
     tenant.userId, t
   );
-  await financialEntriesService.settleFinancialEntry(e.id, tenant.userId, t);
+  await receiptService.settleFinancialEntry(e.id, tenant.userId, t);
   const bank = await BankAccount.create(T({ bankCode: '001', agency: '0001', accountNumber: `R1-${sfx}`, status: 'ACTIVE' }), { transaction: t });
   const repasse = await ownerRepassesService.createOwnerRepasse(
     T({ propertyId: prop.id, contractId: contract.id, ownerPersonId: owner.id, bankAccountId: withBank ? bank.id : undefined, referenceMonth: '2026-11', sourceEntryIds: [e.id] }),
@@ -73,7 +74,7 @@ async function runGate(t, userId) {
 }
 
 test('R4: aprovação e reabertura do fechamento têm o portão de MFA recente; sem MFA recente => MFA_STEP_UP_REQUIRED, com => liberado', async () => {
-  const routes = fs.readFileSync(path.join(__dirname, '../src/features/finance/finance.routes.js'), 'utf8');
+  const routes = fs.readFileSync(path.join(__dirname, '../src/modules/finance/presentation/http/finance.routes.js'), 'utf8');
   for (const p of ['approve', 'reopen', 'return-to-open']) {
     const line = routes.split('\n').find((l) => l.includes(`'/finance/period-closures/${p}'`));
     assert.ok(line && line.includes('requireRecentMfa'), `rota ${p} deve exigir MFA recente`);

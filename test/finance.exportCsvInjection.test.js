@@ -12,8 +12,8 @@ process.env.PORT = process.env.FINANCE_EXPORT_HTTP_TEST_PORT || '21650';
 require('../app');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const { exportFinancialEntries, csvCell } = require('../src/features/finance/financeExport.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const { exportFinancialEntries, csvCell } = require('../src/modules/finance/application/services/finance-export.service');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); await new Promise((r) => setTimeout(r, 300)); });

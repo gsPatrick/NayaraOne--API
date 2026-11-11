@@ -3,9 +3,10 @@
 // Apoio dos testes do pagamento bancário sobre o registro de integração (M9-D237): intenção aprovada, webhook assinado, leitura dos envios e dos erros.
 const crypto = require('node:crypto');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, withTenantTransaction, createTestCostCenter, uniqueSuffix } = require('../../testHelpers');
-const { createFinancialEntry } = require('../../../src/features/finance/financialEntries.service');
-const { createPaymentIntent, approvePaymentIntent } = require('../../../src/features/finance/paymentIntents.service');
-const bankPayments = require('../../../src/features/finance/bankPayments.service');
+const { createFinancialEntry } = require('../../../src/modules/finance/application/services/financial-entry.service');
+const { createPaymentIntent, approvePaymentIntent } = require('../../../src/modules/finance/application/services/payment.service');
+const bankPayments = require('../../../src/modules/finance/application/services/bank-submission.service');
+const paymentService = require('../../../src/modules/finance/application/services/payment.service');
 const settingsService = require('../../../src/features/settings/settings.service');
 const { registerBuiltInAdapters } = require('../../../src/features/integrations/adapters');
 const { BankAccount, User, Person } = require('../../../src/models');
@@ -45,6 +46,6 @@ const assinado = (segredo, corpo) => {
 };
 
 module.exports = {
-  sequelize, withRollbackTenantTransaction, withTenantTransaction, uniqueSuffix, carregar, ctxDe, intencaoAprovada, intencaoEnviada, envios, erros, definirSegredoWebhook, assinado, bankPayments, linhas,
+  sequelize, withRollbackTenantTransaction, withTenantTransaction, uniqueSuffix, carregar, ctxDe, intencaoAprovada, intencaoEnviada, envios, erros, definirSegredoWebhook, assinado, bankPayments, paymentService, linhas,
   get tenant() { return tenant; },
 };

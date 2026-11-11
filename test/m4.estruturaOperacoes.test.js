@@ -14,8 +14,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const { Company, Person } = require('../src/models');
 
 let tenant;

@@ -3,7 +3,7 @@
 const { publishDomainEvent } = require('../../engines/events/outbox');
 
 // Publicação dos domain events do módulo billing (Transactional Outbox), mesmo padrão de
-// src/features/finance/financeEvents.service.js e src/modules/legal/shared/legalEvents.service.js —
+// src/modules/finance/application/services/finance-events.service.js e src/modules/legal/shared/legalEvents.service.js —
 // sempre dentro da MESMA transação da operação de negócio que originou o evento.
 
 function publishBillingGenerated(billingSchedule, transaction) {

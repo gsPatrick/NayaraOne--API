@@ -7,9 +7,10 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
-    "migrate": "sequelize-cli db:migrate",
-    "migrate:undo": "sequelize-cli db:migrate:undo",
-    "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
+    "migrate": "node scripts/migrate.js up",
+    "migrate:status": "node scripts/migrate.js status",
+    "migrate:undo": "node scripts/migrate.js undo",
+    "migrate:undo:all": "node scripts/migrate.js undo:all",
     "smoke:test": "node scripts/smokeTest.js",
     "seed": "node scripts/seed-dev.js",
     "backup": "node scripts/backupDatabase.js",

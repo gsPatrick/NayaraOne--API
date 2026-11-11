@@ -2,6 +2,13 @@
 
 const path = require('path');
 
+// M4-D140 (Guia do Marco 4 §2): as migrations do Financeiro ficam em src/modules/finance/infrastructure/db/migrations/.
+// O executor único (scripts/migrate.js) faz o sequelize-cli ler as duas pastas (src/config/migrationDirs.js) na ordem
+// global do nome do arquivo — vale para `npm run migrate*` e para o comando direto `npx sequelize-cli db:migrate*`.
+// `migrations-path` continua sendo a raiz: é onde `migration:generate` cria o arquivo novo (migration do Financeiro
+// é movida para a pasta do módulo; o teste test/m4d140.estruturaFinanceiro.test.js reprova se ficar na raiz).
+require(path.join(__dirname, 'scripts', 'migrate')).installMultiDirMigrations();
+
 module.exports = {
   config: path.resolve('src/config', 'sequelize-cli.js'),
   'models-path': path.resolve('src', 'models'),

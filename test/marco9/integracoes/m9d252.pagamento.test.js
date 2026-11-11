@@ -5,7 +5,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d237Env');
-const { SandboxBankAdapter } = require('../../../src/features/finance/adapters/BankAdapter');
+const { SandboxBankAdapter } = require('../../../src/modules/finance/infrastructure/bank/providers/sandbox.provider');
 
 const { sequelize, withRollbackTenantTransaction } = env;
 before(async () => { await env.carregar(); });

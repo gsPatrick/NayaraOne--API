@@ -18,7 +18,7 @@ const { accrualByProject } = require('./costBasis');
 
 // M6-42/M6-99 — read model de custo/saúde da obra. Cálculo REAL sobre dados já existentes no
 // banco (nenhum número inventado): tudo aqui é soma/derivação de linhas reais, lida sob o RLS
-// da empresa do contexto (mesma filosofia de financialHealthReport.service.js, M4-20).
+// da empresa do contexto (mesma filosofia de finance-health.service.js, M4-20).
 //
 // GET /construction/projects/:id/health devolve os 9 campos pedidos pelo escopo do Marco 6
 // (M6-42) mais um conjunto de KPIs adicionais (M6-99) que dependem só de dados sob controle

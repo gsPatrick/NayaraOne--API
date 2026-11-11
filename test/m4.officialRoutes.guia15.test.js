@@ -13,9 +13,10 @@ process.env.PORT = process.env.M4_GUIA15_TEST_PORT || '21612';
 require('../app');
 const T = require('./testHelpers');
 const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
 
 let tenant;
 let http;
@@ -57,7 +58,7 @@ async function payableWithEvidence(label) {
   return inTenant(async (t) => {
     const entry = await financialEntriesService.createFinancialEntry({ ...base(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 123.45, costCenterId, description: `Guia §15 ${label} ${T.uniqueSuffix()}` }, users.maker.id, t);
     const manual = await T.createManualSettlementEvidence(tenant, users.maker.id, t);
-    await financialEntriesService.attachSettlementEvidence(entry.id, manual, users.maker.id, t);
+    await settlementEvidence.attachSettlementEvidence(entry.id, manual, users.maker.id, t);
     return { entry, manual };
   });
 }

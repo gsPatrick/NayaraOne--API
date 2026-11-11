@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const envFin = require('../_helpers/painelFinEnv');
 const { seedMass, cleanupMass } = require('../_helpers/m9d626Massa');
 const money = require('../../../src/features/analytics/metrics/formulas/money');
-const { getWeeklyHealthReport } = require('../../../src/features/finance/financialHealthReport.service');
+const { getWeeklyHealthReport } = require('../../../src/modules/finance/application/services/finance-health.service');
 
 const { FIN_USER, NOW, openPanel, http } = envFin;
 const widgets = (res) => res.body.data.widgets;

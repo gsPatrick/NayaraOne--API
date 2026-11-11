@@ -21,9 +21,10 @@ const personContactsService = require('../src/features/people/personContacts.ser
 const rentAdjustmentService = require('../src/features/billing/rentAdjustment.service');
 const { createMockIndexSourceAdapter } = require('../src/features/billing/adapters/IndexSourceAdapter');
 const mfaService = require('../src/features/users/mfa.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
 const usersService = require('../src/features/users/users.service');
-const commissionsService = require('../src/features/finance/commissions.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
 const { registrarAuditoria } = require('../src/engines/audit/auditLog.service');
 const { publishDomainEvent } = require('../src/engines/events/outbox');
 const { dispatchPendingEventsForCompany } = require('../src/engines/events/outbox-dispatcher');
@@ -404,8 +405,8 @@ test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem s
 
   try {
     const results = await Promise.allSettled([
-      withCommittedTenantTransaction(tenantCtx, (t) => financialEntriesService.settleFinancialEntry(entry.id, tenantCtx.userId, t)),
-      withCommittedTenantTransaction(tenantCtx, (t) => financialEntriesService.settleFinancialEntry(entry.id, tenantCtx.userId, t)),
+      withCommittedTenantTransaction(tenantCtx, (t) => receiptService.settleFinancialEntry(entry.id, tenantCtx.userId, t)),
+      withCommittedTenantTransaction(tenantCtx, (t) => receiptService.settleFinancialEntry(entry.id, tenantCtx.userId, t)),
     ]);
 
     const succeeded = results.filter((r) => r.status === 'fulfilled').length;

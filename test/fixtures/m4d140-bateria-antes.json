@@ -1,0 +1,6306 @@
+{
+ "demanda": "M4-D140",
+ "geradoNoCommit": "a8335d22073a3ac4a7a0fdda5a634313888dcb9b",
+ "criterio": "scripts/lib/testInventory.js",
+ "arquivos": 1574,
+ "declaracoes": 7404,
+ "marcasDeIgnorado": 1001,
+ "porArquivo": {
+  "test/adversarial.crm.test.js": {
+   "testes": 20,
+   "ignorados": 0
+  },
+  "test/adversarial.finance.test.js": {
+   "testes": 21,
+   "ignorados": 0
+  },
+  "test/adversarial.legal.test.js": {
+   "testes": 19,
+   "ignorados": 0
+  },
+  "test/ai/archGuard.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/ai/invariantes.test.js": {
+   "testes": 15,
+   "ignorados": 0
+  },
+  "test/analytics.m9d600.esquema.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/analytics.m9d600.isolamento.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/analytics.m9d600.versoes.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/analytics.m9d601.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/analytics.m9d602.scope.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/analytics.m9d602.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/analytics.m9d603.read.test.js": {
+   "testes": 4,
+   "ignorados": 1
+  },
+  "test/analytics.m9d603.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/analytics.m9d604.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/analytics.m9d605.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/analytics.m9d612.test.js": {
+   "testes": 8,
+   "ignorados": 7
+  },
+  "test/analytics.m9d613.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/aiBudget.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/aiCostByAgent.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/aiProposalsPending.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/aiQualityScores.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/aiToolCallsBlocked.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/corAnalysisTime.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/corApprovalRateByProvider.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/corCasesByStage.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/corCommission.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmBrokerCapture.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmBrokerConversion.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmConversionRate.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmFirstResponseTime.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmLeadsByOrigin.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmLossReasons.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmOpportunitiesByStage.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmOpportunitiesWon.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmPortfolioWithoutNextAction.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmProposals.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/crmVisits.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finAnomaliesOpen.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finApprovalsPending.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finBreathingNeed.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finCommissionsPaid.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finCommissionsProvisioned.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finDelinquencyRate.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finFreeCash.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finOverdueReceivables.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finOwnerRepassesPending.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finPayables30d.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finPayables60d.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finPayables7d.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finPaymentsSettledRelevant.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finReceivables30d.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finReceivables60d.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finReceivables7d.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finReconciliationsPending.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finSectorMargin.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/finThirdPartyCash.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/invAdjustmentsPending.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/invBelowMinimum.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/invLosses.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/invStockValue.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/invToolsOverdue.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/legalCasesByRisk.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/legalContractsSigned.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/legalDeadlines.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/legalMissingDocuments.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/legalValues.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktAttribution.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktAutomationsBlockedFailed.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktCampaigns.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktCost.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktDeliverability.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktFrequency.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktLeads.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/mktOptOut.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraBaselineActualForecast.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraDelays.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraMeasurements.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraNonconformities.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraPostworkCost.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraProgressVsSchedule.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraProjectedMargin.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraRecurrence.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/obraWaste.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/propActiveProperties.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/propPriceChanges.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/propWithoutSaleByPeriod.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/radarMatches.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentActiveContracts.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentDelinquency.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentGuaranteesExpiring.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentInspectionsKeys.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentObligationsPending.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentRepasses.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentSatisfaction.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentTickets.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/rentVacancy.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/supComplaintsByReason.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/supReviews.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/supSatisfaction.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/supSlaResolution.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/tecRuleApprovalsPending.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/techAuthFailures.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/techAvailability.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/techBlockedEvents.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/techFreshness.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/techIntegrationErrors.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/analytics/formulas/techQueuesDlq.formula.test.js": {
+   "testes": 0,
+   "ignorados": 0
+  },
+  "test/api.permissionMatrix.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/approverScreensPermissions.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/auditLogAppendOnly.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/auditoriaNayara.marco5.coverage.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/auth.switchCompany.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/bankPaymentReconciliationJob.candidates.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/billing.collectionCadence.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/billing.collectionCadenceRoutes.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/billing.indexAdapters.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/billing.rentAdvanceRecovery.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/billing.test.js": {
+   "testes": 18,
+   "ignorados": 0
+  },
+  "test/billingScheduleAutoGenerateJob.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/ciTwoTenantsFinanceLegal.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/ciTwoTenantsProfiles.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/companies.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/construction.adminPermissions.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/construction.budget.test.js": {
+   "testes": 39,
+   "ignorados": 0
+  },
+  "test/construction.closedCaseRequirements.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/construction.costBasis.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/construction.dailyReports.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/construction.dashboard.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/construction.delivery.test.js": {
+   "testes": 21,
+   "ignorados": 0
+  },
+  "test/construction.e2e.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/construction.evidenceFiles.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/construction.evidenceReuse.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/construction.failureDrills.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/construction.hardcodeScanner.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/construction.httpRoutes.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/construction.lockVersion.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/construction.marginRuleLifecycle.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/construction.materialRequests.test.js": {
+   "testes": 15,
+   "ignorados": 0
+  },
+  "test/construction.measurements.test.js": {
+   "testes": 18,
+   "ignorados": 0
+  },
+  "test/construction.minimumEvents.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/construction.missingDailyReport.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/construction.nayNoAutomaticEffect.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/construction.nayObras.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/construction.nonconformities.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/construction.projectDelay.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/construction.qualityItemDelete.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/construction.rlsWrite.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/construction.siteReturns.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/construction.slaRules.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/construction.warranty.test.js": {
+   "testes": 27,
+   "ignorados": 0
+  },
+  "test/correspondent.adversarialConsolidated.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/correspondent.appraisals.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/correspondent.asyncWorkers.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/correspondent.caseDocumentExpiry.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/correspondent.caseDocuments.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/correspondent.commissions.test.js": {
+   "testes": 14,
+   "ignorados": 0
+  },
+  "test/correspondent.documentPipeline.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/correspondent.domainEvents.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/correspondent.eligibility.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/correspondent.financingCases.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/correspondent.fiscal.test.js": {
+   "testes": 16,
+   "ignorados": 0
+  },
+  "test/correspondent.httpRoutes.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/correspondent.nay.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/correspondent.providerAdapter.test.js": {
+   "testes": 17,
+   "ignorados": 0
+  },
+  "test/correspondent.restrictedFileGuard.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/correspondent.security.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/correspondent.simulations.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/correspondent.submissions.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/correspondent.webhooks.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/crm.carts.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/crm.dashboardCreatedFilter.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/crm.dashboardStagnation.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/crm.exportVolumeLimit.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/crm.funnelStages.http.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/crm.funnelStages.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/crm.livroAntifraudeCarrinho.http.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/crm.livroApiOcorrencias.http.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/crm.livroEntidades.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/crm.opportunities.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/crm.opportunityOutcomeRace.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/crm.optOutGate.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/crm.ownerScope.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/crm.permanentHistory.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/crm.taskOverdueJob.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/dec007.antifraudeParametros.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/entregaMarco45.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/f06.flowSecurity.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/files.accessControl.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/files.encryptionAtRest.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/files.uploadSecurity.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/finance.adminPermissions.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/finance.anomalyCases.display.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/finance.bankAccountRedirect.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/finance.bankPaymentConfirmation.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/finance.bankWebhookSignature.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/finance.entries.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/finance.exportCsvInjection.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/finance.nay.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/finance.readOnlyProfile.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/finance.receiptFileAccess.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/finance.reconciliationSuggestions.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/financeE2E.flow.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/frente3.financeRules.test.js": {
+   "testes": 18,
+   "ignorados": 0
+  },
+  "test/homologacaoEvidencias.test.js": {
+   "testes": 22,
+   "ignorados": 0
+  },
+  "test/insurance.auditGaps.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/insurance.hub.test.js": {
+   "testes": 22,
+   "ignorados": 0
+  },
+  "test/insurance.policyExpiry.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/insurance.rlsWrite.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/insurance.webhookSignature.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/integrations/catalog.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/integrations/outboxAdequacao.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/integrations/outboxConcorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/integrations/registry.conexoes.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/integrations/registry.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/integrations/syncCursors.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/integrations/syncErrors.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/inventory.adjustmentRiskRule.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/inventory.auditGapsRound2.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/inventory.auditGapsRound3.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/inventory.auditGapsRound4.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/inventory.averageCost.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/inventory.countSelfApproval.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/inventory.failureDrills.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/inventory.lossCase.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/inventory.lossCaseCharge.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/inventory.maintenance.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/inventory.marco7.adversarial.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/inventory.marco7.concurrency.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/inventory.marco7.rls.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/inventory.marco7CheckFixes.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/inventory.marco7ContractGaps.test.js": {
+   "testes": 22,
+   "ignorados": 0
+  },
+  "test/inventory.marco7FinalFixes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/inventory.marco7check.severeBugs.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/inventory.minStockRules.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/inventory.nay.httpRoutes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/inventory.nay.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/inventory.patrimonioGaps.test.js": {
+   "testes": 14,
+   "ignorados": 0
+  },
+  "test/inventory.receiptOcr.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/inventory.rlsWrite.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/inventory.skuUniqueCaseInsensitive.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/inventory.toolLoanOverdue.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/legal.clauseConditions.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/legal.clauseConditionsGeneration.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/legal.clauseLibrary.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/legal.constructionContractType.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/legal.contractNumberUnique.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/legal.contractTimelineAndSubtypes.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/legal.contracts.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/legal.crossCompanyIsolation.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/legal.deadlineAccountability.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/legal.deadlineCriticalAndNote.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/legal.deadlineFinalState.concurrency.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/legal.deadlineFinalState.http.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/legal.deadlineFinalState.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/legal.deadlineInvisibleText.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/legal.deadlineRaceCritical.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/legal.deadlineReopenCritical.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/legal.deadlineResponsible.concurrency.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/legal.deadlineResponsible.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/legal.deadlineStatusValidation.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/legal.frente5.rules.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/legal.frente5.waiveHttp.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/legal.guaranteeExpiry.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/legal.inspections.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/legal.keyDeliveries.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/legal.nay.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/legal.notices.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/legal.requirements.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/legal.signatureProviders.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/logRedaction.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m3.automacaoEtapaFunil.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/m3.funilMigracaoEtapas.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/m4.antifraudeValorForaDoPadrao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m4.ciEsteiraFinanceiro.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/m4.conciliacaoManualRecorrente.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m4.estruturaOperacoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m4.eventosGuia14.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m4.extratoUnicidadePorConta.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m4.intencaoChaveIdempotencia.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m4.lancamentoConcorrenteChave.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m4.officialRoutes.guia15.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/m4.parametrosFinanceiro.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m4.precisaoCentavo.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m4.reconfBrowser.errors.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m4.reconfBrowser.finance.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m4.reconfBrowser.group.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m4.reconfBrowser.statement.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/m4.restoreDrill.finance.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/m4.settlePartialIdempotency.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/m45.cadernoM4Gaps.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/m45.cadernoM5Gaps.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/m45.closeoutEligibilityNotFound.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/m45.commissionRuleVersion.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/m45.files.webhook.security.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m45.ownerRepasseEligible.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m45.reconf2010.repasseMfaFechamento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m45.settlementEvidenceSha.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.adversariais.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.checklist.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.maquinaTipos.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.modelosAditivos.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.previaModelo.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.rodada3.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.rotasLivro.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.versoesAprovacao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.contratos.webhookLiteral.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.adversariais.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.carga.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.custodia.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.failureDrills.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.nay.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.pentest.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.prazos.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.prazosLivro.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.processos.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.rotas.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/m5fech.juridico.versoesRecebivel.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.chaves.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.chavesLivro.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.cobranca.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.garantias.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.http.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.obrigacoesLivro.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.pentest.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.rodada3.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.vistorias.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.locacao.vistoriasLivro.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m5fech.meta.erroEntradaInvalida.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.meta.esteiraJuridico.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/m5fech.meta.estruturaGuia.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m5fech.meta.redacaoLinear.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m5fech.meta.tabelasDoLivro.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m5fech.pentest.test.js": {
+   "testes": 3,
+   "ignorados": 1
+  },
+  "test/m9d402.permissoesMarketing.test.js": {
+   "testes": 8,
+   "ignorados": 4
+  },
+  "test/m9d404.aprovacao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/m9d404.rotas.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/m9d404.templates.test.js": {
+   "testes": 11,
+   "ignorados": 1
+  },
+  "test/m9d405.fonteVersaoConteudo.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/m9d406.complementos.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/m9d406.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/m9d406.estados.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/m9d406.pipeline.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/m9d406.rotas.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/m9d412.campanhas.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/m9d412.ciclo.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/m9d412.rls.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m9d412.rotas.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/m9d413.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/m9d413.definicao.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/m9d413.rotas.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/m9d417.cadenciaParametros.test.js": {
+   "testes": 8,
+   "ignorados": 1
+  },
+  "test/m9d417.rotas.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/m9d434.eventosMarketing.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/m9d800.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m9d800.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/m9d800.permissoes.test.js": {
+   "testes": 4,
+   "ignorados": 2
+  },
+  "test/m9d801.calendario.http.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/m9d801.calendario.regras.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco3.acceptance.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco3.batch2.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco3.crm.test.js": {
+   "testes": 19,
+   "ignorados": 0
+  },
+  "test/marco3.crossCompanyIsolation.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco3.httpRoutes.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco3.minimumEvents.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco4.acceptance.batch2.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco4.acceptance.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco4.batch3.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/marco4.budgetsForecasts.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco4.contract.gaps.test.js": {
+   "testes": 19,
+   "ignorados": 0
+  },
+  "test/marco4.crossCompanyIsolation.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco4.finance.batch3.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco4.httpRoutes.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco4.nayNoExecution.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco45.auditTrailBeforeAfter.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco5.acceptance.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco5.auditGapClosureR1.test.js": {
+   "testes": 18,
+   "ignorados": 0
+  },
+  "test/marco5.batch2.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco5.httpRoutes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco5.legal.test.js": {
+   "testes": 15,
+   "ignorados": 0
+  },
+  "test/marco7.auditTrailBeforeAfter.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco7compras.auditFixes.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/marco7final2.auditFixes.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco7r2.auditFixes.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco7rev19.A.test.js": {
+   "testes": 19,
+   "ignorados": 0
+  },
+  "test/marco7rev19.A9concurrency.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco7rev19.B.concurrency.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco7rev19.B.insurance.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco7rev19.B.procurement.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/marco7rev20.F.test.js": {
+   "testes": 24,
+   "ignorados": 1
+  },
+  "test/marco8/apisMinimas.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco8/auditoriaIndependente.test.js": {
+   "testes": 76,
+   "ignorados": 0
+  },
+  "test/marco8/comissaoCiclo.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco8/comissaoParametros.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco8/dimobCongelamentoConcorrente.test.js": {
+   "testes": 2,
+   "ignorados": 1
+  },
+  "test/marco8/dimobGatilhoLoteFechado.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco8/dimobModeloPorVersao.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco8/eventosCaderno.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco8/fiscalCompleto.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco8/fluxoManualCancelamento.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco8/historicoDocumentosDatas.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco8/integracaoConta.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco8/lacunasRevisao.test.js": {
+   "testes": 22,
+   "ignorados": 0
+  },
+  "test/marco8/regrasCaderno.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco8/statusMachine.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco8/tabelasRls.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco8/validacaoDocumentoCritico.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco8/validacaoEnvio.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/_helpers/pontoExato.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9bi.agendaTecnologia.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9bi.briefSemFontes.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9bi.confirmacaoSnapshot.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9bi.disponibilidadeSerie.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d605.entrada.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d605.portaUnica.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d606.periodo.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d606.rota.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d607.agenda.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d607.outbox.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d607.worker.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d608.lockEmpresa.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d608.protecao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d608.reproducao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d608.script.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d608.snapshots.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d609.alerta.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d609.freshness.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d609.futuro.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d609.job.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d609.snapshotDiario.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d609.snapshotFinanceiro.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d610.naturezas.test.js": {
+   "testes": 5,
+   "ignorados": 2
+  },
+  "test/marco9/analytics/m9d611.hmac.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d611.rastreio.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d611.reconciliacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d614.banco.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d614.estaticos.test.js": {
+   "testes": 6,
+   "ignorados": 2
+  },
+  "test/marco9/analytics/m9d615.estrutura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d615.numeros.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d615.worker.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d616.crm.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d616.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d616.imoveis.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d616.worker.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d617.carteira.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d617.estrutura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d617.operacao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d617.worker.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d618.agenda.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d618.estrutura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d618.isolamento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d618.numeros.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d618.rebuild.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d618.replay.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d619.agenda.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d619.estrutura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d619.isolamento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d619.numeros.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d619.publicadores.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d619.rebuild.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d619.replay.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d620.caixaLivre.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d620.estrutura.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d620.qualidade.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d620.rota.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d621.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d621.janelas.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d621.rota.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d622.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d622.inadimplencia.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d622.respirar.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d622.rota.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d623.comissoes.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d623.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d623.margem.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d623.repasses.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d623.rota.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d624.anomalias.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d624.conciliacoes.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d624.estrutura.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d624.rota.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d625.eliminacao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d625.escopo.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d625.leitura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d626.esquema.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d626.painel.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d626.reconciliacao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d627.atendimento.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d627.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d627.marketing.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d627.worker.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.agenda.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.conciliacaoSondas.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.isolamento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.numeros.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.rebuild.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.relogio.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d628.replay.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d630.estrutura.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d630.leads.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d630.primeiraResposta.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d630.rota.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d631.estrutura.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d631.funil.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d631.perdas.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d631.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d632.drilldown.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d632.estrutura.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d632.kpis.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d632.qualidade.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d632.worker.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d633.drilldown.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d633.estrutura.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d633.kpis.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d633.qualidade.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d634.esquema.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d634.incompleto.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d634.painel.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d640.carteira.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d640.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d640.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d641.estrutura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d641.garantias.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d641.obrigacoes.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d641.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d641.vistoriasChaves.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d642.chamados.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d642.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d642.repasses.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d642.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d642.satisfacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d643.esquema.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d643.painel.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d650.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d650.gancho.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d650.numeros.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d650.qualidade.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d650.rota.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d651.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d651.numeros.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d651.qualidade.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d651.rota.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d652.estrutura.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d652.perdas.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d652.recorrencia.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d652.rota.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d653.estoque.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d653.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d653.janela.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d653.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d654.esquema.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d654.painel.test.js": {
+   "testes": 11,
+   "ignorados": 1
+  },
+  "test/marco9/analytics/m9d660.documentos.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d660.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d660.prazos.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d660.processos.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d660.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d661.aprovacao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d661.comissao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d661.estagios.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d661.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d661.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d662.esquema.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d662.painel.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d670.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d670.numeros.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d670.rota.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d671.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d671.numeros.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d671.rota.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d672.atendimento.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d672.avaliacoes.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d672.estrutura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d672.rota.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d672.zerolinhas.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d673.esquema.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d673.painel.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d673.reabertura.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d680.autenticacaoBloqueios.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d680.disponibilidade.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d680.estrutura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d680.filasIntegracoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d680.rota.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d681.custoBudget.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d681.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d681.qualidadeFerramentas.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d681.recusasNay.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d681.rota.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d682.painel.test.js": {
+   "testes": 9,
+   "ignorados": 1
+  },
+  "test/marco9/analytics/m9d682.painelIa.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d682.quadroEsquema.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d682.reabertura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d685.acesso.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d685.blocos.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d685.dinheiro.test.js": {
+   "testes": 5,
+   "ignorados": 1
+  },
+  "test/marco9/analytics/m9d685.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d685.rotulos.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d686.configuracao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d686.semaforo.test.js": {
+   "testes": 5,
+   "ignorados": 2
+  },
+  "test/marco9/analytics/m9d686.semdado.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d686.versao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d687.logAbertura.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d687.paineis.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d690.criticos.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d690.detalhe.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d690.escopo.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d691.ciclo.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d691.condicao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d691.freshness.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d691.robustez.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d692.owner.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d692.sigilo.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d692.tarefa.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d693.agenda.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d693.fluxoReal.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d693.geracao.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d693.job.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d693.leitura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d694.bloqueio.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d694.entrada.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d694.grounding.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d694.variacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d695.catalogo.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d695.leitura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d695.painel.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d696.catalogo.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d696.dominios.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d696.financeiro.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d696.rebuild.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d696.tipos.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d697.consumidores.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d697.estados.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d697.reabertura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d697.recuperacao.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d698.cache.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d698.indices.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d698.instrumentacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d698.matview.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d698.metas.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d698.protecao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d699.carga.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d699.criterios.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d699.massa.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d699.rebuild.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d700.logAcesso.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d700.mascaramento.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d700.seguranca.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d700.varredura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d701.chave.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d701.detalhe.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d701.download.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d701.pedido.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d701.worker.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d702.fusoHorario.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d702.metrica.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d702.painel.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d703.ack.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d703.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d703.listagem.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d704.adversarial.test.js": {
+   "testes": 15,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d704.suite.test.js": {
+   "testes": 7,
+   "ignorados": 4
+  },
+  "test/marco9/analytics/m9d705.etapas.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d705.globs.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d705.portoes.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d706.esteira.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d706.mapa.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d706.ordem.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d707.dod.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d707.ordem.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/analytics/m9d708.aceite.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d708.estrutura.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d708.origem.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d708.reconciliacao.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d708.scripts.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d709.ciclo.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d709.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d709.reproducao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d710.estrutura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d710.janela.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d710.numeros.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d710.replay.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d710.reversao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d710.rota.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d712.catalogoReal.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d712.drilldown.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d712.semente.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/analytics/m9d712.tabela.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d800.endereco_empresa.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d800.rls_sem_empresa.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d800.rota_inexistente.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d801.portaEfemera.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d802.alertas.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d802.fontes.test.js": {
+   "testes": 10,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d802.matriz.test.js": {
+   "testes": 6,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d802.projetor.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d803.backfill.test.js": {
+   "testes": 3,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d803.eventos.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d803.fontes.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d803.visibilidade.http.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d804.http.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d804.servico.test.js": {
+   "testes": 12,
+   "ignorados": 12
+  },
+  "test/marco9/governanca/m9d805.concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d805.decisao.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d805.deteccao.test.js": {
+   "testes": 10,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d805.http.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d805.impacto_review.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d806.consulta.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d806.gravacao.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d806.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d806.issues.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d806.job.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d806.score.test.js": {
+   "testes": 6,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d807.guard.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d807.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d807.servico.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d807.vinculos.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d808.evidencia.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d808.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d808.servico.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d809.aud.matriz.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d809.aud013.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d809.aud014.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d809.aud015.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d809.aud016.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d809.aud017.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d809.aud018.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d809.aud019.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d809.aud020.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d810.arquivo.test.js": {
+   "testes": 3,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d810.http.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d810.regras.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d810.semente.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d810.servico.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d811.ci.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d811.gate.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d820.edicao.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d820.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d820.matriz.test.js": {
+   "testes": 10,
+   "ignorados": 10
+  },
+  "test/marco9/governanca/m9d821.guard.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d821.servico.test.js": {
+   "testes": 13,
+   "ignorados": 13
+  },
+  "test/marco9/governanca/m9d822.auditoria.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d822.formatos.test.js": {
+   "testes": 6,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d822.http.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d822.inventario.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d822.servico.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d823.http.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d823.servico.test.js": {
+   "testes": 10,
+   "ignorados": 10
+  },
+  "test/marco9/governanca/m9d824.deteccao.test.js": {
+   "testes": 10,
+   "ignorados": 10
+  },
+  "test/marco9/governanca/m9d824.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d824.resposta.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d825.copy.http.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d825.perfisQa.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d825.regras.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d825.tela.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d825.view.http.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d830.catalogo.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d830.runbooks.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d831.http.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d831.regras.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d831.servico.test.js": {
+   "testes": 11,
+   "ignorados": 11
+  },
+  "test/marco9/governanca/m9d832.adaptadores.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d832.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d832.decisao.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d832.http.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d832.regras.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d833.conciliacao.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d833.diasUteis.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d833.dupla.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d833.http.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d834.catalogo.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d834.http.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d834.impressao.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d840.comando.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d840.regras.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d841.alvo.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d841.evento.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d841.http.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d841.regras.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d842.cobertura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d842.contrato.test.js": {
+   "testes": 3,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d842.deteccao.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d842.guarda.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d842.limpeza.test.js": {
+   "testes": 2,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d843.erros.test.js": {
+   "testes": 5,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d843.idempotencia.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d843.limite.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d843.paginacao.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d843.rotainexistente.test.js": {
+   "testes": 2,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d844.dados.http.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d844.token.http.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d844.varredura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d850.parametro.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d850.vinculos.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d852.acoes.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d852.erro.test.js": {
+   "testes": 4,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d852.http.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d852.inventario.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d852.nucleo.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d852.provedores.test.js": {
+   "testes": 5,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d852.uniao.test.js": {
+   "testes": 5,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d860.coletores.test.js": {
+   "testes": 10,
+   "ignorados": 10
+  },
+  "test/marco9/governanca/m9d860.fatura.test.js": {
+   "testes": 4,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d860.http.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d860.ledger.test.js": {
+   "testes": 9,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d861.alertas.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d861.consumo.test.js": {
+   "testes": 3,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d861.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d862.ciclo.test.js": {
+   "testes": 5,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d862.deteccao.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d862.http.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d863.degradacao.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d863.health.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d863.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d863.job.test.js": {
+   "testes": 4,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d863.politica.test.js": {
+   "testes": 5,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d870.alteracao.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d870.atividades.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.escrita.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.http.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.marketing.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.migracao.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d870.modulos.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.plataforma.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.protegidas.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.resolucao.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d870.restritas.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d870.seguranca.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d871.ci.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d871.expiracao.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d871.validade.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d872.ciclo.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d872.drill.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d872.hermetico.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d872.http.test.js": {
+   "testes": 5,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d872.registro.test.js": {
+   "testes": 4,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d890.irmaos.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d890.mapa.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d890.workflow.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d891.readmes.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d891.runbooks.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d900.alvos.test.js": {
+   "testes": 4,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d900.cdc.test.js": {
+   "testes": 9,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d900.descarte.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d900.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d900.legado.codigo.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d900.legado.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d900.limites.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d900.lote.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d900.r3.codigo-corrida.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d900.r3.replay-expira.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d900.r4.codigo-rajada.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d900.r4.replay-sinal.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d900.replay.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d900.replay.limites.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d900.watermark.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d901.concorrencia.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d901.eta.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d901.http.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d901.isolamento.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d901.maquina.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d901.provedores.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d901.resolve.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d901.totais.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d902.decisoes.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d902.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d902.matriz.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d902.torre.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d903.comparacao.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d903.http.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d903.isolamento.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d903.janela.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d903.parametros.test.js": {
+   "testes": 4,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d903.regras.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d904.comparacao.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d904.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d904.login.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d904.migracao-real.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d904.parametros.test.js": {
+   "testes": 4,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d904.protegidas-estreita.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d904.selecao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d904.servico.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d905.formato.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d905.lote.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d905.reconciliacao.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d906.primaria.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d906.servico.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d907.http.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d907.inventario.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d907.isolamento.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d907.parametros.test.js": {
+   "testes": 2,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d907.prontidao.test.js": {
+   "testes": 2,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d907.registro.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d907.relatorio.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d908.alertas.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d908.commit.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d908.documentacao.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d908.dry3.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d908.exportado.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d908.fuso.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d908.oficial.test.js": {
+   "testes": 6,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d908.parametros.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d908.relogio.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d908.restritas.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d908.seguranca.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d908.vinculo.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d910.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d910.registro.test.js": {
+   "testes": 6,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d910.servico.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d910.vocabulario.test.js": {
+   "testes": 4,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d911.aplicacao.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d911.disposicao.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d911.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d911.integracao.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d911.politica.test.js": {
+   "testes": 9,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d911.retomada.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d911.simulacao.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d912.concorrencia.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d912.disposicao.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d912.empresa.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d912.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d912.inventario.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d912.retencao.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d912.servico.test.js": {
+   "testes": 7,
+   "ignorados": 7
+  },
+  "test/marco9/governanca/m9d914.ci.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d914.mapa.test.js": {
+   "testes": 7,
+   "ignorados": 1
+  },
+  "test/marco9/governanca/m9d914.semente.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d914.torre.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d915.campo.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/governanca/m9d915.exportacao.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/governanca/m9d915.ia.test.js": {
+   "testes": 8,
+   "ignorados": 8
+  },
+  "test/marco9/governanca/m9d915.logs.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/governanca/m9d915.tela.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d920.anexo.http.test.js": {
+   "testes": 7,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d920.download.http.test.js": {
+   "testes": 11,
+   "ignorados": 11
+  },
+  "test/marco9/governanca/m9d920.impressao.http.test.js": {
+   "testes": 8,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d920.lote.http.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/governanca/m9d920.marca.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d920.portaHttp.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d940.adiado.test.js": {
+   "testes": 16,
+   "ignorados": 6
+  },
+  "test/marco9/governanca/m9d940.banco.test.js": {
+   "testes": 4,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d940.fechamento.test.js": {
+   "testes": 5,
+   "ignorados": 3
+  },
+  "test/marco9/governanca/m9d940.provas.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/m9d940.vinculo.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/governanca/mfa.testWindow.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv00.manifest_completo.test.js": {
+   "testes": 5,
+   "ignorados": 3
+  },
+  "test/marco9/ia/adversarial/adv01.documento_manda_ignorar.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv02.dado_de_outra_empresa.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv03.tool_sem_permissao.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv04.argumento_fora_do_schema.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv05.fonte_revogada.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv06.rag_sem_fonte_suficiente.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv07.modelo_cai.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv08.budget_estoura.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv09.prompt_tenta_obter_secret.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv10.pagar_ou_alterar_banco.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv11.memoria_invalidada.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv12.resposta_financeira.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv13.troca_de_provider.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv14.pii_no_log.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv15.tool_replay.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/adv99.avaliacao_http.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/m9d042.atendimento.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/m9d042.juridica.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/adversarial/m9d042.obras.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d004.patch_vazio.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d004.uuid_no_redactor.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d006.bloqueios_pipeline.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d006.concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d006.propostas.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d006.replay.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d006.schema.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d007.compat.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d007.concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d007.criacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d007.estado.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d007.permissoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d008.patch_vazio.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d009.ciclo.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d009.concorrencia.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d009.http.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d009.regras.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d009.valor.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d010.arquitetura.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d010.contrato.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d010.erros.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d011.candidates.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d011.conexao.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d011.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d011.integracao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d011.registro.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d011.sandbox.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d012.caminhos.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d012.escalonamento.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d012.modelos.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d012.orcamento.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d013.equivalencia.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d013.orquestrador.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d014.alertas.test.js": {
+   "testes": 4,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d014.http.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d014.periodo.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d014.politica.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d014.reserva.test.js": {
+   "testes": 6,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d015.elegibilidade.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d015.isolamento.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d015.orquestrador.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d016.http.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d016.iniciais.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d016.registro.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d016.servidor.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d017.adversariais.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d017.auditoria.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d017.http.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d017.identidade.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d018.executor.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d018.validador.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d019.aprovacao.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d019.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d019.decisao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d019.http.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d019.politica.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d019.proposta.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.entrada_max.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d020.falhas_entrada.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.falhas_modelo.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.fluxo.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.fontes.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.integracao.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.memoria.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.rajada.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d020.tabela.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d020.tools.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d021.detector.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d021.evento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d021.lista_admin.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d021.normalizacao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d021.prompt.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d021.saida.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d022.concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d022.conhecimento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d022.http.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d022.pipeline.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d022.url.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d023.busca.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d023.chunks.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d023.concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d023.consulta_max.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d023.fontes.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d023.origem.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d024.atomicidade.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d024.conflito.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d024.revogada.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d024.vigencia.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d025.confirmacao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d025.validador.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d026.numeros.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d026.readmodel.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d027.chaves_reais.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d027.contexto.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d027.redactor.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d027.varredura.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d028.entrada_bloqueada.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d028.job.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d028.logs.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d028.resumo.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d028.retencao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d029.atomicidade.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d029.eventos.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d030.atendimento.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/ia/m9d030.chat.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d030.falhas.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d030.historico.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d030.rag.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d030.runs.test.js": {
+   "testes": 9,
+   "ignorados": 9
+  },
+  "test/marco9/ia/m9d031.orcamentos.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/ia/m9d031.recomendacoes.test.js": {
+   "testes": 5,
+   "ignorados": 5
+  },
+  "test/marco9/ia/m9d032.categorias.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d032.feedback.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d032.homologacao.test.js": {
+   "testes": 6,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d032.imutavel.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d033.dataset.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d033.regressao.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d033.troca_provider.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d034.fronteira.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d034.homologacao.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d034.http.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d034.proxima_acao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d034.radar.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d034.rascunhos.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d034.resumo.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d035.cadastro.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d035.conversa.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d035.fronteira.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d035.saida.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d036.cadastro.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d036.fronteira.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d036.leitura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d037.cadastro.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d037.consultas.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d037.fronteira.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d038.cadastro.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d038.compartilhada.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d038.consultas.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d038.fronteira.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d039.cadastro.test.js": {
+   "testes": 6,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d039.fronteira.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d039.http.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d039.leitura.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d040.cadastro.test.js": {
+   "testes": 6,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d040.fronteira.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d040.funcoes.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d040.http.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d041.cadastro.test.js": {
+   "testes": 6,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d041.canal.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d041.ciclo.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d041.fluxo.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d041.parametros.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d041.proibicoes.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d043.manifesto.test.js": {
+   "testes": 8,
+   "ignorados": 3
+  },
+  "test/marco9/ia/m9d044.esteira.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d044.golden_agentes.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d044.injecao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d044.portoes.test.js": {
+   "testes": 4,
+   "ignorados": 2
+  },
+  "test/marco9/ia/m9d045.mapa.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d045.portao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.carga.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.drill_infra.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.drill_modelo.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.esteira.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.gate.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.http.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/ia/m9d046.lab.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.red_team.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d046.registro.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d047.dod.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d047.esteira.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d047.logs.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9d047.metricas.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9dleve.barrel_guard.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9dleve.baseurl.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9dleve.ratelimiter.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9dleve.relogio.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/ia/m9dleve.settle_excedente.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.catalogo-global.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.corpo-vazio.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.legado-somente-leitura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.papel-plataforma.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.permissoes-plataforma.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.sandbox-concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.saneamento-familias.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.saneamento-operador.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d200.saneamento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d201.catalogoEscrita.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d203.empresas.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d203.legado-api-antiga.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d210.arquitetura.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d211.canal.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d211.empresas.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d211.legado.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d211.limite.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d211.rota.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d211.verifiers.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d212.envio.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d212.falha.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d212.rota.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d212.worker.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d213.limites.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d213.replay.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d213.schema.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d214.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d214.enqueue.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d214.outbox.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d214.politica.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d214.worker.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d215.arquitetura.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d215.esgota.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d215.fluxo.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d215.http.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d215.orfaos.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d216.auth.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d216.cliente.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d216.fluxo.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d216.http.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d216.politica.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d217.arquitetura.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d217.instancias.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d217.maquina.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d217.worker.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d218.cota.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d218.limite.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d219.arquitetura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d219.envio.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d219.log.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d219.mapper.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d219.params.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d220.arquitetura.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d220.dominio.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d221.arquitetura.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d221.swap.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d222.cenarios.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d222.cobertura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d222.params.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d222.timeoutDeterministico.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d223.check.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d223.job.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d223.runbook.test.js": {
+   "testes": 3,
+   "ignorados": 1
+  },
+  "test/marco9/integracoes/m9d224.alertas.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d224.job.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d224.metricas.test.js": {
+   "testes": 4,
+   "ignorados": 3
+  },
+  "test/marco9/integracoes/m9d225.slo.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d226.alternativo.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d226.drill.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d226.fila.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d226.gatilhos.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d226.http.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d226.politica.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d226.recuperacao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d227.arquitetura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d227.assinatura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d227.portal.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d227.whatsapp.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d228.arquitetura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d228.banco.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d228.financiamento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d228.ia.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d229.fluxo.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d229.sandbox.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d230.entrega.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d230.envio.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d230.midia.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d231.arquitetura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d231.canario.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d231.despublica.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d231.readModel.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d232.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d232.publicacao.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d232.reacao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d232.sync.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d233.despublicacao.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d234.anexos.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d234.arquitetura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d234.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d234.envio.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d235.anexos.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d235.leitura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d235.mensagem.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d235.redaction.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d236.arquitetura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d236.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d236.fluxo.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d236.provider.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d237.confirmacao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d237.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d237.envio.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d237.extrato.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d237.reacao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d237.segredo.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.arquitetura.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.contrato.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.fluxo.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.reacao.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.renovacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.retry.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d238.versoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d239.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d239.publicacao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d239.reacao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d239.redes.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d239.sandbox.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.connection.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.corpoVazio.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.envio.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.equivalencia.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.legado-api-antiga.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.reacao.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.refUnica.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d240.webhook.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d241.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d241.emissao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d241.reacao.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d241.rejeicao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.arquivos.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.fallback.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.identity.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.s3.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.s3destino.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.s3ipv6.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.s3metadados.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d242.storage.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d243.analytics.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d243.contrato.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d243.ia.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d244.egress.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d244.privado.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d244.rede.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d244.retencao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d244.rodada3.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d244.transporte.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d245.destino.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d245.parametros.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d245.rodada2.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d245.rodada3.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d245.ssrf.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d247.quarentena.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d247.sink.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d248.auditoria.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d248.job.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d249.erros-envio.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d249.leitura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d250.arquitetura.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d250.retryEnvio.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d250.retryOrigens.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d250.rotacao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d250.testeConexao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d251.circuito.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d251.fora.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d251.manifesto.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d251.saida.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d251.webhook.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d252.cursor.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d252.pagamento.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d252.portal.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d252.post.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d252.segredo.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d252.ssrf.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d252.swap.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d253.dod.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d253.irmaos.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d253.matriz.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d254.esteira.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d255.carga.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d255.sprints.test.js": {
+   "testes": 5,
+   "ignorados": 1
+  },
+  "test/marco9/integracoes/m9d256.lab.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d256.mfa.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d256.portao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d257.naoImprovisar.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d258.offline.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d258.perguntas.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d258.portao.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/integracoes/m9d258.saida.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d259.adapter.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d259.fluxo.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d259.ordem.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d259.payload.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/integracoes/m9d259.portaEfemera.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_01_opt_out_recebe_automacao_bloqueado.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_02_mesmo_evento_2x_uma_mensagem_ou_post.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_03_imovel_sem_dado_ia_nao_inventa.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_04_ocorrencia_interna_nao_entra_em_conteudo.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_05_template_muda_apos_approval_invalida.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_06_frequency_cap_excedido_bloqueia.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_07_kill_switch_ativo_nenhuma_acao_outbound.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_08_provider_timeout_nao_duplica_post.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_09_cross_company_audience_bloqueado.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_10_tracking_invalido_nao_atribui_venda.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_11_conta_social_token_vazado_secret_redaction.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_12_cliente_negativo_abre_ocorrencia_antes_de_review_request.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_13_endereco_restrito_payload_publico_sanitizado.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_14_campanha_encerrada_steps_nao_continuam.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/adversarial/adv_15_prompt_injection_em_descricao_nao_altera_policy.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/carga/canSend_usa_indice_em_tabelas_grandes.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/carga/carga_runner_sem_perda_nem_duplicidade.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/carga/carga_worker_3_instancias_um_post_por_job.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/carga/kill_switch_sob_carga_nenhuma_chamada_depois.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/carga/m9d441.conexao_concorrente.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/carga/m9d441.migracao_indice.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/carga/queda_de_worker_sem_perda_nem_duplicidade.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/channelAdapter.contract.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/ci/m9d438.estagios.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/ci/m9d438.migracoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/cada_guarda_reprova_quando_a_violacao_e_introduzida.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_ai_output_requires_factual_validation.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_kill_switch_always_checked.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_no_blind_retry.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_no_hardcoded_cadence.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_public_payload_only.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_replay_is_safe.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_review_after_case_resolved.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/guards/guard_send_requires_cansend.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d402.limitesMassa.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d403.escrita.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d407.http.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d407.injecao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d407.pipeline.test.js": {
+   "testes": 9,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d407.referencias.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d407.referencias_param.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d407.validador.test.js": {
+   "testes": 13,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d408.aprovacao.test.js": {
+   "testes": 4,
+   "ignorados": 4
+  },
+  "test/marco9/marketing/m9d408.autopublicacao.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d408.portoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d408.url_variavel.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d409.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d409.definicoes.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d409.gatilhos.test.js": {
+   "testes": 17,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d409.rotas.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d409.tipos.test.js": {
+   "testes": 12,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d410.agendamento.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d410.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d410.rotas.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/marketing/m9d410.status.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d411.concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/marketing/m9d411.politicas.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d411.publicacao.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d411.unknown.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.acoes.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.adiadas.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.bloqueios.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.concorrencia.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/marketing/m9d414.consumidor.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.passos.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.url_rodada3.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.url_rodada4.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.url_rodada4_template.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.url_rodada5.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d414.url_texto.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d416.cap.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d416.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d416.condicoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d416.cooldown.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d418.campanha.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d418.canSend.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d418.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d418.marketing_sempre_opt_in.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d418.supressao.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d419.campanha.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d419.consumidor.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d419.evento.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d419.privacidade.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d419.segmento.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d420.cadencia.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d420.frio.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d420.lead.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d421.radar.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d422.agenda.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d422.contrato.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d423.pendencias.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d423.serie.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d424.concorrencia.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d424.fluxo.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d424.pedido.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d425.catalogo.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d425.escopos.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d425.falha.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d425.http.test.js": {
+   "testes": 3,
+   "ignorados": 3
+  },
+  "test/marco9/marketing/m9d425.inventario.test.js": {
+   "testes": 3,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d425.migracao.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d425.mudanca.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d425.social.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d426.conteudo.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d426.http.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/m9d426.midia.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d426.operacoes.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d426.transparencia.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d427.arquitetura.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d427.blog.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d427.http.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/marketing/m9d427.seo.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d428.adapters.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d428.capability.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d428.publicacao.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d429.arquitetura.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d429.campanha.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d429.descadastro_cofre.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/marketing/m9d429.entrega.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d429.envio.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d429.homologacao_sem_cofre.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d429.http.test.js": {
+   "testes": 2,
+   "ignorados": 2
+  },
+  "test/marco9/marketing/m9d429.preview.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d430.contingencia.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d430.liberacao.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d430.real.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d430.sandbox.test.js": {
+   "testes": 11,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d430.webhook.http.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d431.atribuicao.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d431.fiacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d431.relatorio.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d432.custo.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.comprometida.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.conteudo.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.erro_parametro.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.linear_rodada5.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.massa.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.rodada5.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.url.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.url_desenho.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.url_formas.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.url_linear.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d433.url_texto.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d435.http.test.js": {
+   "testes": 6,
+   "ignorados": 6
+  },
+  "test/marco9/marketing/m9d435.inventario.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d439.canais.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d439.dod.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d439.mapa.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d442.cenarios.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d442.circuito.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d442.contingencia.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d442.liberacao.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d442.portao.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d444.inicio.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d444.lab.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d444.ordem.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9d444.pipeline.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/m9dAceite.trilhaEValidacao.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/seguranca/escalada_de_permissao_recusada.test.js": {
+   "testes": 1,
+   "ignorados": 1
+  },
+  "test/marco9/marketing/seguranca/injecao_de_prompt_em_campos_de_origem.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/seguranca/logs_com_pii_mascarada.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/seguranca/ssrf_em_todos_os_campos_de_url.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/seguranca/varredura_rls_15_tabelas.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marco9/marketing/seguranca/vazamento_nada_sensivel_em_resposta_log_evento.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/marketing.idempotencia.chaves.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marketing.idempotencia.destinos.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marketing.publicFields.test.js": {
+   "testes": 15,
+   "ignorados": 0
+  },
+  "test/marketing.schema.execucao.garantias.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/marketing.schema.execucao.models.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/marketing.schema.execucao.rls.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/marketing.schema.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/mfa.test.js": {
+   "testes": 8,
+   "ignorados": 0
+  },
+  "test/nayaraConferencia1810.closing.test.js": {
+   "testes": 14,
+   "ignorados": 0
+  },
+  "test/nayaraConferencia1810.finance.test.js": {
+   "testes": 22,
+   "ignorados": 0
+  },
+  "test/nayaraConferencia1810.payments.test.js": {
+   "testes": 25,
+   "ignorados": 0
+  },
+  "test/nayaraExternalAuditA01A02A10.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/nayaraExternalAuditMatrixCoverage.test.js": {
+   "testes": 10,
+   "ignorados": 0
+  },
+  "test/nayaraExternalAuditMatrixM4Group1.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/nayaraExternalAuditMatrixM4Group2.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/nayaraExternalAuditR3.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/people.dataQuality.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/people.dedupe.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/people.documentAdapters.real.test.js": {
+   "testes": 12,
+   "ignorados": 1
+  },
+  "test/people.documentIngestion.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/people.documentReplaceFile.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/people.documentReplaceFile.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/people.documentVerification.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/people.mergeCpfConflict.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/people.mergeReinforced.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/people.mesmoGrupo.http.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/people.mesmoGrupo.rls.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/people.validationFields.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/people.weakDedup.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/procurement.approvalSegregation.test.js": {
+   "testes": 9,
+   "ignorados": 0
+  },
+  "test/procurement.auditGaps.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/procurement.auditGapsRound2.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/procurement.auditGapsRound3.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/procurement.auditGapsRound4.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/procurement.cycle1.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/procurement.httpRoutes.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/procurement.inventory.critical.test.js": {
+   "testes": 34,
+   "ignorados": 0
+  },
+  "test/procurement.invoiceWithoutReceipt.test.js": {
+   "testes": 6,
+   "ignorados": 0
+  },
+  "test/procurement.supplierBankChange.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/procurement.supplierQualification.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/properties.addressDedup.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/properties.internalOccurrencesIsolation.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/properties.merge.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/properties.offers.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/properties.priceRace.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/properties.publishGates.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/properties.registryUnique.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/radar.eventDrivenMatch.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/radar.http.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/radar.idempotency.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/radar.livroScoring.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/radar.matching.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/radar.storedMatches.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/reconferencia2010.r2r5.test.js": {
+   "testes": 7,
+   "ignorados": 0
+  },
+  "test/resilientFetch.test.js": {
+   "testes": 4,
+   "ignorados": 0
+  },
+  "test/rls.catalog.allTables.test.js": {
+   "testes": 77,
+   "ignorados": 0
+  },
+  "test/rls.policiesSelectPorEmpresa.test.js": {
+   "testes": 3,
+   "ignorados": 0
+  },
+  "test/settings.mfaCatalogo.meta.test.js": {
+   "testes": 1,
+   "ignorados": 0
+  },
+  "test/settings.mfaParametrosSensiveis.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/settings.test.js": {
+   "testes": 5,
+   "ignorados": 0
+  },
+  "test/simularRetornoSinistro.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/timestampRenamedColumns.guard.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  },
+  "test/users.setPassword.test.js": {
+   "testes": 2,
+   "ignorados": 0
+  }
+ }
+}

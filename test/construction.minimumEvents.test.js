@@ -25,7 +25,7 @@ const stageMeasurementsService = require('../src/features/construction/stageMeas
 const nonconformitiesService = require('../src/features/construction/nonconformities.service');
 const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 const { detectDelayedProjects } = require('../src/engines/jobs/projectDelayDetectionJob');
 
 const MINIMOS = [

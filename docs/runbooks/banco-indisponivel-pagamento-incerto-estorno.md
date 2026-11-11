@@ -8,7 +8,7 @@ três cenários mais prováveis de falha na integração bancária.
 
 ## Garantia de código (confirmada por teste automatizado)
 
-`submitPaymentIntentToBank` (`src/features/finance/bankPayments.service.js`) NUNCA chama
+`submitPaymentIntentToBank` (`src/modules/finance/application/services/bank-submission.service.js`) NUNCA chama
 `settleFinancialEntry` — só `confirmBankPayment` faz isso, e só quando o status reportado pelo
 adapter/webhook é literalmente `'CONFIRMED'`. Qualquer outro valor (`'TIMEOUT'`, `'FAILED'`,
 `'REJECTED'`, ausência de resposta) cai no branch `else`: o `PaymentIntent` vai para `FAILED`
@@ -70,7 +70,7 @@ erro de valor, beneficiário errado identificado depois do fato, devolução, et
 
 **O que o sistema garante** (FIN-010 "Estorno não apaga" — Centro Financeiro §2): o lançamento
 original NUNCA é apagado nem editado. `reverseFinancialEntry`
-(`src/features/finance/financialEntries.service.js`) marca o original como `REVERSED` e cria um
+(`src/modules/finance/application/services/financial-entry.service.js`) marca o original como `REVERSED` e cria um
 **novo** lançamento compensatório (`entryType` invertido, mesmo valor, `reversalOfEntryId`
 apontando para o original). O histórico completo (original + reversão) permanece consultável
 para sempre.
@@ -84,7 +84,7 @@ para sempre.
 3. Se o estorno for de um pagamento que já tinha comissão associada e paga, ver também o
    procedimento de **ajuste de comissão por cancelamento**
    (`cancelCommission`/`adjustCommissionForCancellation` em
-   `src/features/finance/commissions.service.js`) — mesma lógica de "ajuste, nunca apaga
+   `src/modules/finance/application/services/commission.service.js`) — mesma lógica de "ajuste, nunca apaga
    histórico".
 4. Se o estorno envolveu movimentação bancária real (dinheiro já saiu/chegou fisicamente),
    confirme a devolução/compensação com o provedor bancário ANTES de considerar o caso
@@ -94,7 +94,7 @@ para sempre.
 ## Sinalizadores de alerta (para identificar os cenários acima proativamente)
 
 `checkFrequentReversalAlert`/`checkRecurringManualReconciliationAlert`
-(`src/features/finance/financeAntifraud.service.js`) contam, por empresa, estornos e
+(`src/modules/finance/application/services/finance-antifraud.service.js`) contam, por empresa, estornos e
 conciliações manuais recorrentes nos últimos 30 dias — um volume alto de qualquer um dos dois é
 sinal de que vale revisar os cenários acima com mais atenção (ex.: provedor instável gerando
 muitos pagamentos incertos tratados via estorno manual).

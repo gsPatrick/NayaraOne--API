@@ -343,7 +343,7 @@ async function listLegalCaseParties(legalCaseId, transaction) {
  * tabela/model de tasks vinculável antes de inventar mecanismo. Existe `Task` (core.tasks,
  * src/models/Task.js) com colunas polimórficas `related_entity_type` + `related_entity_id`
  * — o MESMO padrão já usado por finance.approval_requests (ver
- * src/features/finance/approvals.service.js). Reutilizamos esse mecanismo existente: vincular
+ * src/modules/finance/application/services/approvals.service.js). Reutilizamos esse mecanismo existente: vincular
  * uma task a um processo jurídico é simplesmente setar `relatedEntityType: 'LegalCase'` e
  * `relatedEntityId: legalCaseId` na Task — sem precisar de tabela nova nem de migration.
  * `core.tasks` não tem FK real para legal.legal_cases (é polimórfico, `constraints: false`,

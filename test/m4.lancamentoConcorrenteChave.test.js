@@ -14,7 +14,7 @@ process.env.PORT = process.env.M4_LANC_CONCORRENTE_TEST_PORT || '21618';
 require('../app');
 const T = require('./testHelpers');
 const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
-const { mapFinanceUniqueViolation } = require('../src/features/finance/financeUniqueViolations');
+const { mapFinanceUniqueViolation } = require('../src/modules/finance/presentation/http/finance-unique-violations');
 const { FinancialEntry } = require('../src/models');
 
 let tenant;

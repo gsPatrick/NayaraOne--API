@@ -320,6 +320,10 @@ jobs:
       - name: Run test suite (RLS real, sem bypass — mesmo usuário de privilégio mínimo da produção)
         env:
           DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
+          # M4-D140 (test/m4d140.estruturaFinanceiro.test.js, testes 9 e 10): o superusuário do container cria um banco VAZIO
+          # próprio, migra pelo executor único (scripts/migrate.js), compara o schema com o retrato de antes e apaga o banco.
+          # Só esse teste lê esta variável; a suíte continua rodando com o usuário de privilégio mínimo acima.
+          M4D140_ADMIN_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
           DB_USER: nayara_ci_app
           DB_PASSWORD: nayara_ci_app_password
           # FIX (18/10/2026): sem NODE_ENV=test, qualquer arquivo de teste que importa app.js

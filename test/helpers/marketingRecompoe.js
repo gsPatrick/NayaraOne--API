@@ -4,9 +4,8 @@
 // O down da parte 1/2 derruba as tabelas com TUDO que as migrations posteriores acrescentaram (colunas, índices, checks, FKs); recriar só as partes 1 e 2 e algumas das posteriores
 // deixava o schema pela metade para os arquivos seguintes no mesmo banco (ex.: review_requests sem error_code, publication_jobs sem as colunas do worker). Aqui entram TODAS as
 // migrations posteriores à parte 2 que mexem em objetos de marketing, em ordem de versão, e o GRANT do papel de runtime que o preparo do banco descartável faz (disposableCluster.grantRuntime).
-const path = require('node:path');
-
-const DIR = path.resolve(__dirname, '../../migrations');
+// M4-D140: a 761 (custo de campanha) altera finance.financial_entries e mora na pasta do Financeiro; o caminho vem do executor (as duas pastas).
+const { migrationPath } = require('../../src/config/migrationDirs');
 const POSTERIORES_A_PARTE_2 = [
   '20260101000752-marketing-template-immutability.js', '20260101000754-marketing-campaign-lifecycle.js', '20260101000756-marketing-kill-switch-log.js',
   '20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js', '20260101000760-marketing-permissions-and-roles.js',
@@ -20,7 +19,7 @@ const POSTERIORES_A_PARTE_2 = [
 /** Reaplica (up idempotente) as partes 1 e 2, todas as posteriores e o GRANT do runtime. `admin` é a conexão de superusuário do teste. */
 async function recomporMarketing(admin) {
   const qi = admin.getQueryInterface();
-  for (const file of ['20260101000750-marketing-schema-parte-1.js', '20260101000751-marketing-schema-parte-2.js', ...POSTERIORES_A_PARTE_2]) await require(path.join(DIR, file)).up(qi);
+  for (const file of ['20260101000750-marketing-schema-parte-1.js', '20260101000751-marketing-schema-parte-2.js', ...POSTERIORES_A_PARTE_2]) await require(migrationPath(file)).up(qi);
   const [[role]] = await admin.query("SELECT 1 AS ok FROM pg_roles WHERE rolname = 'nayara_runtime'");
   if (role) await admin.query('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA marketing TO nayara_runtime');
 }

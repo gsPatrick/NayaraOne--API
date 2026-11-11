@@ -37,12 +37,14 @@ const {
   MfaCredential,
   MfaStepUp,
 } = require('../src/models');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const periodClosuresService = require('../src/features/finance/periodClosures.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankPaymentsService = require('../src/features/finance/bankPayments.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const periodClosuresService = require('../src/modules/finance/application/services/closing.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankPaymentsService = require('../src/modules/finance/application/services/bank-submission.service');
+const paymentService = require('../src/modules/finance/application/services/payment.service');
 
 const COMMITTED_CONCURRENCY_MONTH = '2002-01';
 const COMMITTED_HTTP_MONTH = '2002-02';
@@ -124,7 +126,7 @@ async function settledReceivable(transaction, { referenceMonth, amount = 640, ba
     tenant.userId,
     transaction
   );
-  await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+  await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction);
   await moveSettlementInto([entry.id], referenceMonth, transaction);
   return entry;
 }
@@ -283,13 +285,13 @@ test('F02-C1b: mês fechado não recebe nem perde lançamento em nenhum caminho 
       'FINANCE_PERIOD_CLOSED'
     );
     // Baixar (integral e parcial) e estornar lançamento da competência fechada.
-    await expectCode(financialEntriesService.settleFinancialEntry(insideClosed.id, tenant.userId, transaction), 'FINANCE_PERIOD_CLOSED');
+    await expectCode(receiptService.settleFinancialEntry(insideClosed.id, tenant.userId, transaction), 'FINANCE_PERIOD_CLOSED');
     await expectCode(
-      financialEntriesService.settleFinancialEntryPartial(insideClosed.id, 50, tenant.userId, transaction),
+      receiptService.settleFinancialEntryPartial(insideClosed.id, 50, tenant.userId, transaction),
       'FINANCE_PERIOD_CLOSED'
     );
     await expectCode(
-      financialEntriesService.reverseFinancialEntry(insideClosed.id, 'Estorno de teste', tenant.userId, transaction),
+      receiptService.reverseFinancialEntry(insideClosed.id, 'Estorno de teste', tenant.userId, transaction),
       'FINANCE_PERIOD_CLOSED'
     );
     // O lançamento fora do mês fechado segue livre.
@@ -322,7 +324,7 @@ test('F02-C2: conferência desatualizada em REVIEW — o aprovador devolve para 
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(deposit.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(deposit.id, tenant.userId, transaction);
     await moveSettlementInto([deposit.id], referenceMonth, transaction);
 
     await expectPreconditionMissing(
@@ -417,7 +419,7 @@ test('F02-C3b: confirmação do banco que chega depois do fechamento liquida no 
     // pode ser recusado pelo mês fechado.
     const submitted = await bankPaymentsService.submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
     const before = Date.now();
-    const confirmed = await bankPaymentsService.confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', transaction);
+    const confirmed = await paymentService.confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', transaction);
     assert.equal(confirmed.status, 'EXECUTED');
 
     await entry.reload({ transaction });
@@ -450,7 +452,7 @@ test('F02-C4a: +500 de caução e −500 de devolução depois da conferência d
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(deposit.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(deposit.id, tenant.userId, transaction);
     const costCenter = await createTestCostCenter(tenant, transaction);
     const release = await financialEntriesService.createFinancialEntry(
       withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 500, description: 'CLS devolução', costCenterId: costCenter.id, isThirdPartyFunds: true, thirdPartyReference: 'Devolução', thirdPartyOriginEntryId: deposit.id, dueAt: `${referenceMonth}-20T15:00:00.000Z` }),
@@ -480,7 +482,7 @@ test('F02-C4b: baixa parcial de caução entra no caixa de terceiros e no saldo 
       tenant.userId,
       transaction
     );
-    const { settlement } = await financialEntriesService.settleFinancialEntryPartial(deposit.id, 400, tenant.userId, transaction);
+    const { settlement } = await receiptService.settleFinancialEntryPartial(deposit.id, 400, tenant.userId, transaction);
     await moveSettlementInto([settlement.id], referenceMonth, transaction);
 
     const { preconditions } = await periodClosuresService.getPeriodPreconditions(withTenant({ referenceMonth }), transaction);

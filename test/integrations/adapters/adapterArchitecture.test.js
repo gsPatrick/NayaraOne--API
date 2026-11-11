@@ -28,10 +28,11 @@ function arquivos(dir, acumulado = []) {
 
 test('adapter_http_somente_pelo_client', async () => {
   // Todo arquivo de adapter (qualquer pasta "adapters", os ports, o registro e os wrappers) fala HTTP só pelo cliente único.
-  const alvo = arquivos(path.join(SRC, 'features')).filter((f) => {
+  // O adapter bancário do Financeiro mora em src/modules/finance/infrastructure/bank (Guia do Marco 4, §2): porta, provedores e hub.
+  const alvo = [...arquivos(path.join(SRC, 'features')), ...arquivos(path.join(SRC, 'modules'))].filter((f) => {
     const rel = f.split(path.sep).join('/');
     if (rel.includes('/integrations/http/')) return false;
-    return /\/adapters\//.test(rel) || /\/integrations\/(providers|registry|adapters)\//.test(rel);
+    return /\/adapters\//.test(rel) || /\/integrations\/(providers|registry|adapters)\//.test(rel) || /\/finance\/infrastructure\/bank\//.test(rel);
   });
   assert.ok(alvo.length > 30, `varredura cobre os adapters (${alvo.length} arquivos)`);
   const proibido = [/(^|[^.\w])fetch\s*\(/, /axios/, /require\(['"](https?|node:https?|node-fetch|undici|got)['"]\)/, /resilientFetch/];

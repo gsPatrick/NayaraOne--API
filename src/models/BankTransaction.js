@@ -79,7 +79,7 @@ module.exports = (sequelize) => {
         // A impressão digital nasce de toda linha gravada, por qualquer caminho (import, API, provedor).
         beforeValidate(row) {
           if (!row.fingerprint) {
-            const { bankTransactionFingerprint } = require('../features/finance/bankTransactionFingerprint');
+            const { bankTransactionFingerprint } = require('../modules/finance/infrastructure/db/bank-transaction-fingerprint');
             row.fingerprint = bankTransactionFingerprint(row);
           }
         },

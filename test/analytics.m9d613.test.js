@@ -49,7 +49,7 @@ test('m9d613 lint barra fórmula com import de models', async () => {
 
 test('m9d613 lint barra dashboards lendo tabelas de origem', async () => {
   for (const f of ['src/features/analytics/dashboards/x.js', 'src/features/analytics/briefs/x.js']) {
-    for (const t of ['src/models/index', 'src/models/FinancialEntry', 'src/features/finance/finance.service', 'src/features/analytics/read-models/crm.readmodel', 'sequelize']) {
+    for (const t of ['src/models/index', 'src/models/FinancialEntry', 'src/modules/finance/application/services/financial-entry.service', 'src/features/analytics/read-models/crm.readmodel', 'sequelize']) {
       assert.ok((await lintar(f, t)).length > 0, `deveria reprovar ${t} em ${f}`);
     }
     for (const t of ['src/features/analytics/metrics/index', 'src/features/analytics/read-models/index', 'src/utils/AppError', 'src/features/analytics/dashboardStore.service']) {
