@@ -4,6 +4,7 @@
 // as recusas (403/404) e a meta p95. Os snapshots vêm do cenário-base (m9d685Env). Banco descartável.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const { robustP95 } = require('../_helpers/medicaoRobusta');
 const fs = require('node:fs');
 const path = require('node:path');
 const e685 = require('../_helpers/m9d685Env');
@@ -111,10 +112,13 @@ test('m9d685 painel exige analytics:read, não encontra painel ou empresa de out
   assert.deepEqual([other.status, code(other)], [404, 'ANALYTICS_SCOPE_NOT_FOUND']);
   const ok = await openCenter(env);
   assert.equal(ok.body.data.p95TargetMs, 2500, 'meta p95 do livro gravada na definição');
-  const started = process.hrtime.bigint();
-  for (let i = 0; i < 5; i += 1) assert.equal((await openCenter(env)).status, 200);
-  const average = Number(process.hrtime.bigint() - started) / 1e6 / 5;
-  assert.ok(average < 2500, `abertura média de ${average.toFixed(0)} ms dentro da meta de 2.500 ms`);
+  // DI-M9F-4: a meta é de p95 (a da definição): tempo da operação medido no servidor, aquecimento e a mediana do p95 de 3 séries, no lugar da média de 5 aberturas
+  const { p95, series } = await robustP95(async () => {
+    const res = await openCenter(env);
+    assert.equal(res.status, 200);
+    return res.serverMs;
+  }, { porSerie: 10 }); // o centro de comando é a abertura mais pesada: séries de 10 (o p95 de 10 é a maior delas)
+  assert.ok(p95 <= ok.body.data.p95TargetMs, `p95 de ${p95.toFixed(0)} ms acima da meta de 2.500 ms (p95 das séries: ${series.map((x) => x.toFixed(0)).join(', ')} ms)`);
 });
 
 test('m9d685 cada bloco declara em config.dependsOn as métricas de que depende e os parâmetros do administrador existem', async () => {

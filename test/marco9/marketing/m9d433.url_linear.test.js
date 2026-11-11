@@ -12,6 +12,7 @@ const { factualResult } = require('../_helpers/mktFactualEnv');
 const fx = require('../_helpers/m9d431Fixtures');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const security = require('../../../src/features/marketing/security');
+const { medianCpuMs } = require('../_helpers/medicaoRobusta');
 
 let tenant;
 let cleanup;
@@ -74,12 +75,12 @@ test('varredura_de_texto_grande_e_linear', () => {
     arrobas: 'a'.repeat(MB) + '@', porcentos: 'x' + '%'.repeat(MB) + '@a.b/', doisPontos: 'a:'.repeat(MB / 2), arrobasRepetidos: 'a@'.repeat(MB / 2), barras: 'a/'.repeat(MB / 2),
     rotulos: 'a.'.repeat(MB / 2), hifens: 'a-'.repeat(MB / 2), numeros: '1234567/'.repeat(MB / 8), emails: 'x@a.com/ '.repeat(MB / 9), caminho: `evil.com/${'x'.repeat(MB)}`,
   };
+  // DI-M9F-4: tempo de CPU das duas varreduras (não o de parede), mediana de 3 execuções depois de um aquecimento; o limite de 2 s é o da demanda, não do livro
+  const warm = formas.emails.slice(0, 50000);
+  for (let i = 0; i < 3; i += 1) { security.extractCandidates(warm); security.stripUrls(warm); }
   for (const [nome, texto] of Object.entries(formas)) {
-    const start = process.hrtime.bigint();
-    security.extractCandidates(texto);
-    security.stripUrls(texto);
-    const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    assert.ok(ms < 2000, `${nome}: ${ms.toFixed(0)} ms para 1 MB (duas varreduras)`);
+    const ms = medianCpuMs(() => { security.extractCandidates(texto); security.stripUrls(texto); }, { vezes: 3, aquecimento: 0, limite: 2000 });
+    assert.ok(ms < 2000, `${nome}: ${ms.toFixed(0)} ms de CPU para 1 MB (duas varreduras)`);
   }
 });
 

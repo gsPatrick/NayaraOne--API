@@ -4,6 +4,7 @@
 // versão 2 das definições globais e a migration do conteúdo é idempotente e reversível. Banco descartável.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const { robustP95 } = require('../_helpers/medicaoRobusta');
 const env662 = require('../_helpers/painelBiEnv');
 const q = require('../_helpers/m9d698Queries');
 const migration = require('../../../migrations/20260101009835-publish-analytics-legal-correspondent-dashboard-content');
@@ -35,16 +36,13 @@ test('m9d662 p95 dentro da meta da definição', async () => {
   for (const [name, , perms] of CASES) {
     const target = (await globalRows(name)).find((r) => r.status === 'PUBLISHED').p95_target_ms;
     assert.equal(target, 1800, `${name}: meta do livro`);
-    const times = [];
-    for (let i = 0; i < 40; i += 1) {
-      const t0 = process.hrtime.bigint();
+    // DI-M9F-4: tempo da operação medido no servidor (sem o cliente HTTP), 5 aberturas de aquecimento e a mediana do p95 de 3 séries de 20; a meta é a da definição
+    const { p95, series } = await robustP95(async () => {
       const res = await openPanel(env, name, { perms: [...perms, 'analytics:drilldown'] });
-      times.push(Number(process.hrtime.bigint() - t0) / 1e6);
       assert.equal(res.status, 200);
-    }
-    times.sort((a, b) => a - b);
-    const p95 = times[Math.ceil(times.length * 0.95) - 1];
-    assert.ok(p95 <= target, `${name}: p95 ${p95.toFixed(0)} ms acima da meta de ${target} ms`);
+      return res.serverMs;
+    });
+    assert.ok(p95 <= target, `${name}: p95 ${p95.toFixed(0)} ms acima da meta de ${target} ms (p95 das séries: ${series.map((x) => x.toFixed(0)).join(', ')} ms)`);
   }
 });
 
