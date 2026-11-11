@@ -10,7 +10,7 @@ const projectStagesService = require('../src/features/construction/projectStages
 const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
-const { upsertApprovalThreshold } = require('../src/features/construction/approvalThresholds.service');
+const { upsertApprovalThreshold } = require('../src/features/construction/lossRecords.service');
 const { evidenceIds } = require('./constructionEvidenceFixture');
 
 const W = (tenant, fields = {}) => ({ groupId: tenant.groupId, companyId: tenant.companyId, ...fields });
