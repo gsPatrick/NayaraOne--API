@@ -8,9 +8,9 @@ const path = require('node:path');
 
 const DIR = path.resolve(__dirname, '../../migrations');
 const POSTERIORES_A_PARTE_2 = [
-  '20260101000752-marketing-template-immutability.js', '20260101000754-marketing-campaign-lifecycle.js', '20260101000756-marketing-kill-switch-log.js',
+  '20260101000752-marketing-template-immutability.js', '20260101000754-marketing-campaign-lifecycle.js', '20260101000756-marketing-kill-switch-log.js', '20260101000757-marketing-campaign-delivery-retry.js',
   '20260101000758-marketing-automation-definition.js', '20260101000759-marketing-attribution.js', '20260101000760-marketing-permissions-and-roles.js',
-  '20260101000761-marketing-campaign-cost.js', '20260101000764-marketing-resolve-company-group.js', '20260101000765-marketing-public-read-models.js',
+  '20260101000761-marketing-campaign-cost.js', '20260101000762-marketing-automation-action-retry.js', '20260101000764-marketing-resolve-company-group.js', '20260101000765-marketing-public-read-models.js',
   '20260101000765-marketing-seo-page-lifecycle.js', '20260101000771-marketing-publication-jobs-one-active-per-version-channel.js', '20260101000772-marketing-automation-action-receipts.js',
   '20260101000775-marketing-content-types-trigger.js', '20260101000780-marketing-publication-worker-columns.js', '20260101000788-marketing-reminder-pendings.js',
   '20260101000789-marketing-review-requests-request-columns.js', '20260101000796-marketing-media-authorizations-and-derivatives.js', '20260101000797-marketing-media-authorizations-dimensions.js',

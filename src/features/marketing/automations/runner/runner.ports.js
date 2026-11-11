@@ -4,7 +4,7 @@
  * M9-D414 — portas do runner. As áreas do Marketing só se tocam pelo index e sem ciclo; o arquivo de entrada do Marketing registra aqui o que o runner chama
  * em outras áreas (canSend da supressão, o envio de mensagem e a criação de rascunho). O pedido de avaliação (REQUEST_REVIEW) é registrado pela M9-D424.
  */
-const ports = { canSend: null, sendMessage: null, createDraft: null, reviewRequester: null };
+const ports = { canSend: null, sendMessage: null, createDraft: null, reviewRequester: null, reconcileMessage: null, settleMessage: null };
 const linkProviders = new Map();
 
 const required = (name) => {
@@ -12,10 +12,13 @@ const required = (name) => {
   return ports[name];
 };
 
-function registerRunnerPorts({ canSend, sendMessage, createDraft }) {
+/** `reconcileMessage`/`settleMessage` (DI-M9F-1): acompanham a mensagem do CRM da ação de envio pela action_key (consultar o provedor no UNKNOWN; fechar a QUEUED). */
+function registerRunnerPorts({ canSend, sendMessage, createDraft, reconcileMessage, settleMessage }) {
   if (canSend) ports.canSend = canSend;
   if (sendMessage) ports.sendMessage = sendMessage;
   if (createDraft) ports.createDraft = createDraft;
+  if (reconcileMessage) ports.reconcileMessage = reconcileMessage;
+  if (settleMessage) ports.settleMessage = settleMessage;
 }
 
 function registerReviewRequester(fn) {
@@ -53,5 +56,6 @@ const clearReviewRequester = () => { ports.reviewRequester = null; };
 module.exports = {
   registerLinkProvider, linkOf, registerChannelResolver, hasChannelResolver, channelResolved, registerVariablesProvider, variablesOfProvider, registerAssigneeResolver, assigneeOf, registerRunnerPorts, registerReviewRequester, clearReviewRequester,
   canSend: (...a) => required('canSend')(...a), sendMessage: (...a) => required('sendMessage')(...a), createDraft: (...a) => required('createDraft')(...a),
+  reconcileMessage: (...a) => required('reconcileMessage')(...a), settleMessage: (...a) => required('settleMessage')(...a),
   requestReview: (...a) => { if (!ports.reviewRequester) throw new Error('Serviço de pedido de avaliação (M9-D424) não registrado.'); return ports.reviewRequester(...a); },
 };

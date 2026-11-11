@@ -32,9 +32,15 @@ function markScheduled(actionsResult, index, dueAt) {
   return actionsResult.map((e, i) => (i === index ? { ...e, status: 'SCHEDULED', due_at: new Date(dueAt).toISOString() } : e));
 }
 
-/** Menor due_at entre as ações SCHEDULED (coluna next_due_at da run), ou null. */
+/**
+ * Ação de envio ABERTA (DI-M9F-1): RETRY (falha transitória, volta em due_at) ou UNKNOWN com due_at (resultado incerto, reconciliar pela chave em due_at).
+ * UNKNOWN sem due_at é o legado: resultado incerto que esgotou ou ação interna que estourou o tempo (a run fica FAILED).
+ */
+const isOpenEntry = (e) => Boolean(e) && (e.status === 'RETRY' || (e.status === 'UNKNOWN' && Boolean(e.due_at)));
+
+/** Menor due_at entre as ações SCHEDULED e as abertas (coluna next_due_at da run), ou null. */
 function nextDueAt(actionsResult) {
-  const dues = actionsResult.filter((e) => e.status === 'SCHEDULED' && e.due_at).map((e) => asDate(e.due_at).getTime());
+  const dues = actionsResult.filter((e) => (e.status === 'SCHEDULED' || isOpenEntry(e)) && e.due_at).map((e) => asDate(e.due_at).getTime());
   return dues.length ? new Date(Math.min(...dues)) : null;
 }
 
@@ -74,4 +80,4 @@ async function prepareReplay({ run, now = new Date(), timeoutS, adapterFor }) {
   return { shouldReplay: true, pending, actionsResult, unresolved };
 }
 
-module.exports = { UNKNOWN_MESSAGE, isRunStuck, shouldReplayRun, buildActionsResult, markScheduled, nextDueAt, prepareReplay };
+module.exports = { UNKNOWN_MESSAGE, isRunStuck, shouldReplayRun, buildActionsResult, markScheduled, nextDueAt, isOpenEntry, prepareReplay };

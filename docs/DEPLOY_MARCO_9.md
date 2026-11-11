@@ -59,6 +59,11 @@ A `20260101000757-marketing-campaign-delivery-retry.js` acrescenta os estados ab
 - Por isso entra no passo 2, junto com as demais. Ela tem número menor que as já aplicadas, mas o `db:migrate` aplica toda migration pendente.
 - A `down` recusa se houver entrega em RETRY, UNKNOWN ou CANCELLED, porque não apaga dados.
 
+A `20260101000762-marketing-automation-action-retry.js` (DI-M9F-1) acrescenta o estado RETRY à lista de estados aceitos do resultado por ação das runs de automação (função `marketing.actions_result_valid`), para a ação SEND_MESSAGE com falha transitória esperar a nova tentativa em vez de ficar OK com a mensagem presa na fila.
+- Só troca a função (`CREATE OR REPLACE`), e a lista só cresce: toda linha existente continua válida, e a API antiga não grava RETRY.
+- Entra no passo 2, junto com as demais (número menor que as já aplicadas; o `db:migrate` aplica toda migration pendente).
+- A `down` recusa se alguma run tiver ação em RETRY, porque não apaga nem reescreve dados.
+
 ## Plano de reversão
 
 - Antes do passo 4: `npx sequelize-cli db:migrate:undo:all --to 20260101000648-dimob-gatilho-congelamento-estrito.js --env migration` (as `down` das migrations aditivas derrubam apenas objetos novos). Se alguma `down` falhar, parar a API e restaurar o backup (`pg_restore --clean --if-exists --no-owner`).

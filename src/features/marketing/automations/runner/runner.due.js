@@ -11,6 +11,8 @@ const { lockDueRuns, lockStuckRuns, writeOutcome } = require('./runner.persist')
 const { emitEnd } = require('./runner.events');
 const { buildContext, setTenant, replayRun } = require('./runner.service');
 const { SEND, STEPS, APPLICABILITY_REASONS } = require('./runner.constants');
+const { followUpOpenSend } = require('./runner.sendRetry');
+const { isOpenEntry } = require('../idempotency');
 
 const skip = (entry, reason) => ({ ...entry, status: 'SKIPPED', error_code: reason, due_at: null });
 
@@ -45,6 +47,10 @@ async function processDueRun(row, tenant, transaction, options) {
   let blockedReason = row.blocked_reason;
   const entries = [];
   for (const entry of row.actions_result) {
+    if (isOpenEntry(entry)) { // envio em nova tentativa (RETRY) ou à espera da reconciliação (UNKNOWN): DI-M9F-1
+      entries.push(await followUpOpenSend(ctx, entry, { reason, runId: row.id, reevaluate: (e) => reevaluate(ctx, cand, e, subject) }));
+      continue;
+    }
     const due = entry.status === 'SCHEDULED' && entry.due_at && new Date(entry.due_at).getTime() <= ctx.now.getTime();
     if (reason && entry.status === 'SCHEDULED') entries.push(skip(entry, reason));
     else if (due) entries.push(await reevaluate(ctx, cand, entry, subject));
@@ -63,8 +69,9 @@ async function processDueRun(row, tenant, transaction, options) {
 
 /**
  * Executor das ações adiadas (automationDueJob, a cada 60 s): runs WAITING com `next_due_at` vencido, travadas com FOR UPDATE SKIP LOCKED. Cada ação SCHEDULED vencida é
- * reavaliada na hora (fluxo pausado, contrato, kill switch, canSend inteiro) e envia com a MESMA action_key, é reagendada ou fica SKIPPED com o motivo. Quando não resta ação
- * SCHEDULED a run vira COMPLETED ou BLOCKED e o evento correspondente sai uma única vez.
+ * reavaliada na hora (fluxo pausado, contrato, kill switch, canSend inteiro) e envia com a MESMA action_key, é reagendada ou fica SKIPPED com o motivo. Ação de envio aberta
+ * (RETRY vencida: o mesmo caminho, com a mensagem da fila fechada se for pulada; UNKNOWN vencida: consulta o provedor antes de qualquer reenvio), DI-M9F-1. Quando não resta
+ * ação SCHEDULED nem aberta a run vira COMPLETED, BLOCKED ou FAILED e o evento correspondente sai uma única vez.
  */
 async function runDueActions(tenant, transaction, options = {}) {
   await setTenant(tenant, transaction);

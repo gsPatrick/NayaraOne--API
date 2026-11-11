@@ -1,6 +1,6 @@
 'use strict';
 
-const { actionKey, nextDueAt } = require('../idempotency');
+const { actionKey, nextDueAt, isOpenEntry } = require('../idempotency');
 const { SEND, SEND_BLOCK_REASONS, APPLICABILITY_REASONS, NO_CADENCE_DAY } = require('./runner.constants');
 
 /** Porta da cadência (M9-D422): `fn(def, ctx) -> Date|null` (pode ser assíncrona) devolve o horário em que a ação deve sair, ou null. Sem registro, nenhuma ação espera por cadência. */
@@ -44,12 +44,14 @@ async function planEntries(runKey, defs, decision, ctx) {
 }
 
 /**
- * Estado da run a partir das ações (passos 8 e 9). FAILED/UNKNOWN em alguma ação: FAILED (o resultado fica na run e na auditoria, sem evento). Alguma ação SCHEDULED:
- * WAITING até o menor due_at (sem evento de término). Senão BLOCKED quando a run tem motivo de aplicabilidade ou alguma mensagem ficou SKIPPED por bloqueio de envio;
- * COMPLETED nos demais casos. Devolve { status, blockedReason, nextDueAt }.
+ * Estado da run a partir das ações (passos 8 e 9). Ação de envio ABERTA (RETRY, ou UNKNOWN com due_at; DI-M9F-1): WAITING até o menor due_at, mesmo que outra ação
+ * tenha falhado, porque a mensagem ainda está em andamento e precisa fechar (nada fica na fila para sempre). Sem ação aberta, FAILED ou UNKNOWN em alguma ação: FAILED
+ * (o resultado fica na run e na auditoria, sem evento). Alguma ação SCHEDULED: WAITING até o menor due_at (sem evento de término). Senão BLOCKED quando a run tem motivo
+ * de aplicabilidade ou alguma mensagem ficou SKIPPED por bloqueio de envio; COMPLETED nos demais casos. Devolve { status, blockedReason, nextDueAt }.
  */
 function summarize(entries, blockedReason) {
-  if (entries.some((e) => ['FAILED', 'UNKNOWN'].includes(e.status))) return { status: 'FAILED', blockedReason: blockedReason || null, nextDueAt: null };
+  const open = entries.some(isOpenEntry);
+  if (!open && entries.some((e) => ['FAILED', 'UNKNOWN'].includes(e.status))) return { status: 'FAILED', blockedReason: blockedReason || null, nextDueAt: null };
   const dueAt = nextDueAt(entries);
   const skippedSend = entries.find((e) => e.type === SEND && e.status === 'SKIPPED' && SEND_BLOCK_REASONS.includes(e.error_code));
   const reason = (APPLICABILITY_REASONS.includes(blockedReason) && blockedReason) || (skippedSend && skippedSend.error_code) || (SEND_BLOCK_REASONS.includes(blockedReason) && blockedReason) || null;

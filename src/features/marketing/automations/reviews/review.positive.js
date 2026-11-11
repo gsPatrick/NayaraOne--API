@@ -69,6 +69,9 @@ async function deliver(row, input, params) {
     return { reviewRequestId: row.id, status: 'SENT', messageId: res.messageId };
   }
   if (res.status === 'UNKNOWN') return { reviewRequestId: row.id, unknown: true };
+  if (res.status === 'QUEUED') { // sem reenvio automático do pedido (acima): a mensagem que o canal deixou na fila fecha FAILED com ele, nunca fica QUEUED para sempre (DI-M9F-2)
+    await ports.settleMessage({ tenant: input.tenant, transaction: input.transaction, channel: row.channel, actionKey: input.idempotencyKey }, { status: 'FAILED', code: 'MKT_REVIEW_SEND_FAILED' });
+  }
   if (res.status === 'BLOCKED') {
     const code = res.reason || 'BLOCKED';
     await move(row, { status: code === KILL_SWITCH ? 'FAILED' : 'SUPPRESSED', errorCode: code }, input, `Pedido de avaliação bloqueado antes do envio: ${code}.`);

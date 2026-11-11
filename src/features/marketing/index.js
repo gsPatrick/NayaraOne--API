@@ -14,7 +14,10 @@ const security = require('./security');
 const killSwitchRouter = killSwitch.router;
 
 // M9-D414: o runner de automações chama outras áreas por portas (sem import entre áreas): canSend, envio de mensagem e rascunho de conteúdo.
-automations.runner.registerRunnerPorts({ canSend: suppression.canSend, sendMessage: publications.messaging.sendMarketingMessage, createDraft: content.service.createContent });
+automations.runner.registerRunnerPorts({
+  canSend: suppression.canSend, sendMessage: publications.messaging.sendMarketingMessage, createDraft: content.service.createContent,
+  reconcileMessage: publications.messaging.reconcileMessage, settleMessage: publications.messaging.settleMessage, // DI-M9F-1: nova tentativa e reconciliação da ação de envio
+});
 
 /**
  * Módulo Marketing (Caderno §Marketing, Guia do Marcelo §2): seis áreas em src/features/marketing/<área>/ (content, campaigns,

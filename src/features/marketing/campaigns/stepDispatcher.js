@@ -15,7 +15,7 @@ const { checkApproval } = require('../content').approval;
 const { massStepReason } = require('./massStep.guard');
 const deliveries = require('./delivery/delivery.repository');
 const { processRecipient } = require('./delivery/delivery.recipient');
-const { readDeliveryPolicy } = require('./delivery/delivery.policy');
+const { readDeliveryPolicy } = require('../sendRetry.policy');
 const { closeOpenOfClosedSteps } = require('./delivery/delivery.closing');
 
 /** action_key = sha256(campaign_id:step_id:person_id): ocupa o lugar da chave de run da M9-D415 (step de campanha não tem run). */

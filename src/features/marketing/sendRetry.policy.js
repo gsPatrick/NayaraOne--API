@@ -1,21 +1,29 @@
 'use strict';
 
-const { readRetryParams } = require('../../../integrations/dispatch/retry/retry.params');
-const { backoffMs } = require('../../../integrations/dispatch/retry/retry.delay');
-const { readReconcileParams, waitBeforeAttemptS } = require('../../../integrations/dispatch/reconcile/reconcile.params');
+const { readRetryParams } = require('../integrations/dispatch/retry/retry.params');
+const { backoffMs } = require('../integrations/dispatch/retry/retry.delay');
+const { readReconcileParams, waitBeforeAttemptS } = require('../integrations/dispatch/reconcile/reconcile.params');
 
 /**
- * Política de nova tentativa da entrega de campanha. Não é regra nova: o plano de contingência do canal (M9-D430) manda o e-mail para a "nova tentativa
+ * Política de nova tentativa de mensagem do Marketing, comum à entrega de campanha (campaigns/delivery) e à ação SEND_MESSAGE das automações
+ * (automations/runner, DI-M9F-1). Não é regra nova: o plano de contingência do canal (M9-D430) manda o e-mail para a "nova tentativa
  * por classe de erro" do bloco de Integrações, então valem os MESMOS parâmetros que o administrador já edita em Configurações > Integrações:
  *  - falha transitória (INT-006, §8 TRANSIENT/RATE_LIMIT): `integration.retry.*` de M9-D216 (base, fator, teto, jitter, tentativas, espera máxima atendida
  *    no 429 e adiamentos seguidos por limite que ainda não contam como tentativa);
  *  - resultado incerto (INT-005, §7 e §8 UNKNOWN "tentativas limitadas + DLQ"): `integration.unknown.*` de M9-D215 (consultas e esperas entre elas).
- * Lidos na hora, por empresa (DI-M9E-1). `rand` injetável nos testes (jitter).
+ * Lidos na hora, por empresa (DI-M9E-1). `rand` injetável nos testes (jitter). `row` de planRetry: { attempts, rate_deferrals } da linha ou da ação.
  */
 async function readDeliveryPolicy(tenant, transaction) {
   const [retry, reconcile] = await Promise.all([readRetryParams(tenant, transaction), readReconcileParams(tenant, transaction)]);
   return { retry, reconcile };
 }
+
+/** Motivos de fechamento comuns (campanha e automação): fila morta por tentativas ou consultas esgotadas; o provedor confirmou que não recebeu. */
+const RETRY_CODES = Object.freeze({
+  RETRIES_EXHAUSTED: 'MKT_DELIVERY_RETRIES_EXHAUSTED',
+  UNKNOWN_EXHAUSTED: 'MKT_DELIVERY_UNKNOWN_EXHAUSTED',
+  RECONCILED_NOT_FOUND: 'MKT_DELIVERY_RECONCILED_NOT_FOUND',
+});
 
 const addMs = (date, ms) => new Date(date.getTime() + ms);
 
@@ -43,4 +51,4 @@ function planReconcile(done, policy, now) {
   return { exhausted: false, reconcileAttempts: done, nextAttemptAt: addMs(now, waitBeforeAttemptS(policy.reconcile, done) * 1000) };
 }
 
-module.exports = { readDeliveryPolicy, planRetry, planReconcile };
+module.exports = { readDeliveryPolicy, planRetry, planReconcile, RETRY_CODES };
