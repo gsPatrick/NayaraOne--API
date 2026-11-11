@@ -141,10 +141,31 @@ module.exports = (sequelize) => {
         field: 'status',
       },
       idempotencyKey: {
-        type: DataTypes.STRING(128),
+        type: DataTypes.STRING(180),
+        // Única por EMPRESA (company_id, idempotency_key) — migration 20260101009985. NOT NULL (Caderno M4 §7, migration
+        // 20260101010520): sem chave do cliente, o banco grava `lancamento:<id>` (gatilho finance.financial_entries_fill_ledger_fields).
         allowNull: true,
-        // Única por EMPRESA (company_id, idempotency_key) — migration 20260101009985.
         field: 'idempotency_key',
+      },
+      // Caderno M4 §7 / Guia §7: chave do MOVIMENTO quando o próprio lançamento vira linha do ledger pela baixa integral
+      // (chave do cliente derivada, a da intenção de pagamento ou `baixa-integral:interna:<id>`). A view finance.ledger expõe
+      // COALESCE(settlement_idempotency_key, idempotency_key) como idempotency_key do movimento.
+      settlementIdempotencyKey: {
+        type: DataTypes.STRING(180),
+        allowNull: true,
+        field: 'settlement_idempotency_key',
+      },
+      // PARTIAL | COMPLEMENT | EXCESS | REVERSAL — tipo do movimento nas linhas filhas/estornos (domain/ledger-movement.js MOVEMENT_KINDS).
+      movementKind: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        field: 'movement_kind',
+      },
+      // Só a migration 20260101010520 grava (linha legada de valor 0,00, fora do ledger); o banco recusa em INSERT/UPDATE da aplicação.
+      ledgerExclusionReason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'ledger_exclusion_reason',
       },
       reversalOfEntryId: {
         type: DataTypes.UUID,
