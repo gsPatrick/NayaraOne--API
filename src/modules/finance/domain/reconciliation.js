@@ -6,7 +6,10 @@
 // AUTO_STRONG: auto conforme policy"; DEC-006), lido dos parâmetros da empresa por application/services/reconciliation-policy.js.
 
 const money = require('./money');
-const { businessDateKey } = require('../../../utils/businessDate');
+
+// Dia civil de São Paulo (AAAA-MM-DD), sem depender de utilitário fora do domínio (mesma regra de utils/businessDate.js).
+const SP_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' });
+const businessDateKey = (value) => SP_DAY.format(new Date(value));
 
 // Sentido do extrato (R6 / M4-D019 A7): valor negativo = saída (só concilia com DEBIT/PAYABLE),
 // positivo = entrada (só com CREDIT/RECEIVABLE). Conta bancária diferente também nunca concilia
