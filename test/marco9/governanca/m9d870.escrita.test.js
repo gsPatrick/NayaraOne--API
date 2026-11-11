@@ -16,7 +16,7 @@ const { openTenantTx } = require('../../../src/features/core-governance/data-qua
 const tenantA = () => ({ ...http.state.tenants.A });
 const state = { perms: [] };
 const typeOf = (spec) => (spec.type === 'boolean' ? 'BOOLEAN' : spec.type === 'integer' ? 'INTEGER' : 'STRING');
-const sample = (spec) => (spec.type === 'boolean' ? false : spec.type === 'integer' ? spec.min : 'x');
+const sample = (spec) => (Array.isArray(spec.enum) && spec.enum.length ? spec.enum[0] : spec.type === 'boolean' ? false : spec.type === 'integer' ? spec.min : 'x');
 const required = (key) => restrictedPermissionOf(key) || (isPlatformOnly(SETTINGS_SCHEMA[key]) ? 'integration:platform' : null);
 const blocked = () => Object.keys(SETTINGS_SCHEMA).filter((key) => required(key) && !state.perms.includes(required(key)));
 const denials = async (companyId, key) => (await http.adminQuery("SELECT after_json FROM audit.audit_log WHERE company_id = $1 AND action = 'governance.setting.write_denied' AND after_json->>'key' = $2 ORDER BY occurred_at", [companyId, key])).rows;
