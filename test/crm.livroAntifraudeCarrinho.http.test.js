@@ -41,9 +41,9 @@ after(async () => {
   process.exit(0);
 });
 
-async function http(method, path, body, token = tokenGestor) {
+async function http(method, path, body, token = tokenGestor, extra = {}) {
   const url = path.startsWith('http') ? path : `${baseUrl}${path}`;
-  const headers = { 'Content-Type': 'application/json' };
+  const headers = { 'Content-Type': 'application/json', ...extra };
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
   return { status: res.status, body: await res.json().catch(() => null) };
@@ -188,4 +188,19 @@ test('§7: foto enviada pela tela (IMAGE) só conta para publicar depois de APRO
   assert.equal(aud.beforeJson.qualityStatus, 'PENDING');
   assert.equal(aud.afterJson.qualityStatus, 'REJECTED');
   assert.match(aud.reason, /Pessoa aparece/);
+});
+
+test('§18/CRM-TS-013: exportar as oportunidades (base de clientes) exige a permissão dedicada e MFA recente pela rota POST /exports', async () => {
+  const claims = { sub: tenant.userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['admin'] };
+  const comExport = signAccessToken({ ...claims, permissions: [...BASE_PERMS, 'governance:dlp:export', 'crm:opportunities:export'] });
+  const semPermissaoDoModulo = signAccessToken({ ...claims, permissions: [...BASE_PERMS, 'governance:dlp:export'] });
+  const corpo = { resourceType: 'crm.opportunities', format: 'CSV', purpose: 'OPERACAO', justification: 'Relatório da reunião semanal de vendas da equipe comercial' };
+  const semMfa = await http('POST', '/exports', corpo, comExport, { 'Idempotency-Key': `m3-export-${uniqueSuffix()}` });
+  assert.equal(semMfa.status, 403, JSON.stringify(semMfa.body));
+  assert.equal(semMfa.body.error.code, 'MFA_STEP_UP_REQUIRED');
+  const semModulo = await http('POST', '/exports', corpo, semPermissaoDoModulo, { 'Idempotency-Key': `m3-export-${uniqueSuffix()}` });
+  assert.equal(semModulo.status, 403, JSON.stringify(semModulo.body));
+  const [[job]] = await withTenantTransaction(tenant, (t) => sequelize.query("SELECT status, classification FROM governance.export_jobs WHERE resource_type = 'crm.opportunities' AND actor_user_id = :u ORDER BY created_at DESC LIMIT 1", { replacements: { u: tenant.userId }, transaction: t }));
+  assert.equal(job.classification, 'HIGH');
+  assert.equal(job.status, 'BLOCKED');
 });
