@@ -1,5 +1,7 @@
 'use strict';
 
+const { gravarParametroSensivel } = require('../../helpers/mfaRecente');
+
 // Fábricas e provider sandbox do orçamento da NAY (M9-D014). Rodam com nayara_runtime (RLS real); os testes com rollback usam
 // withRollbackTenantTransaction e só os de concorrência gravam de verdade (cluster descartável).
 
@@ -7,7 +9,7 @@ const { uid, q, sequelize } = require('../../helpers/aiRuns');
 const repo = require('../../../src/features/ai/readmodels/budgetSupport.readmodel');
 const budgets = require('../../../src/features/ai/budgets');
 const { monthPeriodOf } = require('../../../src/features/ai/budgets/budgets.period');
-const { upsertSetting } = require('../../../src/features/settings/settings.service');
+const { upsertSetting, SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
 
 /** Meio do mês corrente em UTC: dentro do período mensal de America/Sao_Paulo e longe das viradas. */
 const AGORA = new Date('2026-10-15T15:00:00Z');
@@ -40,7 +42,10 @@ const alertasDe = (budgetId, tx) => q('SELECT threshold FROM ai.budget_alerts WH
 const eventosLimiar = (budgetId, tx) => q("SELECT * FROM integration.outbox_events WHERE event_type = 'ai.budget.threshold_reached' AND aggregate_id = :id ORDER BY occurred_at", { id: budgetId }, tx);
 
 /** Parâmetro da empresa dentro da transação do teste (valida contra o SETTINGS_SCHEMA como a tela). */
-const definirParametro = (tenant, chave, valor, tx) => upsertSetting(chave, valor, { groupId: tenant.groupId, companyId: tenant.companyId }, null, tx);
+// Parâmetro sensível (requiresMfa, ex.: ia.fallback.max_saltos): gravado por um operador com MFA recente real; os demais pelo caminho interno, como antes.
+const definirParametro = (tenant, chave, valor, tx) => (SETTINGS_SCHEMA[chave] && SETTINGS_SCHEMA[chave].requiresMfa
+  ? gravarParametroSensivel(chave, valor, tenant, tx)
+  : upsertSetting(chave, valor, { groupId: tenant.groupId, companyId: tenant.companyId }, null, tx));
 
 /** Transação REAL (commit) com o contexto do tenant, para simular conexões concorrentes. */
 function comoTenant(tenant, fn) {

@@ -33,7 +33,7 @@ const RULES = [
     conditionAstJson: { fact: 'financeAntifraudRuleActive', op: '==', value: true },
     actionJson: {
       historyMultiplier: 3,
-      newAccountThreshold: 10000,
+      newAccountThreshold: 5000, // DEC-007 (conta nova R$ 5.000,00); a regra publicada só aperta o padrão do catálogo
       bankAccountCooldownHours: 48,
     },
   },

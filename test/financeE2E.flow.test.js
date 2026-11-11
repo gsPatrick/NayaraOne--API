@@ -62,7 +62,8 @@ test('Financeiro E2E: lançamento -> intenção -> callback sandbox HMAC -> ledg
     await settingsService.upsertSetting('finance.bank_payment_webhook_secret', webhookSecret, tenant, tenant.userId, t);
 
     // 1) Lançamento a pagar.
-    const amount = Number((1000 + Math.floor(Math.random() * 9000) + Math.floor(Math.random() * 100) / 100).toFixed(2));
+    // Abaixo do primeiro pagamento que o antifraude retém numa conta sem histórico (R$ 5.000,00, DEC-007): esta jornada não é sobre a revisão manual.
+    const amount = Number((1000 + Math.floor(Math.random() * 3900) + Math.floor(Math.random() * 100) / 100).toFixed(2));
     const bank = await BankAccount.create(W({ bankCode: '001', agency: '0001', accountNumber: `E2E-${suffix}`, pixKey: `e2e-${suffix}@nayaraone.dev`, status: 'ACTIVE' }), { transaction: t });
     const cc = await createTestCostCenter(tenant, t);
     const entry = await financialEntriesService.createFinancialEntry(

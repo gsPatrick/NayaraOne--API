@@ -10,6 +10,7 @@ const { sequelize, withRollbackTenantTransaction, uniqueSuffix } = require('../t
 const { AuditLog, IntegrationConnection, IntegrationProvider, ProviderAccount } = require('../../src/models');
 const registry = require('../../src/features/integrations/registry/registry.service');
 const settingsService = require('../../src/features/settings/settings.service');
+const { gravarParametroSensivel } = require('../helpers/mfaRecente');
 const providerAccountsService = require('../../src/features/correspondent/providerAccounts.service');
 const { setupEnv, teardownEnv, novaConexao, recusa } = require('../helpers/integrationsRegistryEnv');
 const { semMfa } = require('../marco9/_helpers/semMfa');
@@ -214,14 +215,14 @@ test('connections_auditoria_antes_depois', async () => {
 test('connections_producao_exige_mfa_recente_configuravel', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     await semMfa(tenant.userId, transaction); // hermético: outro arquivo pode ter deixado MFA habilitado para o usuário do seed
-    await settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', true, tenant, tenant.userId, transaction);
+    await gravarParametroSensivel('integration.admin.mfa_on_prod_connection_change', true, tenant, transaction); // sensível: operador com MFA recente real
     const c = await registry.createConnection(novaConexao({ environment: 'SANDBOX' }), ctx, transaction);
     await registry.updateConnection(c.id, { label: `${c.label} ok` }, ctx, transaction); // fora de produção não pede MFA
     await assert.rejects(
       registry.createConnection(novaConexao({ environment: 'PRODUCTION' }), ctx, transaction),
       (err) => ['MFA_REQUIRED_NOT_ENABLED', 'MFA_STEP_UP_REQUIRED'].includes(err.code)
     );
-    await settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', false, tenant, tenant.userId, transaction);
+    await gravarParametroSensivel('integration.admin.mfa_on_prod_connection_change', false, tenant, transaction); // sensível: operador com MFA recente real
     const p = await registry.createConnection(novaConexao({ environment: 'PRODUCTION' }), ctx, transaction);
     assert.equal(p.environment, 'PRODUCTION');
   });

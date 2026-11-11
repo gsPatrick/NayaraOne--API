@@ -12,6 +12,8 @@ const collectionCaseService = require('../src/features/billing/collectionCase.se
 const mfaService = require('../src/features/users/mfa.service');
 const { User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+// multa, juros, carência e janela de MFA são parâmetros sensíveis (requiresMfa): quem grava precisa de MFA recente real (settingMfa.js, DI-DEC007-1).
+const { comMfaRecente } = require('./helpers/mfaRecente');
 
 let tenant;
 
@@ -51,6 +53,7 @@ function extractSecret(otpauthUri) {
 // --- upsert persiste e getSetting lê de volta ---
 test('settings: upsert persiste e getSetting lê o valor configurado de volta', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await comMfaRecente(tenant.userId, tenant, transaction);
     const row = await settingsService.upsertSetting('billing.late_fee_percentage', 4.5, tenant, tenant.userId, transaction);
     assert.equal(Number(row.value), 4.5);
 
@@ -68,6 +71,7 @@ test('settings: upsert persiste e getSetting lê o valor configurado de volta', 
 // --- valores fora do schema são rejeitados (fail closed) ---
 test('settings: valores fora do schema (ou chave desconhecida) são rejeitados com 400', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await comMfaRecente(tenant.userId, tenant, transaction);
     await assert.rejects(
       () => settingsService.upsertSetting('billing.late_fee_percentage', -1, tenant, tenant.userId, transaction),
       (err) => {
@@ -107,6 +111,7 @@ test('settings: valores fora do schema (ou chave desconhecida) são rejeitados c
 // --- chave sem configuração retorna default sem erro ---
 test('settings: chave sem configuração para o tenant retorna o default informado, sem lançar erro', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await comMfaRecente(tenant.userId, tenant, transaction);
     const value = await settingsService.getSetting('mfa.step_up_ttl_minutes', tenant, transaction, 10);
     assert.equal(value, 10);
 
@@ -119,6 +124,7 @@ test('settings: chave sem configuração para o tenant retorna o default informa
 // --- alterar multa configurada muda o valor calculado na próxima cobrança em atraso ---
 test('settings: alterar billing.late_fee_percentage muda a multa calculada por collectionCase.service', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await comMfaRecente(tenant.userId, tenant, transaction);
     const contract = await createLeaseContract(transaction);
     const schedule = await billingScheduleService.generateBillingSchedule(
       {
@@ -162,6 +168,7 @@ test('settings: alterar billing.late_fee_percentage muda a multa calculada por c
 test('settings: alterar mfa.step_up_ttl_minutes muda a duração da janela de step-up aplicada em verifyMfa', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await comMfaRecente(tenant.userId, tenant, transaction);
     const userId = await createSecondUser(suffix);
     await settingsService.upsertSetting('mfa.step_up_ttl_minutes', 1, tenant, tenant.userId, transaction);
 

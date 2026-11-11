@@ -54,7 +54,7 @@ test('m9_d237_segredo_lido_pelo_secretstore', async () => {
 
 /** Cadastro manual de connection bancária com segredo exige MFA recente (D202); o teste desliga a exigência só durante a criação. */
 async function semMfaNaTroca(fn, t) {
-  const troca = (valor) => settingsService.upsertSetting('integration.secret.mfa_on_bank_secret_change', valor, tenant, tenant.userId, t);
+  const troca = (valor) => require('../../helpers/mfaRecente').gravarParametroSensivel('integration.secret.mfa_on_bank_secret_change', valor, tenant, t); // sensível: operador com MFA recente real
   await troca(false);
   try { return await fn(); } finally { await troca(true); }
 }
