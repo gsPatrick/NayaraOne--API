@@ -54,12 +54,20 @@ async function outraEmpresa(ctx) {
     const r = await ctx.outra.chamar(metodo, rota, corpo);
     ctx.rel.conferir(CENARIO, `outra empresa NÃO consegue ${nome}`, ok(r), `${metodo} ${alvo(rota)} -> ${resumo(r)}${r.erro ? ` "${r.erro.message}"` : ''}${Array.isArray(r.dados) ? ` (${r.dados.length} itens)` : ''}`);
   }
+  // Vazamento conferido pelo ID dos registros da empresa A e pela EMPRESA de cada item (não só pelo prefixo do nome).
+  // (ctx.ids.pessoaOutraEmpresa é o contato fictício da PRÓPRIA outra empresa: não entra no conjunto da empresa A)
+  const idsA = new Set(Object.entries(ctx.ids).filter(([k, v]) => k !== 'pessoaOutraEmpresa' && typeof v === 'string').map(([, v]) => v));
+  const nomesA = new Set([NOME_OK, NOME_OUT, ...Object.values((ctx.p5 && ctx.p5.contatos) || {}).map((c) => c.nome)]);
   const lista = await ctx.outra.chamar('GET', '/people');
-  const vazou = (Array.isArray(lista.dados) ? lista.dados : []).filter((p) => [NOME_OK, NOME_OUT].includes(p.legalName) || /^ACEITE-M9/i.test(p.legalName));
-  ctx.rel.conferir(CENARIO, 'a lista de contatos da outra empresa não mostra nenhum contato ACEITE-M9', vazou.length === 0, `GET /people -> ${resumo(lista)}, ${(lista.dados || []).length} contatos, ${vazou.length} do teste`);
+  const itens = Array.isArray(lista.dados) ? lista.dados : [];
+  const vazou = itens.filter((p) => idsA.has(p.id) || (p.companyId && p.companyId !== ctx.outra.companyId) || nomesA.has(p.legalName));
+  const semEmpresa = itens.filter((p) => !p.companyId).length;
+  ctx.rel.conferir(CENARIO, 'a lista de contatos da outra empresa não traz nada da empresa A (conferido por id, por empresa e por nome)', lista.status === 200 && vazou.length === 0 && semEmpresa === 0,
+    `GET /people -> ${resumo(lista)}, ${itens.length} contatos, ${vazou.length} da empresa A ou de outra empresa, ${semEmpresa} sem empresa informada`);
   const mod = await ctx.outra.chamar('GET', '/marketing/templates');
-  const vazouMod = ((mod.dados && mod.dados.items) || []).filter((i) => /^aceite-m9/i.test(i.code));
-  ctx.rel.conferir(CENARIO, 'a lista de modelos da outra empresa não mostra o modelo ACEITE-M9', vazouMod.length === 0 && (mod.status === 200 || [403].includes(mod.status)), `GET /marketing/templates -> ${resumo(mod)}, ${vazouMod.length} do teste`);
+  const itensMod = (mod.dados && mod.dados.items) || [];
+  const vazouMod = itensMod.filter((i) => /^aceite-m9/i.test(i.code) || idsA.has(i.id) || (i.versions || []).some((v) => idsA.has(v.id)) || (i.companyId && i.companyId !== ctx.outra.companyId));
+  ctx.rel.conferir(CENARIO, 'a lista de modelos da outra empresa não traz o modelo da empresa A (por id, por empresa e por código)', vazouMod.length === 0 && (mod.status === 200 || [403].includes(mod.status)), `GET /marketing/templates -> ${resumo(mod)}, ${itensMod.length} modelos, ${vazouMod.length} da empresa A`);
   const depois = await ctx.admin.chamar('GET', `/people/${pessoaOk}/consents`);
   const intrusos = (depois.dados || []).filter((c) => c.purpose === 'ACEITE_M9_ISOLAMENTO');
   ctx.rel.conferir(CENARIO, 'nada foi gravado na empresa A pelas tentativas da outra empresa e do perfil de leitura', intrusos.length === 0, `consentimentos de isolamento encontrados na empresa A: ${intrusos.length}`);
