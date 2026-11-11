@@ -260,17 +260,19 @@ const renderContractTemplate = catchAsync(async (req, res) => {
   }
   const variables = body.variables;
   const data = await req.withTenantTransaction(async (t) => {
+    // A prévia mostra a versão que GERA contrato (a publicada); o rascunho só se pedido (versao=rascunho) ou se não houver publicada.
+    const templateVersion = await contractTemplatesService.previewTemplateVersion(req.params.id, t, { rascunho: body.versao === 'rascunho' || req.query.versao === 'rascunho' });
     if (body.contractId) {
-      return contractTemplatesService.renderTemplateForContract(req.params.id, String(body.contractId), t, variables);
+      return contractTemplatesService.renderTemplateForContract(req.params.id, String(body.contractId), t, variables, { templateVersion });
     }
     if (body.draftContract) {
       const { context, unresolved } = await deriveDraftConditionContext(body.draftContract, t);
-      return contractTemplatesService.renderTemplate(req.params.id, t, variables, context, { unresolved, contextSource: 'DRAFT_CONTRACT' });
+      return contractTemplatesService.renderTemplate(req.params.id, t, variables, context, { unresolved, contextSource: 'DRAFT_CONTRACT', templateVersion });
     }
     if (body.simulationContext) {
-      return contractTemplatesService.renderTemplate(req.params.id, t, variables, body.simulationContext, { contextSource: 'SIMULATION' });
+      return contractTemplatesService.renderTemplate(req.params.id, t, variables, body.simulationContext, { contextSource: 'SIMULATION', templateVersion });
     }
-    return contractTemplatesService.renderTemplate(req.params.id, t, variables, {}, { contextSource: 'NONE' });
+    return contractTemplatesService.renderTemplate(req.params.id, t, variables, {}, { contextSource: 'NONE', templateVersion });
   });
   return success(res, { data: { ...data, simulation: data.contextSource === 'SIMULATION' } });
 });

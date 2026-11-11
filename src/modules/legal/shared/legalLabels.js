@@ -6,9 +6,10 @@
  * Código sem rótulo conhecido aparece como "(não informado)" em vez do código cru.
  */
 const CONTRACT_STATUS = {
-  DRAFT: 'Montagem', DOCUMENTS_PENDING: 'Faltam documentos', LEGAL_REVIEW: 'Revisão jurídica', APPROVED: 'Versão homologada',
-  SIGNING: 'Em assinatura', SIGNED: 'Assinado', ACTIVE: 'Em vigor', SUSPENDED: 'Suspenso', TERMINATED: 'Encerrado/rescindido',
-  CLOSED: 'Arquivado', CANCELLED: 'Cancelado (legado)',
+  // Rótulos da linguagem do contrato (M5-D048), iguais aos selos da tela.
+  DRAFT: 'Rascunho', DOCUMENTS_PENDING: 'Documentos pendentes', LEGAL_REVIEW: 'Revisão jurídica', APPROVED: 'Aprovado',
+  SIGNING: 'Em assinatura', SIGNED: 'Assinado', ACTIVE: 'Em vigor', SUSPENDED: 'Suspenso', TERMINATED: 'Encerrado',
+  CLOSED: 'Arquivado', CANCELLED: 'Cancelado',
 };
 const AMENDMENT_STATUS = { DRAFT: 'em rascunho', SIGNED: 'assinado' };
 const NOTICE_STATUS = { DRAFT: 'rascunho', PENDING_REVIEW: 'em revisão', APPROVED: 'aprovada', SENT: 'enviada', DELIVERED: 'entregue', REJECTED: 'recusada' };

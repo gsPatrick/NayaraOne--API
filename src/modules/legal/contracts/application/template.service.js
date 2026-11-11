@@ -415,8 +415,23 @@ async function renderTemplateForContract(templateId, contractOrId, transaction, 
   const { context, unresolved } = await buildConditionContext(contractOrId, transaction);
   // Geração de verdade (options.published): só a versão PUBLICADA do modelo gera contrato (Caderno §6/§19 —
   // publicar é ato de governança com legal:approve); a versão do contrato guarda o template_version_id dela.
-  const templateVersion = options.published ? await templateVersions.getPublishedVersion(templateId, transaction) : undefined;
+  const templateVersion = options.published ? await templateVersions.getPublishedVersion(templateId, transaction) : options.templateVersion;
   return renderTemplate(templateId, transaction, variables, context, { unresolved, contextSource: 'CONTRACT', templateVersion });
+}
+
+/**
+ * Versão do modelo usada na PRÉVIA: a mesma que gera contrato (a publicada). Só se não houver
+ * versão publicada, ou se quem pede quiser ver o rascunho em edição (`rascunho: true`), a prévia usa
+ * a versão vigente (rascunho) — e a resposta diz qual foi (templateVersionStatus).
+ */
+async function previewTemplateVersion(templateId, transaction, { rascunho = false } = {}) {
+  if (rascunho) return undefined;
+  try {
+    return await templateVersions.getPublishedVersion(templateId, transaction);
+  } catch (err) {
+    if (err && err.code === 'LEGAL_TEMPLATE_NOT_PUBLISHED') return undefined;
+    throw err;
+  }
 }
 
 /**
@@ -508,6 +523,7 @@ module.exports = {
   removeClauseFromTemplate,
   renderTemplate,
   renderTemplateForContract,
+  previewTemplateVersion,
   upgradeTemplateClause,
   listClauseTemplateUsage,
   publishTemplate,

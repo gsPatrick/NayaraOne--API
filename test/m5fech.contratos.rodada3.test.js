@@ -28,7 +28,7 @@ test('Mensagens: recusa por documento faltante traz o rótulo das exigências; o
   const k = await h.contratoEmRevisao('A:gestor');
   const linha = (await h.http('A:leitura', 'GET', `/legal/contracts/${k.contractId}/timeline`)).data.items.filter((i) => i.type === 'STATUS_CHANGE');
   assert.ok(linha.length >= 2);
-  assert.equal(linha[0].summary, 'Situação do contrato mudou de "Montagem" para "Faltam documentos"');
+  assert.equal(linha[0].summary, 'Situação do contrato mudou de "Rascunho" para "Documentos pendentes"');
   assert.deepEqual(linha[0].details, { fromStatus: 'DRAFT', toStatus: 'DOCUMENTS_PENDING' });
   assert.ok(linha.every((i) => !/DRAFT|DOCUMENTS_PENDING|LEGAL_REVIEW/.test(i.summary)), 'status cru não aparece no resumo');
 });
