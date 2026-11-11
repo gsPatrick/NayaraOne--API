@@ -7,7 +7,7 @@ const { readReviewParams } = require('./review.settings');
 const { classify } = require('./review.classify');
 const { satisfactionFacts } = require('./review.facts');
 const { negative } = require('./review.negative');
-const { positive, deliver } = require('./review.positive');
+const { positive, deliver, close } = require('./review.positive');
 
 const CHANNELS = ['WHATSAPP', 'EMAIL', 'SITE', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'YOUTUBE', 'TIKTOK', 'PORTAL'];
 
@@ -23,7 +23,7 @@ async function channelOf(input, facts, { allowFallback }) {
 /**
  * Serviço de pedido de avaliação (M9-D424), registrado na porta do runner. Recebe { tenant, transaction, personId, platform, channel, idempotencyKey, correlationId, ... } e devolve
  * { reviewRequestId, ... }. Repetir a mesma chave (ou a mesma origem da satisfação) devolve o mesmo pedido, sem criar outro. Nota negativa: ocorrência antes e nenhum envio;
- * positiva: pedido com link rastreável, só sem ocorrência aberta; entre as duas notas, nenhuma ação.
+ * positiva: pedido com link rastreável, só sem ocorrência aberta; entre as duas notas, nenhuma ação. `close: { status, code }` fecha o pedido PENDING da chave sem enviar (DI-M9F-2).
  */
 async function requestReview(input) {
   const { tenant, transaction, personId } = input;
@@ -31,6 +31,7 @@ async function requestReview(input) {
   await repo.lockPerson(personId, transaction);
   const existing = await repo.findByKey(input.idempotencyKey, transaction);
   const params = await readReviewParams(tenant, transaction);
+  if (existing && existing.status === 'PENDING' && input.close) return close(existing, input, input.close); // o runner fecha a ação aberta do pedido (DI-M9F-2)
   if (existing) return existing.status === 'PENDING' ? deliver(existing, input, params) : { reviewRequestId: existing.id, replay: true };
   const facts = await satisfactionFacts({ context: input.context, transaction });
   if (!facts) return { reviewRequestId: null, blocked: 'MKT_REVIEW_FACTS_MISSING' };

@@ -94,8 +94,20 @@ function view(row, extra = {}) {
   return { status: row.deliveryStatus || row.status, messageId: row.id, channel: row.channel, purpose: row.purpose, providerRef: row.externalMessageId || null, replayed: false, sent: false, ...extra };
 }
 
+/**
+ * canSend NA HORA do reenvio (DI-M9F-2): quem chama sem decidir antes (pedido de avaliação) não reenvia para quem pediu para sair entre as tentativas. Silêncio: a mensagem
+ * continua na fila e a resposta é DEFERRED; bloqueio: a mensagem da fila vira CANCELLED e a resposta é BLOCKED. Devolve null quando pode reenviar.
+ */
+async function resendDecision(ctx, row, input, officialTemplate) {
+  if (ctx.preAuthorized) return null; // o runner e o disparo da campanha já decidiram na hora, com a trava
+  const decision = await canSend(input.personId, row.channel, input.purpose, ctx.now || new Date(), { tenant: ctx.tenant, transaction: ctx.transaction, officialTemplate });
+  if (decision.allowed) return null;
+  if (decision.reason !== QUIET) await moveOutbound(row, { status: 'CANCELLED', reason: `Envio cancelado sem sair: ${decision.reason}.` }, ctx.transaction);
+  return blockedResult(decision, input, ctx.tenant, ctx.transaction);
+}
+
 /** Reenvio de mensagem QUEUED (nova tentativa) ou conferência de UNKNOWN pela chave de idempotência, antes de repetir (M9-D415). */
-async function resumeExisting(ctx, row, rebuild) {
+async function resumeExisting(ctx, row, rebuild, policy = {}) {
   const { tenant, transaction } = ctx;
   const state = row.deliveryStatus || row.status;
   if (state === 'UNKNOWN') {
@@ -108,6 +120,10 @@ async function resumeExisting(ctx, row, rebuild) {
     return view(await moveOutbound(row, { status: 'CANCELLED', reason: STATUS_TEXT.EXPIRED }, transaction), { replayed: true, cancelled: true });
   }
   if ((await killBlock(ctx, row.channel)).blocked) return view(row, { replayed: true, blocked: true, reason: KILL.reason, code: KILL.code }); // fica como estava (QUEUED/UNKNOWN) e sai depois da reativação
+  if (policy.input) {
+    const held = await resendDecision(ctx, row, policy.input, policy.officialTemplate);
+    if (held) return held;
+  }
   const message = await rebuild();
   const result = await sendToChannel(row.channel, message, { tenant, transaction, idempotencyKey: row.actionKey, now: ctx.now, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
   const out = outcomeOf(result);
@@ -145,7 +161,7 @@ async function sendMarketingMessage(ctx, rawInput) {
   };
 
   const existing = await findByActionKey(input.actionKey, tenant, transaction);
-  if (existing) return resumeExisting(ctx, existing, rebuild);
+  if (existing) return resumeExisting(ctx, existing, rebuild, { input, officialTemplate });
 
   const message = await rebuild(); // verificações de template, preview e descadastro vêm antes do canSend
   if (!ctx.preAuthorized) { // o runner de automações (M9-D414) já decidiu kill switch e canSend, com a trava e a reserva, antes de chamar: decidir de novo contaria a própria reserva no cap

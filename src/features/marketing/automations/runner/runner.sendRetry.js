@@ -20,6 +20,15 @@ const { readDeliveryPolicy, planRetry, planReconcile, RETRY_CODES } = require('.
  */
 
 const iso = (date) => new Date(date).toISOString();
+const SEND = 'SEND_MESSAGE';
+
+/**
+ * Ação aberta de outro tipo que também manda mensagem (o pedido de avaliação, DI-M9F-2): quando ela fecha sem a mensagem sair, o dono fecha o próprio registro
+ * (`closer(ctx, entry, { status: 'FAILED'|'SUPPRESSED', code })`). Registrado pelo executor do tipo.
+ */
+const closers = new Map();
+const registerOpenActionCloser = (type, fn) => { closers.set(type, fn); };
+const closeOwner = async (ctx, entry, status, code) => { const fn = closers.get(entry.type); if (fn) await fn(ctx, entry, { status, code }); };
 const msgCtx = (ctx, entry) => ({ tenant: ctx.tenant, channel: entry.channel, actionKey: entry.action_key });
 const counters = (entry) => ({ attempts: Number(entry.attempts || 0), rate_deferrals: Number(entry.rate_deferrals || 0) });
 
@@ -40,6 +49,7 @@ async function resultOfSend(ctx, entry, sent) {
   const plan = planRetry(counters(entry), { rateLimited: Boolean(sent.rateLimited || sent.deferred), retryAfterMs: sent.retryAfterMs }, policy, ctx.now);
   if (!plan.exhausted) return { status: 'RETRY', errorCode: sent.errorCode, dueAt: plan.nextAttemptAt, fields: { attempts: plan.attempts, rate_deferrals: plan.rateDeferrals, reconcile_attempts: 0 } };
   await settle(ctx, entry, 'FAILED', RETRY_CODES.RETRIES_EXHAUSTED);
+  await closeOwner(ctx, entry, 'FAILED', RETRY_CODES.RETRIES_EXHAUSTED);
   return { status: 'FAILED', errorCode: RETRY_CODES.RETRIES_EXHAUSTED, detail: sent.errorCode, fields: { attempts: plan.attempts, rate_deferrals: plan.rateDeferrals } };
 }
 
@@ -68,6 +78,7 @@ const auditReconciled = (ctx, runId, entry, found) => registrarAuditoria({
 /** A ação aberta fecha sem sair (motivo de bloqueio ou de aplicabilidade): SKIPPED, e a mensagem do CRM que estava na fila vira CANCELLED. */
 async function closeWithoutSending(ctx, entry, reason) {
   await settle(ctx, entry, 'CANCELLED', reason);
+  await closeOwner(ctx, entry, reason === 'KILL_SWITCH' ? 'FAILED' : 'SUPPRESSED', reason);
   return { ...entry, status: 'SKIPPED', error_code: reason, due_at: null };
 }
 
@@ -84,6 +95,8 @@ async function reconcileDue(ctx, entry, { reason, reevaluate, runId }) {
   const done = Number(entry.reconcile_attempts || 0) + 1;
   if (answer.found) {
     await auditReconciled(ctx, runId, entry, true);
+    // o envio saiu: a ação de envio fica OK; a de outro tipo (pedido de avaliação) roda de novo com a mesma chave e só registra o envio confirmado, sem reenviar
+    if (entry.type !== SEND) return { ...entry, status: 'PENDING', due_at: null, error_code: null, reconcile_attempts: done };
     return { ...entry, status: 'OK', provider_ref: answer.externalRef || entry.provider_ref || null, error_code: null, due_at: null, reconcile_attempts: done };
   }
   if (answer.notFound) {
@@ -92,12 +105,16 @@ async function reconcileDue(ctx, entry, { reason, reevaluate, runId }) {
     if (reason) return closeWithoutSending(ctx, base, reason);
     if (counters(entry).attempts >= policy.retry.max_attempts) { // tentativas já esgotadas: fecha FAILED, sem reenvio
       await settle(ctx, entry, 'FAILED', RETRY_CODES.RETRIES_EXHAUSTED);
+      await closeOwner(ctx, entry, 'FAILED', RETRY_CODES.RETRIES_EXHAUSTED);
       return { ...base, status: 'FAILED', error_code: RETRY_CODES.RETRIES_EXHAUSTED, detail: RETRY_CODES.RECONCILED_NOT_FOUND, due_at: null };
     }
     return retryNow(ctx, base, reevaluate);
   }
   const plan = planReconcile(done, policy, ctx.now);
-  if (plan.exhausted) return { ...entry, status: 'FAILED', error_code: RETRY_CODES.UNKNOWN_EXHAUSTED, detail: answer.error, due_at: null, reconcile_attempts: done };
+  if (plan.exhausted) {
+    await closeOwner(ctx, entry, 'FAILED', RETRY_CODES.UNKNOWN_EXHAUSTED); // a mensagem continua UNKNOWN (pode ter saído); o pedido fecha na fila morta
+    return { ...entry, status: 'FAILED', error_code: RETRY_CODES.UNKNOWN_EXHAUSTED, detail: answer.error, due_at: null, reconcile_attempts: done };
+  }
   return { ...entry, reconcile_attempts: done, due_at: iso(plan.nextAttemptAt), detail: answer.error };
 }
 
@@ -114,4 +131,4 @@ async function followUpOpenSend(ctx, entry, { reason, reevaluate, runId }) {
   return due ? reconcileDue(ctx, entry, { reason, reevaluate, runId }) : entry;
 }
 
-module.exports = { resultOfSend, timedOutSend, followUpOpenSend };
+module.exports = { resultOfSend, timedOutSend, followUpOpenSend, registerOpenActionCloser };
