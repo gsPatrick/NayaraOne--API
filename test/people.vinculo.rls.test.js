@@ -150,8 +150,10 @@ test('vínculo: B grava os próprios filhos da pessoa vinculada; desfazer é aud
     assert.equal(novo.erro && novo.erro.parent.code, '42501', 'vínculo desfeito não recebe filho novo');
     const volta = await tentar(t, () => q(t, "UPDATE people.person_company_links SET status = 'ACTIVE', ended_at = NULL WHERE person_id = :p", { p: pessoa.id }));
     assert.equal(volta.erro && volta.erro.parent.code, '42501', 'reativar sem a prova é recusado');
-    const apagar = await q(t, 'DELETE FROM people.person_company_links WHERE person_id = :p', { p: pessoa.id });
-    assert.equal(apagar[1].rowCount, 0, 'vínculo não se apaga (sem política de DELETE)');
+    // Vínculo não se apaga: sem política de DELETE (RLS deny-by-default) e, conforme o ambiente, também sem GRANT de DELETE.
+    const apagar = await tentar(t, () => q(t, 'DELETE FROM people.person_company_links WHERE person_id = :p', { p: pessoa.id }));
+    if (apagar.erro) assert.equal(apagar.erro.parent.code, '42501', 'vínculo não se apaga');
+    else assert.equal(apagar.valor[1].rowCount, 0, 'vínculo não se apaga (sem política de DELETE)');
     await prova(t, cpf, legalName);
     await q(t, "UPDATE people.person_company_links SET status = 'ACTIVE', ended_at = NULL, ended_by = NULL, end_reason = NULL WHERE person_id = :p", { p: pessoa.id });
     await prova(t, '', '');

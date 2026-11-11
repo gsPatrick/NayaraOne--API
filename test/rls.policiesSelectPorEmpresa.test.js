@@ -187,7 +187,8 @@ test('RLS: people.persons lê por empresa responsável OU vínculo ACTIVE OU pro
 
 test('ISO-8: os cinco filhos de Pessoa têm chave composta validada para o vínculo e política RESTRICTIVE de vínculo ativo', async () => {
   const [fks] = await sequelize.query(`SELECT c.conrelid::regclass::text AS tabela, c.conname, c.convalidated, pg_get_constraintdef(c.oid) AS def
-    FROM pg_constraint c WHERE c.contype = 'f' AND c.confrelid = 'people.person_company_links'::regclass ORDER BY 1`);
+    FROM pg_constraint c JOIN pg_namespace n ON n.oid = c.connamespace
+    WHERE c.contype = 'f' AND c.confrelid = 'people.person_company_links'::regclass AND n.nspname = 'people' ORDER BY 1`);
   assert.deepEqual(fks.map((f) => f.tabela).sort(), ['people.communication_consents', 'people.person_addresses', 'people.person_contacts', 'people.person_documents', 'people.person_roles']);
   for (const f of fks) {
     assert.equal(f.convalidated, true, `${f.conname} validada`);
