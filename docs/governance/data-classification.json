@@ -2254,6 +2254,13 @@
    "received_at",
    "signature"
   ],
+  "crm.cart_events": [
+   "cart_id",
+   "event_type",
+   "occurred_at",
+   "property_id",
+   "version_number"
+  ],
   "crm.cart_share_routing": [
    "cart_id",
    "token"
@@ -5438,6 +5445,7 @@
   "real_estate.property_documents": [
    "created_by",
    "document_type",
+   "file_id",
    "label",
    "property_id",
    "status",
@@ -5455,6 +5463,7 @@
   "real_estate.property_media": [
    "classification",
    "created_by",
+   "file_id",
    "legacy_classification",
    "media_type",
    "mime_type",
@@ -5470,6 +5479,7 @@
    "accepts_financing",
    "accepts_trade",
    "asking_price",
+   "conditions",
    "confidential_min_price",
    "created_by",
    "deleted_at",
@@ -5480,6 +5490,8 @@
    "property_id",
    "starts_at",
    "status",
+   "superseded_at",
+   "superseded_by_offer_id",
    "updated_by"
   ],
   "real_estate.property_owners": [
