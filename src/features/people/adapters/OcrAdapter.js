@@ -38,6 +38,8 @@ class SandboxOcrAdapter {
         fields: mock.fields || {},
         confidence: typeof mock.confidence === 'number' ? mock.confidence : 0.95,
         illegible: false,
+        // Texto simulado do documento (só para a etapa de classificação de Pessoas; não é gravado).
+        text: typeof mock.text === 'string' ? mock.text : '',
         // Posição de origem (página) e confiança por campo, quando o documento de teste as traz (NAY Documental, M9-D040).
         raw: { sandbox: true, documentType, ...(mock.positions ? { positions: mock.positions } : {}), ...(mock.fieldConfidence ? { fieldConfidence: mock.fieldConfidence } : {}) },
       };
