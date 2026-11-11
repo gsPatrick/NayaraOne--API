@@ -52,6 +52,8 @@ module.exports = (sequelize) => {
         field: 'construction_project_id',
         comment: 'Dimensão de origem Obras (M6-97) — só preenchida quando o lançamento nasce de uma medição/obra.',
       },
+      // Evento do outbox que originou o lançamento (Caderno Obras §7, migration 20260101006604): índice único.
+      sourceEventId: { type: DataTypes.UUID, allowNull: true, field: 'source_event_id' },
       chartOfAccountId: {
         type: DataTypes.UUID,
         allowNull: true,

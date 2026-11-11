@@ -45,6 +45,8 @@ module.exports = (sequelize) => {
       // M6-97 (reforço): override pontual de centro de custo por medição — se ausente, o
       // lançamento gerado usa o centro de custo padrão da obra (Project.costCenterId).
       costCenterId: { type: DataTypes.UUID, allowNull: true, field: 'cost_center_id' },
+      // Evidências da medição (Guia §6, migration 20260101006603): mudam só por revisão nova.
+      evidenceFileIds: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [], field: 'evidence_file_ids' },
       // Item 3 (fechamento de gaps pós-Marco 6) — mesmo padrão de captura offline já usado em
       // DailyReport (M6-94): o app de campo gera a chave localmente e a envia ao sincronizar;
       // reenviar a MESMA chave não cria uma segunda medição. UNIQUE parcial via migration
