@@ -12,8 +12,9 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const { randomCpf } = require('./helpers/pessoasVinculo');
 const peopleService = require('../src/features/people/people.service');
 const { mergePersons } = require('../src/features/people/personMerge.service');
-const { personForeignKeys } = require('../src/features/people/personMerge.references');
-const { REFERENCIAS_REVISADAS, REFERENCIAS_SEM_FK, COLUNAS_SEM_FK_FORA } = require('../src/features/people/personMerge.catalog');
+// Módulos novos carregados dentro dos testes que os usam: na base, a prova executável do merge falha pela regra (referência não remapeada).
+const refs = () => require('../src/features/people/personMerge.references');
+const catalogo = () => require('../src/features/people/personMerge.catalog');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
@@ -24,7 +25,8 @@ const pessoa = (t, nome, extra = {}) => peopleService.createPerson({ groupId: te
 
 test('M3-04 guarda de catálogo: toda FK para people.persons(id) está revisada no merge, e a lista não tem coluna que não existe', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const noBanco = (await personForeignKeys(t)).map((r) => `${r.table}.${r.column}`);
+    const { REFERENCIAS_REVISADAS } = catalogo();
+    const noBanco = (await refs().personForeignKeys(t)).map((r) => `${r.table}.${r.column}`);
     assert.ok(noBanco.length >= 39, `o catálogo devolveu só ${noBanco.length} FKs`);
     const semRevisao = noBanco.filter((k) => !REFERENCIAS_REVISADAS[k]);
     assert.deepEqual(semRevisao, [], `FK nova para pessoa sem política no merge (personMerge.catalog.js): ${semRevisao.join(', ')}`);
@@ -42,7 +44,8 @@ test('M3-04 guarda de catálogo: toda coluna uuid/jsonb com "person" no nome e s
     const rows = await q(t, `SELECT c.table_schema || '.' || c.table_name || '.' || c.column_name AS k
         FROM information_schema.columns c JOIN information_schema.tables tb ON tb.table_schema = c.table_schema AND tb.table_name = c.table_name AND tb.table_type = 'BASE TABLE'
        WHERE c.column_name ILIKE '%person%' AND c.data_type IN ('uuid', 'jsonb') AND c.table_schema NOT IN ('pg_catalog', 'information_schema')`);
-    const comFk = new Set((await personForeignKeys(t)).map((r) => `${r.table}.${r.column}`));
+    const { REFERENCIAS_SEM_FK, COLUNAS_SEM_FK_FORA } = catalogo();
+    const comFk = new Set((await refs().personForeignKeys(t)).map((r) => `${r.table}.${r.column}`));
     const semFk = new Set(REFERENCIAS_SEM_FK.map(([tb, col]) => `${tb}.${col}`));
     const faltando = rows.map((r) => r.k).filter((k) => !comFk.has(k) && !semFk.has(k) && !COLUNAS_SEM_FK_FORA[k]);
     assert.deepEqual(faltando, [], `coluna de pessoa sem FK e sem decisão no merge: ${faltando.join(', ')}`);
@@ -74,6 +77,7 @@ test('M3-04 merge remapeia feedback_cases, proposals, conversas, garantias e o r
     assert.equal((await q(t, 'SELECT person_id FROM crm.conversations WHERE id = :id', { id: conv.id }))[0].person_id, canonica.id);
 
     // Nenhuma coluna REMAPEAR/ESPECIAL (nem sem FK) aponta mais para a absorvida.
+    const { REFERENCIAS_REVISADAS, REFERENCIAS_SEM_FK } = catalogo();
     const alvos = [...Object.entries(REFERENCIAS_REVISADAS).filter(([, p]) => p.politica !== 'FORA').map(([k]) => k), ...REFERENCIAS_SEM_FK.map(([tb, c]) => `${tb}.${c}`)];
     for (const k of alvos) {
       const parts = k.split('.');

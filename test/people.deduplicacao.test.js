@@ -14,7 +14,8 @@ const { randomCpf } = require('./helpers/pessoasVinculo');
 const { Company } = require('../src/models');
 const peopleService = require('../src/features/people/people.service');
 const dedup = require('../src/features/people/personDedup.service');
-const { contactKey, contactKeySql, kindSql } = require('../src/features/people/personContactKey');
+// Módulo novo carregado dentro do teste que o usa: na base (sem ele) só esse teste falha, os outros falham pela regra.
+const contactKeyModule = () => require('../src/features/people/personContactKey');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
@@ -28,6 +29,7 @@ const criar = (t, extra, options, companyId = tenant.companyId) => peopleService
 const codigo = (code) => (err) => { assert.equal(err.code, code, `${err.code}: ${err.message}`); return true; };
 
 test('chave do contato: o cálculo em SQL é o mesmo do JS (e-mail, telefone com e sem DDI, WhatsApp)', async () => {
+  const { contactKey, contactKeySql, kindSql } = contactKeyModule();
   await withRollbackTenantTransaction(tenant, async (t) => {
     const casos = [['EMAIL', '  Fulano.Silva@Exemplo.COM '], ['EMAIL', 'a b@c.d'], ['PHONE', '(11) 98888-7777'], ['WHATSAPP', '+55 11 98888-7777'], ['PHONE', '+1 (415) 555-0100'], ['PHONE', '011988887777']];
     for (const [tipo, valor] of casos) {
@@ -61,8 +63,6 @@ test('M3-03 médio: e-mail com caixa/espaço diferente, telefone com máscara x 
         return true;
       });
     }
-    const pares = await dedup.listPotentialDuplicatePairs(t);
-    assert.ok(Array.isArray(pares));
   });
 });
 
@@ -88,6 +88,11 @@ test('M3-03 médio: criar mesmo assim exige motivo e a permissão; sem permissã
     assert.deepEqual(audit.after_json.candidatos, [existente.id]);
     const fila = await sel(t, "SELECT reason_code, status FROM governance.review_queue_items WHERE entity_type = 'PERSON' AND primary_id IN (:a, :b) AND secondary_id IN (:a, :b)", { a: nova.id, b: existente.id });
     assert.deepEqual(fila.map((f) => [f.reason_code, f.status]), [['PERSON_CONTACT_AT_CREATE', 'OPEN']]);
+    // A lista de "possíveis duplicadas" da tela usa a mesma chave normalizada (e-mail em caixa diferente é o mesmo).
+    const pares = await dedup.listPotentialDuplicatePairs(t);
+    const par = pares.find((p) => p.value === email);
+    assert.ok(par, `par do e-mail ${email} ausente da lista`);
+    assert.deepEqual(par.personIds, [existente.id, nova.id].sort());
   });
 });
 

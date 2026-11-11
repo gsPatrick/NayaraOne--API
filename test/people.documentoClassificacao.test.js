@@ -13,8 +13,9 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const personService = require('../src/features/people/person.service');
 const { ingestPersonDocument } = require('../src/features/people/documentIngestion.service');
 const { upsertSetting } = require('../src/features/settings/settings.service');
-const { classifyBeforeReading, confirmWithText } = require('../src/features/people/personDocumentClassifier');
-const { defaultDocumentParams } = require('../src/features/people/personDocument.settings');
+// Módulos novos carregados dentro do teste que os usa: na base só esse teste falha por ausência; os outros falham pela regra.
+const classificador = () => require('../src/features/people/personDocumentClassifier');
+const regras = () => require('../src/features/people/personDocument.settings').defaultDocumentParams().classificacao;
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
@@ -23,7 +24,6 @@ after(async () => { await sequelize.close(); });
 const mock = (fields, confidence, text = '') => Buffer.from(JSON.stringify({ __mockOcr: { fields, confidence, text } }), 'utf8').toString('base64');
 const pessoa = (t) => personService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Documento ${uniqueSuffix()} Silva` }, tenant.userId, t);
 const enviar = (t, personId, extra) => ingestPersonDocument({ groupId: tenant.groupId, companyId: tenant.companyId, personId, mimeType: 'application/pdf', fileName: 'arquivo.pdf', ...extra }, tenant.userId, t);
-const regras = defaultDocumentParams().classificacao;
 
 async function comAmbiente(vars, fn) {
   const antes = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
@@ -32,21 +32,23 @@ async function comAmbiente(vars, fn) {
 }
 
 test('classificação: declaração, nome do arquivo e conteúdo; CIN não vira RG; divergência e "não classificado" geram pendência', () => {
-  assert.deepEqual(classifyBeforeReading({ documentType: 'rg', fileName: 'x.pdf' }, regras), { declarado: 'RG', porNome: null, tipo: 'RG', metodo: 'DECLARADO' });
-  const porNome = classifyBeforeReading({ fileName: 'Carteira_Nacional_de_Habilitacao-joao.pdf' }, regras);
+  const { classifyBeforeReading, confirmWithText } = classificador();
+  const r = regras();
+  assert.deepEqual(classifyBeforeReading({ documentType: 'rg', fileName: 'x.pdf' }, r), { declarado: 'RG', porNome: null, tipo: 'RG', metodo: 'DECLARADO' });
+  const porNome = classifyBeforeReading({ fileName: 'Carteira_Nacional_de_Habilitacao-joao.pdf' }, r);
   assert.equal(porNome.tipo, 'CNH');
   assert.equal(porNome.metodo, 'NOME_DO_ARQUIVO');
-  const semNada = classifyBeforeReading({ fileName: 'scan001.pdf' }, regras);
+  const semNada = classifyBeforeReading({ fileName: 'scan001.pdf' }, r);
   assert.equal(semNada.tipo, 'OTHER');
-  const porTexto = confirmWithText(semNada, 'REPÚBLICA FEDERATIVA DO BRASIL\nCARTEIRA DE IDENTIDADE NACIONAL\nNome: Ana', regras);
+  const porTexto = confirmWithText(semNada, 'REPÚBLICA FEDERATIVA DO BRASIL\nCARTEIRA DE IDENTIDADE NACIONAL\nNome: Ana', r);
   assert.equal(porTexto.tipo, 'CIN');
   assert.equal(porTexto.metodo, 'CONTEUDO');
   assert.equal(porTexto.pendencia, null);
-  const divergente = confirmWithText(classifyBeforeReading({ documentType: 'RG' }, regras), 'Carteira Nacional de Habilitação - DETRAN', regras);
+  const divergente = confirmWithText(classifyBeforeReading({ documentType: 'RG' }, r), 'Carteira Nacional de Habilitação - DETRAN', r);
   assert.equal(divergente.tipo, 'RG');
   assert.match(divergente.pendencia, /Tipo informado \(RG\) diverge do identificado no conteúdo \(CNH\)/);
-  assert.match(confirmWithText(semNada, 'texto qualquer sem pista', regras).pendencia, /não classificado/);
-  assert.throws(() => classifyBeforeReading({ documentType: 'r g!' }, regras), (err) => err.code === 'DOCUMENT_INGESTION_VALIDATION');
+  assert.match(confirmWithText(semNada, 'texto qualquer sem pista', r).pendencia, /não classificado/);
+  assert.throws(() => classifyBeforeReading({ documentType: 'r g!' }, r), (err) => err.code === 'DOCUMENT_INGESTION_VALIDATION');
 });
 
 test('CAD-05 envio sem tipo: o conteúdo classifica, o tipo decidido vale para os campos críticos e a classificação fica gravada', async () => {
