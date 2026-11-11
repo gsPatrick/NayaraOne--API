@@ -13,6 +13,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client } = require('pg');
 const { sequelize, getSeedTenant, uniqueSuffix, prepareManualSettlement } = require('../testHelpers');
+const { evidenceIds } = require('../constructionEvidenceFixture');
 
 const svc = (nome) => require(path.join(__dirname, '..', '..', 'src', 'features', 'construction', `${nome}.service`));
 const ARQUIVO_PARAMETROS = path.join(__dirname, '..', '..', 'scripts', 'ci-obras', 'parametros.json');
@@ -72,7 +73,9 @@ async function medicaoRevisada(tenant, rotulo, valor) {
   return comCommit(tenant, async (t) => {
     const { project, stage } = await obraComEtapa(tenant, t, rotulo);
     const m = svc('stageMeasurements');
-    const med = await m.createStageMeasurement(stage.id, W(tenant, { measuredPct: 50, measuredAt: '2026-11-04', items: [{ description: `${rotulo} ${uniqueSuffix()}`, quantity: 1, unitPrice: valor }] }), tenant.userId, t);
+    // Verificação M6 (M6-21): a medição leva evidência real (enviada e examinada pelo antivírus); a aprovação confere de novo.
+    const evidenceFileIds = await evidenceIds(tenant, t, 1, `medicao-${rotulo}`.replace(/\s+/g, '-'));
+    const med = await m.createStageMeasurement(stage.id, W(tenant, { measuredPct: 50, measuredAt: '2026-11-04', evidenceFileIds, items: [{ description: `${rotulo} ${uniqueSuffix()}`, quantity: 1, unitPrice: valor }] }), tenant.userId, t);
     await m.submitStageMeasurement(med.id, tenant.userId, t);
     await m.reviewStageMeasurement(med.id, { notes: `conferido (${rotulo})` }, tenant.userId, t);
     return { projectId: project.id, stageId: stage.id, measurementId: med.id };
