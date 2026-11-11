@@ -7,6 +7,7 @@ const AppError = require('../../../../utils/AppError');
 const opportunityService = require('../../../crm/opportunity.service');
 const { getOpportunityTimeline } = require('../../../crm/opportunityTimeline.service');
 const { daysBetween } = require('./comercial.format');
+const { assertVisible } = require('./comercial.scope');
 
 const CLOSED_STAGES = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
 const OPEN_TASK = ['OPEN', 'IN_PROGRESS'];
@@ -15,14 +16,19 @@ const INCOMPLETE_DOCUMENT = ['PENDING', 'REJECTED', 'EXPIRED'];
 const notFound = () => new AppError('Dado não encontrado.', 404, 'AI_CROSS_COMPANY_BLOCKED');
 const timeOf = (d) => (d ? new Date(d).getTime() : null);
 
-/** Oportunidade da empresa do ator (a RLS esconde a de outra empresa: 404 igual ao de inexistente, sem revelar existência). */
-async function findOpportunity(opportunityId, transaction) {
+/**
+ * Oportunidade da empresa do ator (a RLS esconde a de outra empresa: 404 igual ao de inexistente, sem revelar existência) e da carteira
+ * dele quando o escopo é OWN (livro do Marco 3 §18, comercial.scope.js): a de outro corretor é o mesmo 404.
+ */
+async function findOpportunity(opportunityId, transaction, ownerScope = null) {
+  let opportunity;
   try {
-    return await opportunityService.getOpportunity(opportunityId, transaction);
+    opportunity = await opportunityService.getOpportunity(opportunityId, transaction);
   } catch (err) {
     if (err && err.statusCode === 404) throw notFound();
     throw err;
   }
+  return assertVisible(opportunity, ownerScope);
 }
 
 /** Documentos pendentes da oportunidade: exigências ainda abertas dos processos de financiamento ligados a ela. */
@@ -59,8 +65,8 @@ function proposalsOf(rows, interactions, now) {
  * Fatos da oportunidade em `now`. `lastInteractionAt` é a mais recente das interações; sem nenhuma, o contato conta desde a abertura da
  * oportunidade (`contactBase: 'CREATED'`). Encerrada (ganha, perdida ou desistência) não tem dias sem contato a cobrar.
  */
-async function loadOpportunityFacts(opportunityId, transaction, { now = new Date(), companyId } = {}) {
-  const opportunity = await findOpportunity(opportunityId, transaction);
+async function loadOpportunityFacts(opportunityId, transaction, { now = new Date(), companyId, ownerScope = null } = {}) {
+  const opportunity = await findOpportunity(opportunityId, transaction, ownerScope);
   const tenantCompany = companyId || opportunity.companyId;
   const [person, timeline, documents, sentProposals] = await Promise.all([
     Person.findByPk(opportunity.personId, { transaction }),
@@ -77,6 +83,7 @@ async function loadOpportunityFacts(opportunityId, transaction, { now = new Date
   return {
     opportunityId: opportunity.id,
     personId: opportunity.personId,
+    ownerUserId: opportunity.ownerUserId || null,
     propertyId: opportunity.propertyId || null,
     customerName: person ? (person.preferredName || person.legalName) : null,
     stage,

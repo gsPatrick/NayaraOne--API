@@ -1,43 +1,32 @@
 'use strict';
 
-// M9-D034 — "descrições" e "recuperação" do livro: só RASCUNHO de texto, feito com fatos do cadastro (nada inventado), com fonte, sem
-// publicar nem enviar. O texto sai de modelo fixo sobre os campos preenchidos; campo vazio simplesmente não aparece.
-const { Property, PropertyOffer } = require('../../../../models');
-const AppError = require('../../../../utils/AppError');
-const { dateBR, brl, plural } = require('./comercial.format');
+// M9-D034 — "descrições" e "recuperação" do livro: só RASCUNHO de texto, com fonte, sem publicar nem enviar. A descrição de imóvel
+// (livro do Marco 3 §16 e Guia §12) é feita SÓ com os fatos públicos aprovados (comercial.publicFacts.js): o caminho de regra monta o
+// texto com eles e o caminho de modelo os recebe como única fonte; nos dois, a saída passa por validateGeneratedDescription
+// (comercial.review.js). Campo vazio simplesmente não aparece.
+const { dateBR, plural } = require('./comercial.format');
+const { loadApprovedFacts, factsText } = require('./comercial.publicFacts');
 
-const TYPE = Object.freeze({ APARTMENT: 'apartamento', HOUSE: 'casa', LAND: 'terreno', COMMERCIAL: 'imóvel comercial', FARM: 'chácara', ROOM: 'sala' });
 const BANNER = 'RASCUNHO — não foi publicado nem enviado; revise antes de usar.';
 
-const notFound = () => new AppError('Dado não encontrado.', 404, 'AI_CROSS_COMPANY_BLOCKED');
+/** Fonte da descrição: os fatos aprovados, com a origem `properties` (a visão pública do imóvel). */
+const propertySource = (approved, asOf) => ({ sourceType: 'READ_MODEL', sourceRef: `properties.public:${approved.propertyId}`, title: 'properties', retrievedAt: asOf, text: factsText(approved) });
 
-/** Atributos do cadastro que existem (valor preenchido), com o rótulo que vai ao texto. Nada além disso entra na descrição. */
-function propertyFacts(p, offer) {
-  const facts = [];
-  const add = (label, value) => { if (value !== null && value !== undefined && value !== '') facts.push({ label, value: String(value) }); };
-  add('tipo', TYPE[String(p.propertyType || '').toUpperCase()] || (p.propertyType ? String(p.propertyType).toLowerCase() : null));
-  add('cidade', p.city);
-  add('estado', p.state);
-  add('área total', p.areaTotalM2 === null || p.areaTotalM2 === undefined ? null : `${Number(p.areaTotalM2).toLocaleString('pt-BR')} m²`);
-  add('quartos', p.bedrooms);
-  add('vagas', p.parkingSpots);
-  if (offer) add(offer.offerType === 'RENT' ? 'aluguel' : 'preço', brl(offer.askingPrice));
-  return facts;
+/** Texto montado pelo código, só com os fatos aprovados (também é a correção quando a guarda tira tudo o que o modelo escreveu). */
+function propertyDraftText(approved) {
+  const lista = approved.facts.map((f) => `${f.label}: ${f.value}`);
+  return [BANNER, `Descrição do imóvel ${approved.publicCode} [1]: ${lista.length ? lista.join('; ') : 'o cadastro ainda não tem atributos públicos preenchidos'}.`, 'Só constam fatos públicos aprovados do cadastro; o que não está preenchido não foi incluído.'].join('\n');
 }
 
 async function propertyDraft(propertyId, now, transaction) {
-  const property = await Property.findByPk(propertyId, { include: [{ model: PropertyOffer, as: 'offers', required: false }], transaction });
-  if (!property) throw notFound();
-  const offer = (property.offers || []).find((o) => o.status === 'ACTIVE') || null;
-  const facts = propertyFacts(property, offer);
+  const approved = await loadApprovedFacts(propertyId, transaction);
   const asOf = now.toISOString();
-  const lista = facts.map((f) => `${f.label}: ${f.value}`);
-  const titulo = property.title ? ` "${property.title}"` : '';
   return {
-    answer: [BANNER, `Descrição do imóvel${titulo} [1]: ${lista.length ? lista.join('; ') : 'o cadastro ainda não tem atributos preenchidos'}.`, 'Só constam atributos do cadastro; o que não está preenchido não foi incluído.'].join('\n'),
+    answer: propertyDraftText(approved),
     snapshotAt: asOf,
-    structured: { rascunho: true, tipo: 'DESCRICAO_IMOVEL', imovel: property.id, atributos: facts.map((f) => f.label) },
-    sources: [{ sourceType: 'READ_MODEL', sourceRef: `properties:${property.id}`, title: 'properties', retrievedAt: asOf, text: `Imóvel${titulo}. ${lista.join('. ')}.` }],
+    structured: { rascunho: true, tipo: 'DESCRICAO_IMOVEL', imovel: approved.propertyId, codigoPublico: approved.publicCode, atributos: approved.facts.map((f) => f.label), fonte: 'FATOS_PUBLICOS_APROVADOS' },
+    meta: { approvedFacts: approved.facts, publicCode: approved.publicCode, propertyId: approved.propertyId },
+    sources: [propertySource(approved, asOf)],
   };
 }
 
@@ -57,4 +46,4 @@ function recoveryDraft(facts) {
   };
 }
 
-module.exports = { propertyDraft, recoveryDraft, propertyFacts, BANNER };
+module.exports = { propertyDraft, propertyDraftText, propertySource, recoveryDraft, BANNER };

@@ -16,7 +16,8 @@ const PERFIS = ['CI GESTOR', 'CI CHECKER', 'CI MAKER', 'CI LEITURA'];
 const POLITICA = { capability: 'chat', maxOutputTokens: 800, cacheableTaskTypes: [] };
 
 /** Perfis: gestor (tudo da NAY + CRM), checker (corretor: ai:use e ai:read + CRM, sem ai:approve), maker (ai:use, ai:read e ai:evaluate, sem CRM), leitura (só ai:use). */
-async function subir(porta) {
+/** `extras`: { perfil: [códigos] } concedidos antes do login (o token leva as permissões). */
+async function subir(porta, { extras = {} } = {}) {
   await admin(
     `DELETE FROM core.role_permissions rp USING core.roles r, core.permissions p
       WHERE rp.role_id = r.id AND rp.permission_id = p.id AND r.name = ANY($1::text[]) AND (p.code LIKE 'ai:%' OR p.code = ANY($2::text[]))`,
@@ -26,6 +27,7 @@ async function subir(porta) {
   await grant('CI CHECKER', ['ai:use', 'ai:read', 'legal:read', ...LEITURA_CRM]);
   await grant('CI MAKER', ['ai:use', 'ai:read', 'ai:evaluate']);
   await grant('CI LEITURA', ['ai:use']);
+  for (const [perfil, codigos] of Object.entries(extras)) await grant(perfil, codigos);
   const env = await startHttpEnv(porta, [['A', 'gestor'], ['A', 'checker'], ['A', 'maker'], ['A', 'leitura'], ['B', 'gestor']]);
   const gestor = await usuario('A', 'gestor');
   const gestorB = await usuario('B', 'gestor');
