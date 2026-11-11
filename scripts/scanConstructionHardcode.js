@@ -39,16 +39,35 @@ const ALLOW_MARKER = 'scanner:allow';
 const DECIMAL_RATE_PATTERN = /(?<![\w.])0\.\d+(?!\d)/g;
 
 // Inteiros de 4+ dígitos "redondos" (terminam em 00) — candidatos a valor monetário
-// hard-coded (ex.: 1500, 2500, 10000). Números como 2026 (ano) ou 1000000000000 (uuid/hash)
-// não batem porque exigimos terminar em "00".
-const ROUND_MONEY_PATTERN = /(?<![\w.])\d{3,}00(?!\d)/g;
+// hard-coded (ex.: 1000, 1500, 2500, 10000). Números como 2026 (ano) não batem porque exigimos
+// terminar em "00". Verificação independente do Marco 6 (M6-96): a regex antiga (\d{3,}00)
+// exigia 5+ dígitos e deixava passar 1500, 2500 e o próprio padrão de alçada 1000.0.
+const ROUND_MONEY_PATTERN = /(?<![\w.])\d{2,}00(?![\d.])/g;
+
+// Valor com casas decimais e parte inteira de 3+ dígitos (ex.: 1000.0, 250.5, 999.99) — valor monetário fixo.
+const DECIMAL_MONEY_PATTERN = /(?<![\w.])\d{3,}\.\d+(?!\d)/g;
+
+// Percentual inteiro (ex.: 15 em "margem = 15", "minMarginPct: 15", "valor * 15 / 100", "15 / 100"): o número
+// literal ao lado de um nome de taxa/percentual/margem/comissão/desconto, ou dividido por 100.
+const RATE_NAME = '(?:pct|percent\\w*|percentual\\w*|porcent\\w*|margem\\w*|margin\\w*|comiss\\w*|commission\\w*|desconto\\w*|discount\\w*|taxa\\w*|rate|aliquota\\w*|juros|multa\\w*|economy\\w*|economia\\w*)';
+const NAMED_RATE_PATTERN = new RegExp(`\\w*${RATE_NAME}\\s*[:=]\\s*(\\d+(?:\\.\\d+)?)(?![\\w.])`, 'gi');
+const OVER_100_PATTERN = /(?<![\w.])(\d{1,3})\s*\/\s*100(?![\d.])/g;
+
+function percentMatches(line) {
+  const found = [];
+  for (const m of line.matchAll(NAMED_RATE_PATTERN)) if (Number(m[1]) !== 0) found.push(m[0].trim());
+  for (const m of line.matchAll(OVER_100_PATTERN)) found.push(m[0].trim());
+  return found;
+}
 
 function stripComments(source) {
   // Remove comentários de bloco e de linha antes de rodar os padrões — não queremos que
   // documentação/decisões de engenharia (que citam números como "M6-96" ou datas) disparem
   // falso positivo.
   return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // Comentário de bloco vira espaço preservando as quebras de linha: senão a numeração das linhas (e o
+    // "scanner:allow" da linha original) desalinhava do código sem comentários.
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
     .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
@@ -64,7 +83,8 @@ function scanFile(filePath) {
 
     const decimalMatches = line.match(DECIMAL_RATE_PATTERN) || [];
     const moneyMatches = line.match(ROUND_MONEY_PATTERN) || [];
-    const allMatches = [...decimalMatches, ...moneyMatches];
+    const decimalMoneyMatches = line.match(DECIMAL_MONEY_PATTERN) || [];
+    const allMatches = [...decimalMatches, ...moneyMatches, ...decimalMoneyMatches, ...percentMatches(line)];
     if (allMatches.length > 0) {
       findings.push({ line: idx + 1, matches: allMatches, content: originalLine.trim() });
     }
