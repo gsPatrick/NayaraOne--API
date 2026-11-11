@@ -1,52 +1,13 @@
 'use strict';
 
-const { LossRecord, ApprovalThreshold, Project } = require('../../models');
+const { LossRecord, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
-// DECISÃO DE ENGENHARIA (M6-14/M6-29): valor-padrão de alçada quando a empresa ainda não
-// configurou uma linha em "construction"."approval_thresholds" — ver comentário completo na
-// migration 20260101000217-create-construction-approval_thresholds.js. Configurável por
-// empresa (tabela), este número é só o fallback de fábrica.
-const DEFAULT_MAX_AUTO_APPROVE_AMOUNT = 1000.0;
+// Alçada por valor (M6-14/M6-29): configuração da empresa, sem número fixo no código — approvalThresholds.service.js.
+const { getApprovalThreshold, upsertApprovalThreshold, listApprovalThresholds } = require('./approvalThresholds.service');
+
 const CONTEXT_MATERIAL_LOSS = 'MATERIAL_LOSS';
-
-async function getApprovalThreshold(groupId, companyId, context, transaction) {
-  const row = await ApprovalThreshold.findOne({ where: { companyId, context }, transaction });
-  return row ? Number(row.maxAutoApproveAmount) : DEFAULT_MAX_AUTO_APPROVE_AMOUNT;
-}
-
-async function upsertApprovalThreshold(payload, actorUserId, transaction) {
-  const { groupId, companyId, context, maxAutoApproveAmount } = payload;
-  if (!groupId || !companyId || maxAutoApproveAmount == null) {
-    throw AppError.badRequest(
-      'Os campos "groupId", "companyId" e "maxAutoApproveAmount" são obrigatórios.',
-      'APPROVAL_THRESHOLD_VALIDATION'
-    );
-  }
-  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): maxAutoApproveAmount
-  // era persistido sem Number.isFinite/teto de sanidade — "Infinity"/"1e999" fazia TODA perda ou
-  // garantia auto-aprovar (Number(x) <= Infinity é sempre true), quebrando a alçada de aprovação;
-  // "NaN" também passava (maxAutoApproveAmount == null é falso pra string "NaN").
-  const numericThreshold = Number(maxAutoApproveAmount);
-  if (!Number.isFinite(numericThreshold) || numericThreshold < 0) {
-    throw AppError.badRequest('"maxAutoApproveAmount" deve ser um número não negativo.', 'APPROVAL_THRESHOLD_VALIDATION');
-  }
-  if (numericThreshold > 1_000_000_000_000) {
-    throw AppError.badRequest('"maxAutoApproveAmount" excede o limite permitido.', 'APPROVAL_THRESHOLD_VALIDATION');
-  }
-
-  const normalizedContext = context ? String(context).toUpperCase() : CONTEXT_MATERIAL_LOSS;
-  const [row] = await ApprovalThreshold.findOrCreate({
-    where: { companyId, context: normalizedContext },
-    defaults: { groupId, companyId, context: normalizedContext, maxAutoApproveAmount, createdBy: actorUserId || null },
-    transaction,
-  });
-  row.maxAutoApproveAmount = maxAutoApproveAmount;
-  row.updatedBy = actorUserId || null;
-  await row.save({ transaction });
-  return row;
-}
 
 /**
  * createLossRecord — regra de alçada (M6-14/M6-29/M6-60): se `estimatedValue` estiver dentro do
@@ -341,6 +302,6 @@ module.exports = {
   getMaterialBalance,
   upsertApprovalThreshold,
   getApprovalThreshold,
-  DEFAULT_MAX_AUTO_APPROVE_AMOUNT,
+  listApprovalThresholds,
   CONTEXT_MATERIAL_LOSS,
 };

@@ -25,6 +25,7 @@ const { DRILL_SETTINGS_SCHEMA } = require('../../features/marketing/publications
 const { LEAD_PARAMS_SCHEMA } = require('../../features/marketing/automations/leadParams');
 const { AUTOPUBLISH_SETTINGS_SCHEMA } = require('../../features/marketing/content/autopublish.settings');
 const { RUNNER_SETTINGS_SCHEMA } = require('../../features/marketing/automations/runner/runner.settings');
+const { CONSTRUCTION_SETTINGS_SCHEMA } = require('../construction/construction.settings');
 const { URL_SETTINGS_SCHEMA } = require('../../features/marketing/security/url.settings');
 const { URL_LIMITS_SCHEMA } = require('../../features/marketing/security/urlText.limits');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
@@ -147,6 +148,8 @@ const SETTINGS_SCHEMA = {
   // (Construção §5 actual_financial_cost). CAIXA = só o pago (padrão, comportamento anterior); COMPETENCIA = soma as
   // medições aprovadas ainda a pagar (src/features/construction/costBasis.js). Gravação exige construction:approve.
   'construction.custo_realizado.base': { type: 'string', enum: ['CAIXA', 'COMPETENCIA'] },
+  // Verificação independente do Marco 6: evidências mínimas da medição e regra de diário ausente (construction.settings.js).
+  ...CONSTRUCTION_SETTINGS_SCHEMA,
   // parametros.csv exige_mfa_para_alterar = sim (settingMfa.js): multa, juros e carência só mudam com MFA recente de quem altera.
   'billing.late_fee_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
   'billing.interest_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
