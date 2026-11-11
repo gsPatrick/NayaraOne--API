@@ -29,6 +29,9 @@ const TEMPLATES = {
     { requirementCode: 'LEASE_INSPECTION', requirementType: 'INSPECTION', description: 'Vistoria de entrada do imóvel.' },
     { requirementCode: 'LEASE_OWNERSHIP', requirementType: 'OWNERSHIP_PROOF', description: 'Comprovação de titularidade do imóvel.' },
     { requirementCode: 'LEASE_OBLIGATIONS', requirementType: 'OBLIGATIONS', description: 'Definição de responsáveis pelas obrigações locatícias (IPTU/condomínio/água/luz/gás).' },
+    // Fechamento M5 (livro §10 "Checklist calculado por Motor de Regras" + "Registrar quantidade/identificação de
+    // chaves/controles"): exigência da etapa KEY_DELIVERY — só bloqueia a entrega das chaves, não as etapas anteriores.
+    { requirementCode: 'LEASE_KEYS_LIST', requirementType: 'KEYS', stage: 'KEY_DELIVERY', description: 'Relação das chaves e controles a entregar, conferida com o locador.' },
   ],
   SALE_FINANCED: [
     { requirementCode: 'SALE_FIN_BUYER_DOCS', requirementType: 'BUYER_DOCUMENT', description: 'Documentos do comprador.' },
@@ -87,4 +90,11 @@ const TYPE_TO_TEMPLATE = {
 
 const DEFAULT_ACTION = Object.freeze({ templates: TEMPLATES, typeToTemplate: TYPE_TO_TEMPLATE });
 
-module.exports = { DEFAULT_ACTION, TEMPLATES, TYPE_TO_TEMPLATE };
+// Hash (sha256 do JSON da ação) das políticas PADRÃO anteriores. Empresa cuja versão vigente ainda é exatamente um padrão
+// antigo (nunca personalizou) recebe o padrão atual numa versão nova (requirementRules.service#resolveRequirementPolicy);
+// política personalizada nunca é trocada.
+const PREVIOUS_DEFAULT_HASHES = Object.freeze([
+  'a222325e003107eeaa8a5e1f04a6319fbdcdcad34614e71645daa5f7ab90e683', // até o fechamento M5 vistorias/prazos (sem item da etapa KEY_DELIVERY)
+]);
+
+module.exports = { DEFAULT_ACTION, TEMPLATES, TYPE_TO_TEMPLATE, PREVIOUS_DEFAULT_HASHES };

@@ -37,7 +37,7 @@ test('m9d809 AUD-020 evento de contrato assinado, chaves entregues e prazo gera 
     const lc = await origin.legalCase(t, tx);
     const prazo = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', sourceFileId: await origemNaTransacao(t, tx), responsibleUserId: t.userId }, t.userId, tx);
     const entrega = await keyDeliveriesService.createKeyDelivery({ groupId: t.groupId, companyId: t.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id }, t.userId, tx);
-    await keyDeliveriesService.releaseKeyDelivery(entrega.id, { keysCount: 2, termSignedByPersonId: tenantPerson.id, termEvidenceFileId }, t.userId, tx);
+    await keyDeliveriesService.releaseKeyDelivery(entrega.id, { keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id, termEvidenceFileId }, t.userId, tx);
 
     // cada operação publicou o seu evento UMA vez, na mesma transação
     assert.equal(await publicados(contract.id, 'contract.renewal.upserted', tx), 1);
