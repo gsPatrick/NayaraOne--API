@@ -1,7 +1,7 @@
 'use strict';
 
-const { QueryTypes } = require('sequelize');
-const { sequelize, Message, Notification } = require('../../models');
+const { Message, Notification } = require('../../models');
+const { managerUserIds } = require('./crmUsers');
 const AppError = require('../../utils/AppError');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
@@ -11,11 +11,9 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
  *  - "Interaction pode abrir service_occurrence": `messageId` liga a ocorrência à interação (crm.messages) que a originou.
  *  - evento mínimo `crm.occurrence.opened` (o `crm.feedback_case.created` de sempre continua, para quem já o consome).
  *  - "Reclamação grave escala para gerência": reclamação de severidade HIGH já nasce ESCALATED e avisa a gerência.
- *    O livro não diz quem é a gerência; é quem vê o painel gerencial do CRM (§11 "Gerente visualiza oportunidades sem
- *    atividade"), isto é, os membros ativos da empresa com a permissão `crm:dashboard:read`.
+ *    O livro não diz quem é a gerência: são os membros ativos da empresa com a permissão do parâmetro `crm.gerencia.permissao`
+ *    (padrão crm:dashboard:read, quem vê o painel gerencial do §11; crmUsers.managerUserIds, DI-M3CA-5).
  */
-
-const MANAGER_PERMISSION = 'crm:dashboard:read';
 
 async function resolveOriginInteraction(messageId, personId, transaction) {
   if (!messageId) return null;
@@ -49,18 +47,6 @@ function publishOccurrenceOpened(feedbackCase, transaction) {
   );
 }
 
-async function managerUserIds(companyId, transaction) {
-  const rows = await sequelize.query(
-    `SELECT DISTINCT um.user_id
-       FROM core.user_memberships um
-       JOIN core.role_permissions rp ON rp.role_id = um.role_id
-       JOIN core.permissions p ON p.id = rp.permission_id
-      WHERE um.company_id = :companyId AND um.status = 'ACTIVE' AND p.code = :code`,
-    { replacements: { companyId, code: MANAGER_PERMISSION }, type: QueryTypes.SELECT, transaction }
-  );
-  return rows.map((r) => r.user_id);
-}
-
 const isGraveComplaint = (feedbackCase) => feedbackCase.type === 'COMPLAINT' && feedbackCase.severity === 'HIGH';
 
 /** Reclamação grave: escalonada na abertura, com aviso a cada gestor (e ao responsável, se houver). */
@@ -72,7 +58,7 @@ async function escalateGraveComplaint(feedbackCase, actorUserId, transaction) {
   feedbackCase.escalatedAt = escalatedAt;
   await feedbackCase.save({ transaction });
 
-  const recipients = new Set(await managerUserIds(feedbackCase.companyId, transaction));
+  const recipients = new Set(await managerUserIds({ groupId: feedbackCase.groupId, companyId: feedbackCase.companyId }, transaction));
   if (feedbackCase.assignedToUserId) recipients.add(feedbackCase.assignedToUserId);
   for (const userId of recipients) {
     await Notification.create(
@@ -138,4 +124,4 @@ async function refuseDeletion(feedbackCase, actorUserId) {
   throw AppError.conflict('Ocorrência de atendimento não pode ser apagada. Resolva o caso com a conclusão; o histórico fica preservado.', 'FEEDBACK_CASE_DELETE_FORBIDDEN');
 }
 
-module.exports = { resolveOriginInteraction, publishOccurrenceOpened, escalateGraveComplaint, refuseDeletion, isGraveComplaint, MANAGER_PERMISSION };
+module.exports = { resolveOriginInteraction, publishOccurrenceOpened, escalateGraveComplaint, refuseDeletion, isGraveComplaint };

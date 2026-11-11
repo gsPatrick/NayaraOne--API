@@ -7,7 +7,7 @@ const { createOpportunity } = require('../opportunity.service');
 const { readMessagingParams } = require('./messaging.params');
 const { phoneVariants, digitsOf } = require('./messaging.phone');
 
-const CLOSED_STAGES = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
+const { CLOSED_STAGE_CODES: CLOSED_STAGES } = require('../opportunityStages');
 
 /** A pessoa dona do telefone, comparando só os dígitos (o cadastro guarda o número como foi digitado). */
 async function findPersonByPhone(e164, countryCode, transaction) {

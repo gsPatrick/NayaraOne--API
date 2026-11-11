@@ -6,14 +6,14 @@ const AppError = require('../../utils/AppError');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const opening = require('./feedbackCaseOpening');
+const { readSlaHoursBySeverity } = require('./crm.params');
+const { isActiveMember, managerUserIds, resolveOwnerUserId } = require('./crmUsers');
 
 /**
  * M3-20 — Reclamações, elogios e conflitos com SLA e escalonamento.
  *
- * DECISÃO DE ENGENHARIA (os prazos NÃO estavam explicitados no Caderno CURRENT — Marco 3):
- *   HIGH   = 24 horas
- *   MEDIUM = 72 horas
- *   LOW    = 7 dias
+ * SLA por severidade = parâmetros da empresa (livro §15 "Ocorrência possui responsável, SLA, severidade e conclusão"; o livro
+ * não fixa os prazos — DI-M3CA-6): crm.ocorrencia.sla_horas.alta / .media / .baixa (padrões 24, 72 e 168 horas).
  * O `slaDueAt` é CALCULADO NA CRIAÇÃO e PERSISTIDO — não recalculado na leitura — porque o
  * prazo prometido ao cliente não pode mudar retroativamente se a política de SLA for alterada
  * depois. Mudar a `severity` de um caso já aberto, por isso mesmo, NÃO reescreve o SLA
@@ -24,7 +24,11 @@ const opening = require('./feedbackCaseOpening');
  *
  * Escalonamento: manual (`escalateFeedbackCase`) ou automático quando o SLA vence, pelo job
  * src/engines/jobs/feedbackCaseAlertJob.js. Os dois caminhos passam pela MESMA função, então
- * não existe divergência de comportamento entre escalonar na mão e escalonar pelo job.
+ * não existe divergência de comportamento entre escalonar na mão e escalonar pelo job. O aviso vai ao responsável E à
+ * gerência (membros com a permissão de `crm.gerencia.permissao`), como o livro §15 manda para a reclamação grave.
+ *
+ * Responsável obrigatório (§15): o informado (usuário ativo da empresa) ou, na falta, o responsável da oportunidade, quem abre
+ * ou o responsável padrão do lead automático / gestor mais antigo (crmUsers.resolveOwnerUserId). Nunca nulo.
  */
 
 // Livro do Marco 3 §15: reclamação, elogio, conflito, atendimento inadequado (POOR_SERVICE) e retorno pendente (PENDING_RETURN).
@@ -32,18 +36,12 @@ const TYPES = ['COMPLAINT', 'COMPLIMENT', 'CONFLICT', 'POOR_SERVICE', 'PENDING_R
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH'];
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'ESCALATED'];
 
-/** Janela de SLA por severidade, em horas. */
-const SLA_HOURS_BY_SEVERITY = {
-  HIGH: 24,
-  MEDIUM: 72,
-  LOW: 24 * 7,
-};
 
 /** Status que ainda estão "em aberto" e portanto sujeitos a escalonamento por SLA vencido. */
 const ESCALATABLE_STATUSES = ['OPEN', 'IN_PROGRESS'];
 
-function computeSlaDueAt(severity, from = new Date()) {
-  const hours = SLA_HOURS_BY_SEVERITY[String(severity || '').toUpperCase()];
+async function computeSlaDueAt(severity, tenant, transaction, from = new Date()) {
+  const hours = (await readSlaHoursBySeverity(tenant, transaction))[String(severity || '').toUpperCase()];
   if (!hours) {
     throw AppError.badRequest(`O campo "severity" deve ser um de: ${SEVERITIES.join(', ')}.`, 'FEEDBACK_CASE_VALIDATION');
   }
@@ -73,26 +71,36 @@ async function createFeedbackCase(payload, actorUserId, transaction) {
   const person = await Person.findByPk(personId, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
 
-  if (opportunityId) {
-    const opportunity = await Opportunity.findByPk(opportunityId, { transaction });
+  const tenant = { groupId, companyId };
+  const originMessage = await opening.resolveOriginInteraction(messageId, personId, transaction);
+  const linkedOpportunityId = opportunityId || (originMessage && originMessage.opportunityId) || null;
+  let opportunity = null;
+  if (linkedOpportunityId) {
+    opportunity = await Opportunity.findByPk(linkedOpportunityId, { transaction });
     if (!opportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
   }
-
-  const originMessage = await opening.resolveOriginInteraction(messageId, personId, transaction);
-  const slaDueAt = computeSlaDueAt(normalizedSeverity);
+  if (assignedToUserId && !(await isActiveMember(assignedToUserId, companyId, transaction))) {
+    throw AppError.unprocessable('O responsável da ocorrência precisa ser um usuário ativo desta empresa.', 'FEEDBACK_CASE_ASSIGNEE_INVALID', { assignedToUserId });
+  }
+  const responsibleUserId = await resolveOwnerUserId(
+    { ownerUserId: assignedToUserId || (opportunity && opportunity.ownerUserId) || null, actorUserId },
+    tenant,
+    transaction
+  );
+  const slaDueAt = await computeSlaDueAt(normalizedSeverity, tenant, transaction);
 
   const feedbackCase = await FeedbackCase.create(
     {
       groupId,
       companyId,
       personId,
-      opportunityId: opportunityId || (originMessage && originMessage.opportunityId) || null,
+      opportunityId: linkedOpportunityId,
       messageId: originMessage ? originMessage.id : null,
       type: normalizedType,
       description,
       severity: normalizedSeverity,
       status: 'OPEN',
-      assignedToUserId: assignedToUserId || null,
+      assignedToUserId: responsibleUserId,
       slaDueAt,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -268,12 +276,15 @@ async function escalateFeedbackCase(id, payload, actorUserId, transaction) {
   feedbackCase.updatedBy = actorUserId || null;
   await feedbackCase.save({ transaction });
 
-  if (feedbackCase.assignedToUserId) {
+  // Livro §15: o escalonamento chega à gerência (e ao responsável).
+  const recipients = new Set(await managerUserIds({ groupId: feedbackCase.groupId, companyId: feedbackCase.companyId }, transaction));
+  if (feedbackCase.assignedToUserId) recipients.add(feedbackCase.assignedToUserId);
+  for (const userId of recipients) {
     await Notification.create(
       {
         groupId: feedbackCase.groupId,
         companyId: feedbackCase.companyId,
-        userId: feedbackCase.assignedToUserId,
+        userId,
         channel: 'IN_APP',
         title: `Caso de ${feedbackCase.type} ESCALONADO (severidade ${feedbackCase.severity})`,
         body:
@@ -299,6 +310,7 @@ async function escalateFeedbackCase(id, payload, actorUserId, transaction) {
         escalatedAt: escalatedAt.toISOString(),
         automatic,
         slaDueAt: new Date(feedbackCase.slaDueAt).toISOString(),
+        notifiedUserIds: [...recipients],
       },
       idempotencyKey: `crm.feedback_case.escalated:${feedbackCase.id}`,
     },
@@ -315,9 +327,9 @@ async function escalateFeedbackCase(id, payload, actorUserId, transaction) {
       entityId: feedbackCase.id,
       beforeJson,
       afterJson: feedbackCase.toJSON(),
-      reason: automatic
+      reason: `${automatic
         ? `Caso de ${feedbackCase.type} escalonado AUTOMATICAMENTE — SLA venceu em ${new Date(feedbackCase.slaDueAt).toISOString()}.`
-        : `Caso de ${feedbackCase.type} escalonado manualmente.`,
+        : `Caso de ${feedbackCase.type} escalonado manualmente.`} ${recipients.size} pessoa(s) avisada(s), gerência incluída.`,
     },
     transaction
   );
@@ -329,7 +341,6 @@ module.exports = {
   TYPES,
   SEVERITIES,
   STATUSES,
-  SLA_HOURS_BY_SEVERITY,
   ESCALATABLE_STATUSES,
   computeSlaDueAt,
   createFeedbackCase,

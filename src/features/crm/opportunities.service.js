@@ -20,10 +20,10 @@ module.exports = {
   STAGES: stages.STAGES,
   ACTIVE_STAGES: stages.ACTIVE_STAGES,
   normalizeStage: stages.normalizeStage,
-  // M3-12 — enums fechados de motivo de ganho/perda/desistência.
+  // M3-12 — motivos padrão de ganho/perda/desistência (as listas da empresa são parâmetros: crm.params.js).
   WON_REASONS: outcomeReasons.WON_REASONS,
   LOST_REASONS: outcomeReasons.LOST_REASONS,
   WITHDRAWN_REASONS: outcomeReasons.WITHDRAWN_REASONS,
   OUTCOME_STAGES: outcomeReasons.OUTCOME_STAGES,
-  assertOutcomeReason: outcomeReasons.assertOutcomeReason,
+  resolveOutcomeReason: outcomeReasons.resolveOutcomeReason,
 };

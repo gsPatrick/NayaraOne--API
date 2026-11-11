@@ -9,6 +9,7 @@ const messagesService = require('./messages.service');
 const feedbackCasesService = require('./feedbackCases.service');
 const { refuseDeletion } = require('./feedbackCaseOpening');
 const { bulkReassign } = require('./opportunityReassign.service');
+const { readOutcomeReasonCatalog } = require('./crm.params');
 
 /**
  * Endpoints com o caminho do Guia do Marcelo §13 ("APIs mínimas") que o sistema atendia por outro caminho
@@ -65,7 +66,7 @@ const scheduleVisit = catchAsync(async (req, res) => {
 const markLost = catchAsync(async (req, res) => {
   const body = req.body || {};
   const opportunity = await req.withTenantTransaction((transaction) =>
-    opportunitiesService.updateOpportunity(req.params.id, { stage: 'CLOSED_LOST', lostReason: body.reasonCode !== undefined ? body.reasonCode : body.lostReason }, req.auth.userId, transaction)
+    opportunitiesService.updateOpportunity(req.params.id, { stage: 'LOST', lostReason: body.reasonCode !== undefined ? body.reasonCode : body.lostReason }, req.auth.userId, transaction)
   );
   return success(res, { data: opportunity });
 });
@@ -84,4 +85,12 @@ const reassignOwners = catchAsync(async (req, res) => {
   return success(res, { data: result });
 });
 
-module.exports = { recordInteraction, scheduleVisit, markLost, refuseOccurrenceDeletion, reassignOwners };
+/** GET /crm/outcome-reasons — motivos de ganho, perda e desistência configurados pela empresa (§3 crm.loss_reasons; DI-M3CA-2). */
+const listOutcomeReasons = catchAsync(async (req, res) => {
+  const catalog = await req.withTenantTransaction((transaction) =>
+    readOutcomeReasonCatalog({ groupId: req.auth.groupId, companyId: req.auth.companyId }, transaction)
+  );
+  return success(res, { data: catalog });
+});
+
+module.exports = { recordInteraction, scheduleVisit, markLost, refuseOccurrenceDeletion, reassignOwners, listOutcomeReasons };
