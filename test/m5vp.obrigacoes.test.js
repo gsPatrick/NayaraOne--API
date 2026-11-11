@@ -96,6 +96,11 @@ test('M5-A0346/§12: o pagamento é de um vencimento, com comprovante; repetir o
     const first = await utilitiesService.recordUtilityPayment(obligation.id, { amount: 80, paidByParty: 'COMPANY', referenceDueOn: '2027-01-10', proofFileId: proof.id }, tenant.userId, t);
     assert.equal(first.cycle.status, 'PAID');
     assert.equal(first.cycle.reimbursementId, first.reimbursement.id);
+    // UAT M5 (texto do reembolso): concordância "pago pela imobiliária, a cobrar do locatário" (antes "pago por o ...").
+    assert.equal(first.financialEntry.description, 'Reembolso de água pago pela imobiliária, a cobrar do locatário.');
+    const { reimbursementDescription } = require('../src/features/billing/obligations/utilityPayment.service');
+    assert.equal(reimbursementDescription('IPTU', 'LANDLORD', 'TENANT'), 'Reembolso de IPTU pago pelo locador, a cobrar do locatário.');
+    assert.equal(reimbursementDescription('CONDO', 'TENANT', 'LANDLORD'), 'Reembolso de condomínio pago pelo locatário, a cobrar do locador.');
     const proof2 = await uploadTestFile(tenant, t);
     await assert.rejects(() => utilitiesService.recordUtilityPayment(obligation.id, { amount: 80, paidByParty: 'COMPANY', referenceDueOn: '2027-01-10', proofFileId: proof2.id }, tenant.userId, t), code('UTILITY_CYCLE_ALREADY_SETTLED'));
     assert.equal(await UtilityReimbursement.count({ where: { utilityObligationId: obligation.id }, transaction: t }), 1, 'um reembolso só');

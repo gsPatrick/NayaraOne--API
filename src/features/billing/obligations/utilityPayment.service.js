@@ -12,7 +12,12 @@ const cycles = require('./obligationCycles.service');
 // Separado de utilities.service.js (fechamento M5): o pagamento de um vencimento da obrigação, com comprovante e reembolso.
 const UTILITIES_RESULT_CENTER_CODE = 'LOCACAO-UTILIDADES';
 const UTILITY_TYPE_LABELS = { WATER: 'água', ELECTRICITY: 'energia elétrica', GAS: 'gás', CONDO: 'condomínio', IPTU: 'IPTU', SPU: 'SPU (laudêmio/foro)', OTHER: 'outra despesa' };
-const PARTY_LABELS = { LANDLORD: 'o locador', TENANT: 'o locatário' };
+// Concordância do texto do lançamento (UAT M5 C09): "pago pelo locador", "pago pela imobiliária", "a cobrar do locatário".
+const PAID_BY_PHRASE = { LANDLORD: 'pelo locador', TENANT: 'pelo locatário', COMPANY: 'pela imobiliária', AGENCY: 'pela imobiliária' };
+const OWED_BY_PHRASE = { LANDLORD: 'do locador', TENANT: 'do locatário' };
+function reimbursementDescription(utilityType, paidBy, owedBy) {
+  return `Reembolso de ${UTILITY_TYPE_LABELS[utilityType] || 'despesa do imóvel'} pago ${PAID_BY_PHRASE[paidBy] || 'por uma das partes'}, a cobrar ${OWED_BY_PHRASE[owedBy] || 'da outra parte'}.`;
+}
 
 async function getUtilityObligation(id, transaction) {
   return require('../utilities.service').getUtilityObligation(id, transaction);
@@ -81,7 +86,7 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
       entryType: 'CREDIT',
       nature: 'RECEIVABLE',
       amount: numericAmount,
-      description: `Reembolso de ${UTILITY_TYPE_LABELS[obligation.utilityType] || 'despesa do imóvel'} pago por ${PARTY_LABELS[normalizedPaidBy] || 'uma das partes'}, a cobrar de ${PARTY_LABELS[owedByParty] || 'outra parte'}.`,
+      description: reimbursementDescription(obligation.utilityType, normalizedPaidBy, owedByParty),
       dueAt: new Date(),
       idempotencyKey: `utility_reimbursement:${obligation.id}:${cycle.id}`, // chave natural: um reembolso por vencimento
       resultCenterId: resultCenter.id,
@@ -118,7 +123,7 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
       entityType: 'UtilityReimbursement',
       entityId: reimbursement.id,
       afterJson: reimbursement.toJSON(),
-      reason: `Reembolso de ${formatMoneyBR(numericAmount)} criado: pago por "${normalizedPaidBy}", a cobrar de "${owedByParty}".`,
+      reason: `Reembolso de ${formatMoneyBR(numericAmount)} criado: pago ${PAID_BY_PHRASE[normalizedPaidBy] || `por ${normalizedPaidBy}`}, a cobrar ${OWED_BY_PHRASE[owedByParty] || `de ${owedByParty}`}.`,
     },
     transaction
   );
@@ -126,4 +131,4 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
   return { reimbursement, financialEntry, cycle };
 }
 
-module.exports = { recordUtilityPayment };
+module.exports = { recordUtilityPayment, reimbursementDescription };
