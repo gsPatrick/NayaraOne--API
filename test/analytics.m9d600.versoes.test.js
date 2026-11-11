@@ -11,6 +11,8 @@ const assert = require('node:assert/strict');
 const { sequelize } = require('./testHelpers');
 const store = require('../src/features/analytics/metricStore.service');
 const migration = require('../migrations/20260101009600-create-analytics-metrics-core');
+// 9970 (BI, DI-BI-2) cria analytics.metric_snapshot_confirmations com FK para metric_snapshots: o down da 9600 só roda depois do down dela (ordem inversa, como o migrate:undo).
+const confirmationsMigration = require('../migrations/20260101009970-create-analytics-metric-snapshot-confirmations');
 const { setupEnv, closeEnv, inTx, ctxOf, hash, versionInput, newMetric, snapshotInput } = require('./helpers/analyticsM9d600Env');
 
 let admin; // superusuário do cluster descartável (DDL e leitura sem RLS)
@@ -34,6 +36,7 @@ test('m9d600 migration cria schema e tabelas e roda duas vezes', async () => {
   try {
     await migration.up(qi); // 2ª execução em cima do que o migrate já criou: idempotente
     await migration.up(qi);
+    await confirmationsMigration.down(qi);
     await migration.down(qi);
     const [after1] = await admin.query(
       `SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'analytics' AND table_name IN ('metric_definitions','metric_versions','metric_snapshots')`,
