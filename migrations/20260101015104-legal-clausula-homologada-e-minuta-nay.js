@@ -71,7 +71,6 @@ module.exports = {
                ORDER BY l.contract_clause_id, v.published_at ASC) p
         WHERE cv.id = p.contract_clause_id AND cv.homologation_status = 'PENDING'`);
       const [depois] = await q("SELECT homologation_status, count(*)::int AS n FROM legal.clause_versions GROUP BY 1 ORDER BY 1");
-      // eslint-disable-next-line no-console
       console.log(`[20260101015104] versões de cláusula antes ${JSON.stringify(antes)} depois ${JSON.stringify(depois)}`);
       await q('ALTER TABLE legal.clause_versions ENABLE TRIGGER contract_clauses_append_only');
       await q('ALTER TABLE legal.clause_versions FORCE ROW LEVEL SECURITY');

@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 862. Rotas só com login ou públicas: 43.
+Rotas com permissão exigida: 870. Rotas só com login ou públicas: 43.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -575,6 +575,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/clauses/:code/versions` | `legal:create` | não |
 | `POST` | `/api/v1/legal/clauses/:id/approve-condition` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/clauses/:id/deactivate` | `legal:update` | não |
+| `POST` | `/api/v1/legal/clauses/:id/homologate` | `legal:approve` | não |
 | `GET` | `/api/v1/legal/clauses` | `legal:read` | não |
 | `POST` | `/api/v1/legal/clauses` | `legal:create` | não |
 | `POST` | `/api/v1/legal/contract-templates/:id/clauses/:clauseId/upgrade` | `legal:create` | não |
@@ -646,8 +647,12 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/nay/cases/:id/summary` | `legal:read` | não |
 | `GET` | `/api/v1/legal/nay/clause-suggestions` | `legal:read` | não |
 | `GET` | `/api/v1/legal/nay/contracts/:id/compare` | `legal:read` | não |
+| `GET` | `/api/v1/legal/nay/contracts/:id/draft-suggestions` | `legal:read` | não |
+| `POST` | `/api/v1/legal/nay/contracts/:id/draft-suggestions` | `legal:create` | não |
 | `GET` | `/api/v1/legal/nay/contracts/:id/summary` | `legal:read` | não |
 | `POST` | `/api/v1/legal/nay/deadline-suggestions` | `legal:read` | não |
+| `POST` | `/api/v1/legal/nay/draft-suggestions/:id/accept` | `legal:create` | não |
+| `POST` | `/api/v1/legal/nay/draft-suggestions/:id/discard` | `legal:create` | não |
 | `POST` | `/api/v1/legal/notices/:id/approve` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/notices/:id/delivery-evidence` | `legal:update` | não |
 | `POST` | `/api/v1/legal/notices/:id/reject` | `legal:approve` | não |
@@ -658,6 +663,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/notices/:id` | `legal:read` | não |
 | `GET` | `/api/v1/legal/notices` | `legal:read` | não |
 | `POST` | `/api/v1/legal/notices` | `legal:create` | não |
+| `GET` | `/api/v1/legal/requirement-rules/versions` | `legal:read` | não |
+| `GET` | `/api/v1/legal/requirement-rules` | `legal:read` | não |
+| `POST` | `/api/v1/legal/requirement-rules` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/requirements/:requirementId/waive` | `legal:waive` | não |
 | `PATCH` | `/api/v1/legal/requirements/:requirementId` | `legal:update` | não |
 | `POST` | `/api/v1/legal/signature-envelopes/:id/switch-provider` | `legal:sign` | sim |
