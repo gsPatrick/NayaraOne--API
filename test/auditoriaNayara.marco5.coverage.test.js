@@ -229,11 +229,15 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
   // Exceção controlada (NAY Jurídica, Caderno §17, 19/10/2026): o módulo de leitura
   // legalNay.service.js (travado logo abaixo) e as linhas de rota /legal/nay/* — todas
   // exigindo legal:read, conferidas abaixo.
+  // Verificação M5 linha 124 (Caderno §17 "Sugere minuta"; DI-M5CT-5): a minuta sugerida (cases/nayDraft/) é a segunda exceção
+  // controlada — a NAY grava só a SUGESTÃO (pendente) e o run; a versão do contrato nasce apenas no aceite por pessoa (rota
+  // protegida, ator obrigatório), travado mais abaixo.
   const nayRouteRe = /^legalRouter\.(get|post)\('\/legal\/nay\/[^']+', requirePermission\('legal:read'\), legalController\.nay\w+\);$/;
+  const nayDraftRouteRe = /^legalRouter\.(get|post)\('\/legal\/nay\/(contracts\/:id\/draft-suggestions|draft-suggestions\/:id\/(accept|discard))', requirePermission\('legal:(read|create)'\), nayDraftController\.\w+\);$/;
   for (const file of files) {
-    if (file === 'cases/legalNay.service.js') continue;
+    if (file === 'cases/legalNay.service.js' || file.startsWith('cases/nayDraft/')) continue;
     let content = fs.readFileSync(path.join(legalDir, file), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    if (file === 'shared/legal.routes.js') content = content.split('\n').filter((l) => !nayRouteRe.test(l)).join('\n');
+    if (file === 'shared/legal.routes.js') content = content.split('\n').filter((l) => !nayRouteRe.test(l) && !nayDraftRouteRe.test(l) && !/nayDraftController = require/.test(l)).join('\n');
     assert.ok(
       !/\bNAY\b/i.test(content),
       `${file} não deveria referenciar NAY fora de comentário — nenhum agente de IA tem caminho de execução no jurídico.`
@@ -243,12 +247,21 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
   // NAY Jurídica é SOMENTE LEITURA por construção: só importa modelos + AppError + o registrador de run por regra (M9-D005),
   // a única escrita é a auditoria da execução (recordRuleRun) e não usa SQL cru.
   const nay = fs.readFileSync(path.join(legalDir, 'cases', 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../../models', '../../../features/ai/orchestrator/runs', '../../../utils/AppError'].sort());
+  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../../models', '../../../features/ai/orchestrator/runs', '../../../utils/AppError', '../contracts/application/clauseHomologation.service'].sort());
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
-  const routeLines = fs.readFileSync(path.join(legalDir, 'shared', 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));
-  assert.equal(routeLines.length, 6);
-  for (const l of routeLines) assert.match(l, nayRouteRe);
+  const routeLines = fs.readFileSync(path.join(legalDir, 'shared', 'legal.routes.js'), 'utf8').split('\n').filter((l) => /^legalRouter.*\/legal\/nay\//.test(l));
+  assert.equal(routeLines.length, 10);
+  for (const l of routeLines) assert.ok(nayRouteRe.test(l) || nayDraftRouteRe.test(l), l);
+  // Minuta: escrever só exige legal:create (nunca legal:approve/sign); o aceite exige pessoa e a sugestão não cria versão do contrato.
+  const draftRoutes = routeLines.filter((l) => nayDraftRouteRe.test(l));
+  assert.equal(draftRoutes.length, 4);
+  assert.ok(draftRoutes.filter((l) => /^legalRouter\.post/.test(l)).every((l) => l.includes("requirePermission('legal:create')")));
+  const draftSvc = fs.readFileSync(path.join(legalDir, 'cases', 'nayDraft', 'nayDraft.service.js'), 'utf8');
+  const suggestBody = draftSvc.slice(draftSvc.indexOf('async function suggestDraft'), draftSvc.indexOf('async function listDraftSuggestions'));
+  assert.ok(!/createContractVersion|ContractVersion\.create|\.approve|transitionContractStatus/.test(suggestBody), 'sugerir não cria nem aprova versão do contrato');
+  const acceptBody = draftSvc.slice(draftSvc.indexOf('async function acceptDraftSuggestion'), draftSvc.indexOf('async function discardDraftSuggestion'));
+  assert.match(acceptBody, /if \(!actorUserId\) throw AppError\.forbidden\([^)]*'LEGAL_NAY_DRAFT_HUMAN_REQUIRED'\)/, 'o aceite exige pessoa identificada');
 
   // Toda criação/decisão jurídica crítica (processo, dossiê, mudança de status de contrato,
   // decisão de aprovação) exige actorUserId e passa por controller->rota protegida — nunca é

@@ -11,6 +11,7 @@ const contractVersionActionsController = require('../contracts/application/contr
 const contractTemplateVersionsController = require('../contracts/application/contractTemplateVersions.controller');
 const requirementRulesController = require('../contracts/application/requirementRules.controller');
 const nayDraftController = require('../cases/nayDraft/nayDraft.controller');
+const clauseHomologationController = require('../contracts/application/clauseHomologation.controller');
 const { confirmAction } = require('../../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 1 do inventário)
 const { requireVersionApprove, requireVersionApproveWhenApproving } = require('./legalPermissions');
 
@@ -111,7 +112,7 @@ legalRouter.post('/legal/clauses/:id/deactivate', requirePermission('legal:updat
 // F01: aprovação da regra declarativa de uma versão de cláusula (mesma alçada das transições de contrato).
 legalRouter.post('/legal/clauses/:id/approve-condition', requirePermission('legal:approve'), legalController.approveClauseCondition);
 // Caderno §4 "legal.clause_versions | Versões homologadas": homologar o texto da versão (alçada jurídica, quem escreveu não homologa).
-legalRouter.post('/legal/clauses/:id/homologate', requirePermission('legal:approve'), nayDraftController.homologateClause);
+legalRouter.post('/legal/clauses/:id/homologate', requirePermission('legal:approve'), clauseHomologationController.homologateClause);
 // Preview de renderização (só leitura — não persiste nada, ver renderContractTemplate).
 legalRouter.post('/legal/contract-templates/:id/render', requirePermission('legal:read'), legalController.renderContractTemplate);
 

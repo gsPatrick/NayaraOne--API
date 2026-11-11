@@ -3,9 +3,8 @@
 const catchAsync = require('../../../../utils/catchAsync');
 const { success } = require('../../../../utils/httpResponse');
 const nayDraft = require('./nayDraft.service');
-const { homologateClauseVersion } = require('../../contracts/application/clauseHomologation.service');
 
-/** Minuta sugerida pela NAY (Caderno M5 §17) e homologação da versão da cláusula (§4 "Versões homologadas"). */
+/** Minuta sugerida pela NAY (Caderno M5 §17): sugerir, listar, aceitar (pessoa) e descartar (com motivo). */
 const tenantOf = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId });
 
 const suggestDraft = catchAsync(async (req, res) => {
@@ -24,9 +23,5 @@ const discardDraftSuggestion = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) => nayDraft.discardDraftSuggestion(req.params.id, req.body || {}, req.auth.userId, t));
   return success(res, { data });
 });
-const homologateClause = catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((t) => homologateClauseVersion(req.params.id, req.auth.userId, t));
-  return success(res, { data });
-});
 
-module.exports = { suggestDraft, listDraftSuggestions, acceptDraftSuggestion, discardDraftSuggestion, homologateClause };
+module.exports = { suggestDraft, listDraftSuggestions, acceptDraftSuggestion, discardDraftSuggestion };
