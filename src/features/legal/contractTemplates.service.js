@@ -6,6 +6,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { validateCondition, validateContext, evaluateCondition } = require('./clauseConditions');
 const { buildConditionContext } = require('./clauseConditionContext');
 const templateVersions = require('./templateVersions.service');
+const { assertUuidFields } = require('./legalIds');
 
 /**
  * contractTemplates.service — M5-01: modelos de contrato compostos por cláusulas da
@@ -136,6 +137,7 @@ async function updateTemplate(id, payload, actorUserId, transaction) {
 async function addClauseToTemplate(templateId, payload, actorUserId, transaction) {
   const template = await getTemplate(templateId, transaction);
   const { contractClauseId } = payload;
+  assertUuidFields(payload, ['contractClauseId']);
   if (!contractClauseId) {
     throw AppError.badRequest('O campo "contractClauseId" é obrigatório.', 'LEGAL_CONTRACT_TEMPLATE_VALIDATION');
   }
@@ -301,9 +303,7 @@ function ruleVariables(condition) {
  */
 async function renderTemplate(templateId, transaction, variables, conditionContext, options = {}) {
   const template = await getTemplate(templateId, transaction);
-  const templateVersion = options.templateVersionId
-    ? { id: options.templateVersionId }
-    : await templateVersions.getCurrentVersion(template.id, transaction);
+  const templateVersion = options.templateVersion || (await templateVersions.getCurrentVersion(template.id, transaction));
   const entries = await listTemplateClauses(template.id, transaction, templateVersion.id);
   const context = validateContext(conditionContext);
   const unresolved = options.unresolved || {};
@@ -413,15 +413,10 @@ async function renderTemplate(templateId, transaction, variables, conditionConte
  */
 async function renderTemplateForContract(templateId, contractOrId, transaction, variables, options = {}) {
   const { context, unresolved } = await buildConditionContext(contractOrId, transaction);
-  const rendered = await renderTemplate(templateId, transaction, variables, context, { unresolved, contextSource: 'CONTRACT' });
-  if (options.freeze) {
-    // Geração de verdade: a versão do modelo usada fica congelada (publicada) e é a que a versão do contrato guarda.
-    const template = await getTemplate(templateId, transaction);
-    const { TemplateVersion } = require('../../models');
-    const version = await TemplateVersion.findByPk(rendered.templateVersionId, { transaction });
-    await templateVersions.freezeOnUse(template, version, options.actorUserId, transaction);
-  }
-  return rendered;
+  // Geração de verdade (options.published): só a versão PUBLICADA do modelo gera contrato (Caderno §6/§19 —
+  // publicar é ato de governança com legal:approve); a versão do contrato guarda o template_version_id dela.
+  const templateVersion = options.published ? await templateVersions.getPublishedVersion(templateId, transaction) : undefined;
+  return renderTemplate(templateId, transaction, variables, context, { unresolved, contextSource: 'CONTRACT', templateVersion });
 }
 
 /**

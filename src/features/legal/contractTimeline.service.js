@@ -1,5 +1,7 @@
 'use strict';
 
+const L = require('./legalLabels');
+
 const { Contract, ContractAmendment, Notice, CollectionCase, Inspection, InspectionItem, AuditLog } = require('../../models');
 const AppError = require('../../utils/AppError');
 
@@ -56,7 +58,8 @@ async function getContractTimeline(contractId, transaction) {
       type: TYPES.AMENDMENT,
       occurredAt: createdAtOf(amendment),
       referenceId: amendment.id,
-      summary: `Aditivo nº ${amendment.amendmentNumber} (${amendment.status}): ${amendment.reason}`,
+      summary: `Aditivo nº ${amendment.amendmentNumber} (${L.amendmentStatusLabel(amendment.status)}): ${amendment.reason}`,
+      details: { status: amendment.status },
     });
   }
 
@@ -67,7 +70,8 @@ async function getContractTimeline(contractId, transaction) {
       type: TYPES.NOTICE,
       occurredAt: notice.sentAt || createdAtOf(notice),
       referenceId: notice.id,
-      summary: `Notificação (${notice.channel}, status ${notice.status})${notice.isLegallySensitive ? ' — sensível' : ''}`,
+      summary: `Notificação por ${L.noticeChannelLabel(notice.channel)} (${L.noticeStatusLabel(notice.status)})${notice.isLegallySensitive ? ' — sensível' : ''}`,
+      details: { channel: notice.channel, status: notice.status },
     });
   }
 
@@ -78,7 +82,8 @@ async function getContractTimeline(contractId, transaction) {
       type: TYPES.DELINQUENCY,
       occurredAt: dateOnlyToDateTime(collectionCase.overdueSince) || createdAtOf(collectionCase),
       referenceId: collectionCase.id,
-      summary: `Inadimplência (${collectionCase.status}): saldo em atraso de ${collectionCase.currentBalance}, desde ${collectionCase.overdueSince}`,
+      summary: `Inadimplência (${L.collectionStatusLabel(collectionCase.status)}): saldo em atraso de ${collectionCase.currentBalance}, desde ${collectionCase.overdueSince}`,
+      details: { status: collectionCase.status },
     });
   }
 
@@ -91,14 +96,16 @@ async function getContractTimeline(contractId, transaction) {
         type: TYPES.REPAIR,
         occurredAt: createdAtOf(item),
         referenceId: item.id,
-        summary: `Dano em "${item.itemName}" (vistoria ${inspection.inspectionType}): ${item.damageDescription || 'sem descrição'}${item.estimatedBudget ? `, orçamento estimado ${item.estimatedBudget}` : ''}`,
+        details: { inspectionType: inspection.inspectionType },
+        summary: `Dano em "${item.itemName}" (vistoria de ${L.inspectionTypeLabel(inspection.inspectionType)}): ${item.damageDescription || 'sem descrição'}${item.estimatedBudget ? `, orçamento estimado ${item.estimatedBudget}` : ''}`,
       });
     }
   }
 
   // Mudanças de status do próprio contrato (vêm do audit log, registro permanente append-only).
   const statusChanges = await AuditLog.findAll({
-    where: { entityType: 'Contract', entityId: contractId, action: 'legal.contract.status_change' },
+    // Matriz M5: inclui as transições dedicadas (suspender, reativar, rescindir, arquivar), também mudanças de estado.
+    where: { entityType: 'Contract', entityId: contractId, action: ['legal.contract.status_change', 'legal.contract.suspend', 'legal.contract.reactivate', 'legal.contract.terminate', 'legal.contract.close'] },
     transaction,
   });
   for (const log of statusChanges) {
@@ -108,7 +115,8 @@ async function getContractTimeline(contractId, transaction) {
       type: TYPES.STATUS_CHANGE,
       occurredAt: log.occurredAt || createdAtOf(log),
       referenceId: log.id,
-      summary: `Status mudou de "${before}" para "${after}"`,
+      summary: `Situação do contrato mudou de "${L.contractStatusLabel(before)}" para "${L.contractStatusLabel(after)}"`,
+      details: { fromStatus: before || null, toStatus: after || null },
     });
   }
 

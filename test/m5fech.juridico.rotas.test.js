@@ -147,3 +147,13 @@ test('JR rotas: recebível do processo exige legal:approve E finance:create e s�
   assert.deepEqual(list.body.data.map((v) => v.versionNumber), [1, 2]);
   assert.equal(list.body.data[0].content, 'Aviso v1', 'a versão anterior está preservada');
 });
+
+test('Pentest JR (HTTP): objeto no lugar de texto/uuid no dossiê ({"$gt":""}) é 400 com o código do Jurídico, nunca 500', async () => {
+  const legalCase = await withTenantTransaction(tenant, (t) => newCase(tenant, t));
+  const writer = tokenFor(['legal:read', 'legal:create']);
+  const res = await call('POST', `/legal/cases/${legalCase.id}/evidence-package`, writer, { manifestItems: [{ type: { $gt: '' }, description: { $gt: '' }, fileId: { $gt: '' }, hash: { $gt: '' } }, { type: { $gt: '' }, description: { $gt: '' } }] });
+  assert.deepEqual([res.status, res.code], [400, 'LEGAL_EVIDENCE_PACKAGE_VALIDATION']);
+  const auto = await call('POST', `/legal/cases/${legalCase.id}/evidence-packages/auto`, writer, { extraManifestItems: { $gt: '' } });
+  assert.equal(auto.status, 400);
+});
+

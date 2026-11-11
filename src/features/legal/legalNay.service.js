@@ -54,15 +54,17 @@ async function logRun(tenant, actorUserId, inputSummary, toolCallsJson, outputSu
 // Os modelos mapeiam createdAt para o atributo 'created_at'.
 const createdOf = (x) => (x && x.get ? x.get('created_at') || x.get('createdAt') : null);
 const iso = (d) => (d ? new Date(d).toISOString() : null);
+// Pentest M5: id que não é UUID em texto = não encontrado, nunca 500 (regex local: a NAY só importa modelos e o orquestrador).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function loadContract(contractId, transaction) {
-  const contract = contractId ? await Contract.findByPk(contractId, { transaction }) : null;
+  const contract = typeof contractId === 'string' && UUID_RE.test(contractId) ? await Contract.findByPk(contractId, { transaction }) : null;
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
   return contract;
 }
 
 async function loadCase(caseId, transaction) {
-  const legalCase = caseId ? await LegalCase.findByPk(caseId, { transaction }) : null;
+  const legalCase = typeof caseId === 'string' && UUID_RE.test(caseId) ? await LegalCase.findByPk(caseId, { transaction }) : null;
   if (!legalCase) throw AppError.notFound('Processo jurídico não encontrado.', 'LEGAL_CASE_NOT_FOUND');
   return legalCase;
 }

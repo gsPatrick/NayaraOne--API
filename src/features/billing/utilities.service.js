@@ -11,6 +11,8 @@ const {
   File,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
+const { assertCompanyPerson, assertCompanyFile } = require('./utilityInputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
@@ -38,6 +40,14 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
       'UTILITY_OBLIGATION_VALIDATION'
     );
   }
+  assertUuid(contractId, 'contractId', 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(utilityType, 'utilityType', 32, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(responsibleParty, 'responsibleParty', 16, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(provider, 'provider', 120, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(accountNumber, 'accountNumber', 60, 'UTILITY_OBLIGATION_VALIDATION');
+  await assertCompanyFile(evidenceFileId, companyId, 'evidenceFileId', 'UTILITY_OBLIGATION_EVIDENCE_NOT_FOUND', transaction);
+  await assertCompanyPerson(payload.transferFromPersonId, 'transferFromPersonId', 'UTILITY_OBLIGATION_VALIDATION', transaction);
+  await assertCompanyPerson(payload.transferToPersonId, 'transferToPersonId', 'UTILITY_OBLIGATION_VALIDATION', transaction);
   const normalizedType = String(utilityType).toUpperCase();
   const normalizedParty = String(responsibleParty).toUpperCase();
   if (!UTILITY_TYPES.includes(normalizedType)) {
@@ -135,6 +145,9 @@ async function listUtilityObligations(transaction, filters = {}) {
  * passa a TRANSFER_PENDING e o encerramento do contrato fica bloqueado até a conclusão.
  */
 async function requestOwnershipTransfer(utilityObligationId, payload, actorUserId, transaction) {
+  assertUuid(utilityObligationId, 'id', 'UTILITY_OBLIGATION_VALIDATION');
+  await assertCompanyPerson(payload && payload.fromPersonId, 'fromPersonId', 'OWNERSHIP_TRANSFER_VALIDATION', transaction);
+  await assertCompanyPerson(payload && payload.toPersonId, 'toPersonId', 'OWNERSHIP_TRANSFER_VALIDATION', transaction);
   const obligation = await UtilityObligation.findByPk(utilityObligationId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!obligation) throw AppError.notFound('Obrigação de utilidade não encontrada.', 'UTILITY_OBLIGATION_NOT_FOUND');
 
@@ -192,6 +205,10 @@ async function createUtilityAccount(payload, actorUserId, transaction) {
       'UTILITY_ACCOUNT_VALIDATION'
     );
   }
+  assertUuid(utilityObligationId, 'utilityObligationId', 'UTILITY_ACCOUNT_VALIDATION');
+  assertText(provider, 'provider', 120, 'UTILITY_ACCOUNT_VALIDATION');
+  assertText(accountNumber, 'accountNumber', 60, 'UTILITY_ACCOUNT_VALIDATION');
+  await assertCompanyPerson(holderPersonId, 'holderPersonId', 'UTILITY_ACCOUNT_VALIDATION', transaction);
   await getUtilityObligation(utilityObligationId, transaction);
 
   const account = await UtilityAccount.create(
@@ -243,6 +260,8 @@ async function completeOwnershipTransfer(taskId, payload, actorUserId, transacti
   // sem evidência nenhuma de que ela de fato aconteceu. Fail closed: exige os dois.
   const evidenceFileId = payload?.evidenceFileId || null;
   const toPersonId = payload?.toPersonId || task.toPersonId || null;
+  assertUuid(evidenceFileId, 'evidenceFileId', 'OWNERSHIP_TRANSFER_EVIDENCE_NOT_FOUND', { optional: true });
+  await assertCompanyPerson(payload?.toPersonId, 'toPersonId', 'OWNERSHIP_TRANSFER_RECIPIENT_REQUIRED', transaction);
   if (!evidenceFileId) {
     throw AppError.badRequest(
       'É preciso anexar o comprovante da transferência de titularidade antes de concluir.',
@@ -331,6 +350,10 @@ async function recordUtilityPayment(utilityObligationId, payload, actorUserId, t
   if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
     throw AppError.badRequest('"amount" deve ser um número positivo.', 'UTILITY_PAYMENT_VALIDATION');
   }
+  if (typeof paidByParty !== 'string' || !/^[A-Za-z_]{2,16}$/.test(paidByParty)) {
+    throw AppError.badRequest('"paidByParty" deve ser quem pagou (ex.: COMPANY, TENANT, LANDLORD), até 16 letras.', 'UTILITY_PAYMENT_VALIDATION');
+  }
+  if (typeof amount === 'object') throw AppError.badRequest('"amount" deve ser um número positivo.', 'UTILITY_PAYMENT_VALIDATION');
   const normalizedPaidBy = String(paidByParty).toUpperCase();
 
   if (normalizedPaidBy === obligation.responsibleParty) {

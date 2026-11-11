@@ -127,6 +127,7 @@ legalRouter.patch('/legal/guarantees/:id', requirePermission('legal:update'), le
 legalRouter.delete('/legal/guarantees/:id', requirePermission('legal:update'), legalController.removeGuarantee);
 // Fechamento M5 (Caderno §9): substituição de garantia pela API, sem perder o histórico.
 legalRouter.post('/legal/guarantees/:id/replace', requirePermission('legal:update'), guaranteeActionsController.replaceGuarantee);
+legalRouter.get('/legal/guarantee-flows', requirePermission('legal:create'), guaranteeActionsController.listOtherGuaranteeFlows);
 
 // Inspections
 legalRouter.post('/legal/inspections', requirePermission('legal:create'), legalController.createInspection);

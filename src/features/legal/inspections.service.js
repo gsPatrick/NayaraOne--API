@@ -2,7 +2,8 @@
 
 const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
-const { Inspection, InspectionItem, InspectionSignature, InspectionMedia, File, FileLink } = require('../../models');
+const { Inspection, InspectionItem, InspectionSignature, InspectionMedia, File, FileLink, Property, Contract } = require('../../models');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishInspectionCompleted, publishInspectionDifferenceDetected, publishCadernoEvent } = require('./legalEvents.service');
@@ -54,6 +55,13 @@ async function createInspection(payload, actorUserId, transaction) {
   if (!INSPECTION_TYPES.includes(inspectionType)) {
     throw AppError.badRequest(`"inspectionType" deve ser um de: ${INSPECTION_TYPES.join(', ')}.`, 'LEGAL_INSPECTION_VALIDATION');
   }
+  // Fechamento M5 (pentest): imóvel e contrato precisam existir NESTA empresa (a RLS esconde os de outra) — sem isso a
+  // vistoria era gravada na empresa de quem chama apontando para o imóvel/contrato de outra empresa.
+  assertUuid(propertyId, 'propertyId', 'LEGAL_INSPECTION_VALIDATION');
+  assertUuid(contractId, 'contractId', 'LEGAL_INSPECTION_VALIDATION', { optional: true });
+  assertUuid(inspectorUserId, 'inspectorUserId', 'LEGAL_INSPECTION_VALIDATION', { optional: true });
+  if (!(await Property.findByPk(propertyId, { attributes: ['id'], transaction }))) throw AppError.notFound('Imóvel não encontrado.', 'LEGAL_INSPECTION_PROPERTY_NOT_FOUND');
+  if (contractId && !(await Contract.findByPk(contractId, { attributes: ['id'], transaction }))) throw AppError.notFound('Contrato não encontrado.', 'LEGAL_INSPECTION_CONTRACT_NOT_FOUND');
 
   const inspection = await Inspection.create(
     {
@@ -183,6 +191,8 @@ async function addInspectionItem(inspectionId, payload, actorUserId, transaction
   if (!itemName) {
     throw AppError.badRequest('O campo "itemName" é obrigatório.', 'LEGAL_INSPECTION_ITEM_VALIDATION');
   }
+  assertText(itemName, 'itemName', 255, 'LEGAL_INSPECTION_ITEM_VALIDATION', { optional: false });
+  for (const [f, max] of [['notes', 10000], ['description', 10000], ['damageDescription', 10000]]) assertText(payload[f], f, max, 'LEGAL_INSPECTION_ITEM_VALIDATION');
   if (condition !== undefined && condition !== null && !CONDITIONS.includes(condition)) {
     throw AppError.badRequest(`"condition" deve ser um de: ${CONDITIONS.join(', ')}.`, 'LEGAL_INSPECTION_ITEM_VALIDATION');
   }
@@ -281,6 +291,8 @@ async function listInspectionItems(inspectionId, transaction) {
  * positivo de divergência de condição.
  */
 async function compareInspections(entryInspectionId, exitInspectionId, transaction) {
+  assertUuid(entryInspectionId, 'entryInspectionId', 'LEGAL_INSPECTION_VALIDATION');
+  assertUuid(exitInspectionId, 'exitInspectionId', 'LEGAL_INSPECTION_VALIDATION');
   const entryInspection = await getInspection(entryInspectionId, transaction);
   const exitInspection = await getInspection(exitInspectionId, transaction);
 
@@ -353,6 +365,7 @@ async function attachInspectionItemMedia(itemId, payload, actorUserId, transacti
   await assertInspectionNotSigned(item.inspectionId, transaction);
 
   const { fileId, mediaType } = payload;
+  if (fileId) assertUuid(fileId, 'fileId', 'LEGAL_INSPECTION_MEDIA_VALIDATION');
   if (!fileId) {
     throw AppError.badRequest('O campo "fileId" é obrigatório (arquivo precisa existir antes de vincular).', 'LEGAL_INSPECTION_MEDIA_VALIDATION');
   }
@@ -419,11 +432,27 @@ async function attachInspectionItemMedia(itemId, payload, actorUserId, transacti
   return link;
 }
 
+// Fechamento M5 (3ª rodada; Caderno §4/§11): a lista vem de legal.inspection_media (hash, data/hora, tipo, vínculo ao
+// item), com os campos do vínculo genérico mantidos para a tela; vale também para as mídias copiadas na revisão.
 async function listInspectionItemMedia(itemId, transaction) {
-  return FileLink.findAll({
-    where: { relatedEntityType: 'InspectionItem', relatedEntityId: itemId },
-    transaction,
-  });
+  const medias = await InspectionMedia.findAll({ where: { itemId }, order: [['captured_at', 'ASC']], transaction });
+  return medias.map((m) => ({
+    id: m.fileLinkId || m.id,
+    inspectionMediaId: m.id,
+    fileLinkId: m.fileLinkId || null,
+    inspectionId: m.inspectionId,
+    itemId: m.itemId,
+    fileId: m.fileId,
+    sha256: m.sha256,
+    capturedAt: m.capturedAt,
+    mediaType: m.mediaType,
+    purpose: m.mediaType,
+    relatedEntityType: 'InspectionItem',
+    relatedEntityId: m.itemId,
+    groupId: m.groupId,
+    companyId: m.companyId,
+    created_at: m.created_at || m.createdAt,
+  }));
 }
 
 /**

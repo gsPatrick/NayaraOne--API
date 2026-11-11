@@ -135,6 +135,8 @@ function requirePermission(permissionCode) {
         )
       );
     }
+    // Permissão confere: a recusa de anexo adiada pelo fileAttachGuard vale agora.
+    if (req.deferredFileAttachError) return next(req.deferredFileAttachError);
     return next();
   };
   // Marca a permissão exigida para que a matriz de permissões da API (scripts/gerarMatrizPermissoes.js)

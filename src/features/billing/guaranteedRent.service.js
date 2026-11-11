@@ -4,6 +4,7 @@ const { formatCompetenceBR, formatMoneyBR } = require('../../utils/formatBR');
 
 const { GuaranteedRentContract, Contract } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertPeriod } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../finance/financialEntries.service');
 const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
@@ -20,6 +21,11 @@ const { publishGuaranteedRentPaid } = require('./billingEvents.service');
  */
 async function enrollGuaranteedRent(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, coverageStartsAt } = payload;
+  // Fechamento M5 (pentest): tipo e formato conferidos antes do banco.
+  if (contractId) assertUuid(contractId, 'contractId', 'GUARANTEED_RENT_VALIDATION');
+  for (const [f, v] of [['coverageStartsAt', coverageStartsAt], ['coverageEndsAt', payload.coverageEndsAt]]) {
+    if (v && (typeof v !== 'string' || Number.isNaN(new Date(v).getTime()))) throw AppError.badRequest(`"${f}" deve ser uma data.`, 'GUARANTEED_RENT_VALIDATION');
+  }
   if (!groupId || !companyId || !contractId || !coverageStartsAt) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "contractId" e "coverageStartsAt" são obrigatórios.',
@@ -105,6 +111,7 @@ async function payGuaranteedRent(guaranteedRentContractId, payload, actorUserId,
   if (!period || amount === undefined || amount === null) {
     throw AppError.badRequest('Os campos "period" e "amount" são obrigatórios.', 'GUARANTEED_RENT_PAYMENT_VALIDATION');
   }
+  assertPeriod(period, 'period', 'GUARANTEED_RENT_PAYMENT_VALIDATION');
   const numericAmount = Number(amount);
   if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
     throw AppError.badRequest('"amount" deve ser um número positivo.', 'GUARANTEED_RENT_PAYMENT_VALIDATION');

@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getLegalCaseForUpdate, getLegalCase } = require('./legalCases.service');
 const { normalizeOptionalText } = require('./legalText');
 const { parseDueAt } = require('./legalDeadlineDates');
+const { optionalUuid } = require('./legalInput');
 
 /**
  * Recebível do processo (Caderno M5 §14 "Valores a receber ficam estimados e vinculados ao Financeiro somente quando
@@ -40,6 +41,7 @@ async function linkCaseReceivable(legalCaseId, payload, actorUserId, transaction
   if (!basisReference) throw AppError.badRequest('Informe a referência do acordo ou da decisão ("basisReference").', 'LEGAL_CASE_RECEIVABLE_BASIS_INVALID');
   if (body.dueAt === undefined || body.dueAt === null || body.dueAt === '') throw AppError.badRequest('Informe o vencimento do recebível ("dueAt").', 'LEGAL_CASE_RECEIVABLE_VALIDATION');
   const dueAt = parseDueAt(body.dueAt, 'dueAt');
+  const resultCenterId = optionalUuid(body.resultCenterId, 'resultCenterId', 'LEGAL_CASE_RECEIVABLE_VALIDATION');
   const existing = await sequelize.query(listQuery, { type: QueryTypes.SELECT, transaction, replacements: { id: legalCase.id } });
   if (existing.length) throw AppError.conflict('Este processo já tem recebível vinculado ao Financeiro.', 'LEGAL_CASE_RECEIVABLE_DUPLICATE');
 
@@ -52,7 +54,7 @@ async function linkCaseReceivable(legalCaseId, payload, actorUserId, transaction
       nature: 'RECEIVABLE',
       amount: confirmed,
       dueAt,
-      resultCenterId: body.resultCenterId,
+      resultCenterId,
       contractId: legalCase.contractId || null,
       description: `Recebível do processo ${legalCase.caseNumber || legalCase.id} (${BASIS_LABEL[basis]}: ${basisReference})`.slice(0, 255),
       originRef: `legal.legal_cases:${legalCase.id}`,

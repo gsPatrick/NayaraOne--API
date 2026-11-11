@@ -3,6 +3,7 @@
 const { Contract } = require('../../models');
 const { collectContractClosurePendencies, PENDENCY_LABELS } = require('../legal/contractClosureGate');
 const AppError = require('../../utils/AppError');
+const { UUID_RE } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishCloseoutBlocked, publishCloseoutCompleted } = require('./billingEvents.service');
 const contractsService = require('../legal/contracts.service');
@@ -17,7 +18,7 @@ const contractsService = require('../legal/contracts.service');
 async function checkCloseoutEligibility(contractId, transaction) {
   // JUR-015 (fail closed): contrato inexistente ou de outra empresa (invisível pela RLS) nunca
   // é declarado "elegível" — antes a consulta devolvia eligible:true com zero pendências.
-  const contract = await Contract.findByPk(contractId, { transaction });
+  const contract = UUID_RE.test(String(contractId)) ? await Contract.findByPk(contractId, { transaction }) : null; // id inválido = inexistente (pentest)
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'CLOSEOUT_CONTRACT_NOT_FOUND');
   return collectContractClosurePendencies(contractId, transaction);
 }
@@ -61,7 +62,7 @@ async function recordCloseoutBlockedById(contractId, reasons, actorUserId, trans
  * pendência encontrada bloqueia.
  */
 async function closeoutContract(contractId, actorUserId, transaction) {
-  const contract = await Contract.findByPk(contractId, { transaction });
+  const contract = UUID_RE.test(String(contractId)) ? await Contract.findByPk(contractId, { transaction }) : null; // id inválido = inexistente (pentest)
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'CLOSEOUT_CONTRACT_NOT_FOUND');
 
   const reasons = await checkCloseoutEligibility(contractId, transaction);

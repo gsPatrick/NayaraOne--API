@@ -4,6 +4,7 @@ const { ContractAmendment, ContractVersion, ContractParty, AddendumSignature, Fi
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getContract, REQUIRED_ROLES_BY_TYPE } = require('./contracts.service');
+const { assertUuidFields } = require('./legalIds');
 
 /**
  * contractAmendments.service — M5-25: ADITIVO CONTRATUAL como entidade própria.
@@ -90,6 +91,7 @@ function validateVigencia(effectiveFrom, effectiveUntil) {
 
 async function createAmendment(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
+  assertUuidFields(payload, ['documentFileId', 'baseContractVersionId']);
   const { reason, changes, documentFileId, status } = payload;
 
   if (!reason || !String(reason).trim()) {
@@ -202,6 +204,7 @@ async function signAmendment(id, payload, actorUserId, transaction) {
   if (amendment.status === 'SIGNED') {
     throw AppError.conflict('Aditivo já está assinado.', 'LEGAL_CONTRACT_AMENDMENT_ALREADY_SIGNED');
   }
+  assertUuidFields(payload, ['personId', 'evidenceFileId', 'documentFileId']);
   const { personId } = payload || {};
   const evidenceFileId = (payload && (payload.evidenceFileId || payload.documentFileId)) || null;
   if (!personId) {

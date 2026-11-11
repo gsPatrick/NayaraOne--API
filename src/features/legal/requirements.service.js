@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getContract, isLeaseLikeContractType } = require('./contracts.service');
 const { publishCadernoEvent } = require('./legalEvents.service');
+const { assertUuidFields } = require('./legalIds');
 const { publishContractRequirementUpdated } = require('./legalBiEvents.service');
 
 /**
@@ -177,6 +178,7 @@ async function satisfyRequirement(requirementId, payload, actorUserId, transacti
   const requirement = await ContractRequirement.findByPk(requirementId, { transaction });
   if (!requirement) throw AppError.notFound('Requirement não encontrado.', 'LEGAL_REQUIREMENT_NOT_FOUND');
 
+  assertUuidFields(payload, ['satisfiedByFileId']);
   const { satisfiedByFileId, waivedReason } = payload || {};
   const beforeJson = requirement.toJSON();
 
@@ -228,6 +230,7 @@ async function satisfyRequirement(requirementId, payload, actorUserId, transacti
  * topo do arquivo: isto é intencional para não travar contratos de tipos sem template
  * configurado ainda.
  */
+const STAGE_LABELS = { LEGAL_REVIEW: 'revisão jurídica', LEGAL_APPROVAL: 'aprovação', SIGNING: 'assinatura', ACTIVATION: 'ativação', KEY_DELIVERY: 'entrega de chaves' };
 const STAGE_BY_TARGET = { LEGAL_REVIEW: 'LEGAL_REVIEW', APPROVED: 'LEGAL_APPROVAL', SIGNING: 'SIGNING', ACTIVE: 'ACTIVATION', KEY_DELIVERY: 'KEY_DELIVERY' };
 
 /**
@@ -262,10 +265,16 @@ async function assertRequirementsSatisfied(contractId, targetStageOrTransaction,
   const limit = stage ? STAGES.indexOf(stage) : STAGES.length;
   const pending = requirements.filter((r) => r.status === 'PENDING' && STAGES.indexOf(r.requiredStage || 'LEGAL_REVIEW') <= limit);
   if (pending.length > 0) {
+    // Mensagem para pessoas com o rótulo de cada exigência; os códigos ficam nos campos estruturados.
+    const nomes = pending.map((r) => String(r.description || '').replace(/\.$/, '')).join('; ');
     throw AppError.conflict(
-      `Não é possível avançar${stage ? ` para ${stage}` : ''}: há requirement(s) obrigatório(s) pendente(s): ${pending.map((r) => r.requirementCode).join(', ')}.`,
+      `Não é possível avançar${stage ? ` para a etapa de ${STAGE_LABELS[stage]}` : ''}: faltam documentos obrigatórios — ${nomes}.`,
       'LEGAL_REQUIREMENTS_PENDING',
-      { stage, pending: pending.map((r) => ({ id: r.id, requirementCode: r.requirementCode, description: r.description, requiredStage: r.requiredStage })) }
+      {
+        stage,
+        missingRequirementCodes: pending.map((r) => r.requirementCode),
+        pending: pending.map((r) => ({ id: r.id, requirementCode: r.requirementCode, description: r.description, requiredStage: r.requiredStage })),
+      }
     );
   }
   return true;

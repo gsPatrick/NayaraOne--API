@@ -164,9 +164,11 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
       tenant.userId,
       transaction
     );
+    // Fechamento M5 (3ª rodada): os dados do pedido e a via assinada do termo são conferidos antes da vistoria.
+    const pedido = { keysCount: 2, keysIdentification: 'Chave principal', termSignedByPersonId: person.personId, termEvidenceFileId: (await uploadTestFile(tenant, transaction)).id };
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, pedido, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_BLOCKED'); return true; },
       'sem vistoria de entrada concluída, a entrega de chaves precisa ser bloqueada mesmo com contrato SIGNED'
     );
@@ -179,13 +181,13 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
     await inspectionsService.completeInspection(inspection.id, tenant.userId, transaction);
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, pedido, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
       'vistoria CONCLUÍDA mas SEM assinatura de locador/locatário ainda tem que bloquear a liberação'
     );
     await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'assinatura-locador-m522' }, tenant.userId, transaction);
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, pedido, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'LEGAL_KEY_DELIVERY_INSPECTION_NOT_SIGNED'); return true; },
       'só o locador ter assinado ainda não basta — falta o locatário'
     );
@@ -273,9 +275,11 @@ test('REGRESSÃO LOC-2026-0002: releaseKeyDelivery usa a vistoria vinculada à e
       tenant.userId,
       transaction
     );
+    // Fechamento M5 (3ª rodada): os dados do pedido e a via assinada do termo são conferidos antes da vistoria.
+    const pedido = { keysCount: 2, keysIdentification: 'Chave principal', termSignedByPersonId: person.personId, termEvidenceFileId: (await uploadTestFile(tenant, transaction)).id };
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, pedido, tenant.userId, transaction),
       (err) => {
         assert.equal(
           err.code,

@@ -57,6 +57,18 @@ function fileMetadata(file, source, extra = {}) {
   return { fileId: file.id, originalName: file.fileName, createdAt: isoOf(file.get('created_at') || file.get('createdAt')), source, ...extra };
 }
 
+/**
+ * Pentest M5: objeto no lugar de texto/uuid ({"$gt":""}) virava 500. Tipos conferidos antes de qualquer consulta:
+ * type/description texto não vazio; referenceId/hash/source texto ou nulo; fileId UUID em texto; version inteiro.
+ */
+function assertManifestItemTypes(item) {
+  const bad = (field) => AppError.badRequest(`Item do manifesto: "${field}" com tipo inválido.`, 'LEGAL_EVIDENCE_PACKAGE_VALIDATION');
+  for (const field of ['type', 'description']) if (typeof item[field] !== 'string' || !item[field].trim() || item[field].length > 500) throw bad(field);
+  for (const field of ['referenceId', 'hash', 'source']) if (item[field] !== undefined && item[field] !== null && (typeof item[field] !== 'string' || item[field].length > 500)) throw bad(field);
+  if (item.fileId !== undefined && item.fileId !== null && (typeof item.fileId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.fileId))) throw bad('fileId');
+  if (item.version !== undefined && item.version !== null && !Number.isInteger(item.version)) throw bad('version');
+}
+
 /** Item que cita um arquivo (fileId): hash, nome e data vêm do people.files da empresa (RLS); arquivo inexistente é 400. */
 async function resolveFileItem(item, companyId, transaction) {
   if (!item.fileId) return item;
@@ -78,9 +90,10 @@ async function createEvidencePackage(legalCaseId, manifestItems, actorUserId, tr
     throw AppError.badRequest('"manifestItems" deve ser uma lista não vazia de itens de evidência.', 'LEGAL_EVIDENCE_PACKAGE_VALIDATION');
   }
   for (const item of manifestItems) {
-    if (!item || typeof item !== 'object' || !item.type || !item.description) {
+    if (!item || typeof item !== 'object' || Array.isArray(item) || !item.type || !item.description) {
       throw AppError.badRequest('Cada item do manifesto precisa de ao menos "type" e "description".', 'LEGAL_EVIDENCE_PACKAGE_VALIDATION');
     }
+    assertManifestItemTypes(item);
   }
 
   const manifest = [];
@@ -213,6 +226,7 @@ async function createEvidencePackageFromContractAttachments(legalCaseId, actorUs
       'LEGAL_EVIDENCE_PACKAGE_NO_CONTRACT'
     );
   }
+  if (!Array.isArray(extraManifestItems)) throw AppError.badRequest('"extraManifestItems" deve ser uma lista.', 'LEGAL_EVIDENCE_PACKAGE_VALIDATION');
   const autoManifest = await assembleManifestFromContractAttachments(legalCase.contractId, transaction, { legalCaseId: legalCase.id });
   const manifestItems = [...autoManifest, ...extraManifestItems];
   if (manifestItems.length === 0) {

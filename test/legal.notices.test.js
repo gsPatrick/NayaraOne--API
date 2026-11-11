@@ -94,14 +94,19 @@ test('registerDeliveryEvidence registra evidência de envio/recebimento e vira D
     await noticesService.approveNotice(notice.id, tenant.userId, transaction);
     await noticesService.sendNotice(notice.id, tenant.userId, transaction);
 
-    const delivered = await noticesService.registerDeliveryEvidence(
-      notice.id,
-      { deliveryEvidenceFileId: '22222222-2222-2222-2222-222222222222' },
-      tenant.userId,
-      transaction
+    // Pentest M5: a evidência precisa ser um arquivo DESTA empresa (id inventado ou de outra empresa é recusado).
+    await assert.rejects(
+      () => noticesService.registerDeliveryEvidence(notice.id, { deliveryEvidenceFileId: '22222222-2222-2222-2222-222222222222' }, tenant.userId, transaction),
+      (err) => err.code === 'LEGAL_NOTICE_FILE_NOT_FOUND'
     );
+    const { File } = require('../src/models');
+    const evidence = await File.create(
+      { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `test/ar-${Date.now()}.pdf`, fileName: 'ar.pdf', mimeType: 'application/pdf', checksumSha256: 'a'.repeat(64), uploadedByUserId: tenant.userId },
+      { transaction }
+    );
+    const delivered = await noticesService.registerDeliveryEvidence(notice.id, { deliveryEvidenceFileId: evidence.id }, tenant.userId, transaction);
     assert.equal(delivered.status, 'DELIVERED');
-    assert.equal(delivered.deliveryEvidenceFileId, '22222222-2222-2222-2222-222222222222');
+    assert.equal(delivered.deliveryEvidenceFileId, evidence.id);
     assert.ok(delivered.deliveredAt);
   });
 });

@@ -268,6 +268,8 @@ test('F01: mudar a condição cria nova versão; a versão anterior e o document
       { groupId: tenant.groupId, companyId: tenant.companyId, storageKey: `homo-qa/f01/${suffix}.pdf`, fileName: `contrato-${suffix}.pdf`, mimeType: 'application/pdf', uploadedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction }
     );
+    // Matriz M5 (§6/§19): só a versão PUBLICADA do modelo gera contrato — publica antes (alçada jurídica).
+    await contractTemplatesService.publishTemplate(template.id, tenant.userId, transaction);
     const emitted = await contractVersionsService.createContractVersion(
       contract.id,
       { documentFileId: file.id, templateId: template.id },

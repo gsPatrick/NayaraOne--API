@@ -196,6 +196,8 @@ test('G2: publicar nova versão de cláusula NÃO altera templates/versões de c
     await contractTemplatesService.addClauseToTemplate(template.id, { contractClauseId: v1.id }, tenant.userId, transaction);
 
     // Documento gerado ANTES da nova versão — pelo caminho real (o servidor monta o texto).
+    // Matriz M5 (§6/§19): só a versão PUBLICADA do modelo gera contrato — publica antes (alçada jurídica).
+    await contractTemplatesService.publishTemplate(template.id, tenant.userId, transaction);
     const { contract } = await createLeaseWithParties(transaction);
     const docFile = await createFakeDocumentFile(transaction);
     const version = await contractVersionsService.createContractVersion(

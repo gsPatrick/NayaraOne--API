@@ -15,6 +15,7 @@ const { buildManualEvidence, supersedeElectronicRequest } = require('./signature
 const { queryEnvelopeStatus } = require('./signature/signature.status');
 const { recordSimulatedEvidence } = require('./signature/signature.simulated');
 const { encryptFileBuffer } = require('../../utils/fileCrypto');
+const { assertUuidFields, assertUuidList } = require('./legalIds');
 
 /**
  * resolveSignatureAdapter — resolve o adapter de assinatura em runtime, por tenant, a partir
@@ -49,6 +50,7 @@ async function initiateSignature(contractVersionId, signerPersonIds, actorUserId
   if (!Array.isArray(signerPersonIds) || signerPersonIds.length === 0) {
     throw AppError.badRequest('"signerPersonIds" deve ser uma lista não vazia de person ids.', 'LEGAL_SIGNATURE_VALIDATION');
   }
+  assertUuidList(signerPersonIds, 'signerPersonIds');
   const contractVersion = await getContractVersion(contractVersionId, transaction);
 
   // ADV (M5-32): mandar um contrato CANCELADO para assinatura era possível — o service só
@@ -376,6 +378,7 @@ async function handleEnvelopeClosedWebhook(providerEnvelopeId, tenant, transacti
  * O banco também recusa MANUAL sem evidência/coletor (CHECK signatures_manual_evidence_chk).
  */
 async function recordManualSignature(contractVersionId, payload, actorUserId, transaction) {
+  assertUuidFields(payload, ['personId', 'evidenceFileId']);
   const { personId, evidenceFileId, signedAt } = payload || {};
   if (!personId || !evidenceFileId) {
     throw AppError.badRequest('Assinatura manual exige "personId" e "evidenceFileId" (arquivo da via assinada).', 'LEGAL_MANUAL_SIGNATURE_EVIDENCE_REQUIRED');

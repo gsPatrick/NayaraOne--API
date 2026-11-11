@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { KeyDelivery, Inspection, InspectionSignature, Guarantee, ContractParty, Person, Property, PropertyAddress } = require('../../models');
 const { assertPhotosAreRealImages } = require('./keyDeliveryPhotos');
 const { assertKeyDeliveryRequirements, resolveTermEvidence } = require('./keyDeliveryGates');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishKeyDeliveryReleased, publishKeysDelivered } = require('./legalEvents.service');
@@ -214,6 +215,11 @@ async function createKeyDelivery(payload, actorUserId, transaction) {
   if (termType !== undefined && termType !== null && !TERM_TYPES.includes(termType)) {
     throw AppError.badRequest(`"termType" deve ser um de: ${TERM_TYPES.join(', ')}.`, 'LEGAL_KEY_DELIVERY_VALIDATION');
   }
+  // Fechamento M5 (pentest): ids com tipo errado (ex.: objeto) e texto longo viram 400, nunca 500.
+  assertUuid(contractId, 'contractId', 'LEGAL_KEY_DELIVERY_VALIDATION');
+  assertUuid(deliveredToPersonId, 'deliveredToPersonId', 'LEGAL_KEY_DELIVERY_VALIDATION');
+  assertUuid(inspectionId, 'inspectionId', 'LEGAL_KEY_DELIVERY_VALIDATION', { optional: true });
+  assertText(notes, 'notes', 2000, 'LEGAL_KEY_DELIVERY_VALIDATION');
 
   // ADV (M5-32): o contrato NUNCA era carregado na criação — quem chamasse o service com o
   // UUID de um contrato de outra empresa e o próprio group/company no payload conseguia criar
@@ -223,6 +229,9 @@ async function createKeyDelivery(payload, actorUserId, transaction) {
   // um payload forjado não consiga plantar a linha no tenant errado.
   const contract = await getContract(contractId, transaction);
   await assertContractParty(contract.id, deliveredToPersonId, transaction, RECIPIENT_NOT_PARTY);
+  if (inspectionId && !(await Inspection.findOne({ where: { id: inspectionId, contractId: contract.id }, attributes: ['id'], transaction }))) {
+    throw AppError.badRequest('A vistoria informada não é deste contrato.', 'LEGAL_KEY_DELIVERY_INSPECTION_OTHER_CONTRACT');
+  }
 
   const keyDelivery = await KeyDelivery.create(
     {
@@ -370,6 +379,49 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
     );
   }
 
+  // Fechamento M5 (3ª rodada): os dados do pedido e a via assinada do termo são conferidos ANTES da vistoria, para a
+  // pessoa saber de uma vez o que falta no próprio pedido; a vistoria e o checklist vêm depois.
+  // Caderno Anexo I "10. Entrega de chaves": "Registrar quantidade/identificação de
+  // chaves/controles", "Fotos obrigatórias quando política exigir", "Assinatura do termo de
+  // entrega." Fail closed: exige quantidade E assinatura do termo (pessoa que coletou/assinou)
+  // sempre — fotos só quando `photosRequired` (política) estiver marcada.
+  const body = payload || {};
+  const forbidden = CLIENT_FORBIDDEN_FIELDS.filter((f) => body[f] !== undefined);
+  if (forbidden.length > 0) {
+    throw AppError.badRequest(
+      `Política de fotos e termo de entrega são definidos pelo servidor — não envie: ${forbidden.join(', ')}.`,
+      'LEGAL_KEY_DELIVERY_SERVER_POLICY'
+    );
+  }
+  const { keysCount, keysIdentification, photosFileIds, termSignedByPersonId, termEvidenceFileId } = body;
+  const policy = resolveKeyDeliveryPhotoPolicy(contract, keyDelivery);
+  const photosRequired = policy.photosRequired;
+  assertUuid(termSignedByPersonId, 'termSignedByPersonId', 'LEGAL_KEY_DELIVERY_VALIDATION', { optional: true });
+  assertText(keysIdentification, 'keysIdentification', 500, 'LEGAL_KEY_DELIVERY_VALIDATION');
+  if (keysCount === undefined || keysCount === null || typeof keysCount === 'object' || !Number.isInteger(Number(keysCount)) || Number(keysCount) <= 0) {
+    throw AppError.badRequest(
+      '"keysCount" (quantidade de chaves/controles entregues) é obrigatório e deve ser maior que zero.',
+      'LEGAL_KEY_DELIVERY_VALIDATION'
+    );
+  }
+  if (!termSignedByPersonId) {
+    throw AppError.badRequest(
+      '"termSignedByPersonId" é obrigatório — a liberação de chaves exige assinatura do termo de entrega.',
+      'LEGAL_KEY_DELIVERY_VALIDATION'
+    );
+  }
+  if (photosRequired && (!Array.isArray(photosFileIds) || photosFileIds.length === 0)) {
+    throw AppError.conflict(
+      'Não é possível liberar as chaves: a política exige fotos obrigatórias e nenhuma foi informada ("photosFileIds").',
+      'LEGAL_KEY_DELIVERY_PHOTOS_REQUIRED'
+    );
+  }
+  await assertPhotosAreRealImages(photosFileIds, contract, transaction);
+
+  // Recebedor (entregas antigas, criadas antes da regra F6) e signatário precisam ser partes.
+  await assertContractParty(contract.id, keyDelivery.deliveredToPersonId, transaction, RECIPIENT_NOT_PARTY);
+  await assertContractParty(contract.id, termSignedByPersonId, transaction, SIGNER_NOT_PARTY);
+  const termEvidence = await resolveTermEvidence(termEvidenceFileId, contract, transaction);
   // FIX (homologação, LOC-2026-0002): quando um contrato tem MAIS DE UMA vistoria de CHECK_IN
   // concluída (ex.: uma antiga já assinada, e uma nova ainda sem assinatura porque a antiga foi
   // refeita), `findOne` sem ORDER escolhia qualquer uma delas — na prática, muitas vezes a mais
@@ -443,45 +495,6 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
   // etapa KEY_DELIVERY reconferido depois de contrato, garantia e vistoria (que têm mensagem própria).
   await assertKeyDeliveryRequirements(contract.id, transaction);
 
-  // Caderno Anexo I "10. Entrega de chaves": "Registrar quantidade/identificação de
-  // chaves/controles", "Fotos obrigatórias quando política exigir", "Assinatura do termo de
-  // entrega." Fail closed: exige quantidade E assinatura do termo (pessoa que coletou/assinou)
-  // sempre — fotos só quando `photosRequired` (política) estiver marcada.
-  const body = payload || {};
-  const forbidden = CLIENT_FORBIDDEN_FIELDS.filter((f) => body[f] !== undefined);
-  if (forbidden.length > 0) {
-    throw AppError.badRequest(
-      `Política de fotos e termo de entrega são definidos pelo servidor — não envie: ${forbidden.join(', ')}.`,
-      'LEGAL_KEY_DELIVERY_SERVER_POLICY'
-    );
-  }
-  const { keysCount, keysIdentification, photosFileIds, termSignedByPersonId, termEvidenceFileId } = body;
-  const policy = resolveKeyDeliveryPhotoPolicy(contract, keyDelivery);
-  const photosRequired = policy.photosRequired;
-  if (keysCount === undefined || keysCount === null || Number(keysCount) <= 0) {
-    throw AppError.badRequest(
-      '"keysCount" (quantidade de chaves/controles entregues) é obrigatório e deve ser maior que zero.',
-      'LEGAL_KEY_DELIVERY_VALIDATION'
-    );
-  }
-  if (!termSignedByPersonId) {
-    throw AppError.badRequest(
-      '"termSignedByPersonId" é obrigatório — a liberação de chaves exige assinatura do termo de entrega.',
-      'LEGAL_KEY_DELIVERY_VALIDATION'
-    );
-  }
-  if (photosRequired && (!Array.isArray(photosFileIds) || photosFileIds.length === 0)) {
-    throw AppError.conflict(
-      'Não é possível liberar as chaves: a política exige fotos obrigatórias e nenhuma foi informada ("photosFileIds").',
-      'LEGAL_KEY_DELIVERY_PHOTOS_REQUIRED'
-    );
-  }
-  await assertPhotosAreRealImages(photosFileIds, contract, transaction);
-
-  // Recebedor (entregas antigas, criadas antes da regra F6) e signatário precisam ser partes.
-  await assertContractParty(contract.id, keyDelivery.deliveredToPersonId, transaction, RECIPIENT_NOT_PARTY);
-  await assertContractParty(contract.id, termSignedByPersonId, transaction, SIGNER_NOT_PARTY);
-  const termEvidence = await resolveTermEvidence(termEvidenceFileId, contract, transaction);
   const signedAt = new Date();
   const ctx = await gatherTermV2Context({ contract, keyDelivery, termSignedByPersonId, checkIn }, transaction);
   const termText = buildKeyDeliveryTermV2({

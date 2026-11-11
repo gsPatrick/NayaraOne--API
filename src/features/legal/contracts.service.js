@@ -7,6 +7,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishContractStatusChanged, publishContractActivated, publishContractTerminated, publishCadernoEvent } = require('./legalEvents.service');
 const { assertContractClosureAllowed, CLOSURE_TARGET_STATUSES } = require('./contractClosureGate');
+const { assertUuidFields } = require('./legalIds');
 
 // M6-104: CONSTRUCTION adicionado (dependência cruzada com o Marco 6/Obras) — contrato de
 // empreitada, precisa se vincular a uma obra em construction.projects (ver validação em
@@ -337,6 +338,7 @@ async function assertActivationGate(contract, transaction) {
 async function createContract(payload, actorUserId, transaction) {
   const { groupId, companyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt, constructionProjectId, parentContractId } = payload;
   let { propertyId } = payload;
+  assertUuidFields(payload, ['propertyId', 'opportunityId', 'constructionProjectId', 'parentContractId']);
   if (!groupId || !companyId || !contractType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "contractType" são obrigatórios.', 'LEGAL_CONTRACT_VALIDATION');
   }
@@ -661,6 +663,7 @@ async function closeContract(contractId, reason, actorUserId, transaction) {
 async function addContractParty(contractId, payload, actorUserId, transaction) {
   const contract = await getContract(contractId, transaction);
   const { personId, partyRole, representedByPersonId } = payload;
+  assertUuidFields(payload, ['personId', 'representedByPersonId']);
   const VALID_ROLES = ['LANDLORD', 'TENANT', 'GUARANTOR', 'BUYER', 'SELLER'];
   if (!personId || !partyRole) {
     throw AppError.badRequest('Os campos "personId" e "partyRole" são obrigatórios.', 'LEGAL_CONTRACT_PARTY_VALIDATION');

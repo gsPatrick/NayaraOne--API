@@ -13,7 +13,7 @@ let pular = null;
 before(async () => { pular = await h.pronto(); });
 after(h.encerrar);
 
-test('§6/JUR-002: modelo publicado não é editado — nova versão é criada; a versão do contrato guarda template_version_id; responsável jurídico no modelo e na cláusula', async (t) => {
+test('§6/JUR-002: só modelo PUBLICADO gera contrato, publicado não é editado — nova versão é criada; a versão do contrato guarda template_version_id; responsável jurídico no modelo e na cláusula', async (t) => {
   if (pular) return t.skip(pular);
   const code = `MT-${h.sfx()}`;
   const cl = await h.http('A:maker', 'POST', '/legal/clauses', { code, title: 'Multa', bodyText: 'Multa fictícia.', category: 'PENALTY' });
@@ -25,10 +25,16 @@ test('§6/JUR-002: modelo publicado não é editado — nova versão é criada; 
   await h.http('A:maker', 'POST', `/legal/contract-templates/${tpl.data.id}/clauses`, { contractClauseId: cl.data.id });
   const ct = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'LEASE_RESIDENTIAL', totalValue: 1000 });
   const f = await h.arquivo('A:gestor');
+  const versoes = async () => (await h.http('A:leitura', 'GET', `/legal/contract-templates/${tpl.data.id}/versions`)).data.map((x) => [x.versionNumber, x.status]);
+  const rascunho = await h.http('A:gestor', 'POST', `/contracts/${ct.data.id}/versions`, { templateId: tpl.data.id, documentFileId: f });
+  assert.equal(rascunho.status, 409, 'modelo só em rascunho não gera contrato');
+  assert.equal(rascunho.code, 'LEGAL_TEMPLATE_NOT_PUBLISHED');
+  assert.deepEqual(await versoes(), [[1, 'DRAFT']], 'gerar não publica o modelo');
+  assert.equal((await h.http('A:maker', 'POST', `/legal/contract-templates/${tpl.data.id}/publish`, {})).status, 403, 'publicar exige legal:approve');
+  assert.equal((await h.http('A:checker', 'POST', `/legal/contract-templates/${tpl.data.id}/publish`, {})).status, 200);
   const v = await h.http('A:gestor', 'POST', `/contracts/${ct.data.id}/versions`, { templateId: tpl.data.id, documentFileId: f });
   assert.equal(v.status, 201, JSON.stringify(v.body));
-  const versoes = async () => (await h.http('A:leitura', 'GET', `/legal/contract-templates/${tpl.data.id}/versions`)).data.map((x) => [x.versionNumber, x.status]);
-  assert.deepEqual(await versoes(), [[1, 'PUBLISHED']], 'a versão usada no contrato ficou congelada');
+  assert.deepEqual(await versoes(), [[1, 'PUBLISHED']]);
   const [cv] = await h.sql('A:gestor', 'SELECT template_version_id FROM legal.contract_versions WHERE id = :id', { id: v.data.id });
   const [tv1] = await h.sql('A:gestor', 'SELECT id FROM legal.template_versions WHERE template_id = :t AND version_number = 1', { t: tpl.data.id });
   assert.equal(cv.template_version_id, tv1.id);
@@ -40,6 +46,18 @@ test('§6/JUR-002: modelo publicado não é editado — nova versão é criada; 
   const cl2 = await h.http('A:maker', 'POST', '/legal/clauses', { code: `${code}-B`, title: 'Foro', bodyText: 'Foro fictício.', category: 'GENERAL' });
   assert.equal((await h.http('A:maker', 'POST', `/legal/contract-templates/${tpl.data.id}/clauses`, { contractClauseId: cl2.data.id })).status, 201);
   assert.deepEqual(await versoes(), [[1, 'PUBLISHED'], [2, 'DRAFT']], 'mexer no modelo publicado cria a versão 2');
+  const ct2 = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'LEASE_RESIDENTIAL', totalValue: 1000 });
+  const v2c = await h.http('A:gestor', 'POST', `/contracts/${ct2.data.id}/versions`, { templateId: tpl.data.id, documentFileId: await h.arquivo('A:gestor') });
+  assert.equal(v2c.status, 201);
+  const [usa] = await h.sql('A:gestor', 'SELECT template_version_id FROM legal.contract_versions WHERE id = :id', { id: v2c.data.id });
+  assert.equal(usa.template_version_id, tv1.id, 'com rascunho em edição, a geração usa a versão publicada, nunca o rascunho');
+  const det = await h.http('A:leitura', 'GET', `/legal/contract-templates/${tpl.data.id}`);
+  assert.deepEqual(det.data.versions.map((x) => [x.versionNumber, x.status, x.clauses.length]), [[1, 'PUBLISHED', 1], [2, 'DRAFT', 2]], 'o modelo vem com versões e cláusulas');
+  assert.equal(det.data.legalResponsible.id, h.tenantOf('A:maker').userId);
+  assert.equal(det.data.publishedVersion.versionNumber, 1);
+  const lista = await h.http('A:leitura', 'GET', `/legal/clauses?code=${encodeURIComponent(code)}`);
+  assert.equal(lista.data[0].legalResponsible.id, h.tenantOf('A:maker').userId, 'a lista de cláusulas traz o responsável jurídico');
+  assert.ok(lista.data[0].legalResponsible.name);
   const [n1] = await h.sql('A:gestor', 'SELECT count(*)::int AS n FROM legal.contract_template_clauses WHERE template_version_id = :v', { v: tv1.id });
   assert.equal(n1.n, 1, 'a versão 1 continua com a cláusula que tinha');
   assert.equal((await h.http('A:maker', 'POST', `/legal/contract-templates/${tpl.data.id}/publish`, {})).status, 403, 'publicar exige legal:approve');
@@ -115,9 +133,11 @@ test('§13: aditivo referencia contrato e versão base, registra motivo, vigênc
 
 test('Guia §14: POST /webhooks/signature/:provider — Clicksign pelo webhook público validado; fornecedor com canal vai à rota única; desconhecido 404', async (t) => {
   if (pular) return t.skip(pular);
-  const clicksign = await h.http(null, 'POST', '/webhooks/signature/clicksign', { event: { name: 'sign', data: { signer: { key: 'chave-desconhecida' } } } });
-  assert.equal(clicksign.status, 200);
-  assert.deepEqual([clicksign.data.acknowledged, clicksign.data.processed, clicksign.data.reason], [true, false, 'unknown_routing'], 'mesmo handler de /legal/webhooks/clicksign: sem roteamento, reconhece sem efeito');
+  const desconhecido = await h.http(null, 'POST', '/webhooks/signature/clicksign', { event: { name: 'sign', data: { signer: { key: 'chave-desconhecida' } } } });
+  const [sig] = await h.sql('A:gestor', 'SELECT external_signature_id FROM legal.signatures WHERE external_signature_id IS NOT NULL LIMIT 1');
+  const existente = await h.http(null, 'POST', '/webhooks/signature/clicksign', { event: { name: 'sign', data: { signer: { key: sig ? sig.external_signature_id : 'x' } } } });
+  assert.deepEqual([desconhecido.status, desconhecido.code], [401, 'LEGAL_WEBHOOK_HMAC_INVALID'], 'mesmo handler de /legal/webhooks/clicksign: sem assinatura válida, 401');
+  assert.deepEqual([existente.status, existente.code, existente.body.error.message], [401, 'LEGAL_WEBHOOK_HMAC_INVALID', desconhecido.body.error.message], 'sem oráculo: signatário existente e inexistente recebem a mesma resposta');
   const canalErrado = await h.http(null, 'POST', '/webhooks/signature/sandbox?channel=canal-inexistente', { id: 'x' });
   assert.equal(canalErrado.code, 'INTEGRATION_WEBHOOK_UNKNOWN_CHANNEL', 'com canal, a rota única do framework valida o canal');
   assert.equal((await h.http(null, 'POST', '/webhooks/signature/zapsign', { id: 'x' })).code, 'LEGAL_SIGNATURE_WEBHOOK_CHANNEL_REQUIRED');

@@ -32,6 +32,12 @@ const GUARANTEE_TYPES_REQUIRING_VALIDITY = ['GUARANTOR', 'INSURANCE', 'CAPITALIZ
 const GUARANTEE_STATUSES = ['PENDING', 'ACTIVE', 'RELEASED', 'CANCELLED'];
 
 function assertValidDateRange(startsAt, endsAt) {
+  // Fechamento M5 (pentest): data com tipo errado (objeto, texto inválido) vira 400, não erro do banco.
+  for (const [f, v] of [['startsAt', startsAt], ['endsAt', endsAt]]) {
+    if (v !== undefined && v !== null && v !== '' && ((typeof v !== 'string' && !(v instanceof Date)) || Number.isNaN(new Date(v).getTime()))) {
+      throw AppError.badRequest(`"${f}" deve ser uma data válida.`, 'LEGAL_GUARANTEE_VALIDATION');
+    }
+  }
   if (startsAt && endsAt && new Date(endsAt).getTime() < new Date(startsAt).getTime()) {
     throw AppError.badRequest('"endsAt" não pode ser anterior a "startsAt".', 'LEGAL_GUARANTEE_VALIDATION');
   }
@@ -50,6 +56,7 @@ async function createGuarantee(contractId, payload, actorUserId, transaction) {
   const { guarantorPersonId, value, status, startsAt, endsAt } = payload;
   const guaranteeType = normalizeGuaranteeType(payload.guaranteeType);
 
+  if (guaranteeType && typeof payload.guaranteeType !== 'string') throw AppError.badRequest('"guaranteeType" deve ser um texto.', 'LEGAL_GUARANTEE_VALIDATION');
   if (!guaranteeType) {
     throw AppError.badRequest('O campo "guaranteeType" é obrigatório.', 'LEGAL_GUARANTEE_VALIDATION');
   }

@@ -114,6 +114,11 @@ async function resolveTypeData(guaranteeType, payload, contract, transaction, cu
     const main = take('guarantorPersonId') ? p.guarantorPersonId : current && current.guarantorPersonId;
     if (guaranteeType === 'GUARANTOR') await assertGuarantorPeople([main, ...extra].filter(Boolean), contract, transaction);
     if (take('additionalGuarantorPersonIds')) fields.additionalGuarantorPersonIds = extra;
+    // 3ª rodada: a troca da pessoa fiadora pelo PATCH é gravada (antes só era conferida).
+    if (take('guarantorPersonId')) {
+      if (guaranteeType === 'GUARANTOR' && !p.guarantorPersonId) throw bad('"guarantorPersonId" é obrigatório quando "guaranteeType" é "GUARANTOR".');
+      fields.guarantorPersonId = p.guarantorPersonId || null;
+    }
   }
   if (take('documentFileIds')) {
     if (!Array.isArray(p.documentFileIds) || p.documentFileIds.length === 0) throw bad('"documentFileIds" deve listar os documentos do fiador.');

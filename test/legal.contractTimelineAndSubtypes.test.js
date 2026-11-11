@@ -150,7 +150,8 @@ test('AUD-017: getContractTimeline reúne aditivo, notificação e inadimplênci
     const amendmentItem = timeline.items.find((i) => i.referenceId === amendment.id);
     assert.ok(amendmentItem.summary.includes('Reajuste combinado'));
     const noticeItem = timeline.items.find((i) => i.referenceId === notice.id);
-    assert.ok(noticeItem.summary.includes('EMAIL'));
+    assert.ok(noticeItem.summary.includes('e-mail'), 'canal em português no resumo');
+    assert.equal(noticeItem.details.channel, 'EMAIL', 'o código fica no campo estruturado');
     const delinquencyItem = timeline.items.find((i) => i.referenceId === collectionCase.id);
     assert.ok(delinquencyItem.summary.includes('1600'));
   });

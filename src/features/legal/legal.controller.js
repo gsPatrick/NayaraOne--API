@@ -174,9 +174,15 @@ const listContractVersions = catchAsync(async (req, res) => {
 // decisão documentada em contractPdf.service.js). Chamar duas vezes com o mesmo `content`
 // produz o mesmo PDF/hash, então não há razão pra exigir POST aqui.
 const generateContractVersionPdf = catchAsync(async (req, res) => {
-  const { buffer, fileName } = await req.withTenantTransaction((t) =>
-    contractPdfService.generateContractPdf(req.params.versionId, req.auth.userId, t)
-  );
+  const { buffer, fileName } = await req.withTenantTransaction(async (t) => {
+    // Pentest M5 (achado 7): a versão precisa pertencer ao contrato do caminho.
+    const { ContractVersion } = require('../../models');
+    const version = /^[0-9a-f-]{36}$/i.test(String(req.params.id)) && /^[0-9a-f-]{36}$/i.test(String(req.params.versionId))
+      ? await ContractVersion.findOne({ where: { id: req.params.versionId, contractId: req.params.id }, attributes: ['id'], transaction: t })
+      : null;
+    if (!version) throw AppError.notFound('Versão de contrato não encontrada neste contrato.', 'LEGAL_CONTRACT_VERSION_NOT_FOUND');
+    return contractPdfService.generateContractPdf(req.params.versionId, req.auth.userId, t);
+  });
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
   res.setHeader('Content-Length', buffer.length);
@@ -195,7 +201,8 @@ const listContractTemplates = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const getContractTemplate = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => contractTemplatesService.getTemplate(req.params.id, t));
+  // Matriz M5: o modelo vem com responsável jurídico, versões e cláusulas de cada versão.
+  const item = await req.withTenantTransaction((t) => require('./contractTemplateDetail').getTemplateDetail(req.params.id, t));
   return success(res, { data: item });
 });
 // --- Clause library (JUR-002) ---
@@ -215,11 +222,12 @@ const createClauseVersion = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: item });
 });
 const listClauses = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) => contractClausesService.listClauses(t, req.query));
+  // Matriz M5 (JUR-002): cada cláusula com o responsável jurídico da biblioteca.
+  const items = await req.withTenantTransaction(async (t) => require('./contractTemplateDetail').withLegalResponsible(await contractClausesService.listClauses(t, req.query), t));
   return success(res, { data: items });
 });
 const listClauseVersions = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) => contractClausesService.listClauseVersions(req.params.code, t));
+  const items = await req.withTenantTransaction(async (t) => require('./contractTemplateDetail').withLegalResponsible(await contractClausesService.listClauseVersions(req.params.code, t), t));
   return success(res, { data: items });
 });
 const deactivateClause = catchAsync(async (req, res) => {
@@ -446,9 +454,9 @@ const clicksignPublicWebhook = catchAsync(async (req, res) => {
   }
 
   if (!routing) {
-    // Assinatura/envelope desconhecido (de outro ambiente/conta, ou nunca solicitado por
-    // aqui) — 200 para o Clicksign não ficar reenviando, mas não processa nada.
-    return success(res, { data: { acknowledged: true, processed: false, reason: 'unknown_routing' } });
+    // Pentest M5 (oráculo): sem roteamento não há segredo para conferir a assinatura — a resposta é a MESMA da
+    // assinatura inválida (401), para não revelar se o signatário/envelope existe (mesmo padrão do financiamento).
+    throw AppError.unauthorized('Assinatura do webhook (Content-Hmac) ausente ou inválida.', 'LEGAL_WEBHOOK_HMAC_INVALID');
   }
 
   const tenant = { groupId: routing.groupId, companyId: routing.companyId };

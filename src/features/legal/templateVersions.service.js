@@ -10,9 +10,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
  *  - Vínculos de cláusula pertencem a uma versão. Só a versão DRAFT recebe vínculo (gatilho do banco).
  *  - Mexer num modelo cuja versão vigente está PUBLISHED cria a próxima versão DRAFT com cópia dos vínculos.
  *  - Publicar (rota dedicada, legal:approve) leva DRAFT -> PUBLISHED e a anterior -> SUPERSEDED.
- *  - Gerar versão de contrato a partir de uma DRAFT a congela (publica) na hora: o que entrou num contrato
- *    nunca mais muda e a versão do contrato guarda o template_version_id dela. (O livro não diz que só modelo
- *    publicado gera contrato; o comportamento atual — qualquer modelo gera — foi mantido com essa garantia.)
+ *  - Só a versão PUBLICADA gera contrato (getPublishedVersion; sem ela, 409 LEGAL_TEMPLATE_NOT_PUBLISHED) e a
+ *    versão do contrato guarda o template_version_id dela. O rascunho só serve à pré-visualização.
  */
 const latestVersion = (templateId, transaction) => TemplateVersion.findOne({ where: { templateId }, order: [['version_number', 'DESC']], transaction });
 
@@ -79,10 +78,13 @@ async function publishTemplate(template, actorUserId, transaction) {
   return publishVersion(template, draft, actorUserId, transaction);
 }
 
-/** Congela a versão DRAFT usada na geração de um contrato (publicação na primeira geração). */
-async function freezeOnUse(template, version, actorUserId, transaction) {
-  if (version.status === 'DRAFT') return publishVersion(template, version, actorUserId, transaction);
-  return version;
+/** Versão PUBLICADA vigente do modelo — a única que gera contrato. */
+async function getPublishedVersion(templateId, transaction) {
+  const published = await TemplateVersion.findOne({ where: { templateId, status: 'PUBLISHED' }, order: [['version_number', 'DESC']], transaction });
+  if (!published) {
+    throw AppError.conflict('O modelo não tem versão publicada: publique a versão do modelo (POST /legal/contract-templates/:id/publish, alçada jurídica) antes de gerar contrato.', 'LEGAL_TEMPLATE_NOT_PUBLISHED');
+  }
+  return published;
 }
 
-module.exports = { createInitialVersion, getEditableVersion, getCurrentVersion, publishTemplate, freezeOnUse, latestVersion };
+module.exports = { createInitialVersion, getEditableVersion, getCurrentVersion, getPublishedVersion, publishTemplate, latestVersion };

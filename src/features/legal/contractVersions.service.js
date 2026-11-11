@@ -9,6 +9,7 @@ const { getContract } = require('./contracts.service');
 const { getSetting } = require('../settings/settings.service');
 const { renderTemplateForContract } = require('./contractTemplates.service');
 const { storeVersionBytes } = require('./contractVersionFile');
+const { assertUuidFields } = require('./legalIds');
 
 // Guia §4 assertEditableState: só se cria versão enquanto o contrato não foi assinado. Em APPROVED a versão nova
 // nasce DRAFT e exige nova aprovação; em SIGNING ela cancela o envelope e o contrato volta a APPROVED (Caderno §8).
@@ -105,6 +106,7 @@ function clauseIdsOf(list) {
  * — não há cláusula de biblioteca envolvida, e `clauseVersionIds` não pode ser informado.
  */
 async function createContractVersion(contractId, payload, actorUserId, transaction) {
+  assertUuidFields(payload, ['documentFileId', 'templateId']);
   const contract = await getContract(contractId, transaction);
   if (!EDITABLE_STATES.includes(contract.status)) {
     throw AppError.conflict(
@@ -184,7 +186,7 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
   let conditionContext = null;
   let excludedClauses = null;
   if (templateId) {
-    const rendered = await renderTemplateForContract(templateId, contract, transaction, variables, { freeze: true, actorUserId });
+    const rendered = await renderTemplateForContract(templateId, contract, transaction, variables, { published: true });
     if (hasValue(content) && serializeContent(content) !== rendered.content) {
       throw AppError.conflict(
         'O texto enviado não corresponde ao documento que o modelo gera para este contrato (cláusulas e condições aprovadas). Envie apenas "variables" e deixe o servidor montar o texto.',

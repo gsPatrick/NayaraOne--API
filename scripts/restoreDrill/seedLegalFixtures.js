@@ -227,6 +227,7 @@ async function seedTenantA(tenant, approverId) {
     const versionFile = await upload(t, 'drill-contrato-v1.pdf', 'application/pdf', pdfBytes('contrato-v1'), 'contracts');
     // Versão gerada pelo SERVIDOR a partir do modelo: o texto, as cláusulas incluídas/excluídas
     // e o contexto da condição são calculados no serviço (o cliente só manda variáveis).
+    await require('../../src/features/legal/contractTemplates.service').publishTemplate(template.id, tenant.userId, t); // só a versão publicada gera contrato
     const version = await contractVersionsService.createContractVersion(
       contract.id,
       { templateId: template.id, variables: {}, documentFileId: versionFile.id },

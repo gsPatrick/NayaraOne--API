@@ -8,6 +8,7 @@ const { markVersionApproved, assertApprovedCurrentVersion } = require('./contrac
 const { assertRequirementsSatisfied } = require('./requirements.service');
 const { publishCadernoEvent } = require('./legalEvents.service');
 const { initiateSignature } = require('./signatures.service');
+const { assertUuidList } = require('./legalIds');
 
 /**
  * Ações sobre uma versão do contrato pelas rotas literais do Guia §14 (Marco 5):
@@ -63,6 +64,7 @@ async function sendContractVersionForSignature(versionId, signerPersonIds, actor
   if (!Array.isArray(signerPersonIds) || signerPersonIds.length === 0) {
     throw AppError.badRequest('"signerPersonIds" deve ser uma lista não vazia de person ids.', 'LEGAL_SIGNATURE_VALIDATION');
   }
+  assertUuidList(signerPersonIds, 'signerPersonIds');
   const { version, contract } = await loadCurrentVersion(versionId, transaction);
   if (contract.status !== 'APPROVED') {
     throw AppError.conflict(

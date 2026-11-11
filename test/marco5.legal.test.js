@@ -193,6 +193,8 @@ test('M5-01: renderTemplate monta o texto na ordem certa e ignora cláusula desa
     await contractTemplatesService.addClauseToTemplate(template.id, { contractClauseId: clauseC.id, sortOrder: 3 }, tenant.userId, transaction);
 
     await contractClausesService.deactivateClause(clauseC.id, tenant.userId, transaction);
+    // Matriz M5 (§6/§19): só a versão PUBLICADA do modelo gera contrato.
+    await contractTemplatesService.publishTemplate(template.id, tenant.userId, transaction);
 
     const rendered = await contractTemplatesService.renderTemplate(template.id, transaction);
     const expected = [

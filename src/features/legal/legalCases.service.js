@@ -7,6 +7,8 @@ const { publishLegalCaseCreated } = require('./legalEvents.service');
 const { publishLegalCaseUpdated } = require('./legalBiEvents.service');
 const { assertCaseKeepsCriticalAccountability } = require('./legalDeadlineAccountability');
 const { reassignCaseDeadlineTasks } = require('./legalDeadlineTask');
+const { validateCaseInput } = require('./legalCaseInput');
+const { requireUuid } = require('./legalInput');
 
 const CASE_TYPES = ['LITIGATION', 'CONSULTATIVE', 'COLLECTION'];
 
@@ -69,28 +71,30 @@ function readCaseDetails(payload) {
 }
 
 async function createLegalCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, contractId, propertyId, responsibleUserId, escalationUserId, caseNumber, caseType, summary, phase } = payload;
+  const { groupId, companyId, caseType, phase } = payload;
   if (!groupId || !companyId || !caseType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "caseType" são obrigatórios.', 'LEGAL_CASE_VALIDATION');
   }
   if (!CASE_TYPES.includes(caseType)) {
     throw AppError.badRequest(`"caseType" deve ser um de: ${CASE_TYPES.join(', ')}.`, 'LEGAL_CASE_VALIDATION');
   }
+  // Pentest M5: responsável/escalonamento só com vínculo ativo NESTA empresa; contrato/imóvel da mesma empresa; tipos.
+  const refs = await validateCaseInput(payload, { groupId, companyId }, transaction);
   assertValidPhase(phase, payload.allowUnknownPhase);
 
   const legalCase = await LegalCase.create(
     {
       groupId,
       companyId,
-      contractId: contractId || null,
-      propertyId: propertyId || null,
-      responsibleUserId: responsibleUserId || null,
-      escalationUserId: escalationUserId || null,
-      caseNumber: caseNumber || null,
+      contractId: refs.contractId || null,
+      propertyId: refs.propertyId || null,
+      responsibleUserId: refs.responsibleUserId || null,
+      escalationUserId: refs.escalationUserId || null,
+      caseNumber: refs.caseNumber || null,
       caseType,
       status: 'OPEN',
       phase: phase || null,
-      summary: summary || null,
+      summary: refs.summary || null,
       ...readCaseDetails(payload),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -171,6 +175,9 @@ async function setLegalHold(id, payload, actorUserId, transaction) {
   if (typeof legalHold !== 'boolean') {
     throw AppError.badRequest('O campo "legalHold" (boolean) é obrigatório.', 'LEGAL_CASE_LEGAL_HOLD_VALIDATION');
   }
+  if (reason !== undefined && reason !== null && typeof reason !== 'string') {
+    throw AppError.badRequest('"reason" deve ser um texto.', 'LEGAL_CASE_LEGAL_HOLD_VALIDATION');
+  }
   if (legalHold && (!reason || !String(reason).trim())) {
     throw AppError.badRequest('Um motivo é obrigatório para ativar a retenção legal (legal hold).', 'LEGAL_CASE_LEGAL_HOLD_REASON_REQUIRED');
   }
@@ -206,7 +213,10 @@ async function setLegalHold(id, payload, actorUserId, transaction) {
 async function updateLegalCase(id, payload, actorUserId, transaction) {
   const legalCase = await getLegalCaseForUpdate(id, transaction);
   const beforeJson = legalCase.toJSON();
-  const { status, summary, responsibleUserId, escalationUserId, phase } = payload;
+  // Pentest M5: mesma validação da criação (vínculo ativo na empresa do processo, tipos, status de lista fechada).
+  const refs = await validateCaseInput(payload, legalCase, transaction);
+  const { status, summary, responsibleUserId, escalationUserId } = refs;
+  const { phase } = payload;
   // M5-26: mudança de FASE é uma alteração processual relevante — validada aqui e auditada
   // com antes/depois explícitos no `reason`, não só no diff genérico.
   assertValidPhase(phase, payload.allowUnknownPhase);
@@ -276,13 +286,14 @@ async function addLegalCaseParty(legalCaseId, payload, actorUserId, transaction)
   if (!personId) {
     throw AppError.badRequest('O campo "personId" é obrigatório.', 'LEGAL_CASE_PARTY_VALIDATION');
   }
+  requireUuid(personId, 'personId', 'LEGAL_CASE_PARTY_VALIDATION');
   if (!LEGAL_CASE_PARTY_ROLES.includes(partyRole)) {
     throw AppError.badRequest(
       `"partyRole" deve ser um de: ${LEGAL_CASE_PARTY_ROLES.join(', ')}.`,
       'LEGAL_CASE_PARTY_VALIDATION'
     );
   }
-  const person = await Person.findByPk(personId, { transaction });
+  const person = await Person.findOne({ where: { id: personId, companyId: legalCase.companyId }, transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'LEGAL_CASE_PARTY_PERSON_NOT_FOUND');
 
   const existing = await LegalCaseParty.findOne({
@@ -341,7 +352,8 @@ async function listLegalCaseParties(legalCaseId, transaction) {
  */
 async function linkCaseToTask(legalCaseId, taskId, actorUserId, transaction) {
   const legalCase = await getLegalCase(legalCaseId, transaction);
-  const task = await Task.findByPk(taskId, { transaction });
+  requireUuid(taskId, 'taskId', 'LEGAL_CASE_VALIDATION');
+  const task = await Task.findOne({ where: { id: taskId, companyId: legalCase.companyId }, transaction });
   if (!task) throw AppError.notFound('Tarefa não encontrada.', 'LEGAL_CASE_TASK_NOT_FOUND');
 
   const beforeJson = task.toJSON();

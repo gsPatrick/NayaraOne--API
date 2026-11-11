@@ -137,7 +137,15 @@ async function template(t, clauses, contractType = 'LEASE') {
   return tpl;
 }
 
-function generate(t, contractId, payload) {
+// Matriz M5 (§6/§19): só a versão PUBLICADA do modelo gera contrato. Este apoio publica o rascunho em edição
+// (ato de governança) antes de gerar, como o jurídico faria depois de alterar o modelo.
+async function generate(t, contractId, payload) {
+  if (payload && payload.templateId) {
+    const { TemplateVersion } = require('../src/models');
+    if (await TemplateVersion.findOne({ where: { templateId: payload.templateId, status: 'DRAFT' }, transaction: t })) {
+      await contractTemplatesService.publishTemplate(payload.templateId, tenant.userId, t);
+    }
+  }
   return contractVersionsService.createContractVersion(contractId, { requireDocument: false, ...payload }, tenant.userId, t);
 }
 
@@ -418,6 +426,7 @@ async function committedFixture() {
     const fianca = await clause(t, { title: 'DA FIANÇA', bodyText: 'Fiança HTTP', condition: FIANCA });
     const pending = await clause(t, { title: 'DA CAUÇÃO', bodyText: 'Caução HTTP', condition: { match: 'all', rules: [{ variable: 'guaranteeType', operator: 'eq', value: 'DEPOSIT' }] }, approve: false });
     const tpl = await template(t, [base, fianca]);
+    await contractTemplatesService.publishTemplate(tpl.id, tenant.userId, t); // só a versão publicada gera contrato
     const contract = await createLease(t);
     committed.clauseIds.push(base.id, fianca.id, pending.id);
     committed.templateIds.push(tpl.id);

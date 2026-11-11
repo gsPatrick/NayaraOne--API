@@ -2,10 +2,11 @@
 
 const crypto = require('crypto');
 const { QueryTypes } = require('sequelize');
-const { sequelize, Notice, File } = require('../../models');
+const { sequelize, Notice } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { normalizeOptionalText } = require('./legalText');
+const { requireUuid, optionalUuid, assertFileInCompany, assertPersonInCompany } = require('./legalInput');
 
 /**
  * Versões da notificação (Caderno M5 DoD "☐ Aditivos/notificações versionados"; §13 "Notificação possui canal,
@@ -41,6 +42,7 @@ async function insertVersion(notice, reason, actorUserId, transaction) {
 const recordInitialVersion = (notice, actorUserId, transaction) => insertVersion(notice, 'Versão inicial.', actorUserId, transaction);
 
 async function createNoticeVersion(noticeId, payload, actorUserId, transaction) {
+  requireUuid(noticeId, 'id', 'LEGAL_NOTICE_VALIDATION');
   const notice = await Notice.findByPk(noticeId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!notice) throw AppError.notFound('Notificação não encontrada.', 'LEGAL_NOTICE_NOT_FOUND');
   if (!EDITABLE.includes(notice.status)) {
@@ -49,16 +51,14 @@ async function createNoticeVersion(noticeId, payload, actorUserId, transaction) 
   const body = payload || {};
   const reason = normalizeOptionalText(body.reason, 'reason');
   if (!reason) throw AppError.badRequest('Informe o motivo da nova versão ("reason").', 'LEGAL_NOTICE_VALIDATION');
+  if (body.contentFileId !== undefined) optionalUuid(body.contentFileId, 'contentFileId', 'LEGAL_NOTICE_VALIDATION');
   const next = {
     content: body.content !== undefined ? normalizeOptionalText(body.content, 'content') : notice.content,
-    contentFileId: body.contentFileId !== undefined ? body.contentFileId || null : notice.contentFileId,
+    contentFileId: body.contentFileId !== undefined ? await assertFileInCompany(body.contentFileId, notice.companyId, 'contentFileId', 'LEGAL_NOTICE_FILE_NOT_FOUND', transaction) : notice.contentFileId,
     recipientDescription: body.recipientDescription !== undefined ? normalizeOptionalText(body.recipientDescription, 'recipientDescription') : notice.recipientDescription,
-    recipientPersonId: body.recipientPersonId !== undefined ? body.recipientPersonId || null : notice.recipientPersonId,
+    recipientPersonId: body.recipientPersonId !== undefined ? await assertPersonInCompany(body.recipientPersonId, notice.companyId, 'recipientPersonId', 'LEGAL_NOTICE_VALIDATION', transaction) : notice.recipientPersonId,
   };
   if (!next.content && !next.contentFileId) throw AppError.badRequest('Informe "content" (texto) e/ou "contentFileId" (arquivo).', 'LEGAL_NOTICE_VALIDATION');
-  if (next.contentFileId && !(await File.findOne({ where: { id: next.contentFileId, companyId: notice.companyId }, attributes: ['id'], transaction }))) {
-    throw AppError.badRequest('O arquivo do conteúdo não existe nesta empresa.', 'LEGAL_NOTICE_FILE_NOT_FOUND');
-  }
   if (contentSha256(next.content, next.contentFileId) === contentSha256(notice.content, notice.contentFileId)
     && next.recipientDescription === notice.recipientDescription && next.recipientPersonId === notice.recipientPersonId) {
     throw AppError.conflict('A nova versão é idêntica à atual.', 'LEGAL_NOTICE_VERSION_UNCHANGED');

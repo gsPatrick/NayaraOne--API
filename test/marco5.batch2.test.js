@@ -616,7 +616,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
       transaction
     );
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
+      async () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 2, keysIdentification: 'Chave principal', termSignedByPersonId: lessee.id, termEvidenceFileId: (await uploadTestFile(tenant, transaction)).id }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_BLOCKED');
         return true;

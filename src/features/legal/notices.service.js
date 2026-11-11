@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { recordInitialVersion } = require('./noticeVersions.service');
+const { optionalUuid, optionalString, assertFileInCompany, assertPersonInCompany } = require('./legalInput');
 
 /**
  * notices.service.js — auditoria externa (contrato bruto, Anexo I "4. Entidades/tabelas
@@ -36,6 +37,8 @@ async function assertOwner(contractId, legalCaseId, transaction) {
   if (contractId && legalCaseId) {
     throw AppError.badRequest('Informe apenas UM vínculo: "contractId" OU "legalCaseId", nunca os dois.', 'LEGAL_NOTICE_VALIDATION');
   }
+  optionalUuid(contractId, 'contractId', 'LEGAL_NOTICE_VALIDATION');
+  optionalUuid(legalCaseId, 'legalCaseId', 'LEGAL_NOTICE_VALIDATION');
   if (contractId) {
     const contract = await Contract.findByPk(contractId, { transaction });
     if (!contract) throw AppError.notFound('Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
@@ -67,6 +70,13 @@ async function createNotice(payload, actorUserId, transaction) {
   }
 
   const { groupId, companyId } = await assertOwner(contractId, legalCaseId, transaction);
+  // Pentest M5: arquivo e destinatário só da empresa da notificação (a FK do banco não enxerga RLS); textos só texto.
+  optionalUuid(contentFileId, 'contentFileId', 'LEGAL_NOTICE_VALIDATION');
+  const fileId = await assertFileInCompany(contentFileId, companyId, 'contentFileId', 'LEGAL_NOTICE_FILE_NOT_FOUND', transaction);
+  const recipientId = await assertPersonInCompany(recipientPersonId, companyId, 'recipientPersonId', 'LEGAL_NOTICE_VALIDATION', transaction);
+  const text = optionalString(content, 'content', 'LEGAL_NOTICE_VALIDATION', 50000);
+  const recipientText = optionalString(recipientDescription, 'recipientDescription', 'LEGAL_NOTICE_VALIDATION', 2000);
+  if (!text && !fileId) throw AppError.badRequest('Informe "content" (texto) e/ou "contentFileId" (arquivo).', 'LEGAL_NOTICE_VALIDATION');
 
   const notice = await Notice.create(
     {
@@ -75,10 +85,10 @@ async function createNotice(payload, actorUserId, transaction) {
       contractId: contractId || null,
       legalCaseId: legalCaseId || null,
       channel,
-      recipientPersonId: recipientPersonId || null,
-      recipientDescription: recipientDescription || null,
-      content: content || null,
-      contentFileId: contentFileId || null,
+      recipientPersonId: recipientId,
+      recipientDescription: recipientText,
+      content: text,
+      contentFileId: fileId,
       isLegallySensitive: Boolean(isLegallySensitive),
       draftedByAi: Boolean(draftedByAi),
       status: 'DRAFT',
@@ -265,6 +275,12 @@ async function registerDeliveryEvidence(id, payload, actorUserId, transaction) {
   const { deliveryEvidenceFileId, deliveredAt } = payload || {};
   if (!deliveryEvidenceFileId) {
     throw AppError.badRequest('"deliveryEvidenceFileId" é obrigatório.', 'LEGAL_NOTICE_VALIDATION');
+  }
+  // Pentest M5: a evidência é um arquivo DESTA empresa; data de entrega, se vier, precisa ser data válida.
+  optionalUuid(deliveryEvidenceFileId, 'deliveryEvidenceFileId', 'LEGAL_NOTICE_VALIDATION');
+  await assertFileInCompany(deliveryEvidenceFileId, notice.companyId, 'deliveryEvidenceFileId', 'LEGAL_NOTICE_FILE_NOT_FOUND', transaction);
+  if (deliveredAt !== undefined && deliveredAt !== null && (typeof deliveredAt !== 'string' || Number.isNaN(new Date(deliveredAt).getTime()))) {
+    throw AppError.badRequest('"deliveredAt" deve ser uma data válida.', 'LEGAL_NOTICE_VALIDATION');
   }
   const beforeJson = notice.toJSON();
   notice.deliveryEvidenceFileId = deliveryEvidenceFileId;

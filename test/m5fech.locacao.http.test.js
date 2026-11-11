@@ -151,3 +151,15 @@ test('fechamento M5 §9/HTTP: POST /legal/guarantees/:id/replace substitui a gar
   const again = await http('POST', `/legal/guarantees/${created.body.data.id}/replace`, { guaranteeType: 'CAPITALIZATION', value: 1, endsAt: '2030-01-01' });
   assert.equal(again.status, 409);
 });
+
+test('fechamento M5 3ª rodada/HTTP: GET /legal/guarantee-flows mostra a quem cadastra garantia (legal:create) os fluxos homologados de OTHER, sem settings:read', async () => {
+  const { upsertSetting } = require('../src/features/settings/settings.service');
+  await withTenantTransaction(tenant, (t) => upsertSetting('legal.guarantee_other_flows', JSON.stringify([{ code: 'CARTA_FIANCA', label: 'Carta de fiança bancária', requiredFields: ['banco'] }]), base(), tenant.userId, t));
+  const res = await http('GET', '/legal/guarantee-flows');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.data, [{ code: 'CARTA_FIANCA', label: 'Carta de fiança bancária', requiredFields: ['banco'] }]);
+  const leitor = signAccessToken({ sub: tenant.userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['qa'], permissions: ['legal:read'] });
+  const denied = await fetch(`${baseUrl()}/legal/guarantee-flows`, { headers: { Authorization: `Bearer ${leitor}` } });
+  assert.equal(denied.status, 403);
+  await withTenantTransaction(tenant, (t) => upsertSetting('legal.guarantee_other_flows', '[]', base(), tenant.userId, t));
+});
