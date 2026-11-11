@@ -59,8 +59,8 @@ module.exports = {
         if (!lib) [[lib]] = await q('INSERT INTO legal.clause_library (id, group_id, company_id, code, created_at, updated_at) VALUES (gen_random_uuid(), :g, :c, :code, now(), now()) RETURNING id', r);
         let [[clause]] = await q('SELECT id FROM legal.clause_versions WHERE company_id = :c AND code = :code AND is_active ORDER BY version_number DESC LIMIT 1', r);
         if (!clause) {
-          [[clause]] = await q(`INSERT INTO legal.clause_versions (id, group_id, company_id, clause_library_id, code, title, body_text, category, version_number, is_active, created_at, updated_at)
-            VALUES (gen_random_uuid(), :g, :c, :lib, :code, 'Natureza e estado do imóvel usado', :body, 'GENERAL', 1, true, now(), now()) RETURNING id`, { ...r, lib: lib.id });
+          [[clause]] = await q(`INSERT INTO legal.clause_versions (id, group_id, company_id, clause_library_id, code, title, body_text, category, version_number, is_active, created_at)
+            VALUES (gen_random_uuid(), :g, :c, :lib, :code, 'Natureza e estado do imóvel usado', :body, 'GENERAL', 1, true, now()) RETURNING id`, { ...r, lib: lib.id });
         }
         const [[tpl]] = await q("INSERT INTO legal.contract_templates (id, group_id, company_id, name, contract_type, is_active, created_at, updated_at) VALUES (gen_random_uuid(), :g, :c, :name, 'USED_PROPERTY_DELIVERY', true, now(), now()) RETURNING id", r);
         const [[ver]] = await q("INSERT INTO legal.template_versions (id, group_id, company_id, template_id, version_number, status, origin, created_at, updated_at) VALUES (gen_random_uuid(), :g, :c, :t, 1, 'DRAFT', 'CODE_SEED', now(), now()) RETURNING id", { ...r, t: tpl.id });
