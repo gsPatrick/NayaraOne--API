@@ -11,7 +11,8 @@ const SOURCES = Object.freeze({
   bearer: '\\bBearer\\s+[A-Za-z0-9._~+/=-]+',
   pem: '-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----(?:[\\s\\S]*?-----END (?:[A-Z]+ )*PRIVATE KEY-----|[\\s\\S]*$)',
   pemHeader: '-----BEGIN ',
-  connectionPassword: '([a-z][a-z0-9+.-]*:\\/\\/[^/\\s:@]+:)([^@\\s/]+)(@)',
+  // (?<!...) no início: a busca só começa onde a sequência começa (sem isso, texto longo sem o padrão custava O(n²): pentest M5, 11/11/2026).
+  connectionPassword: '(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*:\\/\\/[^/\\s:@]+:)([^@\\s/]+)(@)',
   assignment: '\\b(api[_-]?key|x-api-key|client[_-]?secret|webhook[_-]?secret|secret|(?:access|refresh|id)[_-]?token|token|password|passwd|senha|private[_-]?key)(["\']?\\s*[:=]\\s*["\']?)([^\\s"\',;&]+)',
   keywordValue: '\\b(token|secret|segredo|password|senha|apikey|credential|credencial)(\\s+)([^\\s"\',;]{8,})',
   // Token na própria URL das rotas públicas por link (M9-D823: /public/share/<token>): o log de requisição não pode gravá-lo em claro.
@@ -30,14 +31,14 @@ const SOURCES = Object.freeze({
   cnpjFormatted: '(?<![\\w.])\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}(?![\\w])',
   cnpjBare: '(?<![\\w.-])\\d{14}(?![\\w.-])',
   cardCandidate: '(?<![\\w.-])\\d(?:[ -]?\\d){12,18}(?![\\w.-])',
-  email: '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+',
+  email: '(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+',
   phone: '(?:\\+55[\\s.-]?)?\\(\\d{2}\\)[\\s.-]?9?\\d{4}[\\s.-]?\\d{4}(?!\\d)|\\+55[\\s.-]?\\d{2}[\\s.-]?9?\\d{4}[\\s.-]?\\d{4}(?!\\d)|(?<!\\d)\\d{2}\\s9\\d{4}[\\s-]?\\d{4}(?!\\d)',
   phoneLoose: '(?:\\+?55\\s?)?\\(?\\d{2}\\)?\\s?9?\\d{4}[-\\s]?\\d{4}',
   localPhone: '(?<![\\d-])9?\\d{4}-\\d{4}(?!\\d)',
   cpfLoose: '\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}',
   cnpjLoose: '\\d{2}\\.?\\d{3}\\.?\\d{3}\\/?\\d{4}-?\\d{2}',
-  emailLoose: '[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
-  emailSimple: '[^\\s@]+@[^\\s@]+',
+  emailLoose: '(?<![^\\s@])[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
+  emailSimple: '(?<![^\\s@])[^\\s@]+@[^\\s@]+',
   // Perfil `ai` (M9-D027): tipos além de documento/cartão/e-mail/telefone. Os rótulos ("RG", "conta", "agência", "pix") evitam
   // mascarar número comum; o que tem formato próprio (linha digitável, CEP com hífen) dispensa rótulo.
   rgLabeled: '(\\bRG\\b\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{1,2}\\.?\\d{3}\\.?\\d{3}-?[\\dxX]\\b)',

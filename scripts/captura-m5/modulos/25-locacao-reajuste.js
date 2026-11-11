@@ -41,4 +41,5 @@ module.exports = async function locacaoReajuste(R) {
   await R.sqlTenant({ id: 'LC-RJ-10', req: [RQ.eventos], quem: 'A:gestor', descricao: 'Outbox: rent.adjusted para cada reajuste (com o status no payload)', sql: "SELECT aggregate_id, idempotency_key FROM integration.outbox_events WHERE event_type = 'rent.adjusted' AND aggregate_id IN (:ids)", replacements: () => ({ ids: [a.pend, a.igpm, a.aplicado, a.negociado] }), avaliar: (rows) => rows.length === 4 });
   await H({ id: 'LC-RJ-11', req: [RQ.apis, RQ.registro], titulo: 'Lista os reajustes do contrato', quem: 'A:gestor', metodo: 'GET', rota: `${rota}?contractId=${ct.id}`, esperado: { status: 200 } });
   await H({ id: 'LC-RJ-12', req: [RQ.testes], titulo: 'Tenant B não lê o reajuste do tenant A', quem: 'B:gestor', metodo: 'GET', rota: () => `${rota}/${a.aplicado}`, esperado: { status: 404 } });
+  R.ctx.lcReajuste = { contrato: ct.id };
 };

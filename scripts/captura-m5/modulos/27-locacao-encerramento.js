@@ -82,5 +82,21 @@ module.exports = async function locacaoEncerramento(R) {
 
   // ---------- tabelas e RLS ----------
   await R.sqlCatalogo({ id: 'LC-EN-21', req: [RQ.tabelas, RQ.testes, RQ.status], descricao: 'As tabelas da cobrança/utilidades (9 em finance + legal.lease_obligations, o nome do livro) com RLS ligada e forçada e policy de isolamento; finance.utility_obligations é visão', sql: `SELECT n.nspname || '.' || c.relname AS tabela, c.relkind, c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policies p WHERE p.schemaname = n.nspname AND p.tablename = c.relname) AS policies FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE (n.nspname = 'finance' AND c.relname IN (${TABELAS.map((t) => `'${t}'`).join(',')}, 'utility_obligations')) OR (n.nspname = 'legal' AND c.relname = 'lease_obligations') ORDER BY 1`, avaliar: (rows) => rows.length === TABELAS.length + 2 && rows.filter((r) => r.relkind === 'r').every((r) => r.relrowsecurity && r.relforcerowsecurity && r.policies >= 1) && rows.some((r) => r.tabela === 'finance.utility_obligations' && r.relkind === 'v') });
+  // ---------- as mesmas tabelas lidas pela API (cada uma com linha real dos módulos anteriores) ----------
+  const cob = R.ctx.lcCobranca || {};
+  const gar = R.ctx.lcGarantido || {};
+  const obr = R.ctx.lcObrigacoes || {};
+  const rea = R.ctx.lcReajuste || {};
+  const lista = (b) => (b && Array.isArray(b.data) ? b.data : []);
+  const algum = (b, x, passo) => { if (lista(b).length < 1) passo.ok = false; };
+  const leitura = (id, titulo, rota, guardar) => H({ id, req: [RQ.tabelas, RQ.apis], titulo, quem: 'A:gestor', metodo: 'GET', rota, esperado: { status: 200 }, guardar: guardar || algum });
+  await leitura('LC-EN-32', 'billing_schedules pela API: competências do contrato da cobrança', `/billing/schedules?contractId=${cob.contrato}`);
+  await leitura('LC-EN-33', 'billing_schedule_items pela API: a competência traz aluguel, condomínio e IPTU como itens', `/billing/schedules/${cob.s1}`, (b, x, passo) => { if (!b.data || !Array.isArray(b.data.items) || b.data.items.length !== 3) passo.ok = false; });
+  await leitura('LC-EN-34', 'rent_adjustments pela API: reajustes do contrato', `/billing/rent-adjustments?contractId=${rea.contrato}`);
+  await leitura('LC-EN-35', 'collection_cases pela API: caso de cobrança do contrato', `/billing/collection-cases?contractId=${cob.contrato}`);
+  await leitura('LC-EN-36', 'guaranteed_rent_contracts pela API: matrícula no aluguel garantido', `/billing/guaranteed-rent?contractId=${gar.contrato}`);
+  await leitura('LC-EN-37', 'rent_advances pela API: antecipação do mesmo contrato, em tabela separada', `/billing/rent-advances?contractId=${gar.contrato}`);
+  await leitura('LC-EN-38', 'utility_obligations e ownership_transfer_tasks pela API: obrigações do contrato com as tarefas de troca de titularidade', `/billing/utility-obligations?contractId=${obr.contrato}`, (b, x, passo) => { if (lista(b).length < 1 || !lista(b).some((o) => (o.transferTasks || []).length > 0)) passo.ok = false; });
+  await H({ id: 'LC-EN-39', req: [RQ.tabelas, RQ.testes], titulo: 'Tenant B lista as competências do contrato do tenant A pela API e não recebe nenhuma (RLS)', quem: 'B:gestor', metodo: 'GET', rota: `/billing/schedules?contractId=${cob.contrato}`, esperado: { status: 200 }, guardar: (b, x, passo) => { if (!b || !Array.isArray(b.data) || b.data.length !== 0) passo.ok = false; } });
   await R.sqlTenant({ id: 'LC-EN-22', req: [RQ.testes], quem: 'B:gestor', descricao: 'Pela RLS, o tenant B não enxerga nenhuma linha de cobrança/utilidade do contrato do tenant A', sql: 'SELECT (SELECT count(*)::int FROM finance.billing_schedules WHERE contract_id = :c) AS cobrancas, (SELECT count(*)::int FROM legal.lease_obligations WHERE contract_id = :c) AS obrigacoes, (SELECT count(*)::int FROM finance.guaranteed_rent_contracts WHERE contract_id = :c) AS garantido, (SELECT count(*)::int FROM finance.rent_advances WHERE contract_id = :c) AS antecipacoes', replacements: () => ({ c: ct.id }), avaliar: (rows) => rows[0].cobrancas === 0 && rows[0].obrigacoes === 0 && rows[0].garantido === 0 && rows[0].antecipacoes === 0 });
 };

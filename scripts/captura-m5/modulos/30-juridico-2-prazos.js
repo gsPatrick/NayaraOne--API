@@ -24,7 +24,7 @@ module.exports = async function juridicoPrazos(R) {
   await H({ id: 'JR-D03', req: q('A0107', 'A0156', 'A0206'), titulo: 'Origem só em TEXTO não basta (Guia §12: sourceFileId/sourceEventId)', quem: 'A:gestor', metodo: 'POST', rota, corpo: { description: 'Contestação', dueAt: futuro(15), criticality: 'CRITICAL', sourceDocument: 'Intimação fictícia (só texto)' }, esperado: { status: 400, codigo: 'DEADLINE_SOURCE_REQUIRED' } });
   await H({ id: 'JR-D03b', req: q('A0107', 'A0206'), titulo: 'Arquivo de origem inexistente é recusado', quem: 'A:gestor', metodo: 'POST', rota, corpo: { description: 'Contestação', dueAt: futuro(15), sourceFileId: '00000000-0000-4000-8000-000000000000' }, esperado: { status: 400, codigo: 'LEGAL_DEADLINE_SOURCE_NOT_FOUND' } });
   await H({
-    id: 'JR-D04', req: q('A0107', 'A0108', 'A0306', 'A0218', 'A0173', 'A0271'), titulo: 'CRIAR prazo crítico com origem e responsável (gestor, legal:create)', quem: 'A:gestor', metodo: 'POST', rota,
+    id: 'JR-D04', req: q('A0107', 'A0108', 'A0306', 'A0218', 'A0173', 'A0271', 'A0229', 'A0139', 'A0273'), titulo: 'CRIAR prazo crítico com origem e responsável (gestor, legal:create)', quem: 'A:gestor', metodo: 'POST', rota,
     corpo: (c) => ({ description: `Contestação ${s}`, dueAt: futuro(15), criticality: 'CRITICAL', sourceDocument: 'Intimação fictícia DJe 03/11/2026', ...O(c), responsibleUserId: uid('A:maker') }), esperado: { status: 201 }, guardar: (b, c) => { c.pzCritico = b.data.id; },
   });
   await H({ id: 'JR-D05', req: q('A0218', 'A0177'), titulo: 'CRIAR por perfil só de leitura é recusado', quem: 'A:leitura', metodo: 'POST', rota, corpo: { description: 'x', dueAt: futuro(5), sourceDocument: 'x' }, esperado: { status: 403, codigo: 'PERMISSION_DENIED' } });
@@ -118,10 +118,19 @@ module.exports = async function juridicoPrazos(R) {
   });
 
   // ---------- VENCIDO: alerta, ocorrência, evento e escalonamento (job) ----------
-  await H({ id: 'JR-D33', req: q('A0110', 'A0157'), titulo: 'Prazo crítico que já nasce vencido, com responsável', quem: 'A:gestor', metodo: 'POST', rota, corpo: (c) => ({ description: `Recurso ${s}`, dueAt: passado(2), criticality: 'CRITICAL', sourceDocument: 'Acórdão fictício', ...O(c), responsibleUserId: uid('A:maker') }), esperado: { status: 201 }, guardar: (b, c) => { c.pzVencido = b.data.id; } });
+  await H({ id: 'JR-D33', req: q('A0110', 'A0157', 'A0229', 'A0139'), titulo: 'Prazo crítico que já nasce vencido, com responsável', quem: 'A:gestor', metodo: 'POST', rota, corpo: (c) => ({ description: `Recurso ${s}`, dueAt: passado(2), criticality: 'CRITICAL', sourceDocument: 'Acórdão fictício', ...O(c), responsibleUserId: uid('A:maker') }), esperado: { status: 201 }, guardar: (b, c) => { c.pzVencido = b.data.id; } });
   const agora = new Date();
   await R.servico({ id: 'JR-D34', req: q('A0109', 'A0110', 'A0140', 'A0157', 'A0230'), titulo: 'Job de prazos (relógio de agora): alerta OVERDUE, ocorrência CRITICAL e legal.deadline.overdue', chamada: 'processDeadlinesInTransaction(tx, agora)', fn: () => R.comTenant('A:gestor', (tx) => processDeadlinesInTransaction(tx, agora)), esperado: {} });
   await R.servico({ id: 'JR-D35', req: q('A0109', 'A0157'), titulo: 'Job de novo 25 h depois sem conclusão: escala para o usuário de escalonamento', chamada: 'processDeadlinesInTransaction(tx, agora + 25h)', fn: () => R.comTenant('A:gestor', (tx) => processDeadlinesInTransaction(tx, new Date(agora.getTime() + 25 * 3600000))), esperado: {} });
+  await H({
+    id: 'JR-D35b', req: q('A0140', 'A0230', 'A0157', 'A0110', 'A0109', 'A0273'), titulo: 'Depois do job: a lista de prazos mostra o prazo crítico VENCIDO (severidade OVERDUE), alertado e escalonado, ainda pendente', quem: 'A:leitura', metodo: 'GET',
+    rota: (c) => `/legal/deadlines?legalCaseId=${c.pzCaso}&severity=OVERDUE`, esperado: { status: 200 }, guardar: (b, c) => { c.pzVencidos = (b && b.data) || []; },
+  });
+  await R.servico({
+    id: 'JR-D35c', req: q('A0140', 'A0230'), titulo: 'O corpo de JR-D35b traz o prazo vencido com last_alerted_severity OVERDUE e escalated_at preenchido', chamada: 'conferência do corpo de JR-D35b',
+    fn: (c) => { const d = c.pzVencidos.find((x) => x.id === c.pzVencido); if (!d || d.lastAlertedSeverity !== 'OVERDUE' || !d.escalatedAt || d.status !== 'PENDING') throw Object.assign(new Error('prazo vencido não aparece como alertado/escalado'), { code: 'SEM_VENCIDO' }); return { id: d.id, severity: d.severity, lastAlertedSeverity: d.lastAlertedSeverity, escalatedAt: d.escalatedAt }; },
+    esperado: {},
+  });
   await R.sqlTenant({
     id: 'JR-D36', req: q('A0176', 'A0275', 'A0109', 'A0110', 'A0140', 'A0157', 'A0230', 'A0139', 'A0229', 'A0273'), quem: 'A:gestor', descricao: 'Prazo vencido: severidade alertada, ocorrência CRITICAL única, escalonado, eventos legal.deadline.created e legal.deadline.overdue (uma vez) e notificações ao responsável e ao escalonamento',
     sql: `SELECT d.last_alerted_severity, d.escalated_at IS NOT NULL AS escalado, d.status,

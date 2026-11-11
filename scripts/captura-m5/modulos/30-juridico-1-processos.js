@@ -12,7 +12,7 @@ module.exports = async function juridicoProcessos(R) {
 
   await H({ id: 'JR-P01', req: q('A0102'), titulo: 'Preparação: pessoa que será parte do processo', quem: 'A:gestor', metodo: 'POST', rota: '/people', corpo: { personType: 'PF', legalName: `Réu Fictício JR ${s}` }, esperado: { status: 201 }, guardar: (b, c) => { c.jrPessoa = b.data.id; } });
   await H({
-    id: 'JR-P02', req: q('A0102', 'A0217', 'A0173', 'A0271', 'A0106'), titulo: 'Cria processo com número, órgão, classe, valor estimado, risco, responsável e escalonamento', quem: 'A:gestor', metodo: 'POST', rota: '/legal/cases',
+    id: 'JR-P02', req: q('A0102', 'A0217', 'A0173', 'A0271', 'A0106', 'A0273', 'A0138'), titulo: 'Cria processo com número, órgão, classe, valor estimado, risco, responsável e escalonamento', quem: 'A:gestor', metodo: 'POST', rota: '/legal/cases',
     corpo: () => ({ caseType: 'LITIGATION', caseNumber: `0001234-55.2026.8.26.${s.slice(0, 4)}`, court: '1ª Vara Cível (fictícia)', caseClass: 'Despejo por falta de pagamento', estimatedAmount: 18500.75, riskLevel: 'HIGH', summary: `Processo fictício JR ${s}`, responsibleUserId: uid('A:gestor'), escalationUserId: uid('A:checker') }),
     esperado: { status: 201 }, guardar: (b, c) => { c.jrCaso = b.data.id; },
   });

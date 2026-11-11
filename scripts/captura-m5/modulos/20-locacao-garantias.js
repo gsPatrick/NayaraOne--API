@@ -128,6 +128,10 @@ module.exports = async function locacaoGarantias(R) {
     sql: "SELECT entity_id, action, after_json->>'daysUntilExpiry' AS dias FROM audit.audit_log WHERE action = 'legal.guarantee.job_expiry_alert' AND entity_id IN (:ids)",
     replacements: () => ({ ids: [g.fiador, g.titulo] }), avaliar: (rows) => rows.length >= 2,
   });
+  const dia = (d) => String(d || '').slice(0, 10);
+  await H({ id: 'LC-GA-48', req: [RQ.evtExpP1, RQ.evtExpP2, RQ.vencendo], titulo: 'Depois do job, a API mostra a fiança que gerou lease.guarantee.expiring: ainda ativa e vencendo em 10 dias', quem: 'A:leitura', metodo: 'GET', rota: () => `/legal/guarantees/${g.fiador}`, esperado: { status: 200 }, guardar: (b, x, passo) => { if (b.data.status !== 'ACTIVE' || dia(b.data.endsAt) !== em10) passo.ok = false; } });
+  await H({ id: 'LC-GA-49', req: [RQ.evtExpP1, RQ.evtExpP2, RQ.ts005], titulo: 'A API mostra o título de capitalização que gerou lease.guarantee.expiring com dias negativos: vigência terminada ontem', quem: 'A:leitura', metodo: 'GET', rota: () => `/legal/guarantees/${g.titulo}`, esperado: { status: 200 }, guardar: (b, x, passo) => { if (dia(b.data.endsAt) !== ontem) passo.ok = false; } });
+  await H({ id: 'LC-GA-50', req: [RQ.evtExpP1, RQ.evtExpP2], titulo: 'Tenant B não enxerga pela API a garantia alertada do tenant A', quem: 'B:gestor', metodo: 'GET', rota: () => `/legal/guarantees/${g.fiador}`, esperado: { status: 404 } });
 
   // ---------- rota literal do Guia §14 ----------
   await H({ id: 'LC-GA-27', req: [RQ.api], titulo: 'Rota literal do Guia §14 POST /contracts/:id/guarantees cria a garantia com o mesmo serviço', quem: 'A:gestor', metodo: 'POST', rota: `/contracts/${ct.id}/guarantees`, corpo: { guaranteeType: 'SECURITY_DEPOSIT', value: 500, startsAt: '2026-01-01' }, esperado: { status: 201 } });

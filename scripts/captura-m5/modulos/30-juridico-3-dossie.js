@@ -32,7 +32,7 @@ module.exports = async function juridicoDossie(R) {
   await H({ id: 'JR-E07', req: q('A0219', 'A0174', 'A0272'), titulo: 'Dossiê sem itens é recusado (rota literal do Guia §14)', quem: 'A:gestor', metodo: 'POST', rota: (c) => `/legal/cases/${c.dsCaso}/evidence-package`, corpo: {}, esperado: { status: 400, codigo: 'LEGAL_EVIDENCE_PACKAGE_VALIDATION' } });
   await H({ id: 'JR-E08', req: q('A0219', 'A0177'), titulo: 'Perfil só de leitura não gera dossiê', quem: 'A:leitura', metodo: 'POST', rota: (c) => `/legal/cases/${c.dsCaso}/evidence-package`, corpo: { manifestItems: [{ type: 'NOTE', description: 'x' }] }, esperado: { status: 403, codigo: 'PERMISSION_DENIED' } });
   await H({
-    id: 'JR-E09', req: q('A0219', 'A0114', 'A0207', 'A0174', 'A0272', 'A0113'), titulo: 'Gera dossiê (POST /legal/cases/:id/evidence-package): o item com fileId leva hash, nome, data e origem do SERVIDOR; o hash enviado pelo cliente é ignorado',
+    id: 'JR-E09', req: q('A0219', 'A0114', 'A0207', 'A0174', 'A0272', 'A0113', 'A0231', 'A0141', 'A0273'), titulo: 'Gera dossiê (POST /legal/cases/:id/evidence-package): o item com fileId leva hash, nome, data e origem do SERVIDOR; o hash enviado pelo cliente é ignorado',
     quem: 'A:gestor', metodo: 'POST', rota: (c) => `/legal/cases/${c.dsCaso}/evidence-package`,
     corpo: (c) => ({ manifestItems: [{ type: 'PHOTO', description: 'Foto original do dano', fileId: c.dsOriginal, hash: 'hash-inventado-pelo-cliente' }, { type: 'NOTE', description: 'Nota do perito (sem arquivo)' }] }),
     esperado: { status: 201 }, guardar: (b, c) => { c.dsPacote = b.data.id; c.dsPacoteHash = b.data.packageHash; },
@@ -54,10 +54,10 @@ module.exports = async function juridicoDossie(R) {
   await H({ id: 'JR-E14', req: q('A0176', 'A0275', 'A0159', 'A0147'), titulo: 'JUR-TS-011: perfil sem legal:read exporta o dossiê: negado', quem: 'A:mascarado', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}/export`, esperado: { status: 403, codigo: 'PERMISSION_DENIED' } });
   await H({ id: 'JR-E15', req: q('A0159', 'A0177'), titulo: 'JUR-TS-011: tenant B exporta o dossiê de A: não existe', quem: 'B:gestor', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}/export`, esperado: { status: 404, codigo: 'LEGAL_EVIDENCE_PACKAGE_NOT_FOUND' } });
   await H({ id: 'JR-E16', req: q('A0159'), titulo: 'JUR-TS-011: anônimo exporta o dossiê: negado', quem: 'anonimo', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}/export`, esperado: { status: 401 } });
-  await H({ id: 'JR-E17', req: q('A0147'), titulo: 'Dossiê com arquivo HIGH: exportar sem finalidade/justificativa é recusado pela DLP', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}/export`, esperado: { status: 422, codigo: 'GOV_DLP_PURPOSE_REQUIRED' } });
-  await H({ id: 'JR-E18', req: q('A0147'), titulo: 'Com finalidade e justificativa, a exportação ainda exige MFA recente (recusa real, sem forjar MFA)', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}/export?purpose=JURIDICO&justification=${encodeURIComponent('Entrega do dossiê ao advogado da causa')}`, esperado: { status: 403, codigo: 'MFA_STEP_UP_REQUIRED' } });
+  await H({ id: 'JR-E17', req: q('A0147', 'A0178', 'A0276'), titulo: 'Dossiê com arquivo HIGH: exportar sem finalidade/justificativa é recusado pela DLP', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}/export`, esperado: { status: 422, codigo: 'GOV_DLP_PURPOSE_REQUIRED' } });
+  await H({ id: 'JR-E18', req: q('A0147', 'A0178', 'A0276'), titulo: 'Com finalidade e justificativa, a exportação ainda exige MFA recente (recusa real, sem forjar MFA)', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}/export?purpose=JURIDICO&justification=${encodeURIComponent('Entrega do dossiê ao advogado da causa')}`, esperado: { status: 403, codigo: 'MFA_STEP_UP_REQUIRED' } });
   await H({ id: 'JR-E19', req: q('A0219', 'A0115'), titulo: 'Preparação: dossiê só com nota (sem arquivo: classe padrão da empresa)', quem: 'A:gestor', metodo: 'POST', rota: (c) => `/legal/cases/${c.dsCaso}/evidence-packages`, corpo: { manifestItems: [{ type: 'NOTE', description: 'Ata de reunião fictícia' }] }, esperado: { status: 201 }, guardar: (b, c) => { c.dsPacoteNota = b.data.id; } });
-  await H({ id: 'JR-E20', req: q('A0147', 'A0159'), titulo: 'Dossiê sem arquivo herda a classe padrão da empresa (HIGH): com a permissão, finalidade e justificativa, falta só o MFA recente (recusa real)', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacoteNota}/export?purpose=JURIDICO&justification=${encodeURIComponent('Entrega do dossiê ao advogado da causa')}`, esperado: { status: 403, codigo: 'MFA_STEP_UP_REQUIRED' } });
+  await H({ id: 'JR-E20', req: q('A0147', 'A0159', 'A0178', 'A0276'), titulo: 'Dossiê sem arquivo herda a classe padrão da empresa (HIGH): com a permissão, finalidade e justificativa, falta só o MFA recente (recusa real)', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacoteNota}/export?purpose=JURIDICO&justification=${encodeURIComponent('Entrega do dossiê ao advogado da causa')}`, esperado: { status: 403, codigo: 'MFA_STEP_UP_REQUIRED' } });
   await H({ id: 'JR-E20b', req: q('A0147', 'A0159'), titulo: 'Permissão específica: perfil com legal:read mas sem legal:evidence:export não exporta', quem: 'A:leitura', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacoteNota}/export?purpose=JURIDICO&justification=${encodeURIComponent('Entrega do dossiê ao advogado da causa')}`, esperado: { status: 403, codigo: 'PERMISSION_DENIED' } });
   await R.servico({
     id: 'JR-E21', req: q('A0115', 'A0117', 'A0178', 'A0276'), titulo: 'Exporta o dossiê duas vezes (camada de serviço, o que a rota entrega após o MFA): export_package_id e export_manifest_hash novos a cada vez, package_hash igual e íntegro',
@@ -80,7 +80,7 @@ module.exports = async function juridicoDossie(R) {
     }),
     esperado: {},
   });
-  await H({ id: 'JR-E24', req: q('A0117', 'A0307'), titulo: 'Cadeia de custódia do dossiê: quem acessou/exportou e quando (append-only)', quem: 'A:leitura', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacoteNota}/access-log`, esperado: { status: 200 } });
+  await H({ id: 'JR-E24', req: q('A0117', 'A0307', 'A0178', 'A0276'), titulo: 'Cadeia de custódia do dossiê: quem acessou/exportou e quando (append-only)', quem: 'A:leitura', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacoteNota}/access-log`, esperado: { status: 200 } });
   await R.sqlTenant({
     id: 'JR-E25', req: q('A0117', 'A0159'), quem: 'A:gestor', descricao: 'Custódia: VIEWED/EXPORTED com usuário e data; as exportações recusadas (sem permissão, DLP, MFA) não geraram EXPORTED; cada acesso tem auditoria',
     sql: `SELECT l.evidence_package_id = :pkgNota AS do_dossie_nota, l.action, l.accessed_by_user_id IS NOT NULL AS tem_usuario, l.accessed_at::text AS accessed_at,
@@ -138,4 +138,28 @@ module.exports = async function juridicoDossie(R) {
     },
     esperado: {},
   });
+
+  // ---------- Prova alterada (hash diverge) e prova original que não se apaga ----------
+  await H({ id: 'JR-E35', req: q('A0158', 'A0239', 'A0113'), titulo: 'Preparação: prova enviada (SHA-256 gravado no upload)', quem: 'A:gestor', metodo: 'POST', rota: '/files', corpo: arquivo(`prova-integridade-${s}.pdf`, `Prova de integridade ${s}`), esperado: { status: 201 }, guardar: (b, c) => { c.dsProvaId = b.data.id; c.dsProvaKey = b.data.storageKey; } });
+  await H({ id: 'JR-E36', req: q('A0158', 'A0239', 'A0113'), titulo: 'A prova íntegra é servida (conteúdo confere com o SHA-256)', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/files/${c.dsProvaId}/content`, esperado: { status: 200 } });
+  await R.servico({
+    id: 'JR-E37', req: q('A0158', 'A0239'), titulo: 'Adulteração simulada: um byte do blob da prova trocado no storage local do ambiente descartável',
+    chamada: 'fs: inverte o último byte de UPLOADS_ROOT/<storageKey> (só do arquivo enviado em JR-E35)',
+    fn: (c) => {
+      const fs = require('node:fs');
+      const path = require('node:path');
+      const { UPLOADS_ROOT } = require('../../../src/utils/diskStorage');
+      const target = path.join(UPLOADS_ROOT, c.dsProvaKey);
+      const bytes = fs.readFileSync(target);
+      bytes[bytes.length - 1] ^= 0xff;
+      fs.writeFileSync(target, bytes);
+      return { arquivo: c.dsProvaId, bytes: bytes.length };
+    },
+    esperado: {},
+  });
+  await H({ id: 'JR-E38', req: q('A0158', 'A0239', 'A0307'), titulo: 'JUR-TS-010 por HTTP: prova alterada — a leitura é recusada (integridade falha) e o incidente é auditado', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/files/${c.dsProvaId}/content`, esperado: { status: 409, codigo: 'FILE_INTEGRITY_VIOLATION' } });
+  await H({ id: 'JR-E39', req: q('A0259', 'A0308', 'A0125'), titulo: 'Não existe rota para apagar o dossiê de provas (DELETE recusado)', quem: 'A:gestor', metodo: 'DELETE', rota: (c) => `/legal/evidence-packages/${c.dsPacote}`, esperado: { status: 404 } });
+  await H({ id: 'JR-E40', req: q('A0259', 'A0308'), titulo: 'Não existe rota para apagar o arquivo de prova original (DELETE recusado)', quem: 'A:gestor', metodo: 'DELETE', rota: (c) => `/files/${c.dsOriginal}`, esperado: { status: 404 } });
+  await H({ id: 'JR-E41', req: q('A0259', 'A0113'), titulo: 'Depois das tentativas de exclusão, a prova original continua lá, com o mesmo SHA-256', quem: 'A:gestor', metodo: 'GET', rota: (c) => `/files/${c.dsOriginal}`, esperado: { status: 200 } });
+  await H({ id: 'JR-E42', req: q('A0158', 'A0239', 'A0178', 'A0276'), titulo: 'O dossiê continua com o hash gravado (a verificação de integridade confronta o export com este valor)', quem: 'A:leitura', metodo: 'GET', rota: (c) => `/legal/evidence-packages/${c.dsPacote}`, esperado: { status: 200 } });
 };
