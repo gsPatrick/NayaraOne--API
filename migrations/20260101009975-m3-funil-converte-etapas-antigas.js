@@ -13,7 +13,7 @@
 const MAPA = {
   NOVO: 'NEW', CONTATO: 'QUALIFIED', VISITA: 'VISIT_SCHEDULED', PROPOSTA: 'PROPOSAL', QUALIFYING: 'QUALIFIED', VISIT: 'VISIT_SCHEDULED',
   // DI-M3CA-3 (11/11/2026): o funil grava os códigos do livro WON e LOST; GANHO/PERDIDO vão direto para eles e WON/LOST já são do
-  // livro (não são convertidos). A 20261111030001 converte o que esta migration gravou antes como CLOSED_WON/CLOSED_LOST.
+  // livro (não são convertidos). A 20261111031001 converte o que esta migration gravou antes como CLOSED_WON/CLOSED_LOST.
   NEGOTIATION: 'PROPOSAL', GANHO: 'WON', PERDIDO: 'LOST',
 };
 

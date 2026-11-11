@@ -8,7 +8,7 @@ const AppError = require('../../utils/AppError');
  * DI-M3CA-3 (substitui a parte "grava CLOSED_WON/CLOSED_LOST" da DI-M3-FUNIL-1): o sistema grava WON e LOST; CLOSED_WON e
  * CLOSED_LOST continuam aceitos na entrada e são normalizados. A desistência (WITHDRAWN) não é estágio do livro: é LOST com motivo
  * da categoria desistência (crm.motivos.desistencia); WITHDRAWN continua aceito na entrada e vira LOST.
- * Estágio fora do catálogo é recusado (OPPORTUNITY_STAGE_INVALID). A migration 20261111030001 converteu os registros existentes.
+ * Estágio fora do catálogo é recusado (OPPORTUNITY_STAGE_INVALID). A migration 20261111031001 converteu os registros existentes.
  */
 const ACTIVE_STAGES = Object.freeze(['NEW', 'QUALIFIED', 'MATCHING', 'VISIT_SCHEDULED', 'VISITED', 'PROPOSAL', 'FINANCING', 'CONTRACT', 'NURTURE']);
 const TERMINAL_STAGES = Object.freeze(['WON', 'LOST']);

@@ -12,7 +12,7 @@
  * O down desfaz tudo: volta os códigos antigos (WITHDRAWN e o motivo anterior pelo audit_log desta migration), apaga o gatilho,
  * recria a visão antiga e o parâmetro antigo. Os registros de auditoria ficam (histórico).
  */
-const MIGRATION = '20261111030001';
+const MIGRATION = '20261111031001';
 const DEFAULTS = {
   'crm.motivos.ganho': ['WON', 'WON', 'PRICE_ACCEPTED=Preço aceito,FAST_DECISION=Decisão rápida,REFERRAL=Indicação,OTHER=Outro motivo'],
   'crm.motivos.perda': ['LOST', 'LOSS', 'PRICE_TOO_HIGH=Preço alto,COMPETITOR=Concorrente,FINANCING_DENIED=Financiamento negado,LOCATION=Localização,OTHER=Outro motivo'],

@@ -13,7 +13,7 @@
  * (`opportunity.owner_backfill_without_candidate`). O down devolve o nulo às linhas que esta migration preencheu e que ainda
  * estão com o responsável dado por ela.
  */
-const MIGRATION = '20261111030002';
+const MIGRATION = '20261111031002';
 const TABLES = ['crm.opportunities', 'audit.audit_log', 'core.tenant_settings', 'core.user_memberships'];
 const lit = (text) => `'${String(text).replace(/'/g, "''")}'`;
 

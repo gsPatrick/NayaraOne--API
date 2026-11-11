@@ -2,8 +2,8 @@
 
 /**
  * Migrations de dados das correções do Marco 3 (DI-M3CA-1 e DI-M3CA-3), ida e volta em banco descartável:
- *  - 20261111030001: CLOSED_WON/CLOSED_LOST/WITHDRAWN viram WON/LOST (desistência = LOST com o motivo), com antes/depois no audit_log;
- *  - 20261111030002: oportunidade sem responsável recebe responsável pela regra, com antes/depois e a regra no audit_log.
+ *  - 20261111031001: CLOSED_WON/CLOSED_LOST/WITHDRAWN viram WON/LOST (desistência = LOST com o motivo), com antes/depois no audit_log;
+ *  - 20261111031002: oportunidade sem responsável recebe responsável pela regra, com antes/depois e a regra no audit_log.
  * O down devolve exatamente o estado anterior (nada some). Usa DATABASE_ADMIN_URL para simular dado legado e rodar como o dono.
  */
 
@@ -15,7 +15,7 @@ const { Sequelize } = require('sequelize');
 const { sequelize, getSeedTenant, withTenantTransaction } = require('./testHelpers');
 const { createMember, createOutsider, createOpportunity } = require('./helpers/m3caCrm');
 
-const FILES = ['20261111030001-m3-funil-won-lost-e-motivos-configuraveis.js', '20261111030002-m3-oportunidade-sem-responsavel-recebe-responsavel.js'];
+const FILES = ['20261111031001-m3-funil-won-lost-e-motivos-configuraveis.js', '20261111031002-m3-oportunidade-sem-responsavel-recebe-responsavel.js'];
 let tenant;
 let admin;
 before(async () => {
