@@ -95,7 +95,7 @@ module.exports = (sequelize) => {
       idempotencyKey: {
         type: DataTypes.STRING(128),
         allowNull: true,
-        unique: true,
+        // Única por EMPRESA (company_id, idempotency_key) — migration 20260101009985.
         field: 'idempotency_key',
       },
       lockVersion: {
