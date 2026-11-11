@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission, requireRecentMfa } = require('../../../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../../../middlewares/tenant.middleware');
 const financeController = require('./finance.controller');
+const authz = require('./finance-authorization.controller'); // M4PG: estorno por caso aprovado e reabertura CRITICAL (duas pessoas)
 const { confirmAction } = require('../../../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 2 do inventário)
 const { rejectExcessDecimals: cents } = require('./money-precision.middleware'); // FIN-008: dinheiro até o centavo, sem arredondar em silêncio
 
@@ -46,7 +47,11 @@ financeRouter.post('/finance/entries/:id/settle', requirePermission('finance:set
 // A4 (revisão 18/10/2026): comprovante da baixa manual é anexado ANTES da aprovação.
 financeRouter.post('/finance/entries/:id/settlement-evidence', requirePermission('finance:settle'), financeController.attachSettlementEvidence);
 financeRouter.post('/finance/entries/:id/settlement-evidence/detach', requirePermission('finance:settle'), financeController.detachSettlementEvidence);
-financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:settle'), confirmAction('finance.entry.reverse', { reasonField: 'reason' }), financeController.reverseFinancialEntry);
+// Guia §8 / DEC-003 / DEC-062: o estorno é PEDIDO (finance:reverse + MFA) e só é lançado quando OUTRA pessoa aprova o caso (finance:approve + MFA).
+financeRouter.post('/finance/entries/:id/reverse', requirePermission('finance:reverse'), requireRecentMfa, confirmAction('finance.entry.reverse', { reasonField: 'reason' }), cents('amount'), authz.requestEntryReversal);
+financeRouter.get('/finance/reversal-cases', requirePermission('finance:read'), authz.listReversalCases);
+financeRouter.post('/finance/reversal-cases/:id/approve', requirePermission('finance:approve'), requireRecentMfa, authz.approveReversalCase);
+financeRouter.post('/finance/reversal-cases/:id/reject', requirePermission('finance:approve'), requireRecentMfa, authz.rejectReversalCase);
 financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
 financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, cents('partialAmount'), financeController.settleFinancialEntryPartial);
 
@@ -103,7 +108,8 @@ financeRouter.delete('/finance/chart-of-accounts/:id', requirePermission('financ
 
 // Payment intents (snapshot + hash dos dados aprovados — M4-07). Aprovar exige a permissão de
 // aprovação (maker-checker); executar é o ato que move dinheiro, logo step-up MFA como o settle.
-financeRouter.post('/finance/payment-intents', requirePermission('finance:create'), financeController.createPaymentIntent);
+// Caderno §8.2: no PREPARE se escolhe o valor (parcela) — `amount` opcional, até o saldo em aberto. O risco e os aprovadores vêm da REG-FIN-002/parâmetros.
+financeRouter.post('/finance/payment-intents', requirePermission('finance:create'), cents('amount'), financeController.createPaymentIntent);
 financeRouter.get('/finance/payment-intents', requirePermission('finance:read'), financeController.listPaymentIntents);
 financeRouter.post('/finance/payment-intents/:id/approve', requirePermission('finance:approve'), financeController.approvePaymentIntent);
 financeRouter.post('/finance/payment-intents/:id/execute', requirePermission('finance:settle'), requireRecentMfa, financeController.executePaymentIntent);
@@ -133,7 +139,11 @@ financeRouter.get('/finance/period-closures', requirePermission('finance:read'),
 // F02 — pré-condições do fechamento (Caderno §16) e as duas conferências humanas exigidas.
 financeRouter.get('/finance/period-closures/:referenceMonth/preconditions', requirePermission('finance:read'), financeController.getPeriodPreconditions);
 financeRouter.post('/finance/period-closures/checks', requirePermission('finance:settle'), financeController.confirmPeriodCheck);
-financeRouter.post('/finance/period-closures/reopen', requirePermission('finance:approve'), requireRecentMfa, financeController.reopenPeriod);
+// Caderno §16 / Guia §18: reabrir é fluxo CRITICAL — permissão própria finance:periodReopen e MFA recente para quem pede E para quem aprova (outra pessoa).
+financeRouter.post('/finance/period-closures/reopen', requirePermission('finance:periodReopen'), requireRecentMfa, authz.requestPeriodReopen);
+financeRouter.get('/finance/period-closures/reopen-requests', requirePermission('finance:read'), authz.listPeriodReopenRequests);
+financeRouter.post('/finance/period-closures/reopen-requests/:id/approve', requirePermission('finance:periodReopen'), requireRecentMfa, authz.approvePeriodReopen);
+financeRouter.post('/finance/period-closures/reopen-requests/:id/reject', requirePermission('finance:periodReopen'), requireRecentMfa, authz.rejectPeriodReopen);
 // F02 (2ª rodada): pedido de fechamento em REVIEW volta para OPEN — mesma alçada da aprovação (finance:approve + MFA recente), motivo obrigatório.
 financeRouter.post('/finance/period-closures/return-to-open', requirePermission('finance:approve'), requireRecentMfa, financeController.returnPeriodToOpen);
 financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:read'), financeController.getWeeklyHealthReport);

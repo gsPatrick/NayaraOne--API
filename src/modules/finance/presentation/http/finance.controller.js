@@ -136,12 +136,6 @@ const settleFinancialEntry = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => receiptService.settleFinancialEntry(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body), idempotencyKey }));
   return success(res, { data: item });
 });
-const reverseFinancialEntry = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) =>
-    receiptService.reverseFinancialEntry(req.params.id, req.body.reason, req.auth.userId, t)
-  );
-  return success(res, { data: result });
-});
 // Baixa parcial (FIN-TS-006) pela API/tela — rota criada no ciclo de verificação do Marco 4 (12/10/2026).
 const settleFinancialEntryPartial = catchAsync(async (req, res) => {
   const idempotencyKey = validateClientKey(readClientKey(req), { required: true }); // FIN-004: chave obrigatória na baixa parcial
@@ -230,7 +224,7 @@ const autoReconcileSuggestion = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createCostCenter, listCostCenters, updateCostCenter, removeCostCenter, createResultCenter, listResultCenters, updateResultCenter, removeResultCenter, createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount, createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, detachSettlementEvidence, attachSettlementEvidence, settleFinancialEntry, reverseFinancialEntry, settleFinancialEntryPartial, listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending, clearFinancialEntryManualReview, createBankTransaction, listBankTransactions, importBankStatement, matchReconciliation, matchReconciliationGroup, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,
+  createCostCenter, listCostCenters, updateCostCenter, removeCostCenter, createResultCenter, listResultCenters, updateResultCenter, removeResultCenter, createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount, createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, detachSettlementEvidence, attachSettlementEvidence, settleFinancialEntry, settleFinancialEntryPartial, listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending, clearFinancialEntryManualReview, createBankTransaction, listBankTransactions, importBankStatement, matchReconciliation, matchReconciliationGroup, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,
   ...paymentsController,
   ...operationsController,
 };

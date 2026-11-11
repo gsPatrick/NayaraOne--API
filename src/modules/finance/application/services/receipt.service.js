@@ -243,7 +243,10 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, o
   }
 
   const beforeJson = original.toJSON();
-  const reversal = await ledger.createMovement(buildReversalValues(original, { isPartial, partialCents, actorUserId }), transaction);
+  // Guia §8 (M4PG): o estorno controlado nasce de um caso aprovado e grava a chave literal `reversal:${original.id}:${approvedCaseId}`.
+  const reversalValues = buildReversalValues(original, { isPartial, partialCents, actorUserId });
+  if (options.idempotencyKey) reversalValues.idempotencyKey = options.idempotencyKey;
+  const reversal = await ledger.createMovement(reversalValues, transaction);
 
   if (!isPartial) {
     original.status = 'REVERSED';

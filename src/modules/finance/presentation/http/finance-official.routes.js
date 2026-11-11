@@ -7,7 +7,8 @@
  *   POST /finance/payments/prepare           = POST /finance/payment-intents
  *   POST /finance/payments/:id/approve       = POST /finance/payment-intents/:id/approve
  *   POST /finance/payments/:id/execute       = POST /finance/payment-intents/:id/execute (MFA recente)
- *   POST /finance/ledger/:id/reverse         = POST /finance/entries/:id/reverse (id da linha de finance.ledger; confirmação nível 3)
+ *   POST /finance/ledger/:id/reverse         = POST /finance/entries/:id/reverse (id da linha de finance.ledger; confirmação nível 3): PEDE o estorno —
+ *                                              caso aprovado por outra pessoa em POST /finance/reversal-cases/:id/approve (Guia §8)
  *   GET  /finance/reconciliation/pending     = fila: extrato sem conciliação + pendências de classificação
  *   POST /finance/reconciliation/:id/confirm = confirmação humana do match da transação :id (§11)
  *   GET  /finance/health                     = GET /finance/reports/weekly-health
@@ -19,14 +20,16 @@ const tenantMiddleware = require('../../../../middlewares/tenant.middleware');
 const { confirmAction } = require('../../../../shared/destructive-actions/guard');
 const financeController = require('./finance.controller');
 const official = require('./finance-official.controller');
+const authz = require('./finance-authorization.controller');
+const { rejectExcessDecimals: cents } = require('./money-precision.middleware');
 
 const router = Router();
 const guard = [authMiddleware, tenantMiddleware];
 
-router.post('/finance/payments/prepare', ...guard, requirePermission('finance:create'), financeController.createPaymentIntent);
+router.post('/finance/payments/prepare', ...guard, requirePermission('finance:create'), cents('amount'), financeController.createPaymentIntent);
 router.post('/finance/payments/:id/approve', ...guard, requirePermission('finance:approve'), financeController.approvePaymentIntent);
 router.post('/finance/payments/:id/execute', ...guard, requirePermission('finance:settle'), requireRecentMfa, financeController.executePaymentIntent);
-router.post('/finance/ledger/:id/reverse', ...guard, requirePermission('finance:settle'), confirmAction('finance.entry.reverse', { reasonField: 'reason' }), official.reverseLedgerMovement);
+router.post('/finance/ledger/:id/reverse', ...guard, requirePermission('finance:reverse'), requireRecentMfa, confirmAction('finance.entry.reverse', { reasonField: 'reason' }), cents('amount'), authz.requestLedgerReversal);
 router.get('/finance/reconciliation/pending', ...guard, requirePermission('finance:read'), official.listPendingReconciliation);
 router.post('/finance/reconciliation/:id/confirm', ...guard, requirePermission('finance:reconcile'), official.confirmReconciliationMatch);
 router.get('/finance/health', ...guard, requirePermission('finance:read'), financeController.getWeeklyHealthReport);
