@@ -57,49 +57,58 @@ async function dispatchPendingEventsForCompany(group, company, { limit }) {
   return sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: group.id }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: company.id }, transaction });
-
-    const pending = await OutboxEvent.findAll({
-      where: {
-        status: 'PENDING',
-        [Op.or]: [{ nextRetryAt: null }, { nextRetryAt: { [Op.lte]: new Date() } }],
-      },
-      order: [['occurred_at', 'ASC']],
-      limit,
-      lock: transaction.LOCK.UPDATE,
-      skipLocked: true,
-      transaction,
-    });
-
-    const results = { dispatched: 0, published: 0, waiting: 0, deadLettered: 0, failed: 0 };
-    const backoff = await getOutboxBackoff(company, transaction);
-    const enqueue = getDispatchEnqueuer();
-
-    for (const event of pending) {
-      try {
-        if (event.targetDomain) {
-          if (!enqueue) {
-            results.waiting += 1; // sem Dispatch Service registrado: continua PENDING, sem gastar tentativa
-            continue;
-          }
-          await publishExternalEvent(event, enqueue, transaction);
-          results.published += 1;
-        } else {
-          await publishToBroker(event);
-          await runEventConsumers(event, transaction);
-          event.status = 'DISPATCHED';
-          await event.save({ transaction });
-          results.dispatched += 1;
-        }
-      } catch (err) {
-        const outcome = applyFailure(event, err, backoff);
-        results[outcome] += 1;
-        await event.save({ transaction });
-      }
-    }
-
-    await runBatchEnd(transaction);
-    return results;
+    return dispatchPendingInTransaction(company, transaction, { limit });
   });
+}
+
+/**
+ * dispatchPendingInTransaction — o lote de despacho de UMA empresa numa transação já aberta com o contexto de tenant (SET LOCAL).
+ * É o corpo de dispatchPendingEventsForCompany; exposto para quem já está dentro da transação do tenant (testes com rollback rodam
+ * o mesmo despacho de produção). `where` opcional restringe o lote (ex.: só os eventos de um agregado).
+ */
+async function dispatchPendingInTransaction(company, transaction, { limit = 100, where = {} } = {}) {
+  const pending = await OutboxEvent.findAll({
+    where: {
+      ...where,
+      status: 'PENDING',
+      [Op.or]: [{ nextRetryAt: null }, { nextRetryAt: { [Op.lte]: new Date() } }],
+    },
+    order: [['occurred_at', 'ASC']],
+    limit,
+    lock: transaction.LOCK.UPDATE,
+    skipLocked: true,
+    transaction,
+  });
+
+  const results = { dispatched: 0, published: 0, waiting: 0, deadLettered: 0, failed: 0 };
+  const backoff = await getOutboxBackoff(company, transaction);
+  const enqueue = getDispatchEnqueuer();
+
+  for (const event of pending) {
+    try {
+      if (event.targetDomain) {
+        if (!enqueue) {
+          results.waiting += 1; // sem Dispatch Service registrado: continua PENDING, sem gastar tentativa
+          continue;
+        }
+        await publishExternalEvent(event, enqueue, transaction);
+        results.published += 1;
+      } else {
+        await publishToBroker(event);
+        await runEventConsumers(event, transaction);
+        event.status = 'DISPATCHED';
+        await event.save({ transaction });
+        results.dispatched += 1;
+      }
+    } catch (err) {
+      const outcome = applyFailure(event, err, backoff);
+      results[outcome] += 1;
+      await event.save({ transaction });
+    }
+  }
+
+  await runBatchEnd(transaction);
+  return results;
 }
 
 async function dispatchPendingEvents({ limit = 100 } = {}) {
@@ -151,4 +160,4 @@ async function dispatchPendingEvents({ limit = 100 } = {}) {
   return totals;
 }
 
-module.exports = { dispatchPendingEvents, dispatchPendingEventsForCompany, publishToBroker };
+module.exports = { dispatchPendingEvents, dispatchPendingEventsForCompany, dispatchPendingInTransaction, publishToBroker };

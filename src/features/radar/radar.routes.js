@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const radarController = require('./radar.controller');
 const carteira = require('../crm/carteira/carteira.guard');
+require('./radarEventConsumers'); // CRMX-007: matching do Radar por evento (radar/cliente/imóvel novo ou alterado)
 
 const radarRouter = Router();
 

@@ -21,7 +21,7 @@ const {
 const { recordIntegrationError } = require('../integrationErrors.service');
 const { sanitizeProviderMessage } = require('../sanitizeProviderMessage');
 const { safeAudit } = require('../safeAudit');
-const { syncOpportunityFromFinancingCase, STATUS_LABEL_PT } = require('../correspondentCrmSync.service');
+const { STATUS_LABEL_PT } = require('../correspondentCrmSync.service');
 const { submitViaDispatch } = require('../dispatch/submitViaDispatch');
 const { recordProviderSwitch, REASONS } = require('../dispatch/providerSwitch');
 
@@ -669,13 +669,12 @@ async function finalizeAcceptedSubmission(adapter, submission, financingCase, re
   if (advances) {
     await publishFinancingStatusChanged(
       financingCase,
-      { previousStatus: beforeStatus, normalizedStatus: targetStatus, historyId: historyEntry.id },
+      { previousStatus: beforeStatus, normalizedStatus: targetStatus, historyId: historyEntry.id, manual: manualProvider },
       transaction
     );
   }
   await publishFinancingSubmitted(financingCase, submission, transaction);
   if (advances) {
-    await syncOpportunityFromFinancingCase(financingCase, targetStatus, transaction, { manual: manualProvider });
     if (result?.proposal && ['APPROVED', 'CONTRACTING'].includes(targetStatus)) {
       try {
         const { recordProposal } = require('./caseWorkflow.service');
@@ -1142,7 +1141,6 @@ async function retryPendingFinalization(submission, financingCase, actorUserId, 
             { transaction: savepoint }
           );
           await publishFinancingStatusChanged(financingCase, { previousStatus: beforeStatus, normalizedStatus: 'SUBMITTED', historyId: history.id }, savepoint);
-          await syncOpportunityFromFinancingCase(financingCase, 'SUBMITTED', savepoint);
           await registrarAuditoria(
             { groupId: submission.groupId, companyId: submission.companyId, actorUserId, action: 'correspondent.financing_case.status_changed', entityType: 'FinancingCase', entityId: financingCase.id, beforeJson: { status: beforeStatus }, afterJson: { status: 'SUBMITTED' }, reason: 'O provider aceitou o caso, mas o registro local do envio falhou; o caso foi levado a "Enviado ao banco" para a consulta de status acompanhar.' },
             savepoint

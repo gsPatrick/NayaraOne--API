@@ -7,6 +7,7 @@ const crmController = require('./crm.controller');
 const { requireOpportunityInScope } = require('./opportunityScope.guard');
 const carteira = require('./carteira/carteira.guard');
 const ownerChange = require('./carteira/ownerChange.controller');
+require('./financingStatus.consumer'); // CAD-09: status do financiamento atualiza a oportunidade por evento
 
 const crmRouter = Router();
 

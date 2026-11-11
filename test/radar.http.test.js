@@ -14,6 +14,7 @@ process.env.PORT = process.env.RADAR_HTTP_TEST_PORT || '21647';
 require('../app');
 const { getSeedTenant, uniqueSuffix, sequelize } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
+const { dispatchPendingEventsForCompany } = require('../src/engines/events/outbox-dispatcher');
 
 const PERMS = ['people:create', 'people:read', 'properties:create', 'properties:read', 'properties:update', 'radar:create', 'radar:read', 'radar:update'];
 let tenant;
@@ -92,9 +93,11 @@ test('ROTA Radar livro: obrigatórios + preferências ponderadas + exclusão, ma
   assert.equal(exp.body.data.matched, false);
   assert.deepEqual(exp.body.data.reasons, ['EXCLUDED']);
 
+  // CRMX-007: o match é gravado no despacho do outbox (consumidor do Radar), o mesmo que o job do despachante roda a cada 30 s.
+  await dispatchPendingEventsForCompany({ id: tenant.groupId }, { id: tenant.companyId }, { limit: 1000 });
   const hist = await http('GET', `/radar/${radarId}/match-history`);
   assert.equal(hist.status, 200, JSON.stringify(hist.body));
-  assert.deepEqual(hist.body.data.map((h) => h.propertyId).sort(), [forte, medio].sort(), 'o gatilho da oferta gravou os dois matches; o excluído não');
+  assert.deepEqual(hist.body.data.map((h) => h.propertyId).sort(), [forte, medio].sort(), 'o despacho dos eventos das ofertas gravou os dois matches; o excluído não');
   for (const h of hist.body.data) {
     assert.equal(h.criteriaVersion, 'radar-scoring-v2');
     assert.match(h.criteriaFingerprint, /^[0-9a-f]{64}$/);

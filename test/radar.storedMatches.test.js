@@ -15,6 +15,8 @@ const radarService = require('../src/features/radar/radar.service');
 const { processRadar } = require('../src/engines/jobs/radarMatchingJob');
 const { criteriaFingerprint } = require('../src/features/radar/radarCriteria');
 const { RadarMatch, OutboxEvent } = require('../src/models');
+require('../src/features/radar/radarEventConsumers'); // CRMX-007: o matching da oferta roda no despacho do evento
+const { despacharNaTransacao } = require('./helpers/outboxEmTransacao');
 
 let tenant;
 let otherCompanyId;
@@ -43,9 +45,15 @@ async function cenario(t, criteria) {
   const city = `RadarGrava${suffix}`;
   const person = await peopleService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Radar Grava ${suffix}` }, tenant.userId, t);
   const property = await propertiesService.createProperty({ groupId: tenant.groupId, companyId: tenant.companyId, title: `Grava ${suffix}`, internalCode: `RG-${suffix}`, propertyType: 'RESIDENTIAL', city, bedrooms: 3 }, tenant.userId, t);
-  // Radar criado ANTES da oferta: o gatilho da oferta também grava; o job depois só reprocessa.
+  // Radar criado ANTES da oferta: o evento da oferta, no despacho, grava; o job depois só reprocessa.
   const { radar } = await radarService.createRadar({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, criteriaJson: { offerType: 'SALE', city, ...criteria } }, tenant.userId, t);
   return { radar, property, city };
+}
+
+/** Oferta ACTIVE + despacho do evento dela (property.offer.created): é o consumidor do Radar que grava o match. */
+async function ofertaDespachada(t, property) {
+  await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 300000 }, tenant.userId, t);
+  await despacharNaTransacao(tenant, t, { eventType: 'property.offer.created', payloadJson: { propertyId: property.id } });
 }
 
 const eventos = (t, ids) => OutboxEvent.findAll({ where: { eventType: 'crm.radar.match.created', aggregateType: 'RadarMatch', aggregateId: ids }, transaction: t });
@@ -53,9 +61,9 @@ const eventos = (t, ids) => OutboxEvent.findAll({ where: { eventType: 'crm.radar
 test('radar_matches: oferta ativa grava o match (score, critérios, fingerprint, versão) e publica crm.radar.match.created; o job 2x não duplica', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const { radar, property } = await cenario(t, { preferences: [{ code: 'MIN_BEDROOMS', value: 4 }] });
-    await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 300000 }, tenant.userId, t);
+    await ofertaDespachada(t, property);
     let rows = await RadarMatch.findAll({ where: { radarId: radar.id }, transaction: t });
-    assert.equal(rows.length, 1, 'o gatilho da oferta grava o match na hora');
+    assert.equal(rows.length, 1, 'o despacho do evento da oferta grava o match');
     const [m] = rows;
     assert.equal(m.propertyId, property.id);
     assert.equal(Number(m.score), 0);
@@ -82,7 +90,7 @@ test('radar_matches: oferta ativa grava o match (score, critérios, fingerprint,
 test('radar_matches: mudar o critério gera novo registro com novo fingerprint e novo evento; o anterior fica no histórico', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const { radar, property, city } = await cenario(t, {});
-    await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 300000 }, tenant.userId, t);
+    await ofertaDespachada(t, property);
     const { radar: editado } = await radarService.updateRadar(radar.id, { criteriaJson: { offerType: 'SALE', city, preferences: [{ code: 'MIN_BEDROOMS', value: 3 }] } }, tenant.userId, t);
     const run = await processRadar(editado, t);
     assert.equal(run.storedMatches, 1);
@@ -98,7 +106,7 @@ test('radar_matches: mudar o critério gera novo registro com novo fingerprint e
 test('radar_matches: histórico imutável (UPDATE recusado pelo gatilho e DELETE sem permissão para o runtime)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const { radar, property } = await cenario(t, {});
-    await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 300000 }, tenant.userId, t);
+    await ofertaDespachada(t, property);
     const [m] = await RadarMatch.findAll({ where: { radarId: radar.id }, transaction: t });
     await sequelize.query('SAVEPOINT sp_upd', { transaction: t });
     await assert.rejects(sequelize.query('UPDATE crm.radar_matches SET score = 0.5 WHERE id = :id', { replacements: { id: m.id }, transaction: t }), /histórico imutável/);
@@ -112,7 +120,7 @@ test('radar_matches: histórico imutável (UPDATE recusado pelo gatilho e DELETE
 test('radar_matches: RLS — outra empresa não lê nem grava match da empresa A', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const { radar, property } = await cenario(t, {});
-    await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 300000 }, tenant.userId, t);
+    await ofertaDespachada(t, property);
     assert.equal(await RadarMatch.count({ where: { radarId: radar.id }, transaction: t }), 1);
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: otherCompanyId }, transaction: t });
     const [visto] = await sequelize.query('SELECT id FROM crm.radar_matches WHERE radar_id = :r', { replacements: { r: radar.id }, transaction: t });

@@ -1,13 +1,10 @@
 'use strict';
 
-const { sequelize, Group, Company, PropertyRadar, OutboxEvent, Notification } = require('../../models');
-const { matchRadarToProperties } = require('../../features/radar/radarMatching.service');
-const { publishRadarMatched } = require('../../features/radar/radarEvents.service');
-const { recordRadarMatches } = require('../../features/radar/radarMatchStore.service');
-const { registrarAuditoria } = require('../audit/auditLog.service');
+const { sequelize, Group, Company, PropertyRadar } = require('../../models');
+const { runRadarMatching } = require('../../features/radar/radarMatchRun.service');
 
 /**
- * radarMatchingJob — antes, o matching do Radar só rodava sob demanda quando alguém abria a
+ * radarMatchingJob — rede de segurança do matching por eventos (CRMX-007, radarEventConsumers.js). Antes, o matching do Radar só rodava sob demanda quando alguém abria a
  * tela (`GET /radar/:id/matches`), então um imóvel novo que batesse com o perfil de busca de
  * um cliente só era descoberto se alguém abrisse aquele radar específico por acaso. Este job
  * roda o matching periodicamente para TODOS os radares ativos e avisa (evento + notificação)
@@ -24,65 +21,11 @@ const { registrarAuditoria } = require('../audit/auditLog.service');
  */
 
 /**
- * Um radar: grava os matches (crm.radar_matches) e, para o par radar+imóvel ainda não avisado, publica radar.matched, notifica e
- * audita. Exportado para os testes rodarem o mesmo passo do job dentro da transação deles.
+ * Um radar: o mesmo passo do consumidor de eventos (runRadarMatching, radarMatchRun.service.js) com origem JOB. Exportado para os
+ * testes rodarem o mesmo passo do job dentro da transação deles.
  */
-async function processRadar(radar, transaction) {
-  const matches = await matchRadarToProperties(radar, transaction);
-  if (matches.length === 0) return { newMatches: 0, storedMatches: 0 };
-  // Grava cada match (crm.radar_matches, ON CONFLICT DO NOTHING) e publica crm.radar.match.created só no que nasceu agora.
-  const stored = await recordRadarMatches(radar, matches, transaction);
-
-  // Só considera "novo" o match cujo par (radar, imóvel) ainda não gerou o evento
-  // radar.matched antes — a própria unicidade de `idempotency_key` no outbox já é a fonte
-  // da verdade de "já avisamos isso", sem precisar de uma tabela de estado adicional.
-  const alreadyNotified = await OutboxEvent.findAll({
-    where: { aggregateType: 'PropertyRadar', aggregateId: radar.id, eventType: 'radar.matched' },
-    attributes: ['idempotencyKey'],
-    transaction,
-  });
-  const notifiedKeys = new Set(alreadyNotified.map((e) => e.idempotencyKey));
-
-  const newMatches = matches.filter(
-    (property) => !notifiedKeys.has(`radar.matched:${radar.id}:${property.id}`)
-  );
-  if (newMatches.length === 0) return { newMatches: 0, storedMatches: stored.length };
-
-  for (const property of newMatches) {
-    await publishRadarMatched(radar, property, transaction);
-  }
-
-  if (radar.createdBy) {
-    await Notification.create(
-      {
-        groupId: radar.groupId,
-        companyId: radar.companyId,
-        userId: radar.createdBy,
-        channel: 'IN_APP',
-        title: 'Novo match no Radar',
-        body: `Encontramos ${newMatches.length} imóve${newMatches.length === 1 ? 'l novo compatível' : 'is novos compatíveis'} com um radar de busca que você criou.`,
-        createdBy: null,
-        updatedBy: null,
-      },
-      { transaction }
-    );
-  }
-
-  await registrarAuditoria(
-    {
-      groupId: radar.groupId,
-      companyId: radar.companyId,
-      actorUserId: null,
-      action: 'radar.job_matched',
-      entityType: 'PropertyRadar',
-      entityId: radar.id,
-      afterJson: { newMatchPropertyIds: newMatches.map((p) => p.id) },
-      reason: `Job automático do Radar encontrou ${newMatches.length} novo(s) match(es) para este radar.`,
-    },
-    transaction
-  );
-
-  return { newMatches: newMatches.length, storedMatches: stored.length };
+function processRadar(radar, transaction) {
+  return runRadarMatching(radar, transaction, { origin: 'JOB' });
 }
 
 async function processCompany(group, company) {
