@@ -4,47 +4,10 @@ const { PropertyOffer, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { recordPriceHistory } = require('./propertyPriceHistory.service');
 const { supersedeCurrentActiveOffer } = require('./propertyOfferSupersede.service');
-const { publishPropertyOfferCreated, publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
+const { publishPropertyOfferCreated, publishPropertyPublicSourceChanged, publishPropertyOfferStatusChanged } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { OutboxEvent } = require('../../models');
-const { matchNewPropertyToRadarsDetailed } = require('../radar/radarMatching.service');
-const { recordRadarMatch } = require('../radar/radarMatchStore.service');
-const { publishRadarMatched } = require('../radar/radarEvents.service');
-
-/**
- * M3-22 (CRMX-007) — dispara o matching do Radar NO INSTANTE em que uma offer fica ACTIVE,
- * em vez de só na próxima rodada do job periódico (radarMatchingJob.js). Reaproveita o MESMO
- * evento/idempotencyKey (`radar.matched:${radarId}:${propertyId}`) do job — a unicidade da
- * coluna no outbox garante que, se o job também rodar depois, não duplica o aviso.
- */
-async function triggerRadarMatchingForProperty(property, transaction) {
-  const detailed = await matchNewPropertyToRadarsDetailed(property, transaction);
-  if (detailed.length === 0) return;
-  // Match gravado (crm.radar_matches) + evento do livro crm.radar.match.created; idempotente pela impressão digital dos critérios.
-  for (const { radar, property: matched } of detailed) await recordRadarMatch(radar, matched, transaction);
-  const matchedRadars = detailed.map((m) => m.radar);
-
-  // Pré-checagem (mesmo padrão de radarMatchingJob.js: "notifiedKeys") em vez de
-  // tentar/capturar a violação de unicidade — um erro capturado deixaria a transação do
-  // Postgres em estado abortado para os comandos seguintes (create do offer, auditoria etc.),
-  // já que não há savepoint aqui.
-  const existing = await OutboxEvent.findAll({
-    where: {
-      aggregateType: 'PropertyRadar',
-      aggregateId: matchedRadars.map((radar) => radar.id),
-      eventType: 'radar.matched',
-    },
-    attributes: ['idempotencyKey'],
-    transaction,
-  });
-  const notifiedKeys = new Set(existing.map((event) => event.idempotencyKey));
-
-  for (const radar of matchedRadars) {
-    const key = `radar.matched:${radar.id}:${property.id}`;
-    if (notifiedKeys.has(key)) continue;
-    await publishRadarMatched(radar, property, transaction);
-  }
-}
+// M3-22 (CRMX-007): o matching do Radar com o imóvel roda POR EVENTO no despacho do outbox (radarEventConsumers.js), a partir de
+// property.offer.created, property.price.changed e property.offer.status.changed publicados aqui na mesma transação.
 
 // CRUD de PropertyOffer — a geração append-only de histórico de preço vive em
 // propertyPriceHistory.service.js e a regra de supersede de offer ACTIVE anterior vive em
@@ -155,10 +118,6 @@ async function createOffer(propertyId, payload, actorUserId, transaction) {
     transaction
   );
 
-  if (normalizedStatus === 'ACTIVE') {
-    await triggerRadarMatchingForProperty(property, transaction);
-  }
-
   return offer;
 }
 
@@ -208,6 +167,7 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
   // sem nenhuma offer ACTIVE por trás. Agora, se essa era a offer ACTIVE que sustentava a
   // publicação e não sobra nenhuma outra ACTIVE, o imóvel volta para INACTIVE.
   const wasActive = offer.status === 'ACTIVE';
+  const statusBefore = offer.status;
 
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
@@ -299,6 +259,7 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
     transaction
   );
 
+  if (offer.status !== statusBefore) await publishPropertyOfferStatusChanged(offer, statusBefore, transaction);
   await publishPropertyPublicSourceChanged(property, transaction);
   return offer;
 }

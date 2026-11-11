@@ -9,13 +9,13 @@ const propertiesService = require('../src/features/properties/properties.service
 const offersService = require('../src/features/properties/propertyOffers.service');
 const radarService = require('../src/features/radar/radar.service');
 const { OutboxEvent } = require('../src/models');
+require('../src/features/radar/radarEventConsumers'); // consumidor do Radar registrado para o despacho
+const { despacharNaTransacao } = require('./helpers/outboxEmTransacao');
 
 // CRMX-007 (Caderno Técnico, Marco 3, seção 2): "Novo imóvel ou novo cliente pode disparar
-// matching por eventos." Até esta correção, um imóvel novo só era descoberto pelos radares
-// ativos na PRÓXIMA rodada do job periódico (radarMatchingJob.js) — nunca no instante em que
-// a oferta é publicada. Este teste prova que criar uma offer ACTIVE para um imóvel que já bate
-// com um radar existente gera o evento radar.matched IMEDIATAMENTE, dentro da própria
-// transação de createOffer, sem rodar o job.
+// matching por eventos." Um imóvel novo não espera a PRÓXIMA rodada do job periódico
+// (radarMatchingJob.js): criar a offer publica property.offer.created no outbox, na transação
+// de createOffer, e o consumidor do Radar faz o matching no despacho do outbox (sem o job).
 let tenant;
 
 before(async () => {
@@ -26,7 +26,7 @@ after(async () => {
   await sequelize.close();
 });
 
-test('CRMX-007: criar uma offer ACTIVE dispara o matching do Radar na hora (evento), não só no próximo job periódico', async () => {
+test('CRMX-007: criar uma offer ACTIVE dispara o matching do Radar por evento (despacho do outbox), não só no próximo job periódico', async () => {
   const suffix = uniqueSuffix();
   const city = `RadarEvt${suffix}`;
 
@@ -68,14 +68,17 @@ test('CRMX-007: criar uma offer ACTIVE dispara o matching do Radar na hora (even
     });
     assert.equal(afterPropertyOnly.length, 0, 'property sem offer ACTIVE ainda não deve gerar match');
 
-    // Este createOffer é o evento real — SEM rodar radarMatchingJob.js nem GET /radar/:id/matches.
+    // Este createOffer publica o evento real — SEM rodar radarMatchingJob.js nem GET /radar/:id/matches.
     await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
+    const antesDoDespacho = await OutboxEvent.count({ where: { aggregateType: 'PropertyRadar', aggregateId: radar.id, eventType: 'radar.matched' }, transaction });
+    assert.equal(antesDoDespacho, 0, 'o matching não roda na requisição: espera o despacho do evento');
+    await despacharNaTransacao(tenant, transaction, { eventType: 'property.offer.created', payloadJson: { propertyId: property.id } });
 
     const afterOfferEvents = await OutboxEvent.findAll({
       where: { aggregateType: 'PropertyRadar', aggregateId: radar.id, eventType: 'radar.matched' },
       transaction,
     });
-    assert.equal(afterOfferEvents.length, 1, 'criar a offer ACTIVE deve disparar o evento radar.matched imediatamente');
+    assert.equal(afterOfferEvents.length, 1, 'o despacho do evento da offer ACTIVE deve publicar radar.matched');
     assert.equal(afterOfferEvents[0].idempotencyKey, `radar.matched:${radar.id}:${property.id}`);
     assert.equal(afterOfferEvents[0].payloadJson.personId, person.id);
   });
@@ -103,6 +106,7 @@ test('CRMX-007: criar offer que NÃO bate com nenhum radar ativo não gera event
       transaction
     );
     await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 420000 }, tenant.userId, transaction);
+    await despacharNaTransacao(tenant, transaction, { eventType: 'property.offer.created', payloadJson: { propertyId: property.id } });
 
     const events = await OutboxEvent.findAll({
       where: { aggregateType: 'PropertyRadar', aggregateId: radar.id, eventType: 'radar.matched' },
