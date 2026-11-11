@@ -107,7 +107,8 @@ test('transicao_invalida_recusa', async () => {
 test('exportar_audiencia_nao_existe', async () => {
   const router = require('../src/features/marketing/campaigns').router;
   const rotas = router.stack.filter((l) => l.route).map((l) => `${Object.keys(l.route.methods)[0]} ${l.route.path}`);
-  assert.deepEqual(rotas.sort(), ['get /marketing/campaigns/:id', 'post /marketing/campaigns']);
+  // A única rota além de criar/consultar é o reprocessamento das entregas com falha transitória (verificação K=7, I14 da D435): nenhuma exporta a audiência.
+  assert.deepEqual(rotas.sort(), ['get /marketing/campaigns/:id', 'post /marketing/campaigns', 'post /marketing/campaigns/:id/deliveries/reprocess']);
   await withRollbackTenantTransaction(A, async (t) => {
     const templateId = await makeTemplate(t, A);
     const { campaign } = await save(t, completeBody({ templateId, personIds: [await makePerson(t, A)], schedule: true }));
