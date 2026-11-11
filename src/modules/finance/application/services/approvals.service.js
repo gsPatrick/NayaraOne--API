@@ -242,7 +242,7 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
       },
       { transaction }
     );
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     if (err.name === 'SequelizeUniqueConstraintError') {
       throw AppError.conflict('Você já registrou uma decisão para esta solicitação.', 'FINANCE_APPROVAL_DUPLICATE_DECISION');
     }

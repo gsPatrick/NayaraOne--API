@@ -70,7 +70,7 @@ async function attachSettlementEvidence(id, payload, actorUserId, transaction) {
   entry.updatedBy = actorUserId || null;
   try {
     await entries.save(entry, transaction);
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     if (err && err.name === 'SequelizeUniqueConstraintError') {
       throw AppError.conflict(EVIDENCE_ALREADY_USED, 'FINANCE_SETTLEMENT_EVIDENCE_ALREADY_USED');
     }

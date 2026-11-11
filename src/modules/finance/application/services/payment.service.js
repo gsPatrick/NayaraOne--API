@@ -105,7 +105,7 @@ async function createPaymentIntent(payload, actorUserId, transaction) {
       },
       transaction
     );
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     if (err && err.name === 'SequelizeUniqueConstraintError') {
       throw AppError.conflict('Já existe uma intenção de pagamento em aberto para este lançamento.', 'FINANCE_PAYMENT_INTENT_ALREADY_OPEN');
     }

@@ -177,6 +177,7 @@ async function resolveThirdPartyLinks(payload, normalizedNature, options, transa
       'FINANCE_THIRD_PARTY_ORIGIN_NOT_APPLICABLE'
     );
   }
+  /** @type {{ normalizedThirdParty: any, normalizedThirdPartyReference: any, resolvedContractId: any, resolvedHolderPersonId: any, thirdPartyRelease: any, resolvedReleaseType: string | null, compensatedDebt: any }} */
   const links = {
     normalizedThirdParty,
     normalizedThirdPartyReference,

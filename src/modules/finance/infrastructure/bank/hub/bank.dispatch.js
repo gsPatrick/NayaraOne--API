@@ -51,7 +51,7 @@ async function callBankSubmit({ intent, transaction }) {
       }));
     }
     return await deliver(ctx, dispatch, run, transaction);
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     return { ok: false, error: error && error.message ? error.message : String(error) };
   }
 }

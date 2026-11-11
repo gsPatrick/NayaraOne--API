@@ -1,6 +1,6 @@
 'use strict';
 
-/**
+/*
  * Revisão independente do RBAC-02 (conferência Nayara 18/10/2026):
  *
  * 1. people.files.encrypted_at_rest (I4). Linhas existentes ficam false (legado: podem estar em

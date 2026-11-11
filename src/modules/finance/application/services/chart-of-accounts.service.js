@@ -103,7 +103,7 @@ async function createAccount(payload, actorUserId, transaction) {
       },
       { transaction }
     );
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     if (err.name === 'SequelizeUniqueConstraintError') {
       throw AppError.conflict(
         `Já existe uma conta com o código "${code}" no plano de contas desta empresa.`,
@@ -226,7 +226,7 @@ async function updateAccount(id, payload, actorUserId, transaction) {
   try {
     await account.save({ transaction });
     await recordAccountVersion(account, payload.changeReason || 'Conta alterada.', actorUserId, transaction);
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     if (err.name === 'SequelizeUniqueConstraintError') {
       throw AppError.conflict(
         `Já existe uma conta com o código "${code}" no plano de contas desta empresa.`,

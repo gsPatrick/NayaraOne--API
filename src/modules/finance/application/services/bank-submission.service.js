@@ -85,7 +85,11 @@ async function prepareBankSubmission(id, paymentMethod, actor, transaction) {
   return { intent, request: bank.buildSubmitRequest(intent) };
 }
 
-/** Fase 2 — a ordem ao banco pelo Dispatch Service, FORA de transação (ou, com `transaction`, nela). Nunca lança: devolve { ok, externalId, status } | { deferred } | { ok:false, error }. */
+/**
+ * Fase 2 — a ordem ao banco pelo Dispatch Service, FORA de transação (ou, com `transaction`, nela). Nunca lança: devolve { ok, externalId, status } | { deferred } | { ok:false, error }.
+ * @param {any} prepared
+ * @param {{ transaction?: any }} [options]
+ */
 async function callBankSubmit(prepared, { transaction } = {}) {
   const result = await bank.callBankSubmit({ intent: prepared.intent, transaction });
   if (result.ok && !result.externalId) return { ok: false, error: 'Resposta do banco sem identificador do pagamento.' };
@@ -168,7 +172,7 @@ async function reconcilePaymentIntent(id, actor, transaction) {
   let statusResult;
   try {
     statusResult = await queryPaymentStatus(current, transaction);
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     return { intent: current, outcome: 'BANK_UNREACHABLE', error: err.message };
   }
   const confirmed = await confirmBankPayment(current.externalSubmissionId, statusResult.status, transaction, { sandbox: statusResult.sandbox, amount: statusResult.amount, source: 'STATUS_QUERY' });
