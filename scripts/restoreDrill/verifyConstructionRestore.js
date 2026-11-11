@@ -12,6 +12,11 @@
  *   3. Segurança no destino: RLS ENABLE+FORCE em toda tabela de Obras; a role de runtime sem contexto de
  *      empresa não vê nada; com contexto vê a obra; e a UNIQUE da conta a pagar da medição continua
  *      valendo (reprocessar measurement.approved não cria segunda obrigação depois do restore).
+ *   4. Catálogo e dinheiro (verifyConstructionCatalog.js): somas de toda coluna numérica, políticas RLS, grants dos papéis
+ *      (inclusive nayara_analytics_reader) e pertença de papéis idênticos à origem.
+ *   5. Leitura pela aplicação (verifyConstructionAppRead.js): a API real sobre o banco restaurado devolve os mesmos valores
+ *      que o serviço calculou na origem antes do backup; outra empresa 404; sem permissão 403.
+ *      Para isso o processo precisa de DATABASE_URL = runtime do destino e PORT = porta HTTP livre.
  *
  * Uso: node scripts/restoreDrill/verifyConstructionRestore.js --source-url <super> --target-url <super>
  *        --target-app-url <runtime> --fixtures <fixtures.json> [--report <out.json>]
@@ -21,6 +26,8 @@
 const fs = require('fs');
 const crypto = require('crypto');
 const { Client } = require('pg');
+const { conferirCatalogo } = require('./verifyConstructionCatalog');
+const { conferirLeituraPelaApi } = require('./verifyConstructionAppRead');
 
 const arg = (n) => (process.argv.includes(n) ? process.argv[process.argv.indexOf(n) + 1] : null);
 const EVENTOS = ['project.created', 'project.budget.approved', 'project.started', 'project.stage.completed', 'project.daily_log.created',
@@ -75,8 +82,9 @@ async function main() {
     check('obra restaurada no estado WARRANTY (entregue, em garantia)', proj && proj.status === 'WARRANTY', proj);
     const bud = await one('SELECT status, baseline_amount::numeric AS b FROM construction.budgets WHERE id = $1', [fx.budgetId]);
     const co = await one('SELECT status, budget_impact::numeric AS i FROM construction.change_orders WHERE id = $1', [fx.changeOrderId]);
-    check('baseline = valor congelado na aprovação + aditivo aprovado', bud && bud.status === 'APPROVED' && co && co.status === 'APPROVED'
-      && Number(bud.b) === fx.baselineAtApproval + Number(co.i), { baseline: bud && Number(bud.b), aprovacao: fx.baselineAtApproval, aditivo: co && Number(co.i) });
+    // Fiel à origem, sem embutir a regra do aditivo (a baseline aprovada não muda pelo Guia §3; a regra é provada nos testes de Obras).
+    check('orçamento APPROVED com a mesma baseline da origem no backup e aditivo APPROVED com o mesmo impacto', bud && bud.status === 'APPROVED' && co && co.status === 'APPROVED'
+      && Number(bud.b) === fx.baselineNoBackup && Number(co.i) === fx.changeOrderImpact, { baseline: bud && Number(bud.b), naOrigem: fx.baselineNoBackup, aprovacao: fx.baselineAtApproval, aditivo: co && Number(co.i) });
     const med = await one('SELECT status, total_amount::numeric AS t, payable_financial_entry_id AS p FROM construction.stage_measurements WHERE id = $1', [fx.measurementId]);
     const pay = await one("SELECT count(*)::int AS n, min(amount)::numeric AS v FROM finance.financial_entries WHERE idempotency_key = $1", [`measurement.payable:${fx.measurementId}`]);
     check('medição PAYABLE com exatamente uma conta a pagar do mesmo valor', med && med.status === 'PAYABLE' && med.p === fx.payableId && Number(med.t) === fx.measurementTotal && pay.n === 1 && Number(pay.v) === fx.measurementTotal, { medicao: med, contas: pay });
@@ -117,10 +125,27 @@ async function main() {
       }
       await app.query('ROLLBACK');
       check('reprocessar measurement.approved após o restore não cria segunda conta a pagar (UNIQUE)', dup === '23505', `erro do banco: ${dup || 'nenhum'}`);
+      // O BI assume o papel de leitor (src/features/analytics/readOnly/readOnly.readerRole.js); sem a pertença ele perde essa camada em silêncio.
+      await app.query('BEGIN');
+      await app.query("SELECT set_config('app.group_id', $1, true), set_config('app.company_id', $2, true)", [fx.tenant.groupId, fx.tenant.companyId]);
+      let leitorBi = null;
+      try {
+        const pode = (await app.query("SELECT pg_has_role(current_user, 'nayara_analytics_reader', 'USAGE') AS ok")).rows[0].ok;
+        await app.query('SET LOCAL ROLE nayara_analytics_reader');
+        leitorBi = { pode, obras: (await app.query('SELECT count(*)::int AS n FROM construction.projects WHERE id = $1', [fx.projectId])).rows[0].n };
+      } catch (err) {
+        leitorBi = { erro: err.message };
+      }
+      await app.query('ROLLBACK');
+      check('a role de runtime assume o leitor do BI (nayara_analytics_reader) e lê a obra com RLS', leitorBi.pode === true && leitorBi.obras === 1, leitorBi);
     } finally {
       await app.end();
     }
-    const report = { geradoEm: new Date().toISOString(), aprovado: results.every((r) => r.ok), comparacao, verificacoes: results };
+    console.log('4. Catálogo e dinheiro: origem × destino');
+    const catalogo = await conferirCatalogo(src, dst, check);
+    console.log('5. Leitura pela aplicação sobre o banco restaurado');
+    await conferirLeituraPelaApi(fx, check);
+    const report = { geradoEm: new Date().toISOString(), aprovado: results.every((r) => r.ok), comparacao, catalogo, verificacoes: results };
     if (arg('--report')) fs.writeFileSync(arg('--report'), JSON.stringify(report, null, 2));
     console.log(`Resultado da verificação: ${report.aprovado ? 'APROVADA' : 'REPROVADA'} (${results.filter((r) => r.ok).length}/${results.length})`);
     process.exitCode = report.aprovado ? 0 : 1;
@@ -130,7 +155,8 @@ async function main() {
   }
 }
 
-main().catch((err) => {
+// A API sobe neste processo (passo 5): a saída é explícita para não ficar presa ao servidor HTTP.
+main().then(() => process.exit(process.exitCode || 0), (err) => {
   console.error(`❌ verifyConstructionRestore: ${err.message}`);
   process.exit(1);
 });

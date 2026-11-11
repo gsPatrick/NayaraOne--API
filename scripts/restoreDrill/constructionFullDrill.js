@@ -11,18 +11,23 @@
  *   3. Backup com o script real do projeto (npm run backup → pg_dump -Fc).
  *   4. Cluster de DESTINO novo: roles do runbook, npm run restore.
  *   5. Verificação (verifyConstructionRestore.js): origem × destino tabela a tabela, invariantes da obra,
- *      RLS da role de runtime e a UNIQUE da conta a pagar da medição.
- *   6. Prova negativa: adultera o valor de uma medição no destino e confirma que a verificação ACUSA.
+ *      RLS da role de runtime, a UNIQUE da conta a pagar da medição, somas de dinheiro, políticas, grants dos
+ *      papéis (inclusive nayara_analytics_reader) e a LEITURA pela API real servindo o banco restaurado.
+ *   6. Provas negativas: (a) adultera o valor de uma medição no destino; (b) apaga uma política RLS e tira o
+ *      SELECT do leitor do BI numa tabela de Obras — a verificação precisa ACUSAR as duas.
  *   7. Relatório (--report-dir) e teardown.
  *
- * Uso: node scripts/restoreDrill/constructionFullDrill.js [--keep] [--port 5543] [--report-dir <dir>]
+ * Uso: node scripts/restoreDrill/constructionFullDrill.js [--keep] [--port 5543] [--http-port 45xxx] [--report-dir <dir>]
+ * (--port e a porta seguinte são os dois clusters; --http-port é a API da leitura pós-restore; sem ela, uma porta livre.)
  */
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const net = require('net');
 const { execFileSync } = require('child_process');
 const cl = require('../lib/disposableCluster');
+const { createSupportRoles } = require('./restoreRoles');
 
 const argv = process.argv.slice(2);
 const KEEP = argv.includes('--keep');
@@ -30,6 +35,15 @@ const argValue = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] :
 const PORT_SOURCE = Number(argValue('--port')) || 5543;
 const PORT_TARGET = PORT_SOURCE + 1;
 const REPORT_DIR = argValue('--report-dir');
+const HTTP_PORT_ARG = Number(argValue('--http-port')) || 0;
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = net.createServer();
+    s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
+    s.on('error', reject);
+  });
+}
 
 const logLines = [];
 function log(line = '') {
@@ -77,10 +91,9 @@ async function main() {
     cl.startCluster(dataTarget, PORT_TARGET, workDir);
     toStop.push(dataTarget);
     cl.createRuntimeRole(PORT_TARGET);
-    cl.psql(PORT_TARGET, 'postgres', 'CREATE ROLE nayara_migration');
-    // Achado neste drill (10/11/2026): desde as migrations de BI do Marco 9 (20260101009612) o dump traz GRANTs para
-    // nayara_analytics_reader; sem a role no destino o restore falha. Criada como o runbook passa a instruir.
-    cl.psql(PORT_TARGET, 'postgres', 'CREATE ROLE nayara_analytics_reader NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS NOREPLICATION');
+    // Papéis de apoio do runbook (nayara_migration e nayara_analytics_reader, achado do drill de 10/11/2026), pelo mesmo
+    // procedimento dos drills jurídico e financeiro (restoreRoles.js).
+    log(`  papéis do runbook criados no destino: ${cl.APP_ROLE}, ${createSupportRoles(cl.psql, PORT_TARGET).join(', ')}`);
     cl.psql(PORT_TARGET, 'postgres', 'CREATE DATABASE drill_target');
     const restoreOut = cl.mustRun('npm run restore', 'npm', ['run', '--silent', 'restore', '--', '--file', dumpFile, '--target-db', 'drill_target'],
       src.childEnv({ DATABASE_URL: cl.appUrl(PORT_TARGET, 'drill_main'), DB_MIGRATION_USER: cl.SUPER, DB_MIGRATION_PASSWORD: 'trust-local' }));
@@ -89,17 +102,32 @@ async function main() {
     step('5. Verificação pós-restore (scripts/restoreDrill/verifyConstructionRestore.js)');
     const verifyArgs = ['scripts/restoreDrill/verifyConstructionRestore.js', '--source-url', src.superUrl, '--target-url', cl.superUrl(PORT_TARGET, 'drill_target'),
       '--target-app-url', cl.appUrl(PORT_TARGET, 'drill_target'), '--fixtures', fixturesFile];
-    const verify = cl.run('node', [...verifyArgs, '--report', reportFile], childEnv({}));
+    const httpPort = HTTP_PORT_ARG || await freePort();
+    const verifyEnv = childEnv({ DATABASE_URL: cl.appUrl(PORT_TARGET, 'drill_target'), PORT: String(httpPort), UPLOADS_DIR: uploads });
+    log(`  API real sobre o banco restaurado na porta HTTP ${httpPort} (role de runtime)`);
+    const verify = cl.run('node', [...verifyArgs, '--report', reportFile], verifyEnv);
     for (const line of verify.output.split('\n')) log(line);
 
-    step('6. Prova negativa: adultera o valor da medição no destino (+R$ 1,00) e roda a verificação de novo');
+    step('6. Provas negativas no destino: a verificação precisa acusar cada adulteração');
     const fx = JSON.parse(fs.readFileSync(fixturesFile, 'utf8'));
-    cl.psql(PORT_TARGET, 'drill_target', `UPDATE construction.stage_measurements SET total_amount = total_amount + 1 WHERE id = '${fx.measurementId}'`);
-    const tampered = cl.run('node', [...verifyArgs, '--report', tamperReport], childEnv({}));
-    const flagged = tampered.output.split('\n').filter((l) => l.includes('❌'));
-    for (const l of flagged) log(`  ${l.trim()}`);
-    tamperDetected = !tampered.ok && flagged.some((l) => l.includes('construction.stage_measurements')) && flagged.some((l) => l.includes('uma conta a pagar'));
-    log(`  → adulteração ${tamperDetected ? 'DETECTADA ✅ (hash origem × destino e invariante da conta a pagar acusaram)' : 'NÃO detectada ❌'}`);
+    const tentar = (rotulo, sqls, esperados) => {
+      for (const sql of sqls) cl.psql(PORT_TARGET, 'drill_target', sql);
+      const r = cl.run('node', [...verifyArgs, '--report', tamperReport], verifyEnv);
+      const flagged = r.output.split('\n').filter((l) => l.includes('❌'));
+      for (const l of flagged) log(`  ${l.trim().slice(0, 220)}`);
+      const ok = !r.ok && esperados.every((e) => flagged.some((l) => l.includes(e)));
+      log(`  → ${rotulo}: ${ok ? 'DETECTADA ✅' : 'NÃO detectada ❌'}`);
+      return ok;
+    };
+    log('  6a. valor da medição +R$ 1,00');
+    const a = tentar('adulteração de dinheiro', [`UPDATE construction.stage_measurements SET total_amount = total_amount + 1 WHERE id = '${fx.measurementId}'`],
+      ['construction.stage_measurements', 'uma conta a pagar', 'somas de dinheiro']);
+    cl.psql(PORT_TARGET, 'drill_target', `UPDATE construction.stage_measurements SET total_amount = total_amount - 1 WHERE id = '${fx.measurementId}'`);
+    log('  6b. política RLS apagada e SELECT do leitor do BI retirado numa tabela de Obras');
+    const pol = cl.psql(PORT_TARGET, 'drill_target', "SELECT policyname FROM pg_policies WHERE schemaname = 'construction' AND tablename = 'daily_reports' LIMIT 1").trim();
+    const b = tentar('adulteração de segurança', [`DROP POLICY "${pol}" ON construction.daily_reports`, 'REVOKE SELECT ON construction.daily_reports FROM nayara_analytics_reader'],
+      ['políticas RLS idênticas', 'grants de tabela', 'nayara_analytics_reader lê']);
+    tamperDetected = a && b;
 
     exitCode = verify.ok && tamperDetected ? 0 : 1;
     log(`\nResultado do drill: ${exitCode === 0 ? 'APROVADO' : 'REPROVADO'}`);
