@@ -121,3 +121,27 @@ test('M6-97: baixa parcial de conta de Obras carrega a obra; drill-down e painel
     assert.equal(Math.round((painel2 - painelAntes) * 100) / 100, 10000);
   });
 });
+
+test('M6-97: custo realizado da obra no read model do BI (rm_project_cost) e no painel conta cada real pago uma vez — baixas parciais, sem somar a obrigação quitada', async () => {
+  const { recompute } = require('../src/features/analytics/read-models/obras-project-cost.readmodel');
+  const hoje = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+  await H.withRollbackTenantTransaction(tenant, async (t) => {
+    const { project, stage } = await projectWithApprovedBudget(tenant, t);
+    const m = await medicaoRevisada(t, stage, { valor: 10000, evidenceFileIds: await evidenceIds(tenant, t) });
+    const { payableFinancialEntryId: contaId } = await measurementsService.decideStageMeasurement(m.id, { decision: 'APPROVED' }, tenant.userId, t);
+    const rm = async () => Number((await recompute({ companyId: tenant.companyId, groupId: tenant.groupId, key: { project_id: project.id }, asOfDate: hoje, transaction: t })).fields.actual_cost);
+    const painel = async () => Number((await projectHealthService.getProjectHealth(project.id, t)).actualFinancialCost);
+    assert.equal(await rm(), 0, 'nada pago ainda');
+
+    const ms1 = await H.prepareManualSettlement(tenant, contaId, tenant.userId, t);
+    await receipt.settleFinancialEntryPartial(contaId, 4000, tenant.userId, t, { manualSettlement: ms1, idempotencyKey: `m6v-rm1-${H.uniqueSuffix()}` });
+    assert.equal(await rm(), 4000, 'read model: a baixa parcial paga entra pelo valor pago');
+    assert.equal(await painel(), 4000);
+
+    const ms2 = await H.prepareManualSettlement(tenant, contaId, tenant.userId, t);
+    await receipt.settleFinancialEntryPartial(contaId, 6000, tenant.userId, t, { manualSettlement: ms2, idempotencyKey: `m6v-rm2-${H.uniqueSuffix()}` });
+    assert.equal((await FinancialEntry.findByPk(contaId, { transaction: t })).status, 'SETTLED');
+    assert.equal(await rm(), 10000, 'read model: obrigação quitada por baixas soma 10.000, não 20.000');
+    assert.equal(await painel(), 10000, 'painel da obra: 10.000');
+  });
+});
