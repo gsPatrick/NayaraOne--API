@@ -2,6 +2,7 @@
 
 const { MaterialRequest, Project, ProjectStage, InventoryItem, InventoryMovement } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertLocationInCompany } = require('./companyRefs');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaterialRequested, publishMaterialReceived } = require('./constructionEvents.service');
 const { recordMovement } = require('../inventory/movements.service');
@@ -61,6 +62,9 @@ async function createMaterialRequest(projectId, payload, actorUserId, transactio
   // antes de excluir a obra.
   const project = await Project.findByPk(projectId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined });
   if (!project) throw AppError.notFound('Obra não encontrada.', 'PROJECT_NOT_FOUND');
+  if (project.companyId !== companyId) {
+    throw AppError.unprocessable('"projectId": a obra informada não pertence a esta empresa.', 'CONSTRUCTION_REFERENCE_NOT_IN_COMPANY', { field: 'projectId' });
+  }
 
   if (stageId) {
     const stage = await ProjectStage.findOne({ where: { id: stageId, projectId }, transaction });
@@ -153,6 +157,8 @@ async function receiveMaterialRequest(id, groupId, companyId, actorUserId, trans
       'MATERIAL_REQUEST_STOCK_LINK_REQUIRED'
     );
   }
+  // Verificação independente do Marco 6: o local de estoque de origem é da empresa (FK ignora RLS).
+  await assertLocationInCompany(sourceLocationId, companyId, transaction, 'sourceLocationId');
 
   // Revisão Marco 7 (19/10/2026), A7 — EST-004 ("Material consumido precisa de
   // project_id/stage_id") / Caderno M7 §5 ("OUT vincula project_id/stage_id"): a baixa de estoque
@@ -242,6 +248,7 @@ async function returnMaterialRequest(id, groupId, companyId, payload, actorUserI
       'MATERIAL_REQUEST_RETURN_VALIDATION'
     );
   }
+  await assertLocationInCompany(destinationLocationId, companyId, transaction, 'destinationLocationId');
   const returnQuantity = quantity != null ? Number(quantity) : Number(materialRequest.quantity);
   if (!Number.isFinite(returnQuantity) || returnQuantity <= 0 || returnQuantity > Number(materialRequest.quantity)) {
     throw AppError.badRequest('"quantity" da devolução precisa ser maior que zero e não pode exceder a quantidade recebida.', 'MATERIAL_REQUEST_RETURN_VALIDATION');

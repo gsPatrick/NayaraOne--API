@@ -340,6 +340,10 @@ async function createContract(payload, actorUserId, transaction) {
       'LEGAL_CONTRACT_CONSTRUCTION_PROJECT_REQUIRED'
     );
   }
+  // M6-104 (verificação independente do Marco 6): a obra é da MESMA empresa — FK no PostgreSQL ignora RLS.
+  if (constructionProjectId && !(await sequelize.models.Project.findOne({ where: { id: constructionProjectId, companyId }, attributes: ['id'], transaction }))) {
+    throw AppError.unprocessable('"constructionProjectId": a obra informada não pertence a esta empresa.', 'CONSTRUCTION_REFERENCE_NOT_IN_COMPANY', { field: 'constructionProjectId' });
+  }
 
   // Matriz M5 (Caderno §3): ADDENDUM/KEY_DELIVERY/USED_PROPERTY_DELIVERY são vinculados ao contrato principal
   // (mesma empresa, tipo não vinculado) e herdam o imóvel dele.

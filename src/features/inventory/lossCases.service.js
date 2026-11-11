@@ -3,6 +3,7 @@
 const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, File, FinancialEntry, Person, ApprovalThreshold } = require('../../models');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
+const { assertProjectInCompany } = require('../construction/companyRefs'); // verificação do Marco 6: obra da mesma empresa
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
 const { publishLossOpened } = require('./inventoryEvents.service');
@@ -115,6 +116,7 @@ async function openLossCase(payload, actorUserId, transaction) {
   if (!inventoryItemId && !assetId) {
     throw AppError.badRequest('Informe "inventoryItemId" ou "assetId".', 'LOSS_CASE_VALIDATION');
   }
+  await assertProjectInCompany(projectId, companyId, transaction);
   // EST-TS-10: loss sem evidência é bloqueado quando o item for CONSUMABLE/TOOL de alto valor —
   // como o Caderno não fixa o limiar de valor em código (regra pertence ao Motor de Regras),
   // aplicamos aqui o mínimo seguro do próprio EST-TS-10: ao menos uma evidência é sempre exigida.

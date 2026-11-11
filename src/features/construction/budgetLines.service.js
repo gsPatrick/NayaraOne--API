@@ -4,6 +4,7 @@ const { BudgetLine, Budget } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
+const { assertProjectInCompany } = require('./companyRefs');
 
 function assertNonNegativeAmount(value, fieldName) {
   if (value === undefined || value === null) return;
@@ -30,6 +31,8 @@ async function createBudgetLine(projectId, payload, actorUserId, transaction) {
   // FIX (auditoria adversarial): plannedAmount/actualAmount aceitavam valor negativo tanto na
   // criação quanto na edição — mesmo padrão de bug já achado em RDO/etapa de obra.
   assertNonNegativeAmount(plannedAmount, 'plannedAmount');
+  // Verificação independente do Marco 6: a obra (parâmetro da rota) precisa ser da empresa — sem budgetId ela nem era lida.
+  await assertProjectInCompany(projectId, companyId, transaction);
 
   // Baseline imutável (M6-17): não é possível acrescentar linha nova a um orçamento agregado
   // já `APPROVED` — isso aumentaria o custo total sem passar por Change Order.

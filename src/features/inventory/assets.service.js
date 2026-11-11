@@ -14,6 +14,7 @@ const {
   InventoryToolLoan,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertProjectInCompany } = require('../construction/companyRefs'); // verificação do Marco 6: obra da mesma empresa
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
 const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
@@ -75,6 +76,7 @@ async function createAsset(payload, actorUserId, transaction) {
   }
   assertNonNegativeAcquisitionValue(acquisitionValue);
   assertWarrantyNotBeforeAcquisition(acquiredAt, warrantyUntil);
+  await assertProjectInCompany(projectId, companyId, transaction);
 
   // GAP REAL CORRIGIDO (auditoria real Nayara, Marco 7, 2026-10-14, achado F15): comparação de
   // assetTag era sensível a maiúsculas/minúsculas — permitia cadastrar "ABC-1" e "abc-1" como tags

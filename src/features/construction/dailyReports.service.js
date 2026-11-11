@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishDailyLogCreated } = require('./constructionEvents.service');
 const { assertEvidenceFilesExist } = require('./evidenceFiles');
+const { assertPersonsInCompany } = require('./companyRefs');
 // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): a checagem de reuso suspeito de
 // evidência por hash (`detectEvidenceReuse`, nonconformities.service.js — M6-59) nunca tinha sido
 // conectada ao Diário de Obra, apesar do RDO também gravar `evidenceFileIds`. Reusa o MESMO
@@ -67,6 +68,16 @@ function validateWorkforceCount(workforceCount) {
  */
 async function replaceDailyWorkers(dailyReportId, workers, tenant, actorUserId, transaction) {
   if (!Array.isArray(workers)) return;
+  // Caderno §6 "Prestador/equipe vinculado a Pessoa/Fornecedor e documentação correspondente" (verificação independente
+  // M6-08): o prestador é Pessoa da MESMA empresa (FK ignora RLS) e cada documento é arquivo real da empresa, examinado
+  // pelo antivírus no envio — um ID sem arquivo é recusado. Tudo conferido antes de apagar/gravar a equipe.
+  for (const worker of workers) {
+    if (!worker || !worker.personId) {
+      throw AppError.badRequest('Cada item de "workers" precisa de "personId".', 'DAILY_WORKER_VALIDATION');
+    }
+    await assertEvidenceFilesExist(worker.documentFileIds, tenant.companyId, transaction, 'workers[].documentFileIds', { requireClean: true });
+  }
+  await assertPersonsInCompany(workers.map((w) => w.personId), tenant.companyId, transaction);
   await DailyWorker.destroy({ where: { dailyReportId }, transaction, force: true });
   for (const worker of workers) {
     if (!worker || !worker.personId) {
