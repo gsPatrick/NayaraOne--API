@@ -25,3 +25,7 @@ A API anterior (Marco 9 sem o Marco 5) NÃO funciona depois dessas migrations (n
 ## Plano de reversão
 
 `npx sequelize-cli db:migrate:undo:all --to 20260101009981-legal-aprovacao-por-versao-e-arquivo-da-versao.js --env migration` devolve os nomes antigos (mesma tabela, mesmos dados) e remove só objetos novos; então reimplantar a API anterior. Se alguma `down` falhar, restaurar o backup.
+
+## Depois da M4-D140 (migrations do Financeiro na pasta do módulo)
+
+Os comandos acima não mudam. Desde a M4-D140, as migrations que mexem no schema `finance` (entre elas `20260101009984`, `20260101009985` e `20260101009992`, que fazem parte deste intervalo) ficam em `src/modules/finance/infrastructure/db/migrations/`, com o mesmo nome; o `.sequelizerc` faz o `sequelize-cli` ler as duas pastas na ordem global do nome, então `db:migrate` e `db:migrate:undo:all --to ...` aplicam e desfazem as mesmas migrations, na mesma ordem. Detalhes em `docs/DEPLOY_ESTRUTURA_FINANCEIRO_M4D140.md`.
