@@ -2656,10 +2656,12 @@
    "entry_type",
    "idempotency_key",
    "is_third_party_funds",
+   "ledger_exclusion_reason",
    "lock_version",
    "manual_review_cleared_at",
    "manual_review_cleared_by",
    "manual_review_reason",
+   "movement_kind",
    "nature",
    "origin_ref",
    "parent_entry_id",
@@ -2670,6 +2672,7 @@
    "settlement_evidence_attached_at",
    "settlement_evidence_attached_by",
    "settlement_evidence_file_id",
+   "settlement_idempotency_key",
    "settlement_method",
    "settlement_reason",
    "status",
@@ -2713,6 +2716,16 @@
    "to_company_id",
    "to_entry_id",
    "updated_by"
+  ],
+  "finance.ledger_m4lr_migration_log": [
+   "column_name",
+   "created_entry_id",
+   "detail",
+   "entry_id",
+   "logged_at",
+   "new_value",
+   "old_value",
+   "step"
   ],
   "finance.owner_repasses": [
    "approved_at",

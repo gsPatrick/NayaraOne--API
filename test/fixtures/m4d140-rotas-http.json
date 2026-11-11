@@ -1,7 +1,7 @@
 {
   "demanda": "M4-D140",
   "geradoNoCommit": "a8335d22073a3ac4a7a0fdda5a634313888dcb9b",
-  "total": 100,
+  "total": 101,
   "rotas": [
     {
       "method": "GET",
@@ -562,6 +562,20 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/settle-complement",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "rejectExcessDecimalsMiddleware",
         "wrapped"
       ]
     },
