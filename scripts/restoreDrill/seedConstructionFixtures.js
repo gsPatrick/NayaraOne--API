@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { assertDrillDatabase } = require('./drillGuard');
+const { retratoDaSaude } = require('./verifyConstructionAppRead');
 
 assertDrillDatabase(process.env.DATABASE_URL, 'seedConstructionFixtures');
 
@@ -45,7 +46,7 @@ async function main() {
     const approved = await svc('budgets').approveBudget(budget.id, tenant.userId, t);
     const co = await svc('changeOrders').createChangeOrder(project.id, W({ reasonCode: 'ESCOPO_ADICIONAL', description: 'Reforço de viga', budgetImpact: 1500, scheduleImpactDays: 3, evidenceFileIds: [await foto(t, 'aditivo')], idempotencyKey: `drill-co-${s}` }), tenant.userId, t);
     await svc('changeOrders').decideChangeOrder(co.id, { decision: 'APPROVE' }, tenant.userId, t);
-    Object.assign(f, { projectId: project.id, budgetId: budget.id, baselineAtApproval: Number(approved.baselineAmount), changeOrderId: co.id });
+    Object.assign(f, { projectId: project.id, budgetId: budget.id, baselineAtApproval: Number(approved.baselineAmount), changeOrderId: co.id, changeOrderImpact: Number(co.budgetImpact) });
   });
 
   await T(async (t) => {
@@ -96,7 +97,16 @@ async function main() {
     Object.assign(f, { warrantyCaseId: wc.id, propertyId: property.id });
   });
 
-  f.tenant = { groupId: tenant.groupId, companyId: tenant.companyId };
+  // Retrato de ANTES do backup, calculado pelo serviço real na origem: a verificação compara com o que a API lê do banco restaurado
+  // (verifyConstructionAppRead.js) e com a baseline restaurada (fiel à origem, qualquer que seja a regra do aditivo).
+  await T(async (t) => {
+    const health = require(path.join(SRC, 'features', 'construction', 'projectHealth.service'));
+    f.saudeNoBackup = retratoDaSaude(await health.getProjectHealth(f.projectId, t));
+    f.baselineNoBackup = Number((await ctx.models.Budget.findByPk(f.budgetId, { transaction: t })).baselineAmount);
+    f.statusNoBackup = (await ctx.models.Project.findByPk(f.projectId, { transaction: t })).status;
+  });
+
+  f.tenant = { groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId };
   fs.writeFileSync(out, JSON.stringify(f, null, 2));
   console.log(`fixtures de Obras: obra ${f.projectId} (orçamento, aditivo, requisição+devolução, RDO+correção, medição PAYABLE, NC, perda+estorno, entrega, garantia fechada)`);
   await ctx.sequelize.close();

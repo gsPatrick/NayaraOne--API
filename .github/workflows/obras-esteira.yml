@@ -1,0 +1,74 @@
+name: Esteira de Obras
+
+# Guia do Marco 6, §13 (CI/CD): lint → typecheck → migrations → baseline tests → dependency tests → daily-log tests → measurement idempotency →
+# finance-event tests → inventory integration → quality gate → warranty SLA → multi-company → concurrency → security scan → DEV → LAB →
+# load/failure tests, nesta ordem (scripts/ci-obras/etapas.js recusa outra ordem ou outro nome), parando na primeira etapa vermelha.
+#   - Todo push e pull request: as 17 etapas, com LAB saindo NAO_APLICAVEL (dito no relatório, nunca contado como verde). DEV sobe a API do HEAD
+#     contra o banco descartável e faz o smoke de Obras (scripts/ci-obras/deployLocal.js). "security scan" junta a varredura de segredos, a
+#     auditoria de dependências com a política de exceções, o SAST, as guardas do "não improvisar", o scanner de hard-code de Obras, o lint do
+#     módulo e os testes adversariais pela API real. "load/failure tests" roda as falhas reais, a carga do diário e o drill de restore de Obras.
+#   - Tag obr-release-*: LAB dispara o deploy no ambiente LAB do Patrick (secrets do environment lab) e confere o commit publicado (DI-M6Q-1).
+# Banco: sempre o cluster descartável (scripts/withDisposableDb.js), nunca o compartilhado. O CI NÃO faz deploy em produção.
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9]
+    tags: ['obr-release-*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  esteira-obras:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: PostgreSQL 17 (binarios para o cluster descartavel e o drill de restore)
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          echo "DRILL_PG_BIN=/usr/lib/postgresql/17/bin" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Etapas 1 a 17 (param na primeira vermelha; LAB sai NAO_APLICAVEL fora da tag)
+        run: bash scripts/ci-estagios-obras.sh docs/evidencias/ci/esteira-obras.json
+      - name: Arquivar o relatorio por etapa e o relatorio do drill de restore
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-obras-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-obras*.json
+            reports/obras-ci/
+          if-no-files-found: warn
+          retention-days: 90
+
+  release-obras:
+    # Tag obr-release-*: etapa LAB (hook do environment lab + conferencia do commit em /api/version). Sem os secrets a etapa fica vermelha.
+    if: ${{ startsWith(github.ref, 'refs/tags/obr-release-') }}
+    needs: esteira-obras
+    runs-on: ubuntu-latest
+    environment: lab
+    env:
+      OBR_CI_LAB_DEPLOY_HOOK: ${{ secrets.LAB_API_DEPLOY_HOOK_URL }}
+      OBR_CI_LAB_URL: ${{ secrets.LAB_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Etapa 16 (LAB)
+        run: node scripts/ci-obras/executar.js --release --de 16 --ate 16 --relatorio docs/evidencias/ci/esteira-obras-release.json
+      - name: Arquivar o relatorio da etapa LAB
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-obras-release-${{ github.sha }}
+          path: docs/evidencias/ci/esteira-obras-release.json
+          if-no-files-found: warn
+          retention-days: 90
