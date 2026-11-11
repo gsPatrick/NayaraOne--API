@@ -37,6 +37,13 @@ async function revokeGranted() {
 /** Devolve as permissões emprestadas e encerra o processo do arquivo (o app real fica escutando a porta). */
 async function encerrar() {
   await revokeGranted();
+  if (process.env.M3CB_EVIDENCIA_DIR && trilha.length) {
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const nome = path.basename(process.argv[1] || 'teste').replace(/\.test\.js$/, '');
+    fs.mkdirSync(process.env.M3CB_EVIDENCIA_DIR, { recursive: true });
+    fs.writeFileSync(path.join(process.env.M3CB_EVIDENCIA_DIR, `${nome}.json`), `${JSON.stringify({ arquivo: `test/${nome}.test.js`, chamadas: trilha }, null, 1)}\n`);
+  }
   setTimeout(() => process.exit(0), 300);
 }
 
@@ -49,8 +56,16 @@ async function subir(port, extra = {}) {
   await grantMissing(ROLES.gestor, [...GESTOR, ...(extra.gestor || [])]);
   const http = await startHttpEnv(port, [['A', 'maker'], ['A', 'checker'], ['A', 'gestor']]);
   const ids = { maker: await userIdOf('maker'), checker: await userIdOf('checker'), gestor: await userIdOf('gestor') };
-  return { ...http, ids };
+  const perfilDe = Object.fromEntries(Object.entries(http.tokens).map(([perfil, token]) => [token, perfil]));
+  // Evidência (M3CB_EVIDENCIA_DIR): método, caminho, perfil, status e código de cada chamada, sem token nem corpo.
+  const call = async (method, path, token, body, headers) => {
+    const r = await http.call(method, path, token, body, headers);
+    trilha.push({ em: new Date().toISOString(), metodo: method, caminho: `/api/v1${path}`, perfil: perfilDe[token] || null, status: r.status, codigo: (r.body && r.body.error && r.body.error.code) || null });
+    return r;
+  };
+  return { ...http, call, ids };
 }
+const trilha = [];
 
 const FUTURE = () => new Date(Date.now() + 3 * 86400000).toISOString();
 let seq = 0;

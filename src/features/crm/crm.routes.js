@@ -21,8 +21,6 @@ crmRouter.use('/crm/proposals/:id', carteira.requireRecordInScope('proposal'));
 crmRouter.use('/crm/feedback-cases/:id', carteira.requireRecordInScope('feedback'));
 crmRouter.use('/carts/:cartId', carteira.requireRecordInScope('cart', 'cartId'));
 crmRouter.use('/tasks/:id', carteira.requireRecordInScope('task'));
-for (const path of ['/visits', '/messages', '/messages/send', '/crm/proposals', '/crm/feedback-cases']) crmRouter.post(path, carteira.requireBodyOpportunityInScope);
-for (const path of ['/visits', '/messages', '/crm/proposals', '/crm/feedback-cases']) crmRouter.get(path, carteira.requireQueryOpportunityInScope, carteira.attachCarteira);
 
 // M3-21 — exportação sensível: permissão DEDICADA (não basta crm:opportunities:read) e
 // sempre auditada. Precisa vir ANTES de '/opportunities/:id' para não ser capturada por ele.
@@ -33,8 +31,8 @@ crmRouter.get(
 );
 
 // --- Propostas (M3-13 / M3-25) ---
-crmRouter.post('/crm/proposals', requirePermission('crm:proposals:create'), crmController.createProposal);
-crmRouter.get('/crm/proposals', requirePermission('crm:proposals:read'), crmController.listProposals);
+crmRouter.post('/crm/proposals', requirePermission('crm:proposals:create'), carteira.requireBodyOpportunityInScope, crmController.createProposal);
+crmRouter.get('/crm/proposals', requirePermission('crm:proposals:read'), carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listProposals);
 crmRouter.get('/crm/proposals/:id', requirePermission('crm:proposals:read'), crmController.getProposal);
 crmRouter.patch('/crm/proposals/:id/status', requirePermission('crm:proposals:update'), crmController.updateProposalStatus);
 
@@ -42,8 +40,8 @@ crmRouter.patch('/crm/proposals/:id/status', requirePermission('crm:proposals:up
 crmRouter.get('/crm/dashboard', requirePermission('crm:dashboard:read'), carteira.scopeDashboardToCarteira, crmController.getDashboard);
 
 // --- Reclamações, elogios e conflitos (M3-20) ---
-crmRouter.post('/crm/feedback-cases', requirePermission('crm:feedback:create'), crmController.createFeedbackCase);
-crmRouter.get('/crm/feedback-cases', requirePermission('crm:feedback:read'), crmController.listFeedbackCases);
+crmRouter.post('/crm/feedback-cases', requirePermission('crm:feedback:create'), carteira.requireBodyOpportunityInScope, crmController.createFeedbackCase);
+crmRouter.get('/crm/feedback-cases', requirePermission('crm:feedback:read'), carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listFeedbackCases);
 crmRouter.get('/crm/feedback-cases/:id', requirePermission('crm:feedback:read'), crmController.getFeedbackCase);
 crmRouter.patch('/crm/feedback-cases/:id/resolve', requirePermission('crm:feedback:update'), crmController.resolveFeedbackCase);
 crmRouter.patch('/crm/feedback-cases/:id/escalate', requirePermission('crm:feedback:update'), crmController.escalateFeedbackCase);
@@ -67,17 +65,17 @@ crmRouter.get(
   crmController.getOpportunityTimeline
 );
 
-crmRouter.post('/visits', requirePermission('crm:visits:create'), crmController.createVisit);
-crmRouter.get('/visits', requirePermission('crm:visits:read'), crmController.listVisits);
+crmRouter.post('/visits', requirePermission('crm:visits:create'), carteira.requireBodyOpportunityInScope, crmController.createVisit);
+crmRouter.get('/visits', requirePermission('crm:visits:read'), carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listVisits);
 crmRouter.get('/visits/:id', requirePermission('crm:visits:read'), crmController.getVisit);
 crmRouter.patch('/visits/:id', requirePermission('crm:visits:update'), crmController.updateVisit);
 crmRouter.delete('/visits/:id', requirePermission('crm:visits:delete'), crmController.removeVisit);
 
-crmRouter.post('/messages', requirePermission('crm:messages:create'), crmController.createMessage);
-crmRouter.post('/messages/send', requirePermission('crm:messages:create'), crmController.sendMessage);
+crmRouter.post('/messages', requirePermission('crm:messages:create'), carteira.requireBodyOpportunityInScope, crmController.createMessage);
+crmRouter.post('/messages/send', requirePermission('crm:messages:create'), carteira.requireBodyOpportunityInScope, crmController.sendMessage);
 crmRouter.post('/messages/:id/send-alternate', requirePermission('crm:messages:create'), crmController.sendMessageViaAlternate);
 crmRouter.post('/messages/:id/refresh-status', requirePermission('crm:messages:update'), crmController.refreshMessageStatus);
-crmRouter.get('/messages', requirePermission('crm:messages:read'), crmController.listMessages);
+crmRouter.get('/messages', requirePermission('crm:messages:read'), carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listMessages);
 crmRouter.get('/messages/:id', requirePermission('crm:messages:read'), crmController.getMessage);
 crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update'), crmController.updateMessageStatus);
 

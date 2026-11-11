@@ -94,8 +94,9 @@ test('email_sent_sem_confirmacao_conta_no_cap_e_nao_conta_como_contato', async (
     assert.deepEqual([deliveredFacts.contactBase, deliveredFacts.interactions.length], ['INTERACTION', 1]);
     assert.ok(deliveredFacts.lastInteractionAt);
     // mensagem de pessoa (sem action_key) continua contando quando aceita, como na M9-D229
-    const humana = await env.addMessage(t, A, { personId: m.personId, channel: 'WHATSAPP', status: 'SENT', at: new Date() });
-    await env.q(t, 'UPDATE crm.messages SET opportunity_id = :o, author_type = :a WHERE id = :id RETURNING id', { o: m.opportunityId, a: 'EMPLOYEE', id: humana });
+    // M3-CAD-18: o autor da interação é imutável no banco; a mensagem já nasce da pessoa da equipe (só a ligação com a oportunidade vem depois).
+    const humana = await env.addMessage(t, A, { personId: m.personId, channel: 'WHATSAPP', status: 'SENT', at: new Date(), authorType: 'EMPLOYEE' });
+    await env.q(t, 'UPDATE crm.messages SET opportunity_id = :o WHERE id = :id RETURNING id', { o: m.opportunityId, id: humana });
     assert.equal((await loadOpportunityFacts(m.opportunityId, t, { now: new Date() })).interactions.length, 2);
   });
 });

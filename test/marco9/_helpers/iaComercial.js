@@ -47,7 +47,7 @@ async function cenario(tenant, tx, { perms = PERMS_CORRETOR, dias = 0, deps = {}
 
 const mensagem = (c, direction = 'OUTBOUND') => messagesService.createMessage({
   groupId: c.tenant.groupId, companyId: c.tenant.companyId, personId: c.pessoa.id, opportunityId: c.opp.id, direction, authorType: direction === 'INBOUND' ? 'CLIENT' : 'EMPLOYEE',
-  channel: 'WHATSAPP', body: 'Mensagem de teste.',
+  channel: 'WHATSAPP', body: 'Mensagem de teste.', ...(direction === 'OUTBOUND' ? { purpose: 'TRANSACTIONAL' } : {}), // M3-18: saída declara a finalidade
 }, c.tenant.userId, c.tx);
 
 /** Proposta enviada (SENT, com sentAt de agora). */
