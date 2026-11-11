@@ -5,7 +5,7 @@ class Relato {
 
   /** Uma conferência: ok=true passa, false falha, null = não verificado (com motivo). */
   conferir(cenario, descricao, ok, evidencia) {
-    this.conferencias.push({ cenario, descricao, ok, evidencia: evidencia || '' });
+    this.conferencias.push({ quando: new Date().toISOString(), cenario, descricao, ok, evidencia: evidencia || '' });
     const marca = ok === true ? 'OK    ' : ok === false ? 'FALHOU' : 'N/VERIF';
     console.log(`  [${marca}] ${descricao}${evidencia ? `\n           -> ${evidencia}` : ''}`);
   }
@@ -24,6 +24,12 @@ class Relato {
     }
     for (const [cen, n] of Object.entries(por)) console.log(`- ${cen}: ${n.ok} ok, ${n.falhou} falharam, ${n.nv} não verificadas`);
     if (this.avisos.length) { console.log('\nAvisos:'); this.avisos.forEach((a) => console.log(`- ${a}`)); }
+  }
+
+  /** Conferências, quadro e avisos para gravar em JSON (só ids, status HTTP e trechos curtos; nada de segredo). */
+  paraJson() {
+    const conta = (v) => this.conferencias.filter((c) => c.ok === v).length;
+    return { resumo: { ok: conta(true), falharam: conta(false), naoVerificadas: conta(null) }, conferencias: this.conferencias, quadro: this.quadro, avisos: this.avisos };
   }
 
   get falhas() { return this.conferencias.filter((c) => c.ok === false).length; }

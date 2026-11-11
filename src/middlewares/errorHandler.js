@@ -57,6 +57,18 @@ function mapMarketingDatabaseError(err) {
   return null;
 }
 
+/**
+ * Isolamento entre empresas (10/11/2026): gravação recusada pelo WITH CHECK de uma política RLS (SQLSTATE 42501, "new row
+ * violates row-level security policy") é registro fora da empresa em uso, não falha do servidor. Antes caía no 500
+ * (POST /people/:id/consents de outra empresa do mesmo grupo). Só a mensagem de RLS é mapeada: 42501 de GRANT ausente
+ * ("permission denied for table") continua 500, porque aí é configuração do servidor.
+ */
+function mapRlsViolation(err) {
+  const pg = err && err.parent;
+  if (!pg || pg.code !== '42501' || !/row-level security/i.test(String(pg.message || err.message || ''))) return null;
+  return { statusCode: 403, code: 'TENANT_SCOPE_DENIED', message: 'Este registro não pertence à empresa em uso.' };
+}
+
 const isIntegrationRoute = (req) => /\/(integrations|webhooks)(\/|\?|$)/i.test(String(req.originalUrl || ''));
 
 /** M9-D843 / K5: todo corpo de erro leva `error.traceId` (o correlationId da requisição, o mesmo de X-Correlation-Id); nunca na raiz. */
@@ -125,6 +137,12 @@ async function errorHandler(err, req, res, next) { // eslint-disable-line no-unu
 
   const marketingMapped = mapMarketingDatabaseError(err);
   if (marketingMapped) return failure(res, marketingMapped);
+
+  const rlsMapped = mapRlsViolation(err);
+  if (rlsMapped) {
+    logger.warn({ ...context, code: rlsMapped.code, statusCode: rlsMapped.statusCode, table: err.parent.table || null }, '[RLS] gravação fora do escopo da empresa recusada');
+    return failure(res, rlsMapped);
+  }
 
   // FIX (auditoria E2E de browser, 01/10/2026): um id de rota com formato inválido (ex.:
   // /construction/projects/id-que-nao-existe-123, resultado comum de favoritos velhos ou link
@@ -200,3 +218,4 @@ async function errorHandler(err, req, res, next) { // eslint-disable-line no-unu
 }
 
 module.exports = errorHandler;
+module.exports.mapRlsViolation = mapRlsViolation;

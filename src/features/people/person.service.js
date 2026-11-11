@@ -28,8 +28,9 @@ function validatePersonRoleCode(roleCode) {
  * vive em personDocumentFormat.service.js; contacts/documents/roles como sub-recursos têm CRUD
  * próprio em personContacts.service.js / personDocuments.service.js / personRoles.service.js.
  *
- * "people"."persons" tem RLS por par de policies (persons_company_select/persons_company_write —
- * ver migration 20260101000083); "person_contacts"/"person_documents" têm RLS por
+ * "people"."persons" tem RLS por empresa: persons_company_select (migration 20260101000083) e
+ * persons_company_insert/update/delete (migration 20260101009965, que tirou o FOR ALL só por grupo
+ * que liberava a leitura para o grupo inteiro); "person_contacts"/"person_documents" têm RLS por
  * `company_id = current_setting('app.company_id', true)`. Toda query aqui recebe `transaction`
  * já aberta por `req.withTenantTransaction` (ver src/middlewares/tenant.middleware.js).
  */

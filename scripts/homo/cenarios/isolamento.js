@@ -35,16 +35,21 @@ async function outraEmpresa(ctx) {
   if (!ctx.outra) { ctx.rel.conferir(CENARIO, 'usuário de outra empresa não enxerga a empresa A', null, 'HOMO_OUTRA_EMPRESA_EMAIL/HOMO_OUTRA_EMPRESA_PASSWORD não informados. Criar uma segunda empresa e usuário não é possível por este script (exige MFA recente e papéis); informe um usuário que já exista.'); return; }
   const { pessoaOk, pessoaOptOut, campanhaId, fluxoId, modeloId } = ctx.ids;
   const alvo = (rota) => rota.replace(/[0-9a-f-]{36}/g, ':id');
+  // Edição com o MESMO nome de uso que a pessoa já tem: se o isolamento falhar (código antigo), o registro fictício não muda.
+  const atual = await ctx.admin.chamar('GET', `/people/${pessoaOk}`);
+  const nomeDeUso = atual.dados && atual.dados.preferredName !== undefined ? atual.dados.preferredName : null;
   const casos = [
     ['ler a pessoa da empresa A', 'GET', `/people/${pessoaOk}`, undefined, segue(404, 403)],
     ['ler os consentimentos da pessoa da empresa A', 'GET', `/people/${pessoaOptOut}/consents`, undefined, segue(404, 403)],
+    ['ler os contatos da pessoa da empresa A', 'GET', `/people/${pessoaOk}/contacts`, undefined, segue(404, 403)],
+    ['editar a pessoa da empresa A', 'PATCH', `/people/${pessoaOk}`, { preferredName: nomeDeUso }, segue(404, 403)],
     ['ler a campanha da empresa A', 'GET', `/marketing/campaigns/${campanhaId}`, undefined, segue(404, 403)],
     ['registrar consentimento para pessoa da empresa A', 'POST', `/people/${pessoaOk}/consents`, { channel: 'PHONE', purpose: 'ACEITE_M9_ISOLAMENTO', status: 'OPT_IN' }, segue(404, 403)],
     ['pausar a automação da empresa A', 'POST', `/marketing/automations/${fluxoId}/pause`, { reason: 'ACEITE-M9 tentativa de outra empresa' }, segue(404, 403)],
     ['ler mensagens da pessoa da empresa A', 'GET', `/messages?personId=${pessoaOk}`, undefined, vazio],
     ['ler a auditoria dos registros da empresa A', 'GET', `/audit-log?entityId=${campanhaId}`, undefined, vazio],
   ];
-  if (!fluxoId) casos.splice(4, 1);
+  if (!fluxoId) casos.splice(casos.findIndex((c) => c[0] === 'pausar a automação da empresa A'), 1);
   for (const [nome, metodo, rota, corpo, ok] of casos) {
     const r = await ctx.outra.chamar(metodo, rota, corpo);
     ctx.rel.conferir(CENARIO, `outra empresa NÃO consegue ${nome}`, ok(r), `${metodo} ${alvo(rota)} -> ${resumo(r)}${r.erro ? ` "${r.erro.message}"` : ''}${Array.isArray(r.dados) ? ` (${r.dados.length} itens)` : ''}`);
