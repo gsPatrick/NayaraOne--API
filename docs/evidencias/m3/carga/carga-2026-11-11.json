@@ -1,0 +1,210 @@
+{
+  "volume": {
+    "pessoasPorEmpresa": 40,
+    "tentativasMesmoCpf": 8,
+    "oportunidades": 40,
+    "oportunidadesSemProximaAcao": 10,
+    "imoveisComOferta": 10,
+    "reprocessamentosSimultaneosDoRadar": 6,
+    "leiturasPorConsulta": 20,
+    "concorrencia": 8,
+    "limiteP95Ms": 3000
+  },
+  "rodada": "mwbwe9ew",
+  "operacoes": {
+    "pessoasCriadas": 80,
+    "criacoesSimultaneasMesmoCpf": {
+      "tentativas": 8,
+      "aceitas": 1,
+      "recusas": {
+        "PERSON_DUPLICATE_TAX_ID": 7
+      }
+    },
+    "oportunidadesCriadas": 40,
+    "oportunidadesSemProximaAcao": {
+      "tentativas": 10,
+      "aceitas": 0,
+      "recusas": {
+        "OPPORTUNITY_NEXT_ACTION_REQUIRED": 10
+      }
+    },
+    "imoveisComOferta": 10,
+    "reprocessamentosDoRadar": [
+      {
+        "tipo": "evento",
+        "simultaneos": 6,
+        "comErro": [],
+        "finalComErro": []
+      },
+      {
+        "tipo": "job",
+        "simultaneos": 6,
+        "comErro": [],
+        "finalComErro": []
+      }
+    ],
+    "p95CriacaoPessoaMs": 1573,
+    "p95CriacaoOportunidadeMs": 910
+  },
+  "leituras": {
+    "listPersons": {
+      "n": 20,
+      "linhas": 45,
+      "p50Ms": 10.7,
+      "p95Ms": 172.01,
+      "maxMs": 198.1
+    },
+    "listOpportunities": {
+      "n": 20,
+      "linhas": 42,
+      "p50Ms": 2.37,
+      "p95Ms": 88.67,
+      "maxMs": 95.37
+    },
+    "getStoredRadarMatches": {
+      "n": 20,
+      "linhas": 10,
+      "p50Ms": 6.98,
+      "p95Ms": 141.91,
+      "maxMs": 182.26
+    }
+  },
+  "banco": {
+    "pessoasDaRodada": {
+      "A": 40,
+      "B": 40
+    },
+    "pessoasComOCpfDisputado": 1,
+    "oportunidadesAtivasSemProximaAcao": 0,
+    "oportunidadesDaRodada": 40,
+    "radares": [
+      {
+        "tipo": "evento",
+        "radarId": "a8b91bf2-1e72-4ca6-8ac5-7272440a3a21",
+        "matchesRepetidos": [],
+        "imoveisComMatch": 10,
+        "eventosMatchCreated": 10,
+        "eventosRadarMatchedPorImovel": [
+          {
+            "property_id": "29815a97-d145-4a1c-bff4-d28e9c28bc8a",
+            "n": 1
+          },
+          {
+            "property_id": "29b33db3-bb34-4f38-a97f-c1407bd539c0",
+            "n": 1
+          },
+          {
+            "property_id": "467e362c-f269-4c79-b507-8320daa53ac9",
+            "n": 1
+          },
+          {
+            "property_id": "619669ca-259f-454c-b1c1-1d78bb4775c0",
+            "n": 1
+          },
+          {
+            "property_id": "651b17c9-41d3-4143-a263-27fc47d5b64e",
+            "n": 1
+          },
+          {
+            "property_id": "67b79289-d2cb-4a1b-8c45-287c5a8367d1",
+            "n": 1
+          },
+          {
+            "property_id": "8c6999be-974b-47d0-92f6-912a80dbd8fb",
+            "n": 1
+          },
+          {
+            "property_id": "a20c4688-8fea-45e4-b0bb-43f913046eda",
+            "n": 1
+          },
+          {
+            "property_id": "a3ff8a9b-9a51-4341-8707-a1869d9e33e9",
+            "n": 1
+          },
+          {
+            "property_id": "da83de6a-41e0-4b89-830e-ef6ecaf1ee92",
+            "n": 1
+          }
+        ],
+        "notificacoes": 0,
+        "imoveisAnunciados": 0
+      },
+      {
+        "tipo": "job",
+        "radarId": "83f0ae86-6418-4114-81c2-2205fd001342",
+        "matchesRepetidos": [],
+        "imoveisComMatch": 10,
+        "eventosMatchCreated": 10,
+        "eventosRadarMatchedPorImovel": [
+          {
+            "property_id": "29815a97-d145-4a1c-bff4-d28e9c28bc8a",
+            "n": 1
+          },
+          {
+            "property_id": "29b33db3-bb34-4f38-a97f-c1407bd539c0",
+            "n": 1
+          },
+          {
+            "property_id": "467e362c-f269-4c79-b507-8320daa53ac9",
+            "n": 1
+          },
+          {
+            "property_id": "619669ca-259f-454c-b1c1-1d78bb4775c0",
+            "n": 1
+          },
+          {
+            "property_id": "651b17c9-41d3-4143-a263-27fc47d5b64e",
+            "n": 1
+          },
+          {
+            "property_id": "67b79289-d2cb-4a1b-8c45-287c5a8367d1",
+            "n": 1
+          },
+          {
+            "property_id": "8c6999be-974b-47d0-92f6-912a80dbd8fb",
+            "n": 1
+          },
+          {
+            "property_id": "a20c4688-8fea-45e4-b0bb-43f913046eda",
+            "n": 1
+          },
+          {
+            "property_id": "a3ff8a9b-9a51-4341-8707-a1869d9e33e9",
+            "n": 1
+          },
+          {
+            "property_id": "da83de6a-41e0-4b89-830e-ef6ecaf1ee92",
+            "n": 1
+          }
+        ],
+        "notificacoes": 1,
+        "imoveisAnunciados": 10
+      }
+    ],
+    "vistoPelaEmpresaB": {
+      "pessoas": 0,
+      "oportunidades": 0,
+      "imoveis": 0,
+      "radarMatches": 0
+    }
+  },
+  "violacoes": {
+    "pessoaUnica": [],
+    "pessoasPerdidas": [],
+    "proximaAcao": [],
+    "radarIdempotente": [],
+    "isolamento": [],
+    "latencia": []
+  },
+  "totais": {
+    "pessoaUnica": 0,
+    "pessoasPerdidas": 0,
+    "proximaAcao": 0,
+    "radarIdempotente": 0,
+    "isolamento": 0,
+    "latencia": 0
+  },
+  "ok": true,
+  "duracaoMs": 18315,
+  "executadoEm": "2026-11-11T09:09:45.896Z"
+}
