@@ -10,6 +10,7 @@ const legalCasesController = require('../cases/legalCases.controller');
 const contractVersionActionsController = require('../contracts/application/contractVersionActions.controller');
 const contractTemplateVersionsController = require('../contracts/application/contractTemplateVersions.controller');
 const { confirmAction } = require('../../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 1 do inventário)
+const { requireVersionApprove, requireVersionApproveWhenApproving } = require('./legalPermissions');
 
 const legalRouter = Router();
 
@@ -30,7 +31,7 @@ legalRouter.use(authMiddleware, tenantMiddleware);
 legalRouter.post('/legal/contracts', requirePermission('legal:create'), legalController.createContract);
 legalRouter.get('/legal/contracts', requirePermission('legal:read'), legalController.listContracts);
 legalRouter.get('/legal/contracts/:id', requirePermission('legal:read'), legalController.getContract);
-legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), confirmAction('legal.contract.terminate', { reasonField: 'reason' }), legalController.transitionContract);
+legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), requireVersionApproveWhenApproving(), confirmAction('legal.contract.terminate', { reasonField: 'reason' }), legalController.transitionContract);
 // FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026): fim-de-vida do contrato (Caderno,
 // Anexo I "5. Estado do contrato") — SUSPENDED/TERMINATED/CLOSED. Ações HIGH, exigem motivo
 // (ver assertReason em contracts.service.js) e permissão de aprovação jurídica, mesmo padrão de
@@ -74,7 +75,8 @@ legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:creat
 // Matriz M5 — rotas literais do Guia §14 (APIs mínimas): mesmo controller, permissão e serviço das rotas /legal/...
 legalRouter.post('/contracts', requirePermission('legal:create'), legalController.createContract);
 legalRouter.post('/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
-legalRouter.post('/contract-versions/:id/approve', requirePermission('legal:approve'), contractVersionActionsController.approveContractVersion);
+// Guia §6 assertPermission(ctx, 'contracts.version.approve') — DEC-073: o nome do livro, sem mapa para legal:approve.
+legalRouter.post('/contract-versions/:id/approve', requireVersionApprove(), contractVersionActionsController.approveContractVersion);
 legalRouter.post('/contract-versions/:id/send-signature', requirePermission('legal:sign'), contractVersionActionsController.sendContractVersionForSignature);
 legalRouter.get('/legal/contracts/:id/versions', requirePermission('legal:read'), legalController.listContractVersions);
 // GET, não POST: sem efeito colateral (nada é persistido) — ver comentário em

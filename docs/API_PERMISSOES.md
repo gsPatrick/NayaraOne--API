@@ -264,7 +264,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/construction/stages/:id` | `construction:read` | não |
 | `PATCH` | `/api/v1/construction/stages/:id` | `construction:update` | não |
 | `POST` | `/api/v1/construction/warranty-cases` | `construction:create` | não |
-| `POST` | `/api/v1/contract-versions/:id/approve` | `legal:approve` | não |
+| `POST` | `/api/v1/contract-versions/:id/approve` | `contracts.version.approve` | não |
 | `POST` | `/api/v1/contract-versions/:id/send-signature` | `legal:sign` | não |
 | `POST` | `/api/v1/contracts/:contractId/guarantees` | `legal:create` | não |
 | `POST` | `/api/v1/contracts/:id/key-delivery` | `legal:create`, `lease.keys.deliver` | não |
@@ -603,7 +603,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/contracts/:id/suspend` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/contracts/:id/terminate` | `legal:approve` | não |
 | `GET` | `/api/v1/legal/contracts/:id/timeline` | `legal:read` | não |
-| `POST` | `/api/v1/legal/contracts/:id/transition` | `legal:approve` | não |
+| `POST` | `/api/v1/legal/contracts/:id/transition` | `legal:approve`; `contracts.version.approve` quando targetStatus = APPROVED | não |
 | `GET` | `/api/v1/legal/contracts/:id/versions/:versionId/generate-pdf` | `legal:read` | não |
 | `GET` | `/api/v1/legal/contracts/:id/versions` | `legal:read` | não |
 | `POST` | `/api/v1/legal/contracts/:id/versions` | `legal:create` | não |
