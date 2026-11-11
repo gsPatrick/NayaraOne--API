@@ -62,7 +62,10 @@ test('JR dossiê: item com fileId usa hash, nome e data do servidor (o hash do c
     assert.equal(fileItem.fileId, file.id);
     assert.equal(fileItem.source, 'people.files');
     assert.ok(Date.parse(fileItem.createdAt));
-    assert.deepEqual(Object.keys(noteItem).sort(), ['description', 'hash', 'referenceId', 'type'], 'item sem arquivo segue com os 4 campos');
+    // Fechamento M5 (M5-A0207): item sem arquivo tem hash e origem do servidor; o 'abc' do chamador não é aceito.
+    assert.deepEqual(Object.keys(noteItem).sort(), ['description', 'hash', 'referenceId', 'source', 'type']);
+    assert.equal(noteItem.source, 'declaracao_manual');
+    assert.equal(noteItem.hash, crypto.createHash('sha256').update(JSON.stringify({ type: 'NOTE', description: 'Nota sem arquivo', referenceId: null })).digest('hex'));
     assert.equal(pkg.packageHash, evidencePackagesService.computePackageHash(pkg.manifestJson));
     const legacy = [{ type: 'CONTRACT', description: 'x', referenceId: null, hash: 'h' }];
     assert.equal(evidencePackagesService.computePackageHash(legacy), crypto.createHash('sha256').update(JSON.stringify(legacy)).digest('hex'), 'hash dos pacotes antigos não muda');

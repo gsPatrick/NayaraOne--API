@@ -701,7 +701,7 @@ const createEvidencePackageFromContractAttachments = catchAsync(async (req, res)
   return success(res, { statusCode: 201, data: item });
 });
 const listEvidencePackages = catchAsync(async (req, res) => {
-  const items = await req.withTenantTransaction((t) => evidencePackagesService.listEvidencePackages(req.params.id, t));
+  const items = await req.withTenantTransaction((t) => evidencePackagesService.listEvidencePackagesAudited(req.params.id, req.auth.userId, t)); // M5-A0117: lista audita o acesso
   return success(res, { data: items });
 });
 // M5-28: o acesso HUMANO ao dossiê entra na cadeia de custódia (viewEvidencePackage), ao
@@ -746,7 +746,13 @@ const nayCaseSummary = catchAsync(async (req, res) => {
   return success(res, { data });
 });
 const nayCaseDossier = catchAsync(async (req, res) => {
-  const data = await req.withTenantTransaction((t) => legalNayService.organizeDossier(nayTenant(req), req.params.id, req.auth.userId, t));
+  const data = await req.withTenantTransaction(async (t) => {
+    const dossier = await legalNayService.organizeDossier(nayTenant(req), req.params.id, req.auth.userId, t);
+    // Fechamento M5 (§16 "Acesso/exportação são auditados"): o dossiê organizado entrega arquivos e hashes de cada pacote do
+    // processo a quem pediu — cada pacote entra na cadeia de custódia (a NAY em si continua só leitura).
+    await evidencePackagesService.logCaseEvidenceAccess(req.params.id, req.auth.userId, t);
+    return dossier;
+  });
   return success(res, { data });
 });
 const nayClauseSuggestions = catchAsync(async (req, res) => {

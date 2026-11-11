@@ -133,6 +133,7 @@ const REFERENCES_QUERY = buildReferencesQuery();
 async function resolveFileOwnership(fileId, transaction) {
   const [rows] = await sequelize.query(REFERENCES_QUERY, { replacements: { fileId }, transaction });
   const permissions = new Set();
+  const origins = []; // Fechamento M5 (JUR-010 "origem"): onde o arquivo está ligado, 'schema.tabela.coluna' ou 'people.file_links:<Tipo>'
   let hasOwner = false;
   let restricted = false;
   for (const row of rows) {
@@ -143,11 +144,13 @@ async function resolveFileOwnership(fileId, transaction) {
     hasOwner = true;
     if (row.ref === -1) {
       (FILE_LINK_ENTITY_PERMISSIONS[row.related_entity_type] || []).forEach((p) => permissions.add(p));
+      origins.push(`people.file_links:${row.related_entity_type}`);
     } else {
       FILE_REFERENCES[row.ref].permissions.forEach((p) => permissions.add(p));
+      origins.push(`${FILE_REFERENCES[row.ref].table}.${FILE_REFERENCES[row.ref].column}`);
     }
   }
-  return { hasOwner, permissions, restricted };
+  return { hasOwner, permissions, restricted, origins: [...new Set(origins)] };
 }
 
 // A categoria do upload não tem coluna própria: fica no primeiro segmento do storageKey
@@ -221,7 +224,7 @@ async function assertCanReadFile(fileId, auth, transaction) {
       'FILE_ACCESS_FORBIDDEN'
     );
   }
-  return { file, restricted: ownership.restricted };
+  return { file, restricted: ownership.restricted, ownership };
 }
 
 /**
