@@ -11,11 +11,13 @@ const { registrarAuditoria } = require('../../../../engines/audit/auditLog.servi
 const entries = require('../../infrastructure/repositories/financial-entry.repository');
 const ledger = require('../../infrastructure/repositories/ledger-movement.repository');
 const { SETTLEMENT_METHODS, OPEN_FOR_SETTLEMENT_STATUSES, settlementAuditSuffix, isPositiveAmount, isThirdPartyRelease } = require('../../domain/financial-entry');
-const { toCents, fromCents, toBRLDisplay, splitReceipt, statusAfterPartialSettlement, buildPartialSettlementValues, buildExcessPendingValues, buildReversalValues } = require('../../domain/ledger-movement');
+const { toCents, fromCents, toBRLDisplay, splitReceipt, statusAfterPartialSettlement, buildPartialSettlementValues, buildExcessPendingValues, MOVEMENT_KINDS } = require('../../domain/ledger-movement');
 const { checkFrequentReversalAlert } = require('./finance-antifraud.service');
 const { createAnomalyCase } = require('./anomaly-cases.service');
-const { publishFinancialEntrySettled, publishFinancialEntryReversed, publishThirdPartyFundsReleased } = require('./finance-events.service');
-const { deriveKey, findPartialReplay, findSettleReplay } = require('./settlement-idempotency');
+const { publishFinancialEntrySettled, publishThirdPartyFundsReleased } = require('./finance-events.service');
+const { deriveKey, findPartialReplay, findSettleReplay, movementKeyForSettle, movementKeyForPartial } = require('./settlement-idempotency');
+const { lockForReversal, applyReversal } = require('./reversal-movements');
+const { readBankAccountRequired } = require('./ledger-settings');
 const { computeRemainingAmount } = require('./ledger-balance.service');
 const { runSettlementGates, recordSettlementWarnings } = require('./settlement-gates');
 const { assertCompetenceOpen, assertPeriodOpenForEntry } = require('./competence-guard');
@@ -24,6 +26,13 @@ async function getEntryForUpdate(id, transaction) {
   const entry = await entries.findByIdForUpdate(id, transaction);
   if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   return entry;
+}
+
+// Caderno §7 (bank_account_id no movimento): com o parâmetro ligado (DI-M4LR-1), nenhuma baixa entra no ledger sem a conta.
+async function assertLedgerBankAccount(entry, options, transaction) {
+  const hasAccount = entry.bankAccountId || (options.paymentIntent && options.paymentIntent.bankAccountId);
+  if (hasAccount || !(await readBankAccountRequired({ companyId: entry.companyId, groupId: entry.groupId }, transaction))) return;
+  throw AppError.conflict('Informe a conta bancária do lançamento antes da baixa: a empresa exige a conta em todo movimento do ledger.', 'FINANCE_LEDGER_BANK_ACCOUNT_REQUIRED');
 }
 
 const settledAtOf = (options) => (options && options.settledAt ? new Date(options.settledAt) : new Date());
@@ -47,7 +56,7 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
   const settleKey = deriveKey('baixa-integral', entry.companyId, options && options.idempotencyKey);
   const settleReplay = await findSettleReplay(entry, settleKey, transaction); // FIN-004: mesma chave = baixa original
   if (settleReplay) return settleReplay;
-  if (entry.status === 'PARTIALLY_SETTLED') {
+  if (entry.status === 'PARTIALLY_SETTLED' || (entry.status === 'PENDING' && (await ledger.hasSettlementChildren(entry.id, transaction)))) {
     throw AppError.conflict(
       'Este lançamento já tem baixas parciais — use a liquidação parcial do saldo restante (settleFinancialEntryPartial) para fechá-lo.',
       'FINANCE_ENTRY_INVALID_STATUS'
@@ -57,11 +66,17 @@ async function settleFinancialEntry(id, actorUserId, transaction, options = {}) 
     throw AppError.conflict(`Só é possível liquidar um lançamento PENDING (atual: "${entry.status}").`, 'FINANCE_ENTRY_INVALID_STATUS');
   }
   const { settlementInfo, warnings } = await runSettlementGates(entry, options, transaction);
+  await assertLedgerBankAccount(entry, options, transaction);
   const beforeJson = entry.toJSON();
 
   entry.status = 'SETTLED';
   // Data efetiva do caixa informada por quem recebeu (ex.: comissão paga ontem); sem ela, agora.
   entry.settledAt = settledAtOf(options);
+  // Caderno §7 / FIN-004: o lançamento vira linha do ledger e o movimento nasce com chave (a do cliente, a da intenção de
+  // pagamento — Guia §7 — ou a interna desta baixa única).
+  entry.settlementIdempotencyKey = movementKeyForSettle(entry, settleKey, options);
+  // Guia §7: o movimento confirmado pelo banco leva a conta da intenção (bank_account_id NOT NULL no ledger, §7).
+  if (!entry.bankAccountId && options.paymentIntent && options.paymentIntent.bankAccountId) entry.bankAccountId = options.paymentIntent.bankAccountId;
   if (settlementInfo) {
     entry.settlementMethod = settlementInfo.method;
     entry.settlementEvidenceFileId = settlementInfo.evidenceFileId;
@@ -97,10 +112,10 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
   // Lock pessimista no pai: sem ele, duas baixas concorrentes somadas passariam do total.
   const entry = await getEntryForUpdate(id, transaction);
   if (!isPositiveAmount(partialAmount)) {
-    throw AppError.badRequest('Informe um valor maior que zero.', 'FINANCE_ENTRY_VALIDATION');
+    throw AppError.badRequest('Informe um valor maior que zero, em decimal simples (ex.: 0.10), de pelo menos R$ 0,01.', 'FINANCE_ENTRY_VALIDATION');
   }
   // FIN-004: a chave do cliente (obrigatória na rota HTTP) é gravada na filha; repetir a mesma baixa devolve a original.
-  const partialKey = deriveKey('baixa-parcial', entry.companyId, options && options.idempotencyKey);
+  const partialKey = deriveKey(options.movementKind === MOVEMENT_KINDS.COMPLEMENT ? 'complemento' : 'baixa-parcial', entry.companyId, options && options.idempotencyKey);
   const partialReplay = await findPartialReplay(entry, partialKey, partialAmount, transaction, computeRemainingAmount);
   if (partialReplay) return partialReplay;
   if (!OPEN_FOR_SETTLEMENT_STATUSES.includes(entry.status)) {
@@ -127,6 +142,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
   const settlementInfo = compensationOf
     ? { method: SETTLEMENT_METHODS.COMPENSATION, evidenceFileId: null, reason: `Abatida por compensação de caução (lançamento ${compensationOf}).` }
     : gates.settlementInfo;
+  await assertLedgerBankAccount(entry, options, transaction);
 
   const partialCents = toCents(partialAmount);
   const remainingCents = toCents(await computeRemainingAmount(entry, transaction));
@@ -141,14 +157,17 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
 
   const beforeJson = entry.toJSON();
 
+  // FIN-004: o movimento sempre nasce com chave — a do cliente (derivada) ou a interna (compensação de caução ou uuid).
+  const movementKey = partialKey || movementKeyForPartial(compensationOf);
+  const movementKind = options.movementKind === MOVEMENT_KINDS.COMPLEMENT ? MOVEMENT_KINDS.COMPLEMENT : MOVEMENT_KINDS.PARTIAL;
   const settlement = await ledger.createMovement(
-    buildPartialSettlementValues(entry, { appliedCents, settledAt: settledAtOf(options), idempotencyKey: partialKey, settlementInfo, actorUserId }),
+    buildPartialSettlementValues(entry, { appliedCents, settledAt: settledAtOf(options), idempotencyKey: movementKey, settlementInfo, actorUserId, movementKind }),
     transaction
   );
 
   let classificationPending = null;
   if (excessCents > 0) {
-    classificationPending = await ledger.createMovement(buildExcessPendingValues(entry, { excessCents, idempotencyKey: partialKey, actorUserId }), transaction);
+    classificationPending = await ledger.createMovement(buildExcessPendingValues(entry, { excessCents, idempotencyKey: movementKey, actorUserId }), transaction);
   }
 
   const newRemainingCents = remainingCents - appliedCents;
@@ -173,14 +192,15 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
       groupId: entry.groupId,
       companyId: entry.companyId,
       actorUserId,
-      action: 'finance.entry.settle_partial',
+      action: movementKind === MOVEMENT_KINDS.COMPLEMENT ? 'finance.entry.settle_complement' : 'finance.entry.settle_partial',
       entityType: 'FinancialEntry',
       entityId: entry.id,
       beforeJson,
       afterJson: {
         original: entry.toJSON(),
         settlementEntryId: settlement.id,
-        idempotencyKey: partialKey,
+        idempotencyKey: movementKey,
+        movementKind,
         appliedAmount: fromCents(appliedCents),
         remainingAmount: fromCents(newRemainingCents),
         excessAmount: excessCents > 0 ? fromCents(excessCents) : '0.00',
@@ -191,7 +211,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
           ? `Recebimento de ${fromCents(partialCents)} processado: ${fromCents(appliedCents)} baixou o ` +
             `lançamento de ${entry.amount} (saldo restante ${fromCents(newRemainingCents)}) e ${fromCents(excessCents)} ` +
             `excedente abriu pendência de classificação ${classificationPending.id} — nunca tratado como receita.`
-          : `Baixa parcial de ${fromCents(appliedCents)} registrada no lançamento de ${entry.amount} ` +
+          : `${movementKind === MOVEMENT_KINDS.COMPLEMENT ? 'Complemento (quitação do saldo)' : 'Baixa parcial'} de ${fromCents(appliedCents)} registrada no lançamento de ${entry.amount} ` +
             `(saldo restante ${fromCents(newRemainingCents)}).${settlementAuditSuffix(settlementInfo)}`,
     },
     transaction
@@ -201,14 +221,39 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
 }
 
 /**
- * reverseFinancialEntry — ESTORNO. Nunca apaga nem edita o valor do lançamento original (FIN-010):
- * marca o original como REVERSED e cria um novo lançamento compensatório (`entryType`
- * invertido, mesmo `amount`) apontando de volta via `reversalOfEntryId`.
+ * settleFinancialEntryComplement — COMPLEMENTO (Caderno §6: "Um entry pode ter múltiplos movimentos de ledger (pagamento
+ * parcial, estorno, complemento)"). Quita exatamente o saldo em aberto de um lançamento que já tem movimento (baixa
+ * parcial, inclusive uma baixa estornada): um movimento COMPLEMENT no ledger, com as mesmas travas e a mesma chave
+ * obrigatória da baixa parcial. `expectedAmount` (o saldo que a tela mostrou) evita quitar um saldo que mudou. DI-M4LR-4.
+ */
+async function settleFinancialEntryComplement(id, actorUserId, transaction, options = {}) {
+  const entry = await getEntryForUpdate(id, transaction);
+  const replayKey = deriveKey('complemento', entry.companyId, options.idempotencyKey);
+  const previous = replayKey ? await entries.findByIdempotencyKey(replayKey, transaction) : null;
+  if (previous) return settleFinancialEntryPartial(id, previous.amount, actorUserId, transaction, { ...options, movementKind: MOVEMENT_KINDS.COMPLEMENT });
+  if (!(await ledger.hasSettlementChildren(entry.id, transaction))) {
+    throw AppError.conflict('Este lançamento ainda não tem movimento no ledger: use a baixa integral (o complemento quita o saldo depois de uma baixa parcial ou de um estorno).', 'FINANCE_COMPLEMENT_WITHOUT_MOVEMENT');
+  }
+  const remaining = await computeRemainingAmount(entry, transaction);
+  if (toCents(remaining) <= 0) {
+    throw AppError.conflict('Não há saldo em aberto para complementar.', 'FINANCE_COMPLEMENT_NOTHING_OPEN');
+  }
+  if (options.expectedAmount !== undefined && options.expectedAmount !== null && toCents(options.expectedAmount) !== toCents(remaining)) {
+    throw AppError.conflict(`O saldo em aberto mudou: agora é ${toBRLDisplay(remaining)}. Confira e confirme de novo.`, 'FINANCE_COMPLEMENT_AMOUNT_CHANGED', { remainingAmount: remaining });
+  }
+  return settleFinancialEntryPartial(id, remaining, actorUserId, transaction, { ...options, movementKind: MOVEMENT_KINDS.COMPLEMENT });
+}
+
+/**
+ * reverseFinancialEntry — ESTORNO. Nunca apaga nem edita o valor do lançamento original (FIN-010). O que vai para o
+ * ledger segue o Caderno §6 (reversal-movements.js): lançamento não realizado não tem movimento a estornar (só fica
+ * REVERSED); movimento realizado ganha um REVERSAL (tipo invertido) apontando para ele via `reversalOfEntryId`, com
+ * chave `reversal:<movimento>:<caso>`; o pai com baixas parciais estorna cada baixa.
  */
 async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, options = {}) {
   // Lock pessimista: duas chamadas concorrentes de estorno pro mesmo lançamento não podem ambas
-  // ler status != REVERSED antes de qualquer uma commitar (senão criam DOIS compensatórios).
-  const original = await getEntryForUpdate(id, transaction);
+  // ler status != REVERSED antes de qualquer uma commitar (senão criam DOIS compensatórios). Trava o pai antes da filha.
+  const original = await lockForReversal(id, transaction);
   if (original.status === 'REVERSED') {
     throw AppError.conflict('Este lançamento já foi estornado.', 'FINANCE_ENTRY_ALREADY_REVERSED');
   }
@@ -234,23 +279,12 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, o
   await assertPeriodOpenForEntry(original.companyId, [original.competenceMonth, new Date()], transaction);
   await assertCompetenceOpen(original.companyId, original.competenceMonth, transaction);
 
-  // Estorno parcial (ex.: o banco devolve só parte da comissão): lançamento compensatório só do valor
-  // informado; o original continua como está até o estorno final.
-  const partialCents = options.amount !== undefined && options.amount !== null ? toCents(options.amount) : null;
-  const isPartial = partialCents !== null && partialCents < toCents(original.amount);
-  if (partialCents !== null && (partialCents <= 0 || partialCents > toCents(original.amount))) {
-    throw AppError.badRequest('O valor do estorno precisa ser maior que zero e no máximo o valor do lançamento.', 'FINANCE_ENTRY_VALIDATION');
-  }
-
+  // O que o estorno lança no ledger (§6/Guia §8): nada para o não realizado; REVERSAL por movimento realizado (o pai com
+  // baixas parciais estorna cada baixa). Estorno parcial (ex.: o banco devolve só parte da comissão): só o valor
+  // informado; o movimento continua de pé até o estorno final. Regras em reversal-movements.js.
   const beforeJson = original.toJSON();
-  const reversal = await ledger.createMovement(buildReversalValues(original, { isPartial, partialCents, actorUserId }), transaction);
-
-  if (!isPartial) {
-    original.status = 'REVERSED';
-    original.updatedBy = actorUserId || null;
-    await entries.save(original, transaction);
-    await publishFinancialEntryReversed(original, reversal, transaction);
-  }
+  const applied = await applyReversal(original, { partialAmount: options.amount, actorUserId, reasonText, options }, transaction);
+  const { reversal, isPartial, partialCents } = applied;
 
   await registrarAuditoria(
     {
@@ -261,8 +295,16 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, o
       entityType: 'FinancialEntry',
       entityId: original.id,
       beforeJson,
-      afterJson: { original: original.toJSON(), reversalEntryId: reversal.id, partial: isPartial },
-      reason: `${isPartial ? `Lançamento estornado em parte (${toBRLDisplay(fromCents(partialCents))})` : 'Lançamento estornado'}${reasonText ? `: ${reasonText}` : '.'}`,
+      afterJson: {
+        original: original.toJSON(),
+        reversalEntryId: reversal ? reversal.id : null,
+        reversalEntryIds: applied.reversals.map((r) => r.id),
+        ledgerEffect: applied.kind,
+        partial: isPartial,
+      },
+      reason: `${isPartial ? `Lançamento estornado em parte (${toBRLDisplay(fromCents(partialCents))})` : 'Lançamento estornado'}${reasonText ? `: ${reasonText}` : '.'}${
+        applied.kind === 'NOT_REALIZED' ? ' Lançamento não realizado: nenhum movimento no ledger (Caderno §6).' : ''}${
+        applied.kind === 'PARENT_WITH_SETTLEMENTS' ? ` Estornadas ${applied.reversals.length} baixa(s) parcial(is), uma REVERSAL por baixa.` : ''}`,
     },
     transaction
   );
@@ -287,7 +329,7 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, o
     );
   }
 
-  return { original, reversal };
+  return { original, reversal, reversals: applied.reversals, ledgerEffect: applied.kind };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -308,6 +350,7 @@ async function reverseLedgerMovement(id, reasonText, actorUserId, transaction) {
 module.exports = {
   settleFinancialEntry,
   settleFinancialEntryPartial,
+  settleFinancialEntryComplement,
   reverseFinancialEntry,
   reverseLedgerMovement,
   SETTLEMENT_METHODS,

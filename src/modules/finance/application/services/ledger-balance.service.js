@@ -1,14 +1,19 @@
 'use strict';
 
 /**
- * Saldos calculados a partir do ledger (Guia M4 §2 "cálculo de saldo em decimal exato"; Caderno §10 e §13):
- * saldo em aberto de um lançamento e saldo de uma caução (dinheiro de terceiro). Nada é armazenado: o saldo
- * vem sempre das linhas do ledger, somadas em centavos inteiros (domain/ledger-movement.js).
+ * Saldos calculados a partir do ledger (Guia M4 §2 "cálculo de saldo em decimal exato"; Caderno §6, §10 e §13):
+ * saldo em aberto de um lançamento, status derivado do pai e saldo de uma caução (dinheiro de terceiro). Nada é
+ * armazenado: o saldo vem sempre das linhas do ledger, somadas em centavos inteiros (domain/ledger-movement.js).
+ *
+ * Realizado do pai = Σ (baixa filha - estornos que apontam para ela). Assim o estorno de UMA baixa filha devolve o
+ * valor ao saldo em aberto (Caderno §6 "Estorno: mantém histórico/status derivado"; verificação 11/11/2026, sonda P4:
+ * o pai ficava SETTLED com saldo 0,10 que não se baixava mais).
  */
 const AppError = require('../../../../utils/AppError');
+const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
 const entries = require('../../infrastructure/repositories/financial-entry.repository');
 const ledger = require('../../infrastructure/repositories/ledger-movement.repository');
-const { remainingAmount, receivedCentsOf, thirdPartyBalance } = require('../../domain/ledger-movement');
+const { toCents, fromCents, receivedCentsOf, thirdPartyBalance, realizedCentsOfChildren, derivedParentStatus } = require('../../domain/ledger-movement');
 
 async function getEntryOrFail(id, transaction) {
   const entry = await entries.findById(id, transaction);
@@ -16,14 +21,54 @@ async function getEntryOrFail(id, transaction) {
   return entry;
 }
 
+/** Centavos realizados pelas baixas filhas do lançamento, já descontados os estornos de cada uma. */
+async function realizedChildrenCents(entryId, transaction) {
+  const children = await ledger.findSettlementChildren(entryId, transaction);
+  const reversed = await ledger.reversedCentsByMovement(children.map((c) => c.id), transaction);
+  return { children, realizedCents: realizedCentsOfChildren(children, reversed) };
+}
+
 /**
- * computeRemainingAmount — saldo em aberto do lançamento = amount - Σ(baixas parciais filhas
- * que estão SETTLED). Retorna string com 2 casas (mesma precisão do DECIMAL(18,2)).
+ * computeRemainingAmount — saldo em aberto do lançamento = amount - realizado pelas baixas filhas (baixa menos o
+ * estorno de cada uma). Retorna string com 2 casas (mesma precisão do DECIMAL(18,2)).
  */
 async function computeRemainingAmount(entryOrId, transaction) {
   const entry = typeof entryOrId === 'string' ? await getEntryOrFail(entryOrId, transaction) : entryOrId;
-  const children = await ledger.findSettledChildren(entry.id, transaction);
-  return remainingAmount(entry.amount, children);
+  const { realizedCents } = await realizedChildrenCents(entry.id, transaction);
+  return fromCents(toCents(entry.amount) - realizedCents);
+}
+
+/**
+ * refreshParentStatus — recalcula o status do pai depois do estorno de uma baixa filha: nada realizado volta a
+ * PENDING, parte realizada fica PARTIALLY_SETTLED (o saldo continua baixável) e tudo realizado fica SETTLED. O pai
+ * estornado ou cancelado não muda. Grava auditoria quando muda.
+ */
+async function refreshParentStatus(parentId, actorUserId, transaction, reasonText) {
+  const parent = await entries.findByIdForUpdate(parentId, transaction);
+  if (!parent || ['REVERSED', 'CANCELLED'].includes(parent.status)) return parent;
+  const { realizedCents } = await realizedChildrenCents(parent.id, transaction);
+  const status = derivedParentStatus(toCents(parent.amount), realizedCents);
+  if (status === parent.status) return parent;
+  const beforeJson = parent.toJSON();
+  parent.status = status;
+  if (status !== 'SETTLED') parent.settledAt = null;
+  parent.updatedBy = actorUserId || null;
+  await entries.save(parent, transaction);
+  await registrarAuditoria(
+    {
+      groupId: parent.groupId,
+      companyId: parent.companyId,
+      actorUserId,
+      action: 'finance.entry.status_derived',
+      entityType: 'FinancialEntry',
+      entityId: parent.id,
+      beforeJson,
+      afterJson: { ...parent.toJSON(), realizedAmount: fromCents(realizedCents), remainingAmount: fromCents(toCents(parent.amount) - realizedCents) },
+      reason: `Status do lançamento recalculado pelo ledger depois do estorno de uma baixa: ${beforeJson.status} -> ${status} (realizado ${fromCents(realizedCents)} de ${parent.amount}).${reasonText ? ` ${reasonText}` : ''}`,
+    },
+    transaction
+  );
+  return parent;
 }
 
 // F04 (conferência Nayara 18/10/2026) — rastreabilidade de caução / dinheiro de terceiros.
@@ -44,4 +89,4 @@ async function computeThirdPartyOriginBalance(originOrId, transaction) {
   return thirdPartyBalance(origin, received, releases);
 }
 
-module.exports = { computeRemainingAmount, computeThirdPartyOriginBalance };
+module.exports = { computeRemainingAmount, computeThirdPartyOriginBalance, refreshParentStatus, realizedChildrenCents };
