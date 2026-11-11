@@ -7,8 +7,8 @@
  * DESCARTÁVEL da esteira com a role de runtime (sem bypass de RLS), espera o /api/health e faz o smoke do Financeiro com o usuário fictício do CI:
  *   - DEV: /api/health 200, /api/version com o commit, rota financeira sem token 401, login (POST /auth/login) 200, lançamentos, contas,
  *          relatório semanal e fila de aprovações 200, leitura sem permissão (perfil de outra área) 403;
- *   - LAB: o mesmo build com DEPLOY_ENVIRONMENT=lab e o provedor bancário de laboratório (sandbox): além do smoke, o webhook bancário sem assinatura
- *          é recusado (falha fechada) e a suíte de contrato dos adapters bancários (scripts/contractReport.js bank-sandbox bank-santander) passa.
+ *   - LAB: o mesmo build com DEPLOY_ENVIRONMENT=lab e o provedor bancário de laboratório (sandbox): além do smoke, o webhook bancário público não processa
+ *          pagamento desconhecido nem corpo malformado e a suíte de contrato dos adapters bancários (scripts/contractReport.js bank-sandbox bank-santander) passa.
  * Nunca chama endpoint de MFA, nunca grava token. Sai com 1 se algo não respondeu como esperado.
  *
  *   node scripts/financeiro/ci/deployLocal.js --ambiente dev|lab
@@ -75,7 +75,13 @@ async function main() {
     await ler('/audit-log', 403);
     if (AMBIENTE === 'lab') {
       const webhook = await fetch(`${base}/api/v1/finance/webhooks/bank-payment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ externalSubmissionId: 'lab-smoke-inexistente', status: 'CONFIRMED' }) });
-      conferir('POST /api/v1/finance/webhooks/bank-payment sem assinatura HMAC -> recusado (4xx)', webhook.status >= 400 && webhook.status < 500, `HTTP ${webhook.status}`);
+      // Pagamento desconhecido: 200 para o banco não reenviar sem fim, mas NADA é processado e o motivo vem explícito (a recusa por HMAC ausente, com o
+      // pagamento conhecido, é provada no estágio 8 pelo teste B5 "webhook bancário exige assinatura HMAC também em sandbox").
+      const corpo = await webhook.json().catch(() => ({}));
+      const d = corpo.data || {};
+      conferir('POST /api/v1/finance/webhooks/bank-payment sem assinatura e com pagamento desconhecido -> nada processado', webhook.status === 200 && d.processed === false && d.reason === 'unknown_routing', `HTTP ${webhook.status}, processed=${d.processed}, reason=${d.reason}`);
+      const malformado = await fetch(`${base}/api/v1/finance/webhooks/bank-payment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: ['CONFIRMED'] }) });
+      conferir('POST /api/v1/finance/webhooks/bank-payment com corpo malformado -> 400', malformado.status === 400, `HTTP ${malformado.status}`);
       const contrato = spawnSync(process.execPath, ['scripts/contractReport.js', 'bank-sandbox', 'bank-santander'], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, CI: process.env.CI || 'true' } });
       process.stdout.write(contrato.stdout || '');
       conferir('suíte de contrato dos adapters bancários (bank-sandbox, bank-santander) em modo laboratório', contrato.status === 0, `exit ${contrato.status}`);
