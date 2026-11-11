@@ -143,7 +143,7 @@ test('mesmo grupo: sem empresa no contexto não se lê nem se grava pessoa (falh
   });
 });
 
-test('mesmo grupo: o mesmo CPF em outra empresa do grupo é recusado com 409 sem revelar a pessoa (UNIQUE por grupo)', async () => {
+test('mesmo grupo: o mesmo CPF em outra empresa do grupo é recusado com 409 PERSON_TAX_ID_IN_GROUP sem revelar a pessoa (UNIQUE por grupo; o caminho é o vínculo, DI-M9I-2)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const { empresaB, cpf } = await cenario(transaction);
     await usarEmpresa(transaction, empresaB.id);
@@ -152,9 +152,10 @@ test('mesmo grupo: o mesmo CPF em outra empresa do grupo é recusado com 409 sem
       tenant.userId, transaction
     ));
     assert.ok(r.erro, 'criar o mesmo CPF em B tem de ser recusado');
-    assert.equal(r.erro.code, 'PERSON_DUPLICATE_TAX_ID');
+    assert.equal(r.erro.code, 'PERSON_TAX_ID_IN_GROUP');
     assert.equal(r.erro.statusCode, 409);
     assert.ok(!r.erro.details || !r.erro.details.existingPersonId, 'a recusa não pode entregar o id da pessoa da empresa A');
+    assert.ok(!r.erro.message.includes('Pessoa da empresa A'), 'a recusa não traz o nome da pessoa da empresa A');
   });
 });
 

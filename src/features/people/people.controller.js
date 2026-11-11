@@ -22,7 +22,11 @@ const documentIngestionService = require('./documentIngestion.service');
 const create = catchAsync(async (req, res) => {
   const payload = { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
   const { person, similarPersonWarnings } = await req.withTenantTransaction(async (transaction) => {
-    const createdPerson = await peopleService.createPerson(payload, req.auth.userId, transaction);
+    const createdPerson = await peopleService.createPerson(payload, req.auth.userId, transaction).catch((err) => {
+      // DI-M9I-2: a tela oferece "vincular a esta empresa" só a quem tem a permissão people:link.
+      if (err && err.code === 'PERSON_TAX_ID_IN_GROUP') err.details = { podeVincular: req.auth.permissions.includes('people:link') };
+      throw err;
+    });
     const warnings = await dedupService.findWeakDuplicateCandidates(
       { legalName: payload.legalName, birthOrFoundationDate: payload.birthOrFoundationDate, addresses: payload.addresses, excludePersonId: createdPerson.id },
       transaction

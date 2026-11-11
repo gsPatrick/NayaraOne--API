@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const peopleController = require('./people.controller');
+const personLinksController = require('./personLinks.controller');
 
 const peopleRouter = Router();
 
@@ -11,6 +12,8 @@ peopleRouter.use(authMiddleware, tenantMiddleware);
 
 peopleRouter.post('/people', requirePermission('people:create'), peopleController.create);
 peopleRouter.get('/people', requirePermission('people:read'), peopleController.list);
+// Pessoa já cadastrada em outra empresa do grupo: vínculo explícito, com permissão própria (DI-M9I-4). Antes de '/people/:id'.
+peopleRouter.post('/people/links', requirePermission('people:link'), personLinksController.link);
 // Precisa vir ANTES de '/people/:id', senão "duplicates" seria capturado como um :id.
 peopleRouter.get('/people/duplicates', requirePermission('people:read'), peopleController.listDuplicates);
 peopleRouter.get('/people/:id', requirePermission('people:read'), peopleController.getOne);
@@ -40,5 +43,6 @@ peopleRouter.post('/people/:id/consents', requirePermission('people:update'), pe
 peopleRouter.get('/people/:id/consents', requirePermission('people:read'), peopleController.listConsents);
 
 peopleRouter.post('/people/:id/merge', requirePermission('people:update'), peopleController.merge);
+peopleRouter.post('/people/:id/unlink', requirePermission('people:link'), personLinksController.unlink);
 
 module.exports = peopleRouter;

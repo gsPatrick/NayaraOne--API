@@ -22,6 +22,7 @@ const {
   Contract: ContractModel,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertBaseOwner, isLinkedElsewhereError, linkedElsewhereError } = require('./personView');
 const { publishPersonMerged } = require('./personEvents.service');
 
 /**
@@ -113,9 +114,13 @@ async function assertNoIncompatibleActiveContracts(canonicalId, absorbedId, tran
 
 async function mergePersons(canonicalId, absorbedId, actorUserId, transaction) {
   await legalHold.assertNoneOnHold('PERSON', [canonicalId, absorbedId].filter(Boolean), transaction); // M9-D912: união destrutiva recusada em registro sob retenção legal
+  // DI-M9I-3: mesclar altera o cadastro base; só a empresa responsável pelas DUAS bases mescla (a vinculada recebe 403 claro).
+  const vistas = await Person.findAll({ where: { id: [canonicalId, absorbedId].filter(Boolean) }, attributes: ['id', 'companyId'], transaction });
+  for (const pessoa of vistas) await assertBaseOwner(pessoa, transaction);
   try {
     return await mergePersonsInner(canonicalId, absorbedId, actorUserId, transaction);
   } catch (err) {
+    if (isLinkedElsewhereError(err)) throw linkedElsewhereError();
     // Rede de segurança (auditoria externa, 14/10/2026): qualquer violação de unicidade do
     // Postgres NÃO prevista pelas checagens específicas acima (ex.: uma constraint nova
     // adicionada no futuro em alguma das tabelas remapeadas) não deve nunca vazar como "erro
@@ -214,8 +219,8 @@ async function mergePersonsInner(canonicalId, absorbedId, actorUserId, transacti
   //   - person_addresses_one_current_per_person_uk: no máximo 1 endereço is_current=true por
   //     pessoa (migration 20260101000174). Se as duas pessoas tinham endereço atual, o
   //     remapeamento criava 2 linhas is_current=true para o mesmo canônico.
-  //   - person_documents_person_id_document_type_version_no_key: unique(person_id,
-  //     document_type, version_no) (migration 20260101000086). Se as duas pessoas tinham
+  //   - unicidade da versão do documento (hoje person_documents_person_company_type_version_key, por pessoa E
+  //     empresa, migration 20260101010943). Se as duas pessoas tinham
   //     documento do mesmo tipo na mesma versão (ex.: ambas na v1), o remapeamento colidia.
   // Fix: antes de remapear, resolver o conflito (demover o endereço atual duplicado; renumerar
   // a versão do documento duplicado) em vez de deixar o banco recusar a operação inteira.

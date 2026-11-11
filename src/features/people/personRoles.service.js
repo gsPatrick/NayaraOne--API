@@ -3,6 +3,7 @@
 const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PersonRole, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { sessionCompanyId } = require('./personView');
 
 // Valores confirmados pelo Caderno (citação literal, lista aberta/não exaustiva): CLIENTE,
 // PROPRIETARIO, LOCATARIO, FORNECEDOR — mais CORRETOR, já usado no mock do frontend.
@@ -47,7 +48,7 @@ async function createRole(personId, payload, actorUserId, transaction) {
   return PersonRole.create(
     {
       groupId: person.groupId,
-      companyId: person.companyId,
+      companyId: await sessionCompanyId(person, transaction), // DI-M9I-3: o dado é da empresa da sessão (vinculada ou responsável)
       personId,
       roleCode: normalizedRole,
       startsAt: startsAt || null,

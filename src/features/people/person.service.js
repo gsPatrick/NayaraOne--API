@@ -9,6 +9,8 @@ const { findPotentialDuplicate } = require('./personDedup.service');
 const { publishPersonCreated, publishPersonUpdated } = require('./personEvents.service');
 const { VALID_ROLES } = require('./personRoles.service');
 const { scorePersonDataQuality } = require('./personDataQuality.service');
+const { projectForSession, assertBaseOwner, isLinkedElsewhereError, linkedElsewhereError } = require('./personView');
+const { assertWithinAttemptLimit, registrarTentativa } = require('./personLinks.service');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, personEntity } = require('../core-governance/data-quality/evidence');
 
 // Mesma validação de personRoles.service.createRole, aplicada aos papéis enviados junto do
@@ -28,11 +30,12 @@ function validatePersonRoleCode(roleCode) {
  * vive em personDocumentFormat.service.js; contacts/documents/roles como sub-recursos têm CRUD
  * próprio em personContacts.service.js / personDocuments.service.js / personRoles.service.js.
  *
- * "people"."persons" tem RLS por empresa: persons_company_select (migration 20260101000083) e
- * persons_company_insert/update/delete (migration 20260101009965, que tirou o FOR ALL só por grupo
- * que liberava a leitura para o grupo inteiro); "person_contacts"/"person_documents" têm RLS por
- * `company_id = current_setting('app.company_id', true)`. Toda query aqui recebe `transaction`
- * já aberta por `req.withTenantTransaction` (ver src/middlewares/tenant.middleware.js).
+ * "people"."persons" é o cadastro do GRUPO visto por VÍNCULO com a empresa (migration 20260101010940, DI-M9I-1): a sessão lê a
+ * pessoa da empresa responsável pela base (company_id) ou com vínculo ACTIVE em people.person_company_links; só a responsável
+ * grava a base (persons_company_insert/update/delete, migration 20260101009965). Os filhos (contatos, endereços, documentos,
+ * papéis, consentimentos) são da empresa da sessão, com RLS por `company_id = current_setting('app.company_id', true)` e chave
+ * composta para o vínculo (migration 20260101010941). Toda query aqui recebe `transaction` já aberta por
+ * `req.withTenantTransaction` (ver src/middlewares/tenant.middleware.js).
  */
 
 async function createPerson(payload, actorUserId, transaction) {
@@ -74,6 +77,11 @@ async function createPerson(payload, actorUserId, transaction) {
     }
   }
 
+  // DI-M9I-2/5: CPF/CNPJ que não está visível nesta empresa pode existir em outra empresa do grupo (UNIQUE por grupo, TAB-0100).
+  // A recusa diz isso sem id nem nome e aponta o vínculo; antes de tentar, o limite de recusas do usuário vale (falha fechada).
+  const taxIdVisivel = taxIdDigits ? (await Person.count({ where: { taxIdNormalized: taxIdDigits }, paranoid: false, transaction })) > 0 : false;
+  if (taxIdDigits && !taxIdVisivel) await assertWithinAttemptLimit({ groupId, companyId }, actorUserId, transaction);
+
   let person;
   try {
     person = await Person.create(
@@ -98,6 +106,13 @@ async function createPerson(payload, actorUserId, transaction) {
     // (TAB-0100) — diferente do match "médio/fraco" de findPotentialDuplicate, ela NÃO pode
     // ser contornada por "allowDuplicate": duas pessoas com o mesmo CPF/CNPJ no mesmo grupo
     // nunca são uma duplicata legítima de negócio, são o mesmo documento.
+    if (error.name === 'SequelizeUniqueConstraintError' && /tax_id_normalized/.test(error.parent?.detail || error.parent?.message || '') && !taxIdVisivel) {
+      registrarTentativa(transaction, { groupId, companyId }, actorUserId, 'CPF_CNPJ_JA_NO_GRUPO');
+      throw AppError.conflict(
+        'Este CPF/CNPJ já tem cadastro em outra empresa do grupo. Para usar esse cadastro aqui, vincule-o a esta empresa informando o CPF/CNPJ e o nome como está no documento.',
+        'PERSON_TAX_ID_IN_GROUP'
+      );
+    }
     if (error.name === 'SequelizeUniqueConstraintError' && /tax_id_normalized/.test(error.parent?.detail || error.parent?.message || '')) {
       throw AppError.conflict(
         'Já existe uma pessoa com este documento (CPF/CNPJ) neste grupo. Esta duplicidade é uma restrição de identidade e não pode ser forçada com "allowDuplicate".',
@@ -250,12 +265,13 @@ async function listPersons(transaction, filters = {}) {
   const where = {};
   if (filters.personType) where.personType = String(filters.personType).toUpperCase();
   if (filters.status) where.status = filters.status;
-  return Person.findAll({
+  const persons = await Person.findAll({
     where,
     include: PERSON_INCLUDE,
     order: [['created_at', 'DESC']],
     transaction,
   });
+  return projectForSession(persons, transaction); // DI-M9I-3: pessoa vinculada vem só com a base
 }
 
 async function getPerson(id, transaction) {
@@ -270,12 +286,13 @@ async function getPerson(id, transaction) {
   // é silenciosamente descartada por `res.json`/`JSON.stringify`. Por isso devolvemos um objeto
   // plano (`{ ...person.toJSON(), dataQuality }`), mesmo padrão já usado em `afterJson` em todo
   // o projeto (ex: opportunity.service.js), em vez de anexar a propriedade na instância.
-  return { ...person.toJSON(), dataQuality: scorePersonDataQuality(person) };
+  return projectForSession({ ...person.toJSON(), dataQuality: scorePersonDataQuality(person) }, transaction);
 }
 
 async function updatePerson(id, payload, actorUserId, transaction) {
   const person = await Person.findByPk(id, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
+  await assertBaseOwner(person, transaction); // DI-M9I-3: a base só muda pela empresa responsável
 
   const currentCritical = { legalName: person.legalName, taxIdNormalized: person.taxIdNormalized, birthOrFoundationDate: person.birthOrFoundationDate };
   const { legalName, preferredName, taxIdNormalized, birthOrFoundationDate, status, personType, riskFlagsJson } = payload;
@@ -313,9 +330,15 @@ async function deletePerson(id, actorUserId, transaction) {
   await legalHold.assertPersonErasable(id, transaction); // M9-D912: pessoa (ou contrato, processo e arquivo dela) sob retenção legal não se apaga
   const person = await Person.findByPk(id, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
+  await assertBaseOwner(person, transaction); // DI-M9I-3: a vinculada desfaz o vínculo (POST /people/:id/unlink), não exclui a base
   person.deletedBy = actorUserId || null;
-  await person.save({ transaction });
-  await person.destroy({ transaction }); // soft delete (paranoid: true no model)
+  try {
+    await person.save({ transaction });
+    await person.destroy({ transaction }); // soft delete (paranoid: true no model)
+  } catch (err) {
+    if (isLinkedElsewhereError(err)) throw linkedElsewhereError(); // gatilho persons_base_vinculada_nao_some
+    throw err;
+  }
   return { id };
 }
 

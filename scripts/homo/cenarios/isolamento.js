@@ -1,5 +1,5 @@
 'use strict';
-/** Cenário (c): isolamento por perfil (somente leitura) e por empresa (outra empresa não enxerga nem altera). */
+/** Cenário (c): isolamento por perfil (somente leitura) e por empresa (outra empresa não enxerga nem altera; filhos em isolamentoFilhos.js). */
 const { NOME_OK, NOME_OUT } = require('./optOutCampanha');
 
 const CENARIO = '(c) isolamento';
@@ -64,6 +64,8 @@ async function outraEmpresa(ctx) {
   const intrusos = (depois.dados || []).filter((c) => c.purpose === 'ACEITE_M9_ISOLAMENTO');
   ctx.rel.conferir(CENARIO, 'nada foi gravado na empresa A pelas tentativas da outra empresa e do perfil de leitura', intrusos.length === 0, `consentimentos de isolamento encontrados na empresa A: ${intrusos.length}`);
   void modeloId;
+  // Endereços, documentos, papéis e arquivos; lista por id e empresa; mesmo CPF no grupo (verificação de 11/11/2026, ISO-7/ISO-4).
+  await require('./isolamentoFilhos').executar(ctx);
 }
 
 async function executar(ctx) {

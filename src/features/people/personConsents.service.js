@@ -3,6 +3,7 @@
 const { CommunicationConsent, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { sessionCompanyId } = require('./personView');
 
 const VALID_CHANNELS = ['PHONE', 'WHATSAPP', 'EMAIL'];
 const VALID_STATUSES = ['OPT_IN', 'OPT_OUT'];
@@ -44,10 +45,11 @@ async function recordConsent(personId, payload, actorUserId, transaction, option
     throw AppError.badRequest(`O campo "status" deve ser um de: ${VALID_STATUSES.join(', ')}.`, 'PERSON_CONSENT_VALIDATION');
   }
 
+  const companyId = await sessionCompanyId(person, transaction); // DI-M9I-3: consentimento é da empresa da sessão
   const consent = await CommunicationConsent.create(
     {
       groupId: person.groupId,
-      companyId: person.companyId,
+      companyId,
       personId,
       channel: normalizedChannel,
       purpose: String(purpose).toUpperCase(),
@@ -62,7 +64,7 @@ async function recordConsent(personId, payload, actorUserId, transaction, option
   await registrarAuditoria(
     {
       groupId: person.groupId,
-      companyId: person.companyId,
+      companyId,
       actorUserId,
       action: 'people.consent.record',
       entityType: 'CommunicationConsent',
@@ -76,7 +78,7 @@ async function recordConsent(personId, payload, actorUserId, transaction, option
   // OPT_OUT (M9-D419): na MESMA transação, o Marketing cria a supressão, cancela o agendado e emite customer.opted_out. Quem já é o
   // serviço do opt-out (a supressão do Marketing) registra o consentimento com skipOptOutHandler para não entrar em laço.
   if (normalizedStatus === 'OPT_OUT' && optOutHandler && !options.skipOptOutHandler) {
-    await optOutHandler({ person, consent, actorUserId: actorUserId || null }, transaction);
+    await optOutHandler({ person: { id: person.id, groupId: person.groupId, companyId }, consent, actorUserId: actorUserId || null }, transaction);
   }
   return consent;
 }

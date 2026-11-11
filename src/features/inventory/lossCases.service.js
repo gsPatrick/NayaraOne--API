@@ -346,8 +346,9 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
     if (!responsiblePersonId) {
       throw AppError.badRequest('Para cobrar o responsável, informe "responsiblePersonId" (ninguém foi responsabilizado neste caso).', 'LOSS_CASE_CHARGE_RESPONSIBLE_REQUIRED');
     }
+    // Visível pelo RLS = cadastrada por esta empresa ou vinculada a ela (DI-M9I-3, CRMX-015); a de outra empresa não aparece.
     responsiblePerson = await Person.findByPk(responsiblePersonId, { transaction });
-    if (!responsiblePerson || responsiblePerson.companyId !== lossCase.companyId) {
+    if (!responsiblePerson) {
       throw AppError.badRequest('Responsável informado não encontrado no cadastro de pessoas desta empresa.', 'LOSS_CASE_RESPONSIBLE_NOT_FOUND');
     }
   }

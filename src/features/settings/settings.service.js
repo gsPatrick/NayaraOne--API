@@ -6,6 +6,7 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
+const { PEOPLE_LINK_SETTINGS_SCHEMA } = require('../people/personLink.settings');
 const { runSettingGuard } = require('./settingGuards');
 const { isPlatformOnly } = require('./settingPlatform');
 const { assertMfaForSettingWrite } = require('./settingMfa');
@@ -218,6 +219,8 @@ const SETTINGS_SCHEMA = {
   'correspondent.sandbox_webhook_secret': { type: 'string', encrypted: true },
   // Marco 9 — governança (M9-D800): liga/desliga dos 8 módulos, exceções ao prefixo GOV_ e perfis da concessão padrão.
   ...GOVERNANCE_SETTINGS_SCHEMA,
+  // Pessoas (DI-M9I-5): limite de tentativas de vínculo que não conferem por usuário e janela.
+  ...PEOPLE_LINK_SETTINGS_SCHEMA,
   // Marco 9, M9-D003 — chave geral da NAY (ia.habilitada, padrão Desligado) e chave por agente (ai.agents.enabled).
   ...AI_SETTINGS_SCHEMA,
   // Marco 9, M9-D402 — Marketing: tetos de mensagem em massa e nomes dos perfis da concessão padrão.

@@ -3,6 +3,7 @@
 const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PersonDocument, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { sessionCompanyId } = require('./personView');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { onlyDigits, isValidTaxIdDigits } = require('./personDocumentFormat.service');
 const { replaceDocumentFile } = require('./personDocumentReplacement.service');
@@ -132,7 +133,7 @@ async function createDocument(personId, payload, actorUserId, transaction) {
   return PersonDocument.create(
     {
       groupId: person.groupId,
-      companyId: person.companyId,
+      companyId: await sessionCompanyId(person, transaction), // DI-M9I-3: o dado é da empresa da sessão (vinculada ou responsável)
       personId,
       documentType: String(documentType).toUpperCase(),
       fileId,
