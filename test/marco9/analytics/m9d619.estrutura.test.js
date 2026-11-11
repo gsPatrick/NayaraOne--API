@@ -56,7 +56,7 @@ test('m9d619 nenhum dado pessoal restrito é copiado para o read model', async (
 
 test('m9d619 eventos conferem com os serviços de origem e o parâmetro está no SETTINGS_SCHEMA', () => {
   const root = path.join(__dirname, '../../../src/features');
-  const text = ['legal/legalEvents.service.js', 'legal/legalDeadlineCalendarEvents.service.js', 'legal/legalBiEvents.service.js', 'correspondent/correspondentEvents.service.js']
+  const text = ['../modules/legal/shared/legalEvents.service.js', '../modules/legal/cases/legalDeadlineCalendarEvents.service.js', '../modules/legal/shared/legalBiEvents.service.js', 'correspondent/correspondentEvents.service.js']
     .map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
   const all = new Set(Object.values(events).flat());
   assert.ok(all.size >= 20);

@@ -79,7 +79,7 @@ router.use('/', healthRouter);
 // roteamento sem RLS (migration 20260101000172).
 // Marco 9 (M9-D211): a rota única POST /v1/webhooks/:provider/:channel (e o alias da raiz) e os aliases abaixo passam pelo mesmo framework: corpo bruto e limite WEBHOOK compartilhado.
 // Matriz M5 (Guia §14): rota literal do livro POST /webhooks/signature/:provider — antes da rota única genérica, que capturaria /webhooks/signature/:canal.
-router.post('/v1/webhooks/signature/:provider', require('../modules/legal/signatures/signatureWebhook.route').signatureWebhookRoute(legalController.clicksignPublicWebhook));
+router.post('/v1/webhooks/signature/:provider', require('../modules/legal/signatures/signatureWebhook.route').signatureWebhookRoute({ webhookPreflight: require('../features/integrations/webhooks/webhooks.preflight').webhookPreflight, legacyAlias: integrationWebhooks.legacyAlias }, legalController.clicksignPublicWebhook));
 router.use(integrationWebhooks.router);
 router.post('/v1/legal/webhooks/clicksign', ...integrationWebhooks.legacyAlias('clicksign', legalController.clicksignPublicWebhook));
 // Mesmo motivo acima, pro webhook do provider bancário (PROVIDER_BANCARIO.md) — resolve o

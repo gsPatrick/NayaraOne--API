@@ -1,8 +1,6 @@
 'use strict';
 
 const AppError = require('../../../utils/AppError');
-const { legacyAlias } = require('../../../features/integrations/webhooks/webhooks.legacy');
-const { webhookPreflight } = require('../../../features/integrations/webhooks/webhooks.preflight');
 const { rawBodyMiddleware } = require('../../../features/integrations/webhooks/webhooks.rawBody');
 const { receiveWebhook } = require('../../../features/integrations/webhooks/webhooks.handler');
 const catchAsync = require('../../../utils/catchAsync');
@@ -19,7 +17,11 @@ const catchAsync = require('../../../utils/catchAsync');
  */
 const PROVIDER_CODES = Object.freeze({ clicksign: 'signature-clicksign', zapsign: 'signature-zapsign', sandbox: 'signature-sandbox', 'sandbox-alt': 'signature-alt-sandbox' });
 
-function signatureWebhookRoute(clicksignPublicWebhook) {
+/**
+ * `framework` recebe as peças do framework de webhooks (verificação de assinatura no corpo bruto):
+ * { webhookPreflight, legacyAlias } — injetadas na declaração da rota para a verificação ficar explícita.
+ */
+function signatureWebhookRoute({ webhookPreflight, legacyAlias }, clicksignPublicWebhook) {
   const legacy = legacyAlias('clicksign', clicksignPublicWebhook);
   const framework = [webhookPreflight, rawBodyMiddleware, catchAsync(receiveWebhook)];
   const run = (chain, req, res, next) => {

@@ -11,7 +11,7 @@ const NODE_TEST = (...arquivos) => ['node', '--test', '--test-concurrency=1', ..
 const ETAPAS = [
   { nome: 'lint', comandos: [['npm', 'run', '-s', 'lint']] },
   { nome: 'typecheck', comandos: [['npm', 'run', '-s', 'syntax-check']] },
-  { nome: 'migrations', banco: true, comandos: [['node', 'scripts/ci-juridico/migracoes.js'], NODE_TEST('test/rls.catalog.allTables.test.js', 'test/m5fech.meta.tabelasDoLivro.test.js')] },
+  { nome: 'migrations', banco: true, comandos: [['node', 'scripts/ci-juridico/migracoes.js'], ['node', 'scripts/ci-juridico/renomes-livro.js'], NODE_TEST('test/rls.catalog.allTables.test.js', 'test/m5fech.meta.tabelasDoLivro.test.js')] },
   { nome: 'contract_state_tests', banco: true, comandos: [NODE_TEST('test/m5fech.contratos.maquinaTipos.test.js', 'test/legal.contracts.test.js', 'test/m5fech.contratos.versoesAprovacao.test.js')] },
   { nome: 'requirements_tests', banco: true, comandos: [NODE_TEST('test/legal.requirements.test.js', 'test/m5fech.contratos.checklist.test.js', 'test/legal.frente5.rules.test.js')] },
   { nome: 'signature_adapter_contract_tests', banco: true, comandos: [NODE_TEST('test/legal.signatureProviders.test.js')] },
