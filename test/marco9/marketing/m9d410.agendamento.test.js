@@ -112,8 +112,10 @@ test('agendamento_com_kill_switch_recusa: global, canal e estado ilegivel dao 42
 test('conexao_do_canal_inativa_recusa_com_409_e_nenhum_job_nasce', async () => {
   await env.withRollbackTenantTransaction(ctx.tenant, async (t) => {
     const first = await env.approvedItem(t, ctx);
-    await env.schedule(t, ctx, first.itemId, { channels: ['SITE'], when: env.inMinutes(60).toISOString() }); // cria a conexão sandbox do canal
-    await env.fx.q(t, "UPDATE integration.connections SET status = 'PAUSED' WHERE company_id = :c AND provider_code = 'site-sandbox'", { c: ctx.tenant.companyId });
+    await env.schedule(t, ctx, first.itemId, { channels: ['SITE'], when: env.inMinutes(60).toISOString() }); // cria (ou acha) a conexão sandbox ativa do canal
+    // pausa SÓ a conexão que o agendamento usou: outras do mesmo provedor (de outro arquivo, já DISABLED, que o gatilho não deixa voltar a PAUSED) não são deste teste
+    const [{ connection_id: used }] = await jobsOf(t, first.itemId);
+    await env.fx.q(t, "UPDATE integration.connections SET status = 'PAUSED' WHERE id = :id AND company_id = :c AND status = 'ACTIVE' RETURNING id", { id: used, c: ctx.tenant.companyId });
     const other = await env.approvedItem(t, ctx);
     await env.rejectsCode(env.schedule(t, ctx, other.itemId, { channels: ['SITE'], when: env.inMinutes(60).toISOString() }), 409, 'MKT_CHANNEL_CONNECTION_INACTIVE');
     assert.equal((await jobsOf(t, other.itemId)).length, 0);

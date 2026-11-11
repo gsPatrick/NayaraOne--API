@@ -17,6 +17,7 @@ const { Sequelize, QueryTypes } = require('sequelize');
 const { sequelize, Group, Company } = require('../src/models');
 const { getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const { recomporMarketing } = require('./helpers/marketingRecompoe');
+const { guardar, devolver } = require('./helpers/marketingGuarda');
 
 const TABLES = ['campaigns', 'campaign_audiences', 'campaign_steps', 'content_items', 'content_versions', 'templates'];
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -290,6 +291,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
   const parte3 = require(path.resolve(__dirname, '../migrations/20260101000754-marketing-campaign-lifecycle.js')); // M9-D412
   const qi = admin.getQueryInterface();
   const contagem = async () => (await admin.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'marketing' AND table_name IN (:t)", { replacements: { t: TABLES } }))[0][0].n;
+  const guarda = await guardar(admin); // as linhas que OUTROS arquivos commitaram no schema marketing saem antes do ciclo e voltam no fim (helpers/marketingGuarda)
   try {
     const inicial = await contagem();
     assert.equal(inicial, 6);
@@ -313,6 +315,7 @@ test('migration_e_idempotente_e_reversivel', async (t) => {
     // Recompõe o banco na ordem MESMO se uma asserção falhar: o down da parte 1 derruba as tabelas com tudo que as migrations
     // posteriores acrescentaram (colunas, gatilhos, funções); sem isso um defeito aqui deixaria o schema pela metade para os outros testes.
     await recomporMarketing(admin); // partes 1 e 2, TODAS as migrations posteriores de marketing e o GRANT do runtime (helpers/marketingRecompoe)
+    await devolver(admin, guarda);
     await admin.close();
   }
 });

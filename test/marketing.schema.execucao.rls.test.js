@@ -11,15 +11,19 @@ const {
   TABLES, base, expectDbError, mkAutoVersion, mkFlow, mkJob, mkRun, mkVersion, popular, prepararTenants, q, sha, uid,
 } = require('./helpers/marketingExecucao');
 const { withRollbackTenantTransaction } = require('./testHelpers');
+const { empresaPropria } = require('./helpers/empresaPropria');
 
 let tenantA;
 let tenantB;
+let vazia; // empresa própria do teste de isolamento, no grupo de B: nenhum outro arquivo grava nela (as linhas que outros commitam na empresa B não entram na conta)
 
 before(async () => {
   ({ tenantA, tenantB } = await prepararTenants());
+  vazia = await empresaPropria(tenantB);
 });
 
 after(async () => {
+  await vazia.remover();
   await sequelize.close();
 });
 
@@ -69,11 +73,11 @@ test('rls_isola_as_9_tabelas_entre_empresas_e_sem_contexto', async () => {
       const [{ n }] = await q(`SELECT count(*)::int AS n FROM marketing.${tabela}`, {}, tx);
       assert.ok(n >= 1, `empresa A deve ver as suas linhas em ${tabela}`);
     }
-    await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenantB.groupId }, transaction: tx });
-    await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenantB.companyId }, transaction: tx });
+    await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: vazia.groupId }, transaction: tx });
+    await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: vazia.companyId }, transaction: tx });
     for (const tabela of TABLES) {
       const [{ n }] = await q(`SELECT count(*)::int AS n FROM marketing.${tabela}`, {}, tx);
-      assert.equal(n, 0, `empresa B não pode ver nada de ${tabela}`);
+      assert.equal(n, 0, `outra empresa (do teste, sem dados) não pode ver nada de ${tabela}`);
     }
     await expectDbError(tx, `INSERT INTO marketing.suppression_list (group_id, company_id, address_hash, channel, reason, source, active)
       VALUES (:g, :c, :h, 'EMAIL', 'OPT_OUT', 'x', true)`, { ...base(tenantA), h: sha('z') }, /row-level security/i);
