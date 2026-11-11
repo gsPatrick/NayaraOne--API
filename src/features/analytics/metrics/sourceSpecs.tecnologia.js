@@ -10,6 +10,7 @@
 const { registerSourceSpec, getSourceSpec } = require('./sourceRefs.spec');
 const { registerDrilldownDetail } = require('./drilldown.details');
 const { DEFINITIONS } = require('./kpis/tecnologia/definitions');
+const clock = require('./clock');
 
 /** O read model de cada KPI vem das definições (a varredura de segurança M9-D700 só deixa citar o nome do read model na camada read-models e nas definições). */
 const RM = Object.freeze(Object.fromEntries(DEFINITIONS.map((d) => [d.metricCode, `analytics.${d.sourceReadModel}`])));
@@ -17,12 +18,18 @@ const RM = Object.freeze(Object.fromEntries(DEFINITIONS.map((d) => [d.metricCode
 const NO_RESTRICTION = { sql: 'TRUE', replacements: {} };
 const windowOf = (filter) => (filter.equals || {}).tecWindow;
 
+/**
+ * DI-BI-7: "fechada" é medida no instante do read model (`tecClosedBy`, o source_snapshot_at que o filtro assinado carrega), com o relógio do BI (M9-D606), nunca com o now()
+ * do banco. Filtro assinado antes do DI-BI-7 (só `tecWindow`) usa o relógio do BI no instante da leitura.
+ */
+const closedByOf = (filter) => (filter.equals || {}).tecClosedBy || clock.now().toISOString();
+
 /** Última janela FECHADA (DI-BI-5) de cada connection ATIVA na janela configurada; sem o marcador (consulta bruta da prova da M9-D712) a origem é a tabela inteira da empresa. */
 const lastActiveWindow = (filter) => (windowOf(filter) === undefined ? NO_RESTRICTION : {
   sql: `(t."window_minutes" = :tecWindow AND t."window_start" = (SELECT max(h."window_start") FROM integration.provider_health h WHERE h."connection_id" = t."connection_id" AND h."window_minutes" = t."window_minutes"
-      AND h."window_start" + make_interval(mins => h."window_minutes") <= now())
+      AND h."window_start" + make_interval(mins => h."window_minutes") <= CAST(:tecClosedBy AS timestamptz))
     AND EXISTS (SELECT 1 FROM integration.connections c WHERE c."id" = t."connection_id" AND c."company_id" = t."company_id" AND c."status" = 'ACTIVE'))`,
-  replacements: { tecWindow: windowOf(filter) },
+  replacements: { tecWindow: windowOf(filter), tecClosedBy: closedByOf(filter) },
 });
 
 const day = (value) => (value ? String(value).slice(0, 10) : null);
@@ -37,7 +44,7 @@ const SPECS = [
     describe: () => 'Eventos do outbox aguardando (PENDING); a fila de entrada (inbox) e a DLQ entram no número pelo read model',
   },
   {
-    metricCode: 'tec.integration_errors', type: 'PROVIDER_HEALTH', table: 'integration.provider_health', columns: {}, flags: ['tecWindow'], predicates: [lastActiveWindow],
+    metricCode: 'tec.integration_errors', type: 'PROVIDER_HEALTH', table: 'integration.provider_health', columns: {}, flags: ['tecWindow', 'tecClosedBy'], predicates: [lastActiveWindow],
     formulaId: 'tec.integration_errors', rowColumns: ['provider_code', 'calls_total', 'calls_failed'], formulaParams: {},
     describe: (f) => `Saúde das connections ativas na última janela fechada de ${(f.equals || {}).tecWindow || 'qualquer'} minutos (chamadas e erros por fornecedor)`,
   },

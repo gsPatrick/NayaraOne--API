@@ -48,7 +48,7 @@ const snapshotInputs = (base, result) => [
 
 /**
  * set = { name, definitions, readOwner(code, scope, tx), readParams(scope, tx), loadRows(scope, asOfDate, tx) -> { snapshotAt: { código: Date|null }, ... },
- * inputs: { código: (rows, ctx) }, params: { código: (settings) }, filterOf(code, asOfDate, settings) -> filtro de origem, periodStart(asOfDate),
+ * inputs: { código: (rows, ctx) }, params: { código: (settings) }, filterOf(code, asOfDate, settings, { snapshotAt }) -> filtro de origem, periodStart(asOfDate),
  * watched: [nomes dos read models], sourceSpecs: módulo que registra as origens }
  */
 function createKpiSet(set) {
@@ -85,7 +85,8 @@ function createKpiSet(set) {
       const inputs = set.inputs[def.metricCode](rows, { asOfDate, settings });
       const params = set.params[def.metricCode] ? set.params[def.metricCode](settings) : {};
       const result = runFormula(catalog.get(def.metricCode), inputs, params);
-      const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter: set.filterOf(def.metricCode, asOfDate, settings), unit: published.unit }, transaction);
+      const filter = set.filterOf(def.metricCode, asOfDate, settings, { snapshotAt }); // DI-BI-7: o instante do read model, para a origem que depende da hora
+      const { sourceRefs } = await buildSourceRefs(sourceCtx, def.metricCode, { filter, unit: published.unit }, transaction);
       const base = {
         metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,
         periodStart: set.periodStart(asOfDate), periodEnd: asOfDate, asOfDate, status: result.status, sourceSnapshotAt: snapshotAt, readModelVersion: getReadModel(def.sourceReadModel).version,

@@ -9,12 +9,17 @@ const dates = require('../../period.dates');
 
 const monthStart = (day) => `${day.slice(0, 7)}-01`;
 
-function techFilterOf(code, asOfDate, settings) {
+/**
+ * DI-BI-7: `snapshotAt` é o instante (relógio do BI) em que o read model de integrações foi calculado (source_snapshot_at, livro §14). Ele entra no filtro assinado de
+ * tec.integration_errors (`tecClosedBy`) para a origem escolher a MESMA "última janela fechada" que o read model escolheu, agora e em qualquer reconciliação posterior.
+ */
+function techFilterOf(code, asOfDate, settings, { snapshotAt = null } = {}) {
   const tomorrow = dates.addDays(asOfDate, 1);
+  const closedBy = snapshotAt ? { tecClosedBy: new Date(snapshotAt).toISOString() } : {};
   const filters = {
     'tec.availability': { period: { from: monthStart(asOfDate), to: tomorrow } },
     'tec.queues_dlq': { status: ['PENDING'] },
-    'tec.integration_errors': { equals: { tecWindow: settings.windowMinutes } },
+    'tec.integration_errors': { equals: { tecWindow: settings.windowMinutes, ...closedBy } },
     'tec.freshness': { status: ['SUCCEEDED', 'DEGRADED'] },
     'tec.auth_failures': { period: { from: asOfDate, to: tomorrow } },
     'tec.blocked_events': { period: { from: asOfDate, to: tomorrow } },
