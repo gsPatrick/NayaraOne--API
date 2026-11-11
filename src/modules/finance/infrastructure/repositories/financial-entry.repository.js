@@ -7,7 +7,7 @@
  * e travas são as mesmas que estavam nos serviços.
  */
 const { Op } = require('sequelize');
-const { FinancialEntry, File, Person, ContractParty, sequelize } = require('../../../../models');
+const { FinancialEntry, File, Person, Contract, ContractParty, sequelize } = require('../../../../models');
 
 const forUpdate = (transaction) => (transaction ? transaction.LOCK.UPDATE : undefined);
 
@@ -96,6 +96,11 @@ function findPerson(personId, transaction) {
   return Person.findByPk(personId, { transaction });
 }
 
+/** Contrato da MESMA empresa (RLS + company_id explícito): o lançamento não aponta contrato de outra empresa (JUR-013). */
+function findContractOfCompany(contractId, companyId, transaction) {
+  return Contract.findOne({ where: { id: contractId, companyId }, attributes: ['id'], transaction });
+}
+
 function findContractParties(contractId, personId, transaction) {
   return ContractParty.findAll({ where: { contractId, personId }, transaction });
 }
@@ -119,4 +124,5 @@ module.exports = {
   findSameContentFileIds,
   findPerson,
   findContractParties,
+  findContractOfCompany,
 };
