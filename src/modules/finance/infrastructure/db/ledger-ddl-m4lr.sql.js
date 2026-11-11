@@ -25,7 +25,7 @@ $f$`;
 /**
  * Regra única do saldo (Caderno §6): a baixa filha que baixa o pai (parcial ou complemento; o excedente não), quanto as baixas
  * realizaram (cada uma menos os estornos que apontam para ela) e se o lançamento tem baixas filhas (então ele não é linha do
- * ledger: as filhas é que são). Funções do banco para o Financeiro, a NAY e o read model do BI usarem a MESMA conta.
+ * ledger: as filhas é que são). Funções do banco para o Financeiro, a assistente financeira e o read model do BI usarem a MESMA conta.
  */
 const BALANCE_FUNCTIONS = [`
 CREATE OR REPLACE FUNCTION finance.entry_realized_by_children(p_id uuid) RETURNS numeric LANGUAGE sql STABLE AS $f$
@@ -43,7 +43,7 @@ $f$`];
  * finance.ledger (Caderno §7): só movimento realizado. O pai com baixas filhas não é linha (as filhas é que são); linha
  * com ledger_exclusion_reason (legado de 0,00 ou estorno de previsto não realizado) fica fora. O estorno herda da raiz a
  * natureza de negócio, o terceiro e as dimensões; financial_entry_id do estorno é o lançamento da raiz. source_event_id é o
- * evento de domínio (outbox) do movimento. Colunas além do DDL do livro servem os relatórios (§19) e a NAY (§18).
+ * evento de domínio (outbox) do movimento. Colunas além do DDL do livro servem os relatórios (§19) e a assistente financeira (§18).
  */
 const LEDGER_VIEW = `
 CREATE VIEW finance.ledger WITH (security_invoker = true) AS

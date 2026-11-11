@@ -112,7 +112,7 @@ async function settleFinancialEntryPartial(id, partialAmount, actorUserId, trans
   // Lock pessimista no pai: sem ele, duas baixas concorrentes somadas passariam do total.
   const entry = await getEntryForUpdate(id, transaction);
   if (!isPositiveAmount(partialAmount)) {
-    throw AppError.badRequest('Informe um valor maior que zero, em decimal simples (ex.: 0.10), de pelo menos R$ 0,01.', 'FINANCE_ENTRY_VALIDATION');
+    throw AppError.badRequest('Informe um valor maior que zero.', 'FINANCE_ENTRY_VALIDATION');
   }
   // FIN-004: a chave do cliente (obrigatória na rota HTTP) é gravada na filha; repetir a mesma baixa devolve a original.
   const partialKey = deriveKey(options.movementKind === MOVEMENT_KINDS.COMPLEMENT ? 'complemento' : 'baixa-parcial', entry.companyId, options && options.idempotencyKey);

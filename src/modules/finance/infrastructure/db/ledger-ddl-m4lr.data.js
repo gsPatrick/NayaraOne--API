@@ -211,6 +211,12 @@ async function up(queryInterface) {
     for (const { t } of forced) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
     await q(`CREATE TABLE IF NOT EXISTS ${LOG} (id bigserial PRIMARY KEY, logged_at timestamptz NOT NULL DEFAULT now(), step varchar(40) NOT NULL, company_id uuid,
                entry_id uuid, column_name varchar(64), old_value text, new_value text, created_entry_id uuid, detail jsonb)`);
+    // Tabela multiempresa (company_id): RLS + FORCE + isolamento por empresa, como as demais (o runtime nem tem acesso).
+    await q(`ALTER TABLE ${LOG} ENABLE ROW LEVEL SECURITY`);
+    await q(`ALTER TABLE ${LOG} NO FORCE ROW LEVEL SECURITY`); // FORCE no fim (a migration grava o log como dona)
+    await q(`DROP POLICY IF EXISTS tenant_isolation ON ${LOG}`);
+    await q(`CREATE POLICY tenant_isolation ON ${LOG} USING (company_id = NULLIF(current_setting('app.company_id', true), '')::uuid)
+               WITH CHECK (company_id = NULLIF(current_setting('app.company_id', true), '')::uuid)`);
     await q(`REVOKE ALL ON ${LOG} FROM PUBLIC`);
     if (await runtimeExists(q)) await q(`REVOKE ALL ON ${LOG} FROM nayara_runtime`);
     await q(`ALTER TABLE ${FE} ADD COLUMN IF NOT EXISTS settlement_idempotency_key varchar(180) NULL,
@@ -234,6 +240,7 @@ async function up(queryInterface) {
     const after = await counts(q, 'l.cash_amount');
     await logCounts(q, 'CONTAGEM_DEPOIS', after);
     await auditSummary(q, before, after);
+    await q(`ALTER TABLE ${LOG} FORCE ROW LEVEL SECURITY`);
     for (const { t } of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`);
   });
 }
@@ -258,6 +265,7 @@ async function down(queryInterface) {
     await q(`ALTER TABLE ${FE} DISABLE TRIGGER trg_financial_entries_append_only`);
     const [[{ exists }]] = await q("SELECT to_regclass(:t) IS NOT NULL AS exists", { t: LOG });
     if (exists) {
+      await q(`ALTER TABLE ${LOG} NO FORCE ROW LEVEL SECURITY`);
       await q(`DELETE FROM ${FE} e USING ${LOG} l WHERE l.step = 'ESTORNO_CORRECAO' AND l.created_entry_id = e.id`);
       await q(`UPDATE ${FE} e SET status = l.old_value FROM ${LOG} l WHERE l.entry_id = e.id AND l.step IN ('BAIXA_ESTORNADA_NA_CORRECAO', 'VALOR_ZERO_CANCELADO')`);
       await q(`UPDATE ${FE} e SET status = l.old_value, settled_at = CAST(l.detail->>'settled_at_antes' AS timestamptz) FROM ${LOG} l WHERE l.entry_id = e.id AND l.step = 'STATUS_DERIVADO'`);
