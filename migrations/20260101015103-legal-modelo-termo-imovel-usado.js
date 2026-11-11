@@ -64,7 +64,7 @@ module.exports = {
         }
         const [[tpl]] = await q("INSERT INTO legal.contract_templates (id, group_id, company_id, name, contract_type, is_active, created_at, updated_at) VALUES (gen_random_uuid(), :g, :c, :name, 'USED_PROPERTY_DELIVERY', true, now(), now()) RETURNING id", r);
         const [[ver]] = await q("INSERT INTO legal.template_versions (id, group_id, company_id, template_id, version_number, status, origin, created_at, updated_at) VALUES (gen_random_uuid(), :g, :c, :t, 1, 'DRAFT', 'CODE_SEED', now(), now()) RETURNING id", { ...r, t: tpl.id });
-        await q('INSERT INTO legal.contract_template_clauses (id, group_id, company_id, contract_template_id, contract_clause_id, template_version_id, sort_order, created_at, updated_at) VALUES (gen_random_uuid(), :g, :c, :t, :cl, :v, 0, now(), now())', { ...r, t: tpl.id, cl: clause.id, v: ver.id });
+        await q('INSERT INTO legal.contract_template_clauses (id, group_id, company_id, contract_template_id, contract_clause_id, template_version_id, sort_order, created_at) VALUES (gen_random_uuid(), :g, :c, :t, :cl, :v, 0, now())', { ...r, t: tpl.id, cl: clause.id, v: ver.id });
         await q("UPDATE legal.template_versions SET status = 'PUBLISHED', published_at = now() WHERE id = :v", { v: ver.id });
       }
       for (const t of TABLES) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`);
