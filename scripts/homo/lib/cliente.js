@@ -95,6 +95,7 @@ class Sessao {
     const cabecalhos = { Accept: 'application/json' };
     if (corpo !== undefined) cabecalhos['Content-Type'] = 'application/json';
     if (this.token && !opcoes.semToken) cabecalhos.Authorization = `Bearer ${this.token}`;
+    if (opcoes.correlacao) cabecalhos['X-Correlation-Id'] = opcoes.correlacao; // liga a requisição às linhas de auditoria que ela gera
     const res = await fetch(`${this.base}${rota}`, { method: metodo, headers: cabecalhos, body: corpo !== undefined ? JSON.stringify(corpo) : undefined });
     const texto = await res.text();
     let json = null;

@@ -140,4 +140,4 @@ async function conferir(ctx) {
   ctx.rel.aviso('Motivo por destinatário (BLOCKED / SUPPRESSED) fica só na tabela de entregas da campanha; nenhuma rota nem tela mostra esse detalhe hoje. A API mostra o motivo agregado em reach.excludedSuppressed.');
 }
 
-module.exports = { preparar, conferir, NOME_OK, NOME_OUT, CENARIO, FINALIDADE };
+module.exports = { preparar, conferir, garantirDescadastro, garantirModelo, NOME_OK, NOME_OUT, CENARIO, FINALIDADE };
