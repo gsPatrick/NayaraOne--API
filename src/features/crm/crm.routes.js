@@ -5,12 +5,24 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const crmController = require('./crm.controller');
 const { requireOpportunityInScope } = require('./opportunityScope.guard');
+const carteira = require('./carteira/carteira.guard');
+const ownerChange = require('./carteira/ownerChange.controller');
 
 const crmRouter = Router();
 
 crmRouter.use(authMiddleware, tenantMiddleware);
 // CRM-TS-012 / livro §18: corretor só acessa oportunidade da própria carteira, em toda rota com o id da oportunidade.
 crmRouter.use('/opportunities/:id', requireOpportunityInScope);
+// CRM-TS-012 em TODO caminho do CRM (carteira/carteira.scope.js): registro por id fora da carteira = 404; criação com
+// oportunidade alheia no corpo = 404; listagens somam o escopo; painel só com os números da própria carteira.
+crmRouter.use('/visits/:id', carteira.requireRecordInScope('visit'));
+crmRouter.use('/messages/:id', carteira.requireRecordInScope('message'));
+crmRouter.use('/crm/proposals/:id', carteira.requireRecordInScope('proposal'));
+crmRouter.use('/crm/feedback-cases/:id', carteira.requireRecordInScope('feedback'));
+crmRouter.use('/carts/:cartId', carteira.requireRecordInScope('cart', 'cartId'));
+crmRouter.use('/tasks/:id', carteira.requireRecordInScope('task'));
+for (const path of ['/visits', '/messages', '/messages/send', '/crm/proposals', '/crm/feedback-cases']) crmRouter.post(path, carteira.requireBodyOpportunityInScope);
+for (const path of ['/visits', '/messages', '/crm/proposals', '/crm/feedback-cases']) crmRouter.get(path, carteira.requireQueryOpportunityInScope, carteira.attachCarteira);
 
 // M3-21 — exportação sensível: permissão DEDICADA (não basta crm:opportunities:read) e
 // sempre auditada. Precisa vir ANTES de '/opportunities/:id' para não ser capturada por ele.
@@ -27,7 +39,7 @@ crmRouter.get('/crm/proposals/:id', requirePermission('crm:proposals:read'), crm
 crmRouter.patch('/crm/proposals/:id/status', requirePermission('crm:proposals:update'), crmController.updateProposalStatus);
 
 // --- Painel de indicadores (M3-17) ---
-crmRouter.get('/crm/dashboard', requirePermission('crm:dashboard:read'), crmController.getDashboard);
+crmRouter.get('/crm/dashboard', requirePermission('crm:dashboard:read'), carteira.scopeDashboardToCarteira, crmController.getDashboard);
 
 // --- Reclamações, elogios e conflitos (M3-20) ---
 crmRouter.post('/crm/feedback-cases', requirePermission('crm:feedback:create'), crmController.createFeedbackCase);
@@ -39,7 +51,8 @@ crmRouter.patch('/crm/feedback-cases/:id/escalate', requirePermission('crm:feedb
 crmRouter.post('/opportunities', requirePermission('crm:opportunities:create'), crmController.createOpportunity);
 crmRouter.get('/opportunities', requirePermission('crm:opportunities:read'), crmController.listOpportunities);
 crmRouter.get('/opportunities/:id', requirePermission('crm:opportunities:read'), crmController.getOpportunity);
-crmRouter.patch('/opportunities/:id', requirePermission('crm:opportunities:update'), crmController.updateOpportunity);
+// CAD-18 / livro §18: troca de responsável pelo PATCH exige a permissão específica, motivo e auditoria (carteira/ownerChange.controller.js).
+crmRouter.patch('/opportunities/:id', requirePermission('crm:opportunities:update'), ownerChange.updateOpportunity);
 crmRouter.delete('/opportunities/:id', requirePermission('crm:opportunities:delete'), crmController.removeOpportunity);
 
 // --- Tarefas da oportunidade (M3-11) e timeline unificada (M3-19) ---

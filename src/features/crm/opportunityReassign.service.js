@@ -31,7 +31,8 @@ async function assertActiveMember(userId, companyId, transaction) {
   if (!rows.length) throw AppError.unprocessable('O novo responsável precisa ser um usuário ativo desta empresa.', 'OPPORTUNITY_REASSIGN_INVALID_OWNER');
 }
 
-async function bulkReassign(payload, actor, transaction) {
+/** `options.single`: a troca de uma oportunidade pelo PATCH comum (CAD-18) — mesma regra, auditoria `opportunity.reassign`. */
+async function bulkReassign(payload, actor, transaction, options = {}) {
   const { ids, why } = validate(payload || {});
   await assertActiveMember(payload.toUserId, actor.companyId, transaction);
   const found = await Opportunity.findAll({ where: { id: ids }, lock: transaction.LOCK.UPDATE, transaction });
@@ -51,12 +52,12 @@ async function bulkReassign(payload, actor, transaction) {
         groupId: opportunity.groupId,
         companyId: opportunity.companyId,
         actorUserId: actor.userId,
-        action: 'opportunity.bulk_reassign',
+        action: options.single ? 'opportunity.reassign' : 'opportunity.bulk_reassign',
         entityType: 'Opportunity',
         entityId: opportunity.id,
         beforeJson,
         afterJson: opportunity.toJSON(),
-        reason: `Troca de responsável em massa: ${why}`,
+        reason: `${options.single ? 'Troca de responsável' : 'Troca de responsável em massa'}: ${why}`,
       },
       transaction
     );

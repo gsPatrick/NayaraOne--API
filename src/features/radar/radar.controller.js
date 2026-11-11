@@ -14,7 +14,7 @@ const create = catchAsync(async (req, res) => {
 
 const list = catchAsync(async (req, res) => {
   const radars = await req.withTenantTransaction((transaction) =>
-    radarService.listRadars(transaction, { personId: req.query.personId, status: req.query.status })
+    radarService.listRadars(transaction, { personId: req.query.personId, status: req.query.status, carteira: req.carteira }) // CRM-TS-012
   );
   return success(res, { data: radars });
 });

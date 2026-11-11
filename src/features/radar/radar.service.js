@@ -2,6 +2,7 @@
 
 const { PropertyRadar, Person, Opportunity, Property, PropertyOffer, PropertyAddress } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('../crm/carteira/carteira.scope');
 const { matchRadarToProperties, explainMatch } = require('./radarMatching.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { validateCriteria } = require('./radarCriteria');
@@ -66,7 +67,7 @@ async function listRadars(transaction, filters = {}) {
   const where = {};
   if (filters.personId) where.personId = filters.personId;
   if (filters.status) where.status = filters.status;
-  return PropertyRadar.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return PropertyRadar.findAll({ where: withScope(where, 'radar', filters.carteira), order: [['created_at', 'DESC']], transaction }); // CRM-TS-012
 }
 
 async function getRadar(id, transaction) {
