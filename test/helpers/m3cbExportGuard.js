@@ -11,11 +11,11 @@ const ENTRY = getEntry('crm.opportunities');
 const JUSTIFICATION = 'Relatório da reunião semanal de vendas da equipe comercial';
 
 /** Decisão do guard para exportar `estimatedRows` oportunidades. Devolve { decision, error } (error = o AppError que a rota lançaria). */
-async function decideExport(tenant, { permissions, mfaOk, estimatedRows = 1, actorUserId = tenant.userId }) {
+async function decideExport(tenant, { permissions, mfaOk, estimatedRows = 1, actorUserId = tenant.userId, maxRowsCap = null }) {
   const decision = await guardService.decide({ groupId: tenant.groupId, companyId: tenant.companyId, userId: actorUserId }, {
     action: 'EXPORT', kind: 'EXPORT', resourceType: ENTRY.code, minClassification: ENTRY.minClassification, originPermission: ENTRY.permission,
     query: { filter: {}, columns: ENTRY.columns.map((c) => c.key), format: 'CSV' }, purpose: 'OPERACAO', justification: JUSTIFICATION, estimatedRows,
-    mfaOk, permissions, idempotencyKey: `m3-export-${crypto.randomUUID()}`, actorUserId,
+    mfaOk, permissions, idempotencyKey: `m3-export-${crypto.randomUUID()}`, actorUserId, maxRowsCap,
   });
   return { decision, error: decision.decision === 'DENY' ? blockedError(decision, decision.justificationMin) : null };
 }

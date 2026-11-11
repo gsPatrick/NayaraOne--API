@@ -46,7 +46,7 @@ function normalize(raw, tenant) {
   };
   return {
     ...body, actorUserId, minClassification: CLASSES.includes(raw.minClassification) ? raw.minClassification : null, ip: text(raw.ip, 64), mfaOk: raw.mfaOk === true, aiAllowed: raw.aiAllowed, originPermission: text(raw.originPermission, 100),
-    permissions: Array.isArray(raw.permissions) ? raw.permissions : null, idempotencyKey: text(raw.idempotencyKey, 128) || null, correlationId: text(raw.correlationId, 100),
+    permissions: Array.isArray(raw.permissions) ? raw.permissions : null, maxRowsCap: Number.isInteger(raw.maxRowsCap) && raw.maxRowsCap > 0 ? raw.maxRowsCap : null, idempotencyKey: text(raw.idempotencyKey, 128) || null, correlationId: text(raw.correlationId, 100),
     resources: resourcesOf(raw, resourceType), requestHash: crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex'),
   };
 }

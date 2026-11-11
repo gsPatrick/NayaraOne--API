@@ -4,6 +4,7 @@ const { collectOpportunityRows, EXPORT_FIELDS } = require('../../../../crm/oppor
 const { pick, UUID } = require('./filters');
 const { getEffectiveAccess } = require('../../../../memberships/effectivePermissions.service');
 const { resolveOpportunityOwnerScope } = require('../../../../crm/opportunityScope.guard');
+const { readCrmExportMaxRows } = require('./crmOpportunities.settings');
 
 /** Escopo de carteira de quem pede (livro do Marco 3 §18; CRM-TS-012): permissões efetivas de agora, como o resto do pedido. */
 async function ownerScopeOf(ctx, transaction) {
@@ -37,5 +38,7 @@ module.exports = {
   parseFilter: (filter) => pick(filter, ['stage', 'personId', 'propertyId'], { personId: UUID, propertyId: UUID, stage: /^[A-Za-z_]{1,40}$/ }),
   // A estimativa (que passa pelo teto de volume do guard) e o arquivo contam a mesma carteira: o corretor de escopo próprio só exporta a dele.
   estimate: async (ctx, filter, transaction) => (await collectOpportunityRows(filter, transaction, await ownerScopeOf(ctx, transaction))).length,
+  // DEC-049: teto próprio da exportação do CRM (exportacao.crm.linhas_maximo), somado ao teto da classe no guard (vale o menor).
+  volumeCap: (ctx, transaction) => readCrmExportMaxRows(ctx, transaction),
   collect: async (ctx, filter, transaction) => ({ rows: await collectOpportunityRows(filter, transaction, await ownerScopeOf(ctx, transaction)) }),
 };

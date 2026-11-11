@@ -12,6 +12,7 @@ const { Person, Opportunity } = require('../src/models');
 const policyService = require('../src/features/core-governance/dlp/policy.service');
 const { withOwnTenantTransaction } = require('../src/features/core-governance/dlp/guard.tx');
 const { decideExport, ENTRY } = require('./helpers/m3cbExportGuard');
+const { readCrmExportMaxRows } = require('../src/features/core-governance/dlp/exports/catalog/crmOpportunities.settings');
 
 const PERMS = ['governance:dlp:export', 'crm:opportunities:export', 'crm:opportunities:read'];
 
@@ -52,4 +53,16 @@ test('CRM-TS-013: a estimativa que vai ao teto é a contagem real das linhas a e
     assert.equal(await ENTRY.estimate(ctx, { personId: person.id }, transaction), 7);
     assert.equal((await ENTRY.collect(ctx, { personId: person.id }, transaction)).rows.length, 7);
   });
+});
+
+test('CRM-TS-013 DEC-049: o teto próprio da exportação do CRM (exportacao.crm.linhas_maximo, padrão 5000) vence o da classe quando é menor', async () => {
+  const tenant = await getSeedTenant();
+  const cap = await withOwnTenantTransaction(tenant, tenant.userId, (t) => readCrmExportMaxRows(tenant, t));
+  assert.equal(cap, 5000, 'padrão do catálogo de parâmetros');
+  const acima = await decideExport(tenant, { permissions: PERMS, mfaOk: true, estimatedRows: cap + 1, maxRowsCap: cap });
+  assert.equal(acima.decision.blockReason, 'VOLUME');
+  assert.equal(acima.decision.trace.find((t) => t.step === 'VOLUME').maxRows, cap);
+  const noTeto = await decideExport(tenant, { permissions: PERMS, mfaOk: true, estimatedRows: cap, maxRowsCap: cap });
+  assert.equal(noTeto.decision.decision, 'ALLOW');
+  assert.equal(typeof ENTRY.volumeCap, 'function', 'o catálogo do CRM declara o teto próprio');
 });

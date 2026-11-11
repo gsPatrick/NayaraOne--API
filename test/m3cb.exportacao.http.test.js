@@ -86,6 +86,26 @@ test('M3-21 volume: acima do teto da classe HIGH (política da empresa) é recus
   }
 });
 
+test('M3-21 DEC-049: o teto próprio da exportação do CRM (exportacao.crm.linhas_maximo) recusa acima dele; o MFA não pode ser desligado', { skip: H.SKIP }, async () => {
+  await H.mfaRecente(env.ids.gestor, company.id);
+  const KEY = 'exportacao.crm.linhas_maximo';
+  assert.equal((await env.call('PUT', `/settings/${KEY}`, as('gestor'), { value: 1 })).status, 200);
+  try {
+    const r = await pedir('gestor');
+    assert.equal(r.status, 422, JSON.stringify(r.body));
+    assert.equal(r.body.error.code, 'GOV_DLP_VOLUME_EXCEEDED');
+    const pedido = await job(r.body.error.details.exportJobId);
+    assert.equal(pedido.block_reason, 'VOLUME');
+    assert.equal(pedido.decision_trace.find((t) => t.step === 'VOLUME').maxRows, 1, 'o teto do CRM venceu o da classe (10.000)');
+  } finally {
+    await H.admin('DELETE FROM core.tenant_settings WHERE company_id = $1 AND key = $2', [company.id, KEY]);
+  }
+  const desligar = await env.call('PUT', '/settings/exportacao.crm.exige_mfa', as('gestor'), { value: false });
+  assert.equal(desligar.status, 422, JSON.stringify(desligar.body));
+  assert.equal((await env.call('PUT', '/settings/exportacao.crm.exige_mfa', as('gestor'), { value: true })).status, 200, 'ligado (com MFA recente de quem altera) é aceito');
+  await H.admin('DELETE FROM core.tenant_settings WHERE company_id = $1 AND key = $2', [company.id, 'exportacao.crm.exige_mfa']);
+});
+
 test('M3-21 aprovado: APPROVED -> READY com MFA; o corretor de escopo próprio exporta só a própria carteira; pedido, geração e download auditados', { skip: H.SKIP }, async () => {
   await H.mfaRecente(env.ids.maker, company.id);
   const r = await pedir('maker');
