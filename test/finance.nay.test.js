@@ -176,7 +176,8 @@ test('NAY-FIN-03: dados incompletos — sem conta, conta sem extrato do mês e e
     const comExtrato = await getFinanceInsights(fresh, fresh.userId, t);
     assert.ok(!comExtrato.motivosParcial.some((m) => /sem extrato importado/.test(m)), 'motivo de extrato some');
     assert.ok(comExtrato.motivosParcial.some((m) => /sem conciliação/.test(m)), 'extrato sem conciliação ainda torna parcial');
-    assert.equal(comExtrato.explicacoes.fluxoCaixa.numeros.find((n) => n.indicador === 'caixaLivre').valor, 1234.56);
+    // Caderno §19 "Caixa disponível — saldos conciliados próprios" (M4LR, DI-M4LR-7): extrato ainda sem conciliação não é caixa disponível.
+    assert.equal(comExtrato.explicacoes.fluxoCaixa.numeros.find((n) => n.indicador === 'caixaLivre').valor, 0);
   });
 });
 

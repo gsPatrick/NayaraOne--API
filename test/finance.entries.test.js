@@ -249,7 +249,8 @@ test('conciliação: valores batendo concilia; conciliar de novo o mesmo lançam
 test('estorno: lançamento estornado não pode ser estornado de novo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const entry = await createEntry(transaction, tenant.userId);
-    await receiptService.reverseFinancialEntry(entry.id, 'HOMO QA — estorno de teste', tenant.userId, transaction);
+    // M4LR (Caderno §6): lançamento nunca realizado — o estorno só anula o previsto (sem ledger), a pedido explícito.
+    await receiptService.reverseFinancialEntry(entry.id, 'HOMO QA — estorno de teste', tenant.userId, transaction, { voidNotRealized: true });
 
     await assert.rejects(
       () => receiptService.reverseFinancialEntry(entry.id, 'HOMO QA — segunda tentativa', tenant.userId, transaction),

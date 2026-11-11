@@ -127,7 +127,7 @@ test('FIN-004 settle-partial: duas requisições SIMULTÂNEAS com a mesma chave 
   assert.equal(await withTenantTransaction(tenant, (t) => ledgerBalance.computeRemainingAmount(entry.id, t)), '0.20');
 });
 
-test('FIN-004 settle (baixa integral): a 2ª chamada sem chave segue recusada por status (409 FINANCE_ENTRY_INVALID_STATUS); com a mesma chave devolve a baixa original (idempotentReplay); a chave em outro lançamento é 409 IDEMPOTENCY_KEY_REUSED', async () => {
+test('FIN-004 settle (baixa integral): sem chave é 400 FINANCE_IDEMPOTENCY_KEY_REQUIRED (M4LR, verificação 11/11/2026); com a mesma chave devolve a baixa original (idempotentReplay); a chave em outro lançamento é 409 IDEMPOTENCY_KEY_REUSED', async () => {
   const entry = await receivable('0.30', 'integral');
   const other = await receivable('0.30', 'integral outro');
   const key = `m4-integral-${uniqueSuffix()}`;
@@ -138,8 +138,11 @@ test('FIN-004 settle (baixa integral): a 2ª chamada sem chave segue recusada po
   assert.equal(replay.status, 200, JSON.stringify(replay.body));
   assert.equal(replay.body.data.idempotentReplay, true);
   const noKey = await http('POST', `/finance/entries/${entry.id}/settle`, token, {});
-  assert.equal(noKey.status, 409);
-  assert.equal(noKey.code, 'FINANCE_ENTRY_INVALID_STATUS');
+  assert.equal(noKey.status, 400);
+  assert.equal(noKey.code, 'FINANCE_IDEMPOTENCY_KEY_REQUIRED');
+  const otherKey = await http('POST', `/finance/entries/${entry.id}/settle`, token, { idempotencyKey: `m4-integral-2-${uniqueSuffix()}` });
+  assert.equal(otherKey.status, 409, 'a 2ª baixa com outra chave segue recusada por status');
+  assert.equal(otherKey.code, 'FINANCE_ENTRY_INVALID_STATUS');
   const reused = await http('POST', `/finance/entries/${other.id}/settle`, token, { idempotencyKey: key });
   assert.equal(reused.status, 409);
   assert.equal(reused.code, 'IDEMPOTENCY_KEY_REUSED');
