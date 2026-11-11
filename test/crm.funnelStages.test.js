@@ -72,7 +72,7 @@ test('funil do livro: WON e LOST viram CLOSED_WON e CLOSED_LOST, com o motivo es
 test('funil do livro: estágio fora do catálogo é recusado na criação e na mudança, sem alterar a oportunidade', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const person = await lead(t);
-    for (const stage of ['NOVO', 'QUALIFYING', 'NEGOTIATION', 'CLOSED', '']) {
+    for (const stage of ['FASE_X', 'ESTAGIO_INVENTADO', 'CLOSED', '']) {
       await assert.rejects(create(t, person.id, { stage: stage || ' ' }), invalid);
     }
     const ativa = await create(t, person.id, { stage: 'MATCHING' });
@@ -80,5 +80,16 @@ test('funil do livro: estágio fora do catálogo é recusado na criação e na m
     await assert.rejects(opportunitiesService.updateOpportunity(ativa.id, { stage: null }, tenant.userId, t), invalid);
     const depois = await opportunitiesService.getOpportunity(ativa.id, t);
     assert.equal(depois.stage, 'MATCHING');
+  });
+});
+
+test('funil do livro: códigos antigos (quadro anterior do Front e dados legados) entram e são gravados no código do livro (DI-M3-FUNIL-1)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const person = await lead(t);
+    const esperado = { NOVO: 'NEW', CONTATO: 'QUALIFIED', VISITA: 'VISIT_SCHEDULED', PROPOSTA: 'PROPOSAL', QUALIFYING: 'QUALIFIED', VISIT: 'VISIT_SCHEDULED', NEGOTIATION: 'PROPOSAL' };
+    for (const [antigo, livro] of Object.entries(esperado)) {
+      const o = await create(t, person.id, { stage: antigo });
+      assert.equal(o.stage, livro, antigo);
+    }
   });
 });

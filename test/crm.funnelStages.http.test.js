@@ -56,12 +56,19 @@ test('ROTA funil do livro: estágio do livro aceito, WON normalizado com motivo,
   assert.equal(visita.status, 201, JSON.stringify(visita.body));
   assert.equal(visita.body.data.stage, 'VISIT_SCHEDULED');
 
-  const inventado = await http('POST', '/opportunities', { personId, stage: 'NOVO', nextAction: 'Ligar', nextActionDueAt: FUTURE() });
+  // Código do quadro antigo do Front (DI-M3-FUNIL-1): aceito na entrada e gravado no código do livro, para nada quebrar na troca de versão.
+  const antigo = await http('POST', '/opportunities', { personId, stage: 'NOVO', nextAction: 'Ligar', nextActionDueAt: FUTURE() });
+  assert.equal(antigo.status, 201, JSON.stringify(antigo.body));
+  assert.equal(antigo.body.data.stage, 'NEW');
+  const contato = await http('PATCH', `/opportunities/${antigo.body.data.id}`, { stage: 'CONTATO' });
+  assert.equal(contato.body.data.stage, 'QUALIFIED');
+
+  const inventado = await http('POST', '/opportunities', { personId, stage: 'FASE_INVENTADA', nextAction: 'Ligar', nextActionDueAt: FUTURE() });
   assert.equal(inventado.status, 400);
   assert.equal(inventado.body.error.code, 'OPPORTUNITY_STAGE_INVALID');
   assert.match(inventado.body.error.message, /VISIT_SCHEDULED/);
 
-  const mudancaInvalida = await http('PATCH', `/opportunities/${visita.body.data.id}`, { stage: 'CONTATO' });
+  const mudancaInvalida = await http('PATCH', `/opportunities/${visita.body.data.id}`, { stage: 'ESTAGIO_INVENTADO' });
   assert.equal(mudancaInvalida.status, 400);
   assert.equal(mudancaInvalida.body.error.code, 'OPPORTUNITY_STAGE_INVALID');
 

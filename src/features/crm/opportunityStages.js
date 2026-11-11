@@ -15,12 +15,19 @@ const ACTIVE_STAGES = Object.freeze(['NEW', 'QUALIFIED', 'MATCHING', 'VISIT_SCHE
 const TERMINAL_STAGES = Object.freeze(['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN']);
 const STAGES = Object.freeze([...ACTIVE_STAGES, ...TERMINAL_STAGES]);
 const LIVRO_ALIASES = Object.freeze({ WON: 'CLOSED_WON', LOST: 'CLOSED_LOST' });
+// Códigos antigos (DI-M3-FUNIL-1): o quadro do Front anterior ao funil do livro mandava NOVO/CONTATO/VISITA/PROPOSTA e havia
+// dados gravados com NEGOTIATION/QUALIFYING/VISIT. Continuam aceitos na entrada para nada quebrar durante a troca de versão,
+// mas são sempre gravados no código do livro (a migration 20260101009975 converteu os registros existentes).
+const LEGACY_ALIASES = Object.freeze({
+  NOVO: 'NEW', CONTATO: 'QUALIFIED', VISITA: 'VISIT_SCHEDULED', PROPOSTA: 'PROPOSAL', GANHO: 'CLOSED_WON', PERDIDO: 'CLOSED_LOST',
+  QUALIFYING: 'QUALIFIED', VISIT: 'VISIT_SCHEDULED', NEGOTIATION: 'PROPOSAL',
+});
 const DEFAULT_STAGE = 'NEW';
 
 /** Só traduz WON/LOST e caixa; não valida (usado em filtro de listagem). */
 function canonicalStage(stage) {
   const upper = String(stage === undefined || stage === null ? '' : stage).trim().toUpperCase();
-  return LIVRO_ALIASES[upper] || upper;
+  return LIVRO_ALIASES[upper] || LEGACY_ALIASES[upper] || upper;
 }
 
 /** Estágio de entrada (criação/atualização) normalizado e validado contra o catálogo do livro. */
@@ -36,4 +43,4 @@ function normalizeStage(stage) {
   return canonical;
 }
 
-module.exports = { ACTIVE_STAGES, TERMINAL_STAGES, STAGES, LIVRO_ALIASES, DEFAULT_STAGE, canonicalStage, normalizeStage };
+module.exports = { ACTIVE_STAGES, TERMINAL_STAGES, STAGES, LIVRO_ALIASES, LEGACY_ALIASES, DEFAULT_STAGE, canonicalStage, normalizeStage };
