@@ -14,7 +14,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
  *  - alterar exige a permissão própria construction:approval_threshold:manage e MFA recente (na rota) e deixa
  *    auditoria com antes e depois.
  */
-const CONTEXTS = ['MATERIAL_LOSS', 'WARRANTY_RESOLUTION'];
+// INVENTORY_LOSS: alçada do caso de perda do Estoque (Marco 7, inventory/lossCases.service.js), gravada pela mesma rota.
+const CONTEXTS = ['MATERIAL_LOSS', 'WARRANTY_RESOLUTION', 'INVENTORY_LOSS'];
 const NOT_CONFIGURED_AMOUNT = 0;
 const MAX_AMOUNT = 999999999999.99; // scanner:allow — teto técnico da coluna NUMERIC(18,2), não regra de negócio
 
@@ -69,7 +70,7 @@ async function upsertApprovalThreshold(payload, actorUserId, transaction) {
       entityId: row.id,
       beforeJson,
       afterJson: row.toJSON(),
-      reason: `Alçada de ${normalizedContext === 'MATERIAL_LOSS' ? 'perda de material' : 'desconto/ressarcimento de garantia'} ${beforeJson ? `alterada de ${beforeJson.maxAutoApproveAmount} para` : 'definida em'} ${value}.`,
+      reason: `Alçada de ${({ MATERIAL_LOSS: 'perda de material', WARRANTY_RESOLUTION: 'desconto/ressarcimento de garantia', INVENTORY_LOSS: 'perda de estoque' })[normalizedContext]} ${beforeJson ? `alterada de ${beforeJson.maxAutoApproveAmount} para` : 'definida em'} ${value}.`,
     },
     transaction
   );
