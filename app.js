@@ -186,10 +186,16 @@ if (process.env.NODE_ENV !== 'test') {
 
 const port = Number(process.env.PORT) || 3000;
 
-const server = app.listen(port, () => {
-  logger.info({ port, apiPrefix }, `Nayara One API ouvindo na porta ${port} (prefixo ${apiPrefix})`);
-});
-app.server = server;
+// Verificação K=7 (item 7b): em homologação e produção a porta só abre depois de provar que o cofre grava e lê (canário); cofre inutilizável encerra o
+// processo com a mensagem do motivo. Na máquina do desenvolvedor e no CI a API sobe na hora e só registra o estado do cofre.
+const listen = () => {
+  const server = app.listen(port, () => {
+    logger.info({ port, apiPrefix }, `Nayara One API ouvindo na porta ${port} (prefixo ${apiPrefix})`);
+  });
+  app.server = server;
+  return server;
+};
+require('./src/features/integrations/secrets').gateListenOnSecretStore(listen, { log: logger });
 
 // Job periódico de matching do Radar — não roda em ambiente de teste (evita efeitos
 // colaterais/timers pendurados em test runners que importam este arquivo).

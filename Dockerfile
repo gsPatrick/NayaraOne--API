@@ -28,6 +28,14 @@ COPY . .
 # volume novo montado em /app/uploads, o Docker herda este dono.
 RUN mkdir -p /app/uploads && chown -R nodeapi:nodejs /app/uploads
 
+# Cofre de segredos (M9-D202; verificação K=7 do e-mail de campanha). Com SECRET_STORE_DRIVER=file-mounted, as chaves (descadastro
+# do e-mail, links rastreados, credenciais das integrações) ficam cifradas em SECRET_STORE_DIR. O cofre recusa pasta dentro de /app,
+# por isso o caminho padrão é /var/lib/nayara/cofre: criado aqui, dono uid 1001 (nodeapi), permissão 700. Monte um VOLUME PERSISTENTE
+# exatamente neste caminho (volume novo herda este dono; bind mount precisa de chown 1001:1001 no host): sem volume, as chaves somem
+# a cada deploy e os links de descadastro já enviados deixam de valer. Em homologação e produção o boot grava e lê um canário aqui e
+# NÃO sobe se não conseguir (INTEGRATION_SECRET_STORE_UNUSABLE). Passo a passo em docs/DEPLOY_MARCO_9.md.
+RUN mkdir -p /var/lib/nayara/cofre && chown -R nodeapi:nodejs /var/lib/nayara/cofre && chmod 700 /var/lib/nayara/cofre
+
 # Leitor de documentos (Tesseract + poppler), instalado na imagem. Só é usado quando OCR_PROVIDER=local;
 # sem essa variável nada muda. Para uma imagem sem eles: docker build --build-arg INSTALL_DOCUMENT_ENGINES=false.
 ARG INSTALL_DOCUMENT_ENGINES=true

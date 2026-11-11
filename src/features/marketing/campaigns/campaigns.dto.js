@@ -21,8 +21,11 @@ const stepDto = (row) => ({
   offsetMinutes: row.offset_minutes, status: row.status, statusReason: row.status_reason,
 });
 
-/** Campanha completa para a resposta de POST e GET /marketing/campaigns: objetivo, público (contagem), custo e resultado. */
-function campaignDto(row, audiences, steps, audienceSize, reach = null) {
+/**
+ * Campanha completa para a resposta de POST e GET /marketing/campaigns: objetivo, público (contagem), custo, resultado e o resumo das entregas
+ * (`deliveries`, só contagens por status e motivo, inclusive FAILED, RETRY e UNKNOWN; null em rascunho).
+ */
+function campaignDto(row, audiences, steps, audienceSize, reach = null, deliveries = null) {
   const resultValue = num(row.result_value);
   const attainment = computeAttainment(resultValue, row.target_value);
   return {
@@ -31,7 +34,7 @@ function campaignDto(row, audiences, steps, audienceSize, reach = null) {
     costActual: num(row.cost_actual), channels: row.channels || [], startsAt: iso(row.starts_at), endsAt: iso(row.ends_at),
     ownerUserId: row.owner_user_id, killSwitchActive: row.kill_switch_active,
     resultValue, attainment, attainmentDisplay: formatAttainment(attainment), costPerResult: costPerResult(num(row.cost_actual), resultValue),
-    audienceSize, reach, audiences: audiences.map(audienceDto), steps: steps.map(stepDto),
+    audienceSize, reach, deliveries, audiences: audiences.map(audienceDto), steps: steps.map(stepDto),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
     costUpdatedAt: iso(row.cost_updated_at), warnings: costWarnings(row),
   };

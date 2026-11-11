@@ -7,8 +7,13 @@
  * continuam SCHEDULED (nunca se marca enviado sem ter enviado).
  *
  *   canSend(ctx) -> { allowed: boolean, reason?: string }
- *   send(ctx)    -> { ok: boolean, externalRef?: string, errorCode?: string }   (idempotente por ctx.actionKey)
- * ctx = { tenant, campaign: { id, code, channels }, step: { id, stepNo, channel, templateId, contentItemId }, personId, actionKey, now }
+ *   send(ctx)    -> { ok: boolean, externalRef?: string, errorCode?: string, transient?, unknown?, deferred?, rateLimited?, retryAfterMs? }   (idempotente por ctx.actionKey)
+ *                   sem transient/unknown/deferred, ok:false é falha DEFINITIVA (FAILED); transient vira RETRY com backoff; unknown vira UNKNOWN (reconciliar antes).
+ * Opcionais (a porta de mensagens da M9-D429 implementa; porta sem eles nunca reenvia às cegas):
+ *   reconcile(ctx) -> { found: true, externalRef } | { notFound: true } | { error }   (consulta o provedor pela chave, sem enviar)
+ *   settle(ctx, { status: 'FAILED'|'CANCELLED', code })                             (fecha a mensagem do CRM que ficou na fila)
+ *   reopen(ctx)                                                                      (reprocessamento: a mensagem fechada volta à fila)
+ * ctx = { tenant, campaign: { id, code, channels }, step: { id, stepNo, channel, templateId, contentItemId }, personId, actionKey, now, transaction, attempt }
  */
 let port = null;
 

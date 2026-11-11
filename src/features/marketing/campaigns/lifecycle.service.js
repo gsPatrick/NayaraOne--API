@@ -10,6 +10,8 @@ const { countResult, computeAttainment } = require('./campaigns.result');
 const { run } = require('./campaigns.repository');
 const { dispatchDueSteps } = require('./stepDispatcher');
 const { recalculateCampaignCost, recalculateDueCosts } = require('./cost.service');
+const { getCampaignSendPort } = require('./sendPort');
+const { closeOpenOfClosedSteps } = require('./delivery/delivery.closing');
 
 const ENTITY = 'marketing.campaign';
 
@@ -35,7 +37,7 @@ async function startCampaign(id, tenant, now, transaction) {
 }
 
 /** Encerrada não continua: steps pendentes e jobs de publicação PENDING da campanha vão a CANCELLED (motivo CAMPAIGN_ENDED). */
-async function cancelPendingWork(row, tenant, transaction) {
+async function cancelPendingWork(row, tenant, transaction, now = new Date()) {
   const steps = await run(
     `UPDATE marketing.campaign_steps SET status = 'CANCELLED', status_reason = 'CAMPAIGN_ENDED', updated_at = now()
       WHERE campaign_id = :id AND company_id = :companyId AND deleted_at IS NULL AND status IN ('PLANNED','SCHEDULED') RETURNING id`,
@@ -50,7 +52,9 @@ async function cancelPendingWork(row, tenant, transaction) {
       RETURNING id`,
     { id: row.id, companyId: tenant.companyId }, transaction
   );
-  return { steps: steps.length, jobs: jobs.length };
+  // Entrega ainda aberta de campanha encerrada: RETRY é cancelada na hora (a mensagem do CRM que estava na fila também); UNKNOWN segue só para reconciliar.
+  const deliveries = await closeOpenOfClosedSteps(tenant, { port: getCampaignSendPort(), now, campaignId: row.id, sequelize }, transaction);
+  return { steps: steps.length, jobs: jobs.length, deliveriesCancelled: deliveries.cancelled };
 }
 
 /** RUNNING -> ENDED quando ends_at <= agora: calcula o resultado, cancela o que estava pendente e emite marketing.campaign.ended. */
@@ -61,7 +65,7 @@ async function endCampaign(id, tenant, now, transaction) {
   const resultValue = await countResult(row, tenant, transaction);
   await recalculateCampaignCost(id, tenant, transaction, { now }); // M9-D432: custo real final vindo do Financeiro
   const updated = await campaignRepo.update(id, { status: 'ENDED', resultValue }, null, transaction);
-  const cancelled = await cancelPendingWork(row, tenant, transaction);
+  const cancelled = await cancelPendingWork(row, tenant, transaction, now);
   const attainment = computeAttainment(resultValue, updated.target_value);
   await emit('marketing.campaign.ended', row, tenant, {
     endedAt: now.toISOString(), objectiveMetric: row.objective_metric, targetValue: Number(updated.target_value), resultValue, attainment,

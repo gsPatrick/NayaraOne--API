@@ -9,6 +9,7 @@ const { secretNotFound, storeUnavailable, storeConfig } = require('./secrets.err
 const { assertValue, assertRef } = require('./storeContract');
 const { parseMasterKey, encryptValue, decryptValue } = require('./secretCrypto');
 const versions = require('./secretVersions');
+const { selfTestFileMounted } = require('./fileMountedSelfTest');
 
 /**
  * Driver `file-mounted` (M9-D202 3.1a), para DEV e LAB: um diretório montado FORA do repositório, uma pasta por
@@ -91,6 +92,9 @@ function createFileMountedStore({ dir, masterKey, clock = () => new Date() } = {
 
   return {
     driver: 'file-mounted',
+
+    /** Prova de uso real (boot e health): diretório gravável, canário cifrado gravado e lido, segredos existentes abrem com a chave. */
+    selfTest: async () => selfTestFileMounted(raiz, key),
 
     get: embrulhar(async (ref, { version } = {}) => {
       assertRef(ref);

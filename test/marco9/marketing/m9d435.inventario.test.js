@@ -50,6 +50,7 @@ const FOR_OTHER_DEMANDS = {
   'POST /marketing/kill-switch/impact': 'marketing:killswitch:manage', // I11, M9-D425 e M9-D852
   'GET /marketing/seo/sitemap': 'marketing:content:read', // I12, M9-D427
   'POST /marketing/unsubscribe': null, // I13, M9-D429 (pública, token do e-mail)
+  'POST /marketing/campaigns/:id/deliveries/reprocess': 'marketing:campaign:manage', // I14, verificação K=7 do e-mail de campanha (DI-M9E-3)
 };
 
 test('as_10_rotas_existem_e_exigem_permissao', () => {
