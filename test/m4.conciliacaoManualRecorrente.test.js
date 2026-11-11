@@ -13,7 +13,7 @@ const assert = require('node:assert/strict');
 process.env.PORT = process.env.M4_CONCIL_MANUAL_TEST_PORT || '21614';
 require('../app');
 const T = require('./testHelpers');
-const { createUser, tokenFor, client } = require('./helpers/m4FinanceHttp');
+const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
@@ -40,7 +40,7 @@ async function manualCount() {
 const openAlerts = () => inTenant((t) => AnomalyCase.findAll({ where: { caseType: 'RECURRING_MANUAL_RECONCILIATION', status: 'OPEN' }, transaction: t }));
 
 before(async () => {
-  tenant = await T.getSeedTenant();
+  tenant = await isolatedTenant('conciliacao-manual');
   http = client(`http://127.0.0.1:${process.env.PORT}/api/v1`);
   const user = await createUser(tenant, 'conciliador');
   token = tokenFor(tenant, user.id);
@@ -57,6 +57,7 @@ before(async () => {
 
 after(async () => {
   await inTenant((t) => TenantSetting.destroy({ where: { key: KEY }, force: true, transaction: t }));
+  await closeIsolated();
   await T.sequelize.close();
   process.exit(0);
 });

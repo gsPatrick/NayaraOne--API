@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 process.env.PORT = process.env.M4_PRECISAO_TEST_PORT || '21615';
 require('../app');
 const T = require('./testHelpers');
-const { createUser, tokenFor, client } = require('./helpers/m4FinanceHttp');
+const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
 const { hasAtMostTwoDecimals } = require('../src/features/finance/moneyPrecision');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
@@ -26,7 +26,7 @@ let resultCenterId;
 let account;
 
 before(async () => {
-  tenant = await T.getSeedTenant();
+  tenant = await isolatedTenant('centavo');
   http = client(`http://127.0.0.1:${process.env.PORT}/api/v1`);
   token = tokenFor(tenant, (await createUser(tenant, 'centavo')).id);
   await T.withTenantTransaction(tenant, async (t) => {
@@ -38,6 +38,7 @@ before(async () => {
 });
 
 after(async () => {
+  await closeIsolated();
   await T.sequelize.close();
   process.exit(0);
 });
