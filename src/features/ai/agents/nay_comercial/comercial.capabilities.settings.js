@@ -50,7 +50,7 @@ const CAP_SETTING_DEFAULTS = Object.freeze({
   [K.messageSummaryChars]: 280,
   [K.termsComplaint]: 'reclamacao,reclamar,reclamo,insatisfeit,absurdo,pessimo,horrivel,descaso,decepcionad,nao gostei,problema',
   [K.termsCompliment]: 'parabens,obrigad,excelente,otimo atendimento,muito bom,adorei,gostei muito,satisfeit,recomendo,maravilhos',
-  [K.termsConflict]: 'vou processar,processar,procon,advogado,justica,vou processar,cancelar tudo,devolucao do sinal,quero meu dinheiro,briga,discussao',
+  [K.termsConflict]: 'vou processar,processar,procon,advogado,justica,cancelar tudo,devolucao do sinal,quero meu dinheiro,briga,discussao',
   [K.termsPoorService]: 'grosseir,mal atendid,ninguem responde,sem resposta,me ignor,falta de respeito,demora no atendimento,atendimento ruim',
   [K.termsPendingReturn]: 'aguardo retorno,aguardando retorno,ainda nao retornaram,me retorne,retorne,fico no aguardo,pode me ligar,me liga',
   [K.sendPurpose]: 'MARKETING',
