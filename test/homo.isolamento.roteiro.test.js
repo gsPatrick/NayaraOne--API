@@ -13,7 +13,6 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
 
-const { TENANTS, emailFor } = require('../scripts/seed-ci-two-tenants');
 const { sequelize, Group, Company, User, UserMembership, Role, Permission, RolePermission } = require('../src/models');
 const { carregarSegredos } = require('../scripts/homo/lib/segredos');
 
@@ -23,6 +22,7 @@ process.env.PORT = process.env.HOMO_ISOLAMENTO_ROTEIRO_TEST_PORT || '21684';
 const PERMS = ['people:read', 'people:create', 'people:update', 'people:delete', 'crm:messages:read', 'governance:dlp:view-restricted'];
 const SUF = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const EMAIL = `ci-homo-roteiro-${SUF}@ci.nayaraone.test`;
+const EMAIL_LEITURA = `ci-homo-roteiro-leitura-${SUF}@ci.nayaraone.test`;
 // Sem automação ativa, as 2 conferências de "pausar automação" ficam de fora (na homologação, com a automação, são 32).
 const ESPERADAS_SEM_AUTOMACAO = 30;
 
@@ -31,12 +31,12 @@ let skipReason = null; let appLoaded = false; let base; let A; let B;
 before(async () => {
   if (process.env.DISPOSABLE_DB !== '1' && !process.env.CI) { skipReason = 'Grava dados: só roda em banco descartável ou no CI.'; return; }
   if (!process.env.CI_TENANT_USERS_PASSWORD) { skipReason = 'CI_TENANT_USERS_PASSWORD ausente.'; return; }
-  const group = await Group.findOne({ where: { name: TENANTS[0].groupName } });
-  if (!group) { skipReason = 'Seed de dois tenants ausente.'; return; }
+  // Grupo próprio com as duas empresas: não acrescenta empresa ao grupo do seed (testes de outras demandas contam as empresas dele).
+  const group = await Group.create({ name: `CI — Grupo roteiro homo ${SUF}`, legalName: 'Grupo fictício do roteiro', status: 'ACTIVE' });
   await sequelize.transaction(async (transaction) => {
     await sequelize.query("SELECT set_config('app.group_id', :g, true)", { replacements: { g: group.id }, transaction });
-    A = await Company.findOne({ where: { groupId: group.id, name: TENANTS[0].companyName }, transaction });
-    B = await Company.create({ groupId: group.id, name: `CI — roteiro homo ${SUF}`, status: 'ACTIVE' }, { transaction });
+    A = await Company.create({ groupId: group.id, name: `CI — roteiro homo A ${SUF}`, status: 'ACTIVE' }, { transaction });
+    B = await Company.create({ groupId: group.id, name: `CI — roteiro homo B ${SUF}`, status: 'ACTIVE' }, { transaction });
   });
   const permissoes = await Permission.findAll({ where: { code: PERMS } });
   const user = await User.create({ name: `CI roteiro ${SUF}`, email: EMAIL, passwordHash: await bcrypt.hash(process.env.CI_TENANT_USERS_PASSWORD, 10), status: 'ACTIVE' });
@@ -48,6 +48,15 @@ before(async () => {
       await UserMembership.create({ userId: user.id, groupId: group.id, companyId, roleId: role.id, status: 'ACTIVE' }, { transaction });
     });
   }
+  // Perfil somente leitura da empresa A (como o aceite-m9-leitura da homologação): só people:read.
+  const leitor = await User.create({ name: `CI roteiro leitura ${SUF}`, email: EMAIL_LEITURA, passwordHash: await bcrypt.hash(process.env.CI_TENANT_USERS_PASSWORD, 10), status: 'ACTIVE' });
+  const [ler] = permissoes.filter((p) => p.code === 'people:read');
+  await sequelize.transaction(async (transaction) => {
+    await sequelize.query("SELECT set_config('app.group_id', :g, true), set_config('app.company_id', :c, true)", { replacements: { g: group.id, c: A.id }, transaction });
+    const role = await Role.create({ groupId: group.id, companyId: A.id, name: `CI ROTEIRO LEITURA ${SUF}`, description: 'Perfil fictício somente leitura.', isSystem: false }, { transaction });
+    await RolePermission.create({ roleId: role.id, permissionId: ler.id }, { transaction });
+    await UserMembership.create({ userId: leitor.id, groupId: group.id, companyId: A.id, roleId: role.id, status: 'ACTIVE' }, { transaction });
+  });
   require('../app');
   appLoaded = true;
   base = `http://127.0.0.1:${process.env.PORT}/api/v1`;
@@ -67,7 +76,7 @@ test('roteiro (c) isolamento contra a API local, outra empresa no mesmo grupo: t
   const senha = process.env.CI_TENANT_USERS_PASSWORD;
   const admin = await new Sessao(base, 'admin', EMAIL, senha, { companyId: A.id }).entrar();
   const outra = await new Sessao(base, 'outra empresa', EMAIL, senha, { companyId: B.id }).entrar();
-  const leitura = await new Sessao(base, 'somente leitura', emailFor('A', 'mascarado'), senha, {}).entrar();
+  const leitura = await new Sessao(base, 'somente leitura', EMAIL_LEITURA, senha, { companyId: A.id }).entrar();
   assert.equal(admin.groupId, outra.groupId, 'as duas sessões são do MESMO grupo');
   const nova = async (nome) => (await admin.chamar('POST', '/people', { personType: 'PF', legalName: nome })).dados.id;
   const ids = { pessoaOk: await nova(`ACEITE-M9 roteiro ok ${SUF}`), pessoaOptOut: await nova(`ACEITE-M9 roteiro optout ${SUF}`), campanhaId: crypto.randomUUID(), fluxoId: null, modeloId: null };

@@ -8,7 +8,6 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 
-const { TENANTS } = require('../scripts/seed-ci-two-tenants');
 const { sequelize, Group, Company, User, UserMembership, Role, Permission, RolePermission } = require('../src/models');
 const { randomCpf } = require('./helpers/pessoasVinculo');
 
@@ -49,11 +48,11 @@ async function entrar(email, companyId) {
 before(async () => {
   if (process.env.DISPOSABLE_DB !== '1' && !process.env.CI) { skipReason = 'Grava dados: só roda em banco descartável (scripts/withDisposableDb.js) ou no CI.'; return; }
   if (!process.env.CI_TENANT_USERS_PASSWORD) { skipReason = 'CI_TENANT_USERS_PASSWORD ausente.'; return; }
-  grupo = await Group.findOne({ where: { name: TENANTS[0].groupName } });
-  if (!grupo) { skipReason = 'Grupo do seed de dois tenants ausente: rode scripts/seed-ci-two-tenants.js.'; return; }
+  // Grupo próprio com as duas empresas: não acrescenta empresa ao grupo do seed (testes de outras demandas contam as empresas dele).
+  grupo = await Group.create({ name: `CI — Grupo vínculo ${SUFIXO}`, legalName: 'Grupo fictício do teste de vínculo', status: 'ACTIVE' });
   await sequelize.transaction(async (transaction) => {
     await sequelize.query("SELECT set_config('app.group_id', :g, true)", { replacements: { g: grupo.id }, transaction });
-    empresaA = await Company.findOne({ where: { groupId: grupo.id, name: TENANTS[0].companyName }, transaction });
+    empresaA = await Company.create({ groupId: grupo.id, name: `CI — Vínculo A ${SUFIXO}`, status: 'ACTIVE' }, { transaction });
     empresaB = await Company.create({ groupId: grupo.id, name: `CI — Vínculo B ${SUFIXO}`, status: 'ACTIVE' }, { transaction });
   });
   const hash = await bcrypt.hash(process.env.CI_TENANT_USERS_PASSWORD, 10);
