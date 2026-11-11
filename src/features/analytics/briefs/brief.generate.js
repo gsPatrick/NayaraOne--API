@@ -108,8 +108,8 @@ async function generateBrief({ scope, briefType, regenerate = false, now = clock
     }
   }
 
-  const base = {
-    ...key, supersede: Boolean(existing), aiRunId: outcome.runId || null, sourceRefs,
+  const base = { // DI-BI-8: generated_at no relógio do BI (M9-D606), o mesmo com que isRetryable mede o intervalo da nova tentativa
+    ...key, generatedAt: now, supersede: Boolean(existing), aiRunId: outcome.runId || null, sourceRefs,
     freshnessSummary: countBy(facts, (f) => f.current.freshness.state),
     qualitySummary: { areasComDadoIncompleto: [...new Set(facts.filter((f) => f.quality).map((f) => f.area))], semRegistro: noData.map((n) => n.metricCode), indicadoresLidos: facts.length },
   };
