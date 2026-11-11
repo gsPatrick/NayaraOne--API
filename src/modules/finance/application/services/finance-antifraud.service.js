@@ -3,7 +3,6 @@
 const AppError = require('../../../../utils/AppError');
 const { BankAccount, FinancialEntry, Notification, UserMembership } = require('../../../../models');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
-const { evaluateRule } = require('../../../../engines/rules/rulesEngine');
 const { createAnomalyCase } = require('./anomaly-cases.service');
 
 // Regras de antifraude do Financeiro Base (01_ARQUITETURA_E_INVARIANTES.md — bloco Antifraude/
@@ -18,14 +17,12 @@ const { createAnomalyCase } = require('./anomaly-cases.service');
 // (`lock_version`, coluna que já existe em FinancialEntry/Commission/OwnerRepass/BankAccount)
 // comparado no momento da decisão, não por um hash armazenado. Ver approvals.service.js.
 
-// FIX (auditoria externa 2026-10-07 — contrato bruto, Centro Financeiro §2, FIN-005: "Limites
-// vêm do Motor de Regras; aprovação usa snapshot/hash."): os limiares passam por
-// `resolveAntifraudThresholds` (evaluateRule('FIN-005', ...) + getSetting). DEC-007 (DI-DEC007-1): os
-// padrões são os do catálogo (finance-settings.js FINANCE_SETTINGS_DEFAULTS — conta nova R$ 5.000,00,
-// múltiplo 3,0 revisa e 10,0 bloqueia, resfriamento 48 h, duplicidade 90 dias, fornecedor novo 30 dias e
-// R$ 20.000,00), sem variável de ambiente que possa afrouxá-los. Falha segura: o `action.*` de uma versão
-// publicada da regra só aperta o padrão (nunca o afrouxa), e sem a regra publicada o valor gravado pela
-// empresa só vale quando é mais restritivo que o padrão.
+// DEC-007 (DI-DEC007-2): os limiares do antifraude são os parâmetros da tela de Configurações, lidos
+// pelo leitor único `readFinanceNumber` (finance-settings.js). O valor gravado pela tela vale sempre,
+// mais restritivo ou mais frouxo que o padrão, dentro da faixa do catálogo; valor gravado inválido vale
+// como o padrão da DEC-007. Antes, a regra FIN-005 do Motor de Regras (publicada só por script manual)
+// decidia se o valor da tela valia; a dependência saiu (a migration 20260101009988 levou para os
+// parâmetros o valor efetivo de quem tinha a regra publicada e aposentou a regra).
 const { KEYS, FINANCE_SETTINGS_DEFAULTS, readFinanceNumber } = require('./finance-settings');
 
 const DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS = FINANCE_SETTINGS_DEFAULTS[KEYS.bankAccountCooldownHours];
@@ -36,46 +33,23 @@ function hoursSince(date) {
   return (Date.now() - new Date(date).getTime()) / (1000 * 60 * 60);
 }
 
-/** O mais restritivo entre o valor da regra publicada (se for número) e o padrão: `stricter` = Math.min para limiar de valor/múltiplo, Math.max para espera. */
-function tighten(actionValue, fallback, stricter) {
-  const n = Number(actionValue);
-  return actionValue !== undefined && actionValue !== null && Number.isFinite(n) ? stricter(n, fallback) : fallback;
-}
+const THRESHOLD_KEYS = Object.freeze({
+  historyMultiplier: KEYS.historyMultiplier,
+  newAccountThreshold: KEYS.newAccountThreshold,
+  cooldownHours: KEYS.bankAccountCooldownHours,
+  outlierBlockMultiplier: KEYS.outlierBlockMultiplier,
+  outlierMinSample: KEYS.outlierMinSample,
+  outlierHistoryMonths: KEYS.outlierHistoryMonths,
+  duplicateWindowDays: KEYS.duplicateWindowDays,
+  newSupplierDays: KEYS.newSupplierDays,
+  newSupplierMinAmount: KEYS.newSupplierMinAmount,
+});
 
-/**
- * resolveAntifraudThresholds — FIN-005. `evaluateRule` decide SE a versão publicada da regra
- * está vigente para o tenant (fail-closed: RULE_CONFLICT/NOT_FOUND/erro => DENY). Quando APPLY,
- * o QUANTO vem de `getSetting` (ajustável pelo painel, sem publicar regra nova), com o padrão do
- * catálogo apertado pelo `action.*` da regra; quando DENY (regra ainda não publicada para o tenant),
- * vale o padrão do catálogo ou o valor gravado, o que for mais restritivo. Os parâmetros novos da
- * DEC-007 (bloqueio, duplicidade, fornecedor novo) não dependem da regra.
- */
+/** resolveAntifraudThresholds — valor em vigor de cada parâmetro do antifraude de pagamento para a empresa. */
 async function resolveAntifraudThresholds(tenant, transaction) {
-  const evaluation = await evaluateRule('FIN-005', { financeAntifraudRuleActive: true }, tenant, { transaction });
-  const active = evaluation.decision === 'APPLY';
-  const action = (active && evaluation.action) || {};
-  const read = (key, fallback) => readFinanceNumber(key, tenant, transaction, fallback);
-
-  const [historyMultiplier, newAccountThreshold, cooldownHours, outlierBlockMultiplier, duplicateWindowDays, newSupplierDays, newSupplierMinAmount] = await Promise.all([
-    read(KEYS.historyMultiplier, tighten(action.historyMultiplier, DEFAULT_ANOMALY_HISTORY_MULTIPLIER, Math.min)),
-    read(KEYS.newAccountThreshold, tighten(action.newAccountThreshold, DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD, Math.min)),
-    read(KEYS.bankAccountCooldownHours, tighten(action.bankAccountCooldownHours, DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS, Math.max)),
-    read(KEYS.outlierBlockMultiplier),
-    read(KEYS.duplicateWindowDays),
-    read(KEYS.newSupplierDays),
-    read(KEYS.newSupplierMinAmount),
-  ]);
-
-  return {
-    historyMultiplier: active ? historyMultiplier : Math.min(historyMultiplier, DEFAULT_ANOMALY_HISTORY_MULTIPLIER),
-    newAccountThreshold: active ? newAccountThreshold : Math.min(newAccountThreshold, DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD),
-    cooldownHours: active ? cooldownHours : Math.max(cooldownHours, DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS),
-    outlierBlockMultiplier,
-    duplicateWindowDays,
-    newSupplierDays,
-    newSupplierMinAmount,
-    ruleVersionId: active ? evaluation.ruleVersionId : null,
-  };
+  const names = Object.keys(THRESHOLD_KEYS);
+  const values = await Promise.all(names.map((name) => readFinanceNumber(THRESHOLD_KEYS[name], tenant, transaction)));
+  return Object.fromEntries(names.map((name, i) => [name, values[i]]));
 }
 
 /**

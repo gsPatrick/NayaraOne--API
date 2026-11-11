@@ -7,7 +7,7 @@
 //   2. §11 "Conciliação bancária" — motor de sugestão com score/classe.
 //   4. §14 "Comissões" — ajuste de comissão por cancelamento (FIN-TS-017).
 //   5. FIN-TS-018 "Banco timeout | Execução sem confirmação | Não cria sucesso falso".
-//   6. FIN-005 "Limites vêm do Motor de Regras" — antifraude migrado para o Motor de Regras.
+//   6. Limiares do antifraude: DEC-007 (DI-DEC007-2) trocou a regra FIN-005 do Motor pelos parâmetros da tela de Configurações.
 //
 // Todos rodam contra o banco real via withRollbackTenantTransaction (RLS real — SET LOCAL
 // app.group_id/company_id/user_id), sem nenhum mock.
@@ -31,7 +31,6 @@ const approvalsService = require('../src/modules/finance/application/services/ap
 const financialHealthReportService = require('../src/modules/finance/application/services/finance-health.service');
 const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const { seedFinanceAntifraudRules } = require('../scripts/seedFinanceAntifraudRules');
 const { PaymentIntent, BankPaymentProviderRouting, FinancialEntry } = require('../src/models');
 
 let tenant;
@@ -425,59 +424,57 @@ test('FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvi
 });
 
 // ---------------------------------------------------------------------------------------
-// Item 6 — FIN-005 limiares de antifraude vêm do Motor de Regras
+// Item 6 — limiares do antifraude: parâmetros da tela de Configurações (DEC-007, DI-DEC007-2)
 // ---------------------------------------------------------------------------------------
 
-test('FIN-005 resolveAntifraudThresholds usa os defaults hardcoded quando a regra não foi publicada para o tenant (fail closed, nunca enfraquece a proteção)', async () => {
+test('DEC-007 resolveAntifraudThresholds: sem nada gravado vale o padrão da DEC-007, sem consultar o Motor de Regras', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const thresholds = await antifraudService.resolveAntifraudThresholds(tenant, transaction);
     assert.equal(thresholds.historyMultiplier, antifraudService.DEFAULT_ANOMALY_HISTORY_MULTIPLIER);
     assert.equal(thresholds.newAccountThreshold, antifraudService.DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD);
     assert.equal(thresholds.cooldownHours, antifraudService.DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS);
-    assert.equal(thresholds.ruleVersionId, null, 'sem regra publicada, não há ruleVersionId');
+    assert.equal('ruleVersionId' in thresholds, false, 'nenhuma versão de regra do Motor decide o limiar');
   });
 });
 
-test('FIN-005 limiares de antifraude vêm do Motor de Regras (evaluateRule) quando a regra FIN-005 está publicada, ajustável via settings', async () => {
+test('DEC-007 o valor gravado pela tela vale sempre, mais restritivo ou mais frouxo que o padrão (sem regra do Motor)', async () => {
+  const { TenantSetting } = require('../src/models');
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await seedFinanceAntifraudRules(tenant, transaction);
+    await TenantSetting.destroy({ where: { companyId: tenant.companyId, key: ['finance.antifraud_history_multiplier', 'finance.antifraud_new_account_threshold'] }, force: true, transaction });
+    const row = (key, value) => TenantSetting.create({ groupId: tenant.groupId, companyId: tenant.companyId, key, value }, { transaction });
+    await row('finance.antifraud_history_multiplier', 5);
+    await row('finance.antifraud_new_account_threshold', 2000);
     const thresholds = await antifraudService.resolveAntifraudThresholds(tenant, transaction);
-    assert.ok(thresholds.ruleVersionId, 'com a regra publicada, a decisão fica rastreada por ruleVersionId');
-    // Sem override de settings, usa o padrão do catálogo apertado pelo actionJson da regra. DEC-007 (DI-DEC007-1): conta nova
-    // R$ 5.000,00 (antes 10.000) e múltiplo 3,0; uma versão antiga da regra publicada com 10.000 não afrouxa o padrão.
-    assert.equal(thresholds.historyMultiplier, 3);
-    assert.equal(thresholds.newAccountThreshold, 5000);
-    assert.equal(thresholds.bankAccountCooldownHours ?? thresholds.cooldownHours, thresholds.cooldownHours);
+    assert.equal(thresholds.historyMultiplier, 5, 'mais frouxo que o padrão 3 vale');
+    assert.equal(thresholds.newAccountThreshold, 2000, 'mais restritivo que o padrão 5.000 vale');
   });
 });
 
-test('FIN-005 flagAnomalousPayment continua detectando desvio histórico e primeiro-pagamento-alto com os limiares resolvidos pelo Motor de Regras', async () => {
+test('antifraude flagAnomalousPayment detecta o primeiro pagamento alto numa conta sem histórico com os limiares dos parâmetros', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await seedFinanceAntifraudRules(tenant, transaction);
     const account = await createActiveBankAccount(transaction, suffix);
 
     const entry = await createEntry(transaction, { amount: 50000, bankAccountId: account.id });
     // Fechamento do Marco 4 (10/11/2026, §17): o antifraude roda na CRIAÇÃO do pagamento — o lançamento já
     // nasce retido e chamar a regra de novo não duplica a retenção nem o caso.
     const flag = { flagged: entry.requiresManualReview, reason: entry.manualReviewReason };
-    assert.equal(flag.flagged, true, 'conta nova recebendo pagamento alto continua detectada mesmo com os limiares vindos do Motor de Regras');
-    assert.match(flag.reason, /FIN-005/);
+    assert.equal(flag.flagged, true, 'conta nova recebendo pagamento alto continua detectada');
+    assert.match(flag.reason, /Primeiro pagamento desta conta bancária.*limite do antifraude para conta sem histórico: 5000\.00/);
     assert.equal((await antifraudService.flagAnomalousPayment(entry, transaction)).alreadyFlagged, true);
 
-    // GAP REAL CORRIGIDO (Caderno §17/§19): flagAnomalousPayment agora também abre um
-    // AnomalyCase HIGH (antes só marcava a flag requires_manual_review, sem registro próprio).
+    // GAP REAL CORRIGIDO (Caderno §17/§19): flagAnomalousPayment também abre o caso próprio (antes só marcava a flag
+    // requires_manual_review). M4-D022 item 3 (DI-DEC007-6): conta nova + pagamento imediato é NEW_ACCOUNT_IMMEDIATE_PAYMENT MEDIUM.
     const { AnomalyCase } = require('../src/models');
     // DEC-007: 50.000 numa conta recém-cadastrada também é "fornecedor novo de alto valor" (30 dias, a partir de R$ 20.000,00) — caso próprio.
     const cases = await AnomalyCase.findAll({ where: { relatedEntityId: entry.id, companyId: tenant.companyId }, order: [['caseType', 'ASC']], transaction });
-    assert.deepEqual(cases.map((c) => [c.caseType, c.riskLevel, c.status]), [['AMOUNT_OUTLIER', 'HIGH', 'OPEN'], ['NEW_SUPPLIER_HIGH_VALUE', 'MEDIUM', 'OPEN']]);
+    assert.deepEqual(cases.map((c) => [c.caseType, c.riskLevel, c.status]), [['NEW_ACCOUNT_IMMEDIATE_PAYMENT', 'MEDIUM', 'OPEN'], ['NEW_SUPPLIER_HIGH_VALUE', 'MEDIUM', 'OPEN']]);
   });
 });
 
-test('FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imediato, com o limiar vindo do Motor de Regras', async () => {
+test('FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imediato, com a espera do parâmetro finance.bank_account_cooldown_hours', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await seedFinanceAntifraudRules(tenant, transaction);
     const account = await bankAccountsService.createBankAccount(
       { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `fin013-${suffix}` },
       tenant.userId,
@@ -498,15 +495,17 @@ test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno e
     const account = await createActiveBankAccount(transaction, suffix);
 
     let lastReversal;
-    for (let i = 0; i < 3; i += 1) {
+    // DEC-007 / M4-D006 item 9 (DI-DEC007-2): 5 estornos na empresa em 30 dias abrem o caso. Valores diferentes: cada lançamento é um pagamento distinto
+    // (mesmo favorecido, valor e competência seria duplicidade suspeita, DI-DEC007-4).
+    for (let i = 0; i < 5; i += 1) {
        
-      const entry = await createEntry(transaction, { bankAccountId: account.id, description: `estorno frequente ${i}` });
+      const entry = await createEntry(transaction, { bankAccountId: account.id, amount: 100 + i, description: `estorno frequente ${i}` });
        
       lastReversal = await receiptService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction);
     }
 
     const alert = await antifraudService.checkFrequentReversalAlert(tenant.companyId, transaction);
-    assert.ok(alert.count >= 3);
+    assert.ok(alert.count >= 5);
     assert.equal(alert.flagged, true, 'contador simples sinaliza estorno frequente — sem bloquear o estorno em si');
 
     // GAP REAL CORRIGIDO (Caderno §17, "Estorno frequente → Anomaly case"): reverseFinancialEntry
@@ -517,7 +516,7 @@ test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno e
       transaction,
     });
     assert.ok(openCases.length >= 1, 'pelo menos um AnomalyCase de estorno frequente deve existir (aberto no último estorno que cruzou o limiar)');
-    assert.equal(openCases[0].riskLevel, 'HIGH');
+    assert.equal(openCases[0].riskLevel, 'MEDIUM', 'M4-D006 item 9: FREQUENT_REVERSALS MEDIUM');
     void lastReversal;
 
     const reconciliationAlert = await antifraudService.checkRecurringManualReconciliationAlert(tenant.companyId, transaction);
@@ -549,7 +548,7 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
     assert.equal(reread1.status, 'PENDING', 'nada foi liquidado sem aprovação');
 
     // 2) Via payment_intent aprovado + executado: liquida normalmente.
-    const entry2 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-b-${suffix}` });
+    const entry2 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000.01, idempotencyKey: `fin004-b-${suffix}` }); // outro valor: não é duplicidade (DI-DEC007-4)
     const { User: User2 } = require('../src/models');
     const [intentApprover] = await User2.findOrCreate({
       where: { email: `homo-qa-fin004-intent-approver-${suffix}@nayaraone.dev` },
@@ -573,7 +572,7 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
 
     // 3) Via ApprovalRequest aprovada (maker-checker genérico) para o mesmo FinancialEntry:
     // liquida normalmente, sem precisar de payment_intent.
-    const entry3 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-c-${suffix}` });
+    const entry3 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000.02, idempotencyKey: `fin004-c-${suffix}` });
     const { User } = require('../src/models');
     const [approver] = await User.findOrCreate({
       where: { email: `homo-qa-fin004-approver-${suffix}@nayaraone.dev` },
@@ -843,9 +842,12 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
       tenant.userId, transaction
     );
 
-    // Anomalia aberta: pagamento alto numa conta sem histórico.
-    await seedFinanceAntifraudRules(tenant, transaction);
+    // Anomalia aberta de risco alto: valor 90x a mediana de 5 pagamentos já liquidados à mesma conta (DEC-007: a partir de 10x é HIGH e bloqueia).
     const anomalyAccount = await createActiveBankAccount(transaction, `m420bx-${suffix.slice(-8)}`);
+    const historyCc = await createTestCostCenter(tenant, transaction);
+    for (let i = 0; i < 5; i += 1) {
+      await FinancialEntry.create({ groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: anomalyAccount.id, costCenterId: historyCc.id, entryType: 'DEBIT', nature: 'PAYABLE', amount: 1000, description: `M4-20b histórico ${i} ${suffix}`, status: 'SETTLED', settledAt: new Date(), competenceMonth: new Date().toISOString().slice(0, 7) }, { transaction });
+    }
     const anomalyEntry = await createEntry(transaction, { amount: 90000, bankAccountId: anomalyAccount.id });
     await antifraudService.flagAnomalousPayment(anomalyEntry, transaction);
 

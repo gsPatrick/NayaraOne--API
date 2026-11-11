@@ -425,7 +425,8 @@ test('m4d140_bateria_completa_mesmos_totais_antes_e_depois', () => {
 
 const SCRIPTS_DE_SEED_E_RESTORE = [
   'scripts/seed-dev.js', 'scripts/seed-homo-m45.js', 'scripts/seed-homo-m45-repasse.js', 'scripts/m45-sanitizeRuleViolations.js',
-  'scripts/seedFinanceAntifraudRules.js', 'scripts/restoreDrill/seedLegalFixtures.js', 'scripts/restoreDrill/seedFinanceFixtures.js',
+  'scripts/restoreDrill/seedLegalFixtures.js', // scripts/seedFinanceAntifraudRules.js saiu: a regra FIN-005 do Motor deu lugar aos parâmetros (DEC-007, DI-DEC007-2)
+  'scripts/restoreDrill/seedFinanceFixtures.js',
   'scripts/restoreDrill/replayFinanceRestore.js', 'scripts/restoreDrill/verifyFinanceRestore.js', 'scripts/generateSecurityMap.js',
 ];
 

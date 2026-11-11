@@ -82,6 +82,8 @@ financeRouter.get('/finance/commissions/:id/release', requirePermission('finance
 // --- Anomaly cases (antifraude, §17/§19) ---
 financeRouter.get('/finance/anomaly-cases', requirePermission('finance:read'), financeController.listAnomalyCases);
 financeRouter.post('/finance/anomaly-cases/:id/resolve', requirePermission('finance:update'), financeController.resolveAnomalyCase);
+// Valor em vigor dos parâmetros do antifraude (DEC-007, DI-DEC007-2): a mesma permissão de leitura da aba de Configurações.
+financeRouter.get('/finance/antifraud/parameters', requirePermission('settings:read'), require('./finance-antifraud-parameters.controller').listAntifraudParameters);
 financeRouter.post('/finance/commission-installments/:installmentId/pay', requirePermission('finance:settle'), financeController.payCommissionInstallment);
 
 // Owner repasses

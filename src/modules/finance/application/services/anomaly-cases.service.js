@@ -67,6 +67,7 @@ const CASE_TYPE_TITLES = {
   AMOUNT_OUTLIER: 'Valor fora do padrão',
   DUPLICATE_PAYMENT_SUSPECT: 'Possível pagamento duplicado',
   NEW_SUPPLIER_HIGH_VALUE: 'Fornecedor novo de alto valor',
+  NEW_ACCOUNT_IMMEDIATE_PAYMENT: 'Conta nova com pagamento imediato',
   FREQUENT_REVERSAL: 'Estornos frequentes',
   RECURRING_MANUAL_RECONCILIATION: 'Conciliação manual recorrente',
   DUPLICATE_SETTLEMENT: 'Possível pagamento em dobro',

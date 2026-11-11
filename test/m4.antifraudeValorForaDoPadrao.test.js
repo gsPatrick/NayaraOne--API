@@ -59,17 +59,39 @@ async function settledHistory(bankAccountId, amounts) {
 const payable = (amount, extra = {}) => http('POST', '/finance/entries', tk.maker, { entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId, description: `§17 ${amount} ${T.uniqueSuffix()}`, ...extra });
 const casesOf = async (entryId) => (await http('GET', '/finance/anomaly-cases', tk.maker)).body.data.filter((c) => c.relatedEntityId === entryId);
 
-// DEC-007 (DI-DEC007-1): 30.000 sobre média 100 é 300x, acima do múltiplo que bloqueia (10,0) => caso AMOUNT_OUTLIER CRITICAL (antes HIGH, sem nível de
-// bloqueio); a conta recém-cadastrada recebendo a partir de R$ 20.000,00 também abre NEW_SUPPLIER_HIGH_VALUE (fornecedor novo de alto valor).
-test('M4-§17.5 valor fora do padrão: PAYABLE de 30.000 numa conta com histórico de 100 nasce retido e bloqueado, com caso AMOUNT_OUTLIER CRITICAL (e fornecedor novo) em GET /finance/anomaly-cases; valor dentro do padrão não retém', async () => {
+// Roda primeiro: a empresa isolada ainda não tem pagamento liquidado na categoria, então o valor fora do padrão não pontua (DI-DEC007-3) e a preparação
+// segue (o achado de conta nova é de revisão, não bloqueia).
+test('M4-§17.5 lançamento que nasceu sem avaliação (legado/outro módulo) é avaliado ao preparar a intenção, sem duplicar caso no pedido de aprovação, e o envio ao banco do pagamento retido é recusado', async () => {
+  const fresh = await newAccount();
+  const legacy = await inTenant((t) => FinancialEntry.create({ ...base(), bankAccountId: fresh.id, costCenterId, entryType: 'DEBIT', nature: 'PAYABLE', amount: '25000.00', description: `Legado ${T.uniqueSuffix()}`, status: 'PENDING', competenceMonth: new Date().toISOString().slice(0, 7) }, { transaction: t }));
+  assert.equal(legacy.requiresManualReview, false);
+  const prepared = await http('POST', '/finance/payments/prepare', tk.maker, { financialEntryId: legacy.id });
+  assert.equal(prepared.status, 201, JSON.stringify(prepared.body));
+  const flagged = await inTenant((t) => FinancialEntry.findByPk(legacy.id, { transaction: t }));
+  assert.equal(flagged.requiresManualReview, true);
+  const approval = await http('POST', '/finance/approval-requests', tk.maker, { relatedEntityType: 'FinancialEntry', relatedEntityId: legacy.id, riskLevel: 'HIGH' });
+  assert.ok([200, 201].includes(approval.status), JSON.stringify(approval.body));
+  // DI-DEC007-6: o primeiro pagamento alto a conta sem histórico é o caso NEW_ACCOUNT_IMMEDIATE_PAYMENT (MEDIUM, retém sem bloquear a preparação).
+  const cases = await inTenant((t) => AnomalyCase.findAll({ where: { relatedEntityId: legacy.id, caseType: 'NEW_ACCOUNT_IMMEDIATE_PAYMENT' }, transaction: t }));
+  assert.equal(cases.length, 1, 'um caso só');
+  const approved = await http('POST', `/finance/payments/${prepared.body.data.id}/approve`, tk.checker, {});
+  assert.equal(approved.status, 200, JSON.stringify(approved.body));
+  const toBank = await http('POST', `/finance/payment-intents/${prepared.body.data.id}/submit-to-bank`, tk.checker, { paymentMethod: 'TED' });
+  assert.equal(toBank.status, 409, JSON.stringify(toBank.body));
+  assert.equal(toBank.code, 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW');
+});
+
+// DEC-007 (DI-DEC007-3 e DI-DEC007-6): 30.000 sobre a mediana 100 de 5 pagamentos é 300x, acima do múltiplo que bloqueia (10,0) => caso AMOUNT_OUTLIER
+// HIGH, bloqueante; a conta recém-cadastrada recebendo a partir de R$ 20.000,00 também abre NEW_SUPPLIER_HIGH_VALUE (fornecedor novo de alto valor).
+test('M4-§17.5 valor fora do padrão: PAYABLE de 30.000 numa conta com histórico de 100 nasce retido e bloqueado, com caso AMOUNT_OUTLIER HIGH (e fornecedor novo) em GET /finance/anomaly-cases; valor dentro do padrão não retém', async () => {
   const account = await newAccount();
-  await settledHistory(account.id, ['100.00', '100.00']);
+  await settledHistory(account.id, ['100.00', '100.00', '100.00', '100.00', '100.00']);
   const outlier = await payable(30000, { bankAccountId: account.id });
   assert.equal(outlier.status, 201, JSON.stringify(outlier.body));
   assert.equal(outlier.body.data.requiresManualReview, true);
-  assert.match(outlier.body.data.manualReviewReason, /média histórica/);
+  assert.match(outlier.body.data.manualReviewReason, /300\.0x a mediana \(100\.00\)/);
   const cases = (await casesOf(outlier.body.data.id)).sort((x, y) => x.caseType.localeCompare(y.caseType));
-  assert.deepEqual(cases.map((c) => [c.caseType, c.riskLevel, c.status]), [['AMOUNT_OUTLIER', 'CRITICAL', 'OPEN'], ['NEW_SUPPLIER_HIGH_VALUE', 'MEDIUM', 'OPEN']]);
+  assert.deepEqual(cases.map((c) => [c.caseType, c.riskLevel, c.status]), [['AMOUNT_OUTLIER', 'HIGH', 'OPEN'], ['NEW_SUPPLIER_HIGH_VALUE', 'MEDIUM', 'OPEN']]);
   const normal = await payable(150, { bankAccountId: account.id });
   assert.equal(normal.status, 201);
   assert.equal(normal.body.data.requiresManualReview, false);
@@ -78,7 +100,7 @@ test('M4-§17.5 valor fora do padrão: PAYABLE de 30.000 numa conta com históri
 
 test('M4-§17.5 pagamento retido não liquida (409 FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW) até a liberação humana com MFA; liberado, preparar a intenção não abre outro caso', async () => {
   const account = await newAccount();
-  await settledHistory(account.id, ['200.00', '220.00']);
+  await settledHistory(account.id, ['200.00', '220.00', '210.00', '205.00', '215.00']);
   const entry = (await payable(30000, { bankAccountId: account.id })).body.data;
   assert.equal(entry.requiresManualReview, true);
   const settle = await http('POST', `/finance/entries/${entry.id}/settle`, tk.maker, {});
@@ -110,25 +132,8 @@ test('M4-§17.5 (§17.6 fornecedor novo de alto valor): primeiro pagamento de 15
   assert.equal(patched.status, 200, JSON.stringify(patched.body));
   const reloaded = await inTenant((t) => FinancialEntry.findByPk(noAccount.body.data.id, { transaction: t }));
   assert.equal(reloaded.requiresManualReview, true);
-  // DEC-007: 20.000 numa conta recém-cadastrada também é fornecedor novo de alto valor (a partir de R$ 20.000,00).
-  assert.equal((await casesOf(reloaded.id)).map((c) => c.caseType).sort().join(','), 'AMOUNT_OUTLIER,NEW_SUPPLIER_HIGH_VALUE');
+  // DEC-007: 20.000 numa conta recém-cadastrada também é fornecedor novo de alto valor (a partir de R$ 20.000,00); a conta sem histórico é comparada com a
+  // categoria da empresa, que já tem os 10 pagamentos baixos dos testes anteriores (DI-DEC007-3): valor fora do padrão também.
+  assert.equal((await casesOf(reloaded.id)).map((c) => c.caseType).sort().join(','), 'AMOUNT_OUTLIER,NEW_ACCOUNT_IMMEDIATE_PAYMENT,NEW_SUPPLIER_HIGH_VALUE');
 });
 
-test('M4-§17.5 lançamento que nasceu sem avaliação (legado/outro módulo) é avaliado ao preparar a intenção, sem duplicar caso no pedido de aprovação, e o envio ao banco do pagamento retido é recusado', async () => {
-  const fresh = await newAccount();
-  const legacy = await inTenant((t) => FinancialEntry.create({ ...base(), bankAccountId: fresh.id, costCenterId, entryType: 'DEBIT', nature: 'PAYABLE', amount: '25000.00', description: `Legado ${T.uniqueSuffix()}`, status: 'PENDING', competenceMonth: new Date().toISOString().slice(0, 7) }, { transaction: t }));
-  assert.equal(legacy.requiresManualReview, false);
-  const prepared = await http('POST', '/finance/payments/prepare', tk.maker, { financialEntryId: legacy.id });
-  assert.equal(prepared.status, 201, JSON.stringify(prepared.body));
-  const flagged = await inTenant((t) => FinancialEntry.findByPk(legacy.id, { transaction: t }));
-  assert.equal(flagged.requiresManualReview, true);
-  const approval = await http('POST', '/finance/approval-requests', tk.maker, { relatedEntityType: 'FinancialEntry', relatedEntityId: legacy.id, riskLevel: 'HIGH' });
-  assert.ok([200, 201].includes(approval.status), JSON.stringify(approval.body));
-  const cases = await inTenant((t) => AnomalyCase.findAll({ where: { relatedEntityId: legacy.id, caseType: 'AMOUNT_OUTLIER' }, transaction: t }));
-  assert.equal(cases.length, 1, 'um caso só');
-  const approved = await http('POST', `/finance/payments/${prepared.body.data.id}/approve`, tk.checker, {});
-  assert.equal(approved.status, 200, JSON.stringify(approved.body));
-  const toBank = await http('POST', `/finance/payment-intents/${prepared.body.data.id}/submit-to-bank`, tk.checker, { paymentMethod: 'TED' });
-  assert.equal(toBank.status, 409, JSON.stringify(toBank.body));
-  assert.equal(toBank.code, 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW');
-});

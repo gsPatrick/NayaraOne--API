@@ -1,7 +1,10 @@
 {
   "demanda": "M4-D140",
   "geradoNoCommit": "a8335d22073a3ac4a7a0fdda5a634313888dcb9b",
-  "total": 100,
+  "atualizacoes": [
+    "DEC-007 rodada 2 (DI-DEC007-2): + GET /finance/antifraud/parameters"
+  ],
+  "total": 101,
   "rotas": [
     {
       "method": "GET",
@@ -20,6 +23,18 @@
       "path": "/api/v1/finance/anomaly-cases/:id/resolve",
       "permissions": [
         "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/antifraud/parameters",
+      "permissions": [
+        "settings:read"
       ],
       "mfaRecente": false,
       "middlewares": [
