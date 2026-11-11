@@ -13,6 +13,7 @@ const { readRecipientBatch } = require('./campaigns.settings');
 const { STEP_CONTENT_STATUSES } = require('./campaigns.constants');
 const { checkApproval } = require('../content').approval;
 const { massStepReason } = require('./massStep.guard');
+const { auditBlockedRecipient } = require('./deliveryAudit');
 
 /** action_key = sha256(campaign_id:step_id:person_id): ocupa o lugar da chave de run da M9-D415 (step de campanha não tem run). */
 const actionKeyOf = (campaignId, stepId, personId) => crypto.createHash('sha256').update(`${campaignId}:${stepId}:${personId}`).digest('hex');
@@ -60,7 +61,9 @@ async function processRecipient(port, ctx, transaction) {
   // Horário de silêncio (M9-D429/M9-D418): a mensagem é reagendada, não perdida; sem registro de entrega, o destinatário continua pendente e sai na primeira rodada fora do silêncio.
   if (decision && decision.allowed !== true && decision.reason === 'QUIET_HOURS') return 'DEFERRED';
   if (!decision || decision.allowed !== true) {
-    await recordDelivery(tenant, campaign.id, step.id, personId, actionKey, 'BLOCKED', (decision && decision.reason) || 'NOT_ALLOWED', null, transaction);
+    const reason = (decision && decision.reason) || 'NOT_ALLOWED';
+    const [created] = await recordDelivery(tenant, campaign.id, step.id, personId, actionKey, 'BLOCKED', reason, null, transaction);
+    if (created) await auditBlockedRecipient({ tenant, campaign, step, personId, actionKey, reason, deliveryId: created.id }, transaction);
     return 'BLOCKED';
   }
   let sent;
