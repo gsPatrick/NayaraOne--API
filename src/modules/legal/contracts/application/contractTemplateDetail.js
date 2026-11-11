@@ -29,6 +29,7 @@ async function getTemplateDetail(id, transaction) {
     legalResponsible: people.get(v.legalResponsibleUserId) || null,
     publishedBy: people.get(v.publishedBy) || null,
     publishedAt: v.publishedAt,
+    origin: v.origin || 'USER', // CODE_SEED = versão inicial com o texto que vigorava no sistema (termo do imóvel usado, migration 20260101015103)
     clauses: links.filter((l) => l.templateVersionId === v.id).map((l) => {
       const c = clauseById.get(l.contractClauseId);
       return { sortOrder: l.sortOrder, contractClauseId: l.contractClauseId, code: c ? c.code : null, title: c ? c.title : null, versionNumber: c ? c.versionNumber : null, isActive: c ? c.isActive : null };
