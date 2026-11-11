@@ -163,3 +163,16 @@ test('M3-03 forte nesta empresa: bloqueia sempre (allowDuplicate não contorna) 
     }
   });
 });
+
+test('M3-03 forte: CPF de um cadastro EXCLUÍDO desta empresa continua ocupado (nada some) e a recusa diz isso, sem cair na mensagem do grupo', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const cpf = randomCpf();
+    const antiga = await criar(t, { taxIdNormalized: cpf });
+    await peopleService.deletePerson(antiga.id, tenant.userId, t);
+    await assert.rejects(() => criar(t, { taxIdNormalized: cpf }), (err) => {
+      codigo('PERSON_DUPLICATE_TAX_ID')(err);
+      assert.match(err.message, /cadastro excluído desta empresa/);
+      return true;
+    });
+  });
+});

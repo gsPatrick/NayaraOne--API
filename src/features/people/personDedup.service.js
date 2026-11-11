@@ -32,6 +32,14 @@ async function findStrongInCompany(taxIdDigits, transaction) {
   return Person.findOne({ where: { taxIdNormalized: taxIdDigits }, transaction });
 }
 
+/** CPF/CNPJ de um cadastro EXCLUÍDO (soft delete) que esta empresa enxerga: ainda ocupa a unicidade do grupo. */
+async function taxIdOfDeletedInCompany(taxIdDigits, transaction) {
+  if (!taxIdDigits) return false;
+  const [row] = await transaction.sequelize.query('SELECT count(*)::int AS n FROM people.persons WHERE tax_id_normalized = :t AND deleted_at IS NOT NULL',
+    { type: QueryTypes.SELECT, transaction, replacements: { t: taxIdDigits } });
+  return row.n > 0;
+}
+
 /**
  * Match médio nesta empresa: [{ personId, legalName, motivo: MESMO_EMAIL|MESMO_TELEFONE, contactType }], sem repetir pessoa, sem as
  * mescladas e as excluídas. `ddi` vem do parâmetro da empresa.
@@ -189,6 +197,6 @@ async function listPotentialDuplicatePairs(transaction) {
 }
 
 module.exports = {
-  findPotentialDuplicate, findStrongInCompany, findMediumCandidates, taxIdInOtherCompany, contactInOtherCompany, listPotentialDuplicatePairs,
+  findPotentialDuplicate, findStrongInCompany, taxIdOfDeletedInCompany, findMediumCandidates, taxIdInOtherCompany, contactInOtherCompany, listPotentialDuplicatePairs,
   findWeakDuplicateCandidates, tenantOf,
 };

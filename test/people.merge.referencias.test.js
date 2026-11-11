@@ -122,3 +122,26 @@ test('M3-04 tentativa bloqueada (CPF/CNPJ diferentes) fica marcada para a audito
     assert.equal(entry.afterJson.absorbedId, b.id);
   });
 });
+
+test('M3-04 tabela que o papel da aplicação não pode alterar: sem linha da absorvida o merge segue; com linha, recusa clara (nada órfão)', async (t) => {
+  if (process.env.DISPOSABLE_DB !== '1' || !process.env.DATABASE_ADMIN_URL) return t.skip('mexe em GRANT: só em banco descartável');
+  const { adminQuery } = require('./m9d801.helpers');
+  const papel = (await sequelize.query('SELECT current_user AS u', { plain: true })).u;
+  await adminQuery(`REVOKE UPDATE ON crm.conversations FROM "${papel}"`);
+  try {
+    await withRollbackTenantTransaction(tenant, async (tx) => {
+      const canonica = await pessoa(tx, 'Canônica Protegida');
+      const livre = await pessoa(tx, 'Absorvida Sem Conversa');
+      assert.equal((await mergePersons(canonica.id, livre.id, tenant.userId, tx)).status, 'MERGED');
+      const presa = await pessoa(tx, 'Absorvida Com Conversa');
+      await q(tx, `INSERT INTO crm.conversations (group_id, company_id, person_id, channel) VALUES (:g, :c, :a, 'EMAIL') RETURNING id`, { g: tenant.groupId, c: tenant.companyId, a: presa.id });
+      await assert.rejects(() => mergePersons(canonica.id, presa.id, tenant.userId, tx), (err) => {
+        assert.equal(err.code, 'PERSON_MERGE_PROTECTED_REFERENCE');
+        assert.equal(err.details.referencia, 'crm.conversations.person_id');
+        return true;
+      });
+    });
+  } finally {
+    await adminQuery(`GRANT UPDATE ON crm.conversations TO "${papel}"`);
+  }
+});

@@ -60,6 +60,11 @@ async function assertCreationAllowed(draft, ctx, transaction) {
     throw conflict('Já existe uma pessoa cadastrada com este CPF/CNPJ. Abra o cadastro existente em vez de criar outro.', 'PERSON_DUPLICATE',
       { nivel: 'FORTE', existingPersonId: forte.id, existente: { id: forte.id, legalName: forte.legalName } });
   }
+  if (draft.taxIdDigits && (await dedup.taxIdOfDeletedInCompany(draft.taxIdDigits, transaction))) {
+    // Cadastro EXCLUÍDO desta empresa ainda segura o CPF/CNPJ (UNIQUE do grupo, TAB-0100): nada some, então não se cria outro com ele.
+    throw conflict('Já existe uma pessoa com este documento (CPF/CNPJ) neste grupo, num cadastro excluído desta empresa. Peça a quem administra o cadastro para revisá-lo.',
+      'PERSON_DUPLICATE_TAX_ID', { nivel: 'FORTE' });
+  }
   if (draft.taxIdDigits) {
     await assertWithinAttemptLimit(ctx, ctx.actorUserId, transaction);
     if (await dedup.taxIdInOtherCompany(draft.taxIdDigits, transaction)) {

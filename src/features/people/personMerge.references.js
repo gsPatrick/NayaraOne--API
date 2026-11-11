@@ -31,6 +31,27 @@ async function personForeignKeys(transaction) {
   return rows.map((row) => ({ table: row.table_name, column: row.column_name }));
 }
 
+/** UPDATE e SELECT do papel da sessão em cada tabela (a tabela protegida por REVOKE não pode quebrar todo merge). */
+async function tablePrivileges(tables, transaction) {
+  if (!tables.length) return {};
+  const rows = await transaction.sequelize.query(
+    `SELECT t AS tabela, has_table_privilege(t, 'UPDATE') AS pode_update, has_table_privilege(t, 'SELECT') AS pode_select FROM unnest(ARRAY[:tables]::text[]) AS t`,
+    { type: QueryTypes.SELECT, transaction, replacements: { tables } }
+  );
+  return Object.fromEntries(rows.map((r) => [r.tabela, { update: r.pode_update, select: r.pode_select }]));
+}
+
+async function assertNothingPointsTo(table, column, absorbedId, canSelect, transaction) {
+  const AppError = require('../../utils/AppError');
+  const bloqueio = () => AppError.conflict(
+    'Não foi possível mesclar: há registro protegido contra alteração que aponta para a pessoa absorvida. Peça ajuda a quem administra o sistema.',
+    'PERSON_MERGE_PROTECTED_REFERENCE', { referencia: `${table}.${column}` }
+  );
+  if (!canSelect) throw bloqueio();
+  const [{ n }] = await transaction.sequelize.query(`SELECT count(*)::int AS n FROM ${qualified(table)} WHERE ${ident(column)} = :absorbedId`, { type: QueryTypes.SELECT, transaction, replacements: { absorbedId } });
+  if (n > 0) throw bloqueio();
+}
+
 async function update(sql, replacements, transaction) {
   const [, meta] = await transaction.sequelize.query(sql, { replacements, transaction });
   return meta && typeof meta.rowCount === 'number' ? meta.rowCount : 0;
@@ -67,11 +88,17 @@ async function remapAllPersonReferences(canonicalId, absorbedId, actorUserId, tr
   const remapeadas = {};
   const naoRevisadas = [];
   const alvos = [...(await personForeignKeys(transaction)), ...REFERENCIAS_SEM_FK.map(([table, column]) => ({ table, column }))];
+  const privilegios = await tablePrivileges([...new Set(alvos.map((a) => a.table))], transaction);
   for (const { table, column } of alvos) {
     const chave = `${table}.${column}`;
     const politica = REFERENCIAS_REVISADAS[chave];
     if (politica && politica.politica === 'FORA') continue;
     if (!politica && !REFERENCIAS_SEM_FK.some(([t, c]) => t === table && c === column)) naoRevisadas.push(chave);
+    if (!privilegios[table].update) {
+      // Tabela que o papel da aplicação não pode alterar: só segue se nada nela aponta para a absorvida (nunca deixa referência órfã em silêncio).
+      await assertNothingPointsTo(table, column, absorbedId, privilegios[table].select, transaction);
+      continue;
+    }
     const n = await update(`UPDATE ${qualified(table)} SET ${ident(column)} = :canonicalId WHERE ${ident(column)} = :absorbedId`, { canonicalId, absorbedId }, transaction);
     if (n) remapeadas[chave] = n;
   }
