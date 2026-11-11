@@ -420,7 +420,7 @@ test('F02-C3b: confirmação do banco que chega depois do fechamento liquida no 
     const submitted = await bankPaymentsService.submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
     const before = Date.now();
     const confirmed = await paymentService.confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(confirmed.status, 'EXECUTED');
+    assert.equal(confirmed.status, 'CONFIRMED');
 
     await entry.reload({ transaction });
     assert.equal(entry.status, 'SETTLED');

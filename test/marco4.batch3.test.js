@@ -492,7 +492,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
         bankAccountId: account.id,
         entryType: 'DEBIT',
         nature: 'PAYABLE',
-        amount: 7500.45,
+        amount: 75000.45, // M4PG (FIN-005): o risco vem do valor — R$ 75.000,45 é HIGH pelas faixas da DEC-004 (2 aprovadores com MFA)
         description: 'QA M4-28 — jornada E2E financeira',
         dueAt: new Date(Date.UTC(2026, 9, 5)),
         competenceMonth: '2026-09',
@@ -555,7 +555,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
     const settled = await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
     assert.ok(settled.settledAt);
-    assert.equal(String(settled.amount), '7500.45', 'o valor pago é exatamente o valor aprovado');
+    assert.equal(String(settled.amount), '75000.45', 'o valor pago é exatamente o valor aprovado');
 
     // 5) Conciliação contra a linha real do extrato.
     const bankTx = await bankTransactionsService.createBankTransaction(
@@ -563,7 +563,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         bankAccountId: account.id,
-        amount: -7500.45, // saída no extrato
+        amount: -75000.45, // saída no extrato
         transactionDate: new Date(),
         externalTransactionId: `qa-m428-ofx-${suffix}`,
       },
@@ -627,7 +627,7 @@ test('M4-28 jornada E2E: lançamento -> aprovação HIGH (2 aprovadores) -> liqu
     );
 
     // 8) Consistência final: o lançamento não tem saldo em aberto e não pode ser pago de novo.
-    assert.equal(await ledgerBalance.computeRemainingAmount(entry.id, transaction), '7500.45',
+    assert.equal(await ledgerBalance.computeRemainingAmount(entry.id, transaction), '75000.45',
       'sem baixas parciais filhas, o "restante" calculado é o próprio amount — a liquidação total não cria filho');
     await assert.rejects(
       () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),

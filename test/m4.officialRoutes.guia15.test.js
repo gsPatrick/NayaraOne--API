@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 process.env.PORT = process.env.M4_GUIA15_TEST_PORT || '21612';
 require('../app');
 const T = require('./testHelpers');
-const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
+const { createUser, tokenFor, client, isolatedTenant, closeIsolated, FINANCE_ALL } = require('./helpers/m4FinanceHttp');
 const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
 const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
@@ -36,6 +36,7 @@ before(async () => {
   tk.checker = tokenFor(tenant, users.checker.id);
   tk.noMfa = tokenFor(tenant, users.noMfa.id);
   tk.readOnly = tokenFor(tenant, users.maker.id, ['finance:read']);
+  tk.makerReverse = tokenFor(tenant, users.maker.id, [...FINANCE_ALL, 'finance:reverse']); // Guia §8 / DEC-062: pedir estorno é finance:reverse
   tk.none = tokenFor(tenant, users.maker.id, []);
   await T.withTenantTransaction(tenant, async (t) => {
     costCenterId = (await T.createTestCostCenter(tenant, t)).id;
@@ -111,7 +112,7 @@ test('Guia §15 POST /finance/payments/:id/execute: sem MFA recente é 403 MFA_S
   assert.equal(noMfa.code, 'MFA_STEP_UP_REQUIRED');
   const ok = await http('POST', `/finance/payments/${flow.intentId}/execute`, tk.checker, body);
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  assert.equal(ok.body.data.intent.status, 'EXECUTED');
+  assert.equal(ok.body.data.intent.status, 'CONFIRMED');
   assert.equal(ok.body.data.entry.status, 'SETTLED');
 });
 
@@ -122,19 +123,24 @@ async function confirmationFor(id, token) {
   return { typedCode: d.record.code, justification: 'Estorno de teste do Guia §15: pagamento lançado em duplicidade.', impactToken: d.impactToken };
 }
 
-test('Guia §15 POST /finance/ledger/:id/reverse: estorna o movimento do ledger com confirmação (200, original intacto); lançamento fora do ledger é 404 FINANCE_LEDGER_MOVEMENT_NOT_FOUND; sem finance:settle é 403', async () => {
+test('Guia §15 POST /finance/ledger/:id/reverse: PEDE o estorno do movimento do ledger com confirmação (202, caso); outra pessoa aprova o caso e o estorno sai (original intacto); fora do ledger é 404; sem finance:reverse é 403', async () => {
   assert.ok(flow.entry, 'depende do teste de execute');
   const denied = await http('POST', `/finance/ledger/${flow.entry.id}/reverse`, tk.readOnly, { reason: 'x' });
   assert.equal(denied.status, 403);
   assert.equal(denied.code, 'PERMISSION_DENIED');
   const pending = await receivableOnAccount(10);
-  const notLedger = await http('POST', `/finance/ledger/${pending.id}/reverse`, tk.maker, { reason: 'Estorno de teste fora do ledger.', confirmation: await confirmationFor(pending.id, tk.maker) });
+  const settleOnly = await http('POST', `/finance/ledger/${flow.entry.id}/reverse`, tk.maker, { reason: 'x', confirmation: await confirmationFor(flow.entry.id, tk.maker) });
+  assert.equal(settleOnly.status, 403, 'finance:settle não autoriza estorno (DEC-062)');
+  const notLedger = await http('POST', `/finance/ledger/${pending.id}/reverse`, tk.makerReverse, { reason: 'Estorno de teste fora do ledger.', confirmation: await confirmationFor(pending.id, tk.makerReverse) });
   assert.equal(notLedger.status, 404, JSON.stringify(notLedger.body));
   assert.equal(notLedger.code, 'FINANCE_LEDGER_MOVEMENT_NOT_FOUND');
   const [inLedger] = await inTenant((t) => T.sequelize.query('SELECT id, amount FROM finance.ledger WHERE id = :id', { replacements: { id: flow.entry.id }, type: T.sequelize.QueryTypes.SELECT, transaction: t }));
   assert.ok(inLedger, 'o pagamento executado está na view finance.ledger');
-  const ok = await http('POST', `/finance/ledger/${flow.entry.id}/reverse`, tk.maker, { reason: 'Estorno de teste do Guia §15: pagamento lançado em duplicidade.', confirmation: await confirmationFor(flow.entry.id, tk.maker) });
+  const asked = await http('POST', `/finance/ledger/${flow.entry.id}/reverse`, tk.makerReverse, { reason: 'Estorno de teste do Guia §15: pagamento lançado em duplicidade.', confirmation: await confirmationFor(flow.entry.id, tk.makerReverse) });
+  assert.equal(asked.status, 202, JSON.stringify(asked.body));
+  const ok = await http('POST', `/finance/reversal-cases/${asked.body.data.id}/approve`, tk.checker, {});
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
+  assert.equal(ok.body.data.reversal.idempotencyKey, `reversal:${flow.entry.id}:${asked.body.data.id}`);
   const original = await inTenant((t) => financialEntriesService.getFinancialEntry(flow.entry.id, t));
   assert.equal(original.status, 'REVERSED');
   assert.equal(original.amount, '123.45');

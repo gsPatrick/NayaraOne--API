@@ -243,7 +243,7 @@ test('F06-PAY-03 recuperação após falha DEFINITIVA: nova tentativa confirmada
 
     const second = await submitPaymentIntentToBank((await approvedIntentFor(entry.id, t)).id, 'PIX', { userId: tenant.userId }, t);
     const executed = await confirmBankPayment(second.externalSubmissionId, 'CONFIRMED', t);
-    assert.equal(executed.status, 'EXECUTED');
+    assert.equal(executed.status, 'CONFIRMED');
 
     await confirmBankPayment(second.externalSubmissionId, 'CONFIRMED', t);
     await confirmBankPayment(first.externalSubmissionId, 'CONFIRMED', t);
@@ -278,7 +278,7 @@ test(
       const entry = await makePayable(t);
       const submitted = await submitPaymentIntentToBank((await approvedIntentFor(entry.id, t)).id, 'PIX', { userId: tenant.userId }, t);
       const uncertain = await confirmBankPayment(submitted.externalSubmissionId, 'PROCESSING', t);
-      assert.notEqual(uncertain.status, 'EXECUTED', 'resposta incerta nunca vira sucesso');
+      assert.notEqual(uncertain.status, 'CONFIRMED', 'resposta incerta nunca vira sucesso');
       await confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', t);
       await entry.reload({ transaction: t });
       assert.equal(entry.status, 'SETTLED', 'a confirmação real posterior precisa ser registrada');

@@ -180,7 +180,7 @@ test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do sna
     );
 
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
-    assert.equal(intent.status, 'PENDING');
+    assert.equal(intent.status, 'PENDING_APPROVAL');
     assert.equal(intent.snapshotJson.amount, '2500.00');
     assert.equal(
       intent.snapshotHash,
@@ -259,15 +259,15 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
       transaction,
       { manualSettlement }
     );
-    assert.equal(executed.status, 'EXECUTED');
+    assert.equal(executed.status, 'CONFIRMED');
     assert.equal(settled.status, 'SETTLED');
     assert.ok(settled.settledAt, 'liquidação precisa carimbar settled_at');
 
-    // Executar de novo não pode liquidar nada duas vezes.
-    await assert.rejects(
-      () => paymentIntentsService.executePaymentIntent(intent.id, approver.id, transaction),
-      (err) => { assert.equal(err.code, 'FINANCE_PAYMENT_INTENT_NOT_APPROVED'); return true; }
-    );
+    // Executar de novo não pode liquidar nada duas vezes (Guia §5, FIN-TS-002): devolve o resultado existente.
+    const again = await paymentIntentsService.executePaymentIntent(intent.id, approver.id, transaction);
+    assert.equal(again.replayed, true);
+    assert.equal(again.entry.id, settled.id);
+    assert.equal(String(again.entry.settledAt), String(settled.settledAt), 'nenhuma segunda liquidação');
   });
 });
 
@@ -576,15 +576,21 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
       (err) => { assert.equal(err.code, 'FINANCE_PERIOD_REOPEN_REASON_REQUIRED'); return true; }
     );
 
-    // Reabrir COM motivo: libera e deixa rastro de quem/por quê.
-    const reopened = await periodClosuresService.reopenPeriod(
-      { companyId: tenant.companyId, referenceMonth, reason: 'Nota fiscal do fornecedor chegou atrasada.' },
+    // Reabrir COM motivo (Caderno §16 / Guia §18, M4PG): é o PEDIDO do fluxo CRITICAL — o mês continua fechado até OUTRA pessoa,
+    // com MFA recente, aprovar; a reabertura deixa rastro de quem pediu, quem aprovou e por quê.
+    const pedido = await periodClosuresService.reopenPeriod(
+      { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth, reason: 'Nota fiscal do fornecedor chegou atrasada.' },
       tenant.userId,
       transaction
     );
+    assert.equal(pedido.riskLevel, 'CRITICAL');
+    assert.equal((await periodClosuresService.getClosureByMonth(tenant.companyId, referenceMonth, transaction)).status, 'CLOSED');
+    const aprovadorReabertura = await User.create({ name: `M4-19 aprovador ${suffix}`, email: `m419-reabre-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' }, { transaction });
+    await require('./helpers/mfaRecente').comMfaRecente(aprovadorReabertura.id, tenant, transaction);
+    const { closure: reopened } = await require('../src/modules/finance/application/services/period-reopen.service').approvePeriodReopen(pedido.id, aprovadorReabertura.id, transaction);
     assert.equal(reopened.status, 'OPEN');
     assert.equal(reopened.reopenReason, 'Nota fiscal do fornecedor chegou atrasada.');
-    assert.equal(reopened.reopenedByUserId, tenant.userId);
+    assert.equal(reopened.reopenedByUserId, aprovadorReabertura.id);
     assert.ok(reopened.reopenedAt);
 
     const afterReopen = await financialEntriesService.createFinancialEntry(

@@ -33,7 +33,7 @@ test('adv_pagamento_timeout_nao_duplica', async () => {
   try {
     await withRollbackTenantTransaction(env.tenant, async (t) => {
       const { intent } = await env.intencaoEnviada(t, { amount: 1250 });
-      assert.equal(intent.status, 'SUBMITTING');
+      assert.equal(intent.status, 'EXECUTING');
       assert.equal(intent.externalStatus, 'UNCERTAIN');
       let envios = await env.envios(t, intent.id);
       assert.equal(envios.length, 1);
@@ -54,7 +54,7 @@ test('adv_pagamento_timeout_nao_duplica', async () => {
   try {
     await withRollbackTenantTransaction(env.tenant, async (t) => {
       const { intent } = await env.intencaoEnviada(t, { amount: 1250 });
-      assert.equal(intent.status, 'SUBMITTING');
+      assert.equal(intent.status, 'EXECUTING');
       const r = await env.bankPayments.reconcilePaymentIntent(intent.id, { userId: null }, t);
       assert.ok(r.intent.externalSubmissionId, 'a ordem saiu depois que o banco afirmou não conhecê-la');
       assert.equal(naoChegou.chamadas.length, 2);

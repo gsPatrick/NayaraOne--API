@@ -132,7 +132,8 @@ test('F2: "Consultar banco" acha a intenção mesmo sem roteamento gravado e mud
     const { entry } = await payableEntry(transaction, 12.34);
     const created = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
     const intent = await PaymentIntent.findByPk(created.id, { transaction });
-    intent.status = 'SUBMITTED';
+    intent.status = 'EXECUTING'; // Guia M4 §3 (DEC-056): enviado ao banco = EXECUTING, fase SUBMITTED
+    intent.submissionPhase = 'SUBMITTED';
     intent.paymentMethod = 'PIX';
     intent.externalSubmissionId = `sandbox-m45-audit-${uniqueSuffix()}`;
     intent.externalStatus = 'PENDING_EXTERNAL';
@@ -141,7 +142,7 @@ test('F2: "Consultar banco" acha a intenção mesmo sem roteamento gravado e mud
 
     const result = await bankPaymentsService.reconcilePaymentIntent(intent.id, { userId: tenant.userId }, transaction);
     assert.equal(result.outcome, 'CONFIRMED');
-    assert.equal(result.intent.status, 'EXECUTED');
+    assert.equal(result.intent.status, 'CONFIRMED');
     const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId: intent.externalSubmissionId }, transaction });
     assert.ok(routing, 'roteamento recriado');
     await expectTransition('finance.payment_intent.confirm_bank_payment', intent.id, transaction);

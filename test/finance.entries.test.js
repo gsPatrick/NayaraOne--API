@@ -96,7 +96,8 @@ test('maker-checker: quem solicitou a aprovação não pode decidir a própria s
 
 test('maker-checker: segundo usuário aprova (risco HIGH exige 2 aprovações independentes)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const entry = await createEntry(transaction, tenant.userId);
+    // M4PG (FIN-005): o risco vem do valor, não do pedido — R$ 120.000,00 cai na faixa HIGH (DEC-004: acima de R$ 50.000 até R$ 200.000).
+    const entry = await createEntry(transaction, tenant.userId, { amount: 120000 });
     const request = await approvalsService.createApprovalRequest(
       { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'HIGH' },
       tenant.userId,

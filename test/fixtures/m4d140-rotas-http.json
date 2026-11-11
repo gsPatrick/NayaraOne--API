@@ -1,7 +1,7 @@
 {
   "demanda": "M4-D140",
-  "geradoNoCommit": "a8335d22073a3ac4a7a0fdda5a634313888dcb9b",
-  "total": 100,
+  "geradoNoCommit": "f1e4b50f0d980e9005e1a1cb0deeee277c4cf16f",
+  "total": 106,
   "rotas": [
     {
       "method": "GET",
@@ -543,12 +543,14 @@
       "method": "POST",
       "path": "/api/v1/finance/entries/:id/reverse",
       "permissions": [
-        "finance:settle"
+        "finance:reverse"
       ],
-      "mfaRecente": false,
+      "mfaRecente": true,
       "middlewares": [
         "requirePermissionMiddleware",
+        "requireRecentMfa",
         "wrapped",
+        "rejectExcessDecimalsMiddleware",
         "wrapped"
       ]
     },
@@ -746,14 +748,16 @@
       "method": "POST",
       "path": "/api/v1/finance/ledger/:id/reverse",
       "permissions": [
-        "finance:settle"
+        "finance:reverse"
       ],
-      "mfaRecente": false,
+      "mfaRecente": true,
       "middlewares": [
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "requireRecentMfa",
         "wrapped",
+        "rejectExcessDecimalsMiddleware",
         "wrapped"
       ]
     },
@@ -864,6 +868,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "rejectExcessDecimalsMiddleware",
         "wrapped"
       ]
     },
@@ -997,6 +1002,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "rejectExcessDecimalsMiddleware",
         "wrapped"
       ]
     },
@@ -1065,7 +1071,45 @@
       "method": "POST",
       "path": "/api/v1/finance/period-closures/reopen",
       "permissions": [
-        "finance:approve"
+        "finance:periodReopen"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/period-closures/reopen-requests",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/reopen-requests/:id/approve",
+      "permissions": [
+        "finance:periodReopen"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/reopen-requests/:id/reject",
+      "permissions": [
+        "finance:periodReopen"
       ],
       "mfaRecente": true,
       "middlewares": [
@@ -1234,6 +1278,44 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reversal-cases",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reversal-cases/:id/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reversal-cases/:id/reject",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
         "wrapped"
       ]
     },

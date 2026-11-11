@@ -349,7 +349,8 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
     await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, transaction);
 
     const submitted = await bankPaymentsService.submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
-    assert.equal(submitted.status, 'SUBMITTED');
+    assert.equal(submitted.status, 'EXECUTING'); // Guia M4 §3: enviado ao banco = EXECUTING, fase SUBMITTED
+    assert.equal(submitted.submissionPhase, 'SUBMITTED');
 
     const routing = await BankPaymentProviderRouting.findOne({ where: { paymentIntentId: intent.id }, transaction });
     assert.ok(routing, 'roteamento gravado para o webhook/polling resolver o tenant depois');
@@ -359,8 +360,8 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
     const afterTimeout = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
     // F06-PAY-05/06 (conferência 18/10/2026): timeout é resposta INCERTA — o banco pode ter
     // processado. A intenção continua SUBMITTED (antes virava FAILED e liberava um 2º pagamento).
-    assert.equal(afterTimeout.status, 'SUBMITTED', 'timeout não é sucesso nem falha: o pagamento segue em trânsito');
-    assert.notEqual(afterTimeout.status, 'EXECUTED');
+    assert.equal(afterTimeout.status, 'EXECUTING', 'timeout não é sucesso nem falha: o pagamento segue em trânsito');
+    assert.notEqual(afterTimeout.status, 'CONFIRMED');
 
     const reloadedEntry = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(reloadedEntry.status, 'PENDING', 'NENHUMA liquidação indevida — o lançamento original nunca foi tocado');
@@ -369,9 +370,9 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
     // Reprocessar o MESMO status de novo (reentrega de webhook) é idempotente: devolve o
     // estado atual, sem tentar liquidar por trás.
     const reloadedIntent = await PaymentIntent.findByPk(intent.id, { transaction });
-    assert.equal(reloadedIntent.status, 'SUBMITTED');
+    assert.equal(reloadedIntent.status, 'EXECUTING');
     const again = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
-    assert.equal(again.status, 'SUBMITTED');
+    assert.equal(again.status, 'EXECUTING');
     const reloadedEntryAgain = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(reloadedEntryAgain.status, 'PENDING');
   });
@@ -408,7 +409,7 @@ test('FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvi
     assert.equal(beforeConfirm.status, 'PENDING', 'nenhum ledger/liquidação antes da confirmação do banco');
 
     const firstConfirm = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(firstConfirm.status, 'EXECUTED');
+    assert.equal(firstConfirm.status, 'CONFIRMED');
     const afterFirst = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(afterFirst.status, 'SETTLED');
     const firstSettledAt = afterFirst.settledAt?.getTime();
@@ -417,7 +418,7 @@ test('FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvi
     // Reenvio do MESMO webhook (provedor reentregando por falta de 200 explícito, cenário
     // comum em integrações bancárias reais) — não pode reliquidar nem mexer no settledAt.
     const secondConfirm = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(secondConfirm.status, 'EXECUTED', 'idempotente: devolve o mesmo estado, sem reprocessar');
+    assert.equal(secondConfirm.status, 'CONFIRMED', 'idempotente: devolve o mesmo estado, sem reprocessar');
     const afterSecond = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(afterSecond.status, 'SETTLED');
     assert.equal(afterSecond.settledAt?.getTime(), firstSettledAt, 'settledAt não muda — não houve segunda liquidação');
@@ -566,7 +567,7 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
     );
     await paymentIntentsService.approvePaymentIntent(intent.id, intentApprover.id, transaction);
     const executed = await paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction, { manualSettlement });
-    assert.equal(executed.intent.status, 'EXECUTED');
+    assert.equal(executed.intent.status, 'CONFIRMED');
     assert.equal(executed.entry.status, 'SETTLED');
     const reread2 = await FinancialEntry.findByPk(entry2.id, { transaction });
     assert.equal(reread2.status, 'SETTLED');
@@ -711,7 +712,7 @@ test('FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequ
 // de concorrência REAL (duas conexões/transações distintas, não duas chamadas sequenciais na
 // mesma transação). Concorrência real precisa de transações COMMITADAS — usa o mesmo padrão
 // `withCommitted` já usado em ADV-F21 (test/adversarial.finance.test.js).
-test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra é rejeitada (idempotente, não duplica ledger)', async () => {
+test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra devolve o resultado existente (idempotente, não duplica ledger)', async () => {
   const suffix = uniqueSuffix();
   async function withCommitted(fn) {
     const t = await sequelize.transaction();
@@ -760,15 +761,14 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
       withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t, { manualSettlement })),
     ]);
 
-    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
-    const falhas = resultados.filter((r) => r.status === 'rejected');
-    assert.equal(sucessos.length, 1, 'exatamente UMA das duas execuções concorrentes deve vencer');
-    assert.equal(falhas.length, 1, 'a outra deve ser rejeitada (não executar duas vezes)');
-    assert.equal(
-      falhas[0].reason.code,
-      'FINANCE_PAYMENT_INTENT_NOT_APPROVED',
-      'a perdedora falha porque, quando ela consegue o lock, a intent já não está mais APPROVED (a vencedora já mudou pra EXECUTED)'
-    );
+    // Guia M4 §5 (`if (existing) return existing`) e FIN-TS-002 "1 vence; outro idempotente" (M4PG): a perdedora espera o lock
+    // e, quando o consegue, a intenção já está CONFIRMED — devolve o resultado existente (replay), sem segunda execução.
+    assert.equal(resultados.filter((r) => r.status === 'rejected').length, 0, JSON.stringify(resultados.map((r) => r.reason && r.reason.code)));
+    const vencedoras = resultados.filter((r) => !r.value.replayed);
+    const replays = resultados.filter((r) => r.value.replayed === true);
+    assert.equal(vencedoras.length, 1, 'exatamente UMA das duas execuções concorrentes executa');
+    assert.equal(replays.length, 1, 'a outra devolve o resultado existente (idempotente)');
+    assert.equal(replays[0].value.intent.status, 'CONFIRMED');
 
     await withCommitted(async (t) => {
       const ledgerCount = await FinancialEntry.count({ where: { id: entryId, status: 'SETTLED' }, transaction: t });
