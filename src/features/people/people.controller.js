@@ -11,29 +11,25 @@ const consentsService = require('./personConsents.service');
 const mergeService = require('./personMerge.service');
 const dedupService = require('./personDedup.service');
 const documentIngestionService = require('./documentIngestion.service');
+const { OVERRIDE_PERMISSION } = require('./personDedupGate');
 
 // --- Persons ---
 
-// CRMX-010/seção 4 do Caderno ("match fraco... abre revisão; não mescla automaticamente"): a
-// checagem de nome+data de nascimento/endereço parecidos NÃO bloqueia a criação (diferente do
-// match forte/médio em createPerson, que bloqueia por padrão) — só avisa, mesmo padrão já usado
-// em properties.controller.js para CRMX-010 de imóvel (similarPropertyWarnings em `meta`, não
-// em `data`).
+// Deduplicação ANTES de criar (livro §4, CRMX-010; DI-M3PE-3/4): o portão roda dentro de createPerson. Pela tela, o cadastro parecido
+// (match fraco) só é criado com similarReviewed=true e o match médio só com a exceção auditada (motivo + people:dedup:override).
 const create = catchAsync(async (req, res) => {
   const payload = { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
-  const { person, similarPersonWarnings } = await req.withTenantTransaction(async (transaction) => {
-    const createdPerson = await peopleService.createPerson(payload, req.auth.userId, transaction).catch((err) => {
-      // DI-M9I-2: a tela oferece "vincular a esta empresa" só a quem tem a permissão people:link.
-      if (err && err.code === 'PERSON_TAX_ID_IN_GROUP') err.details = { podeVincular: req.auth.permissions.includes('people:link') };
+  const options = { podeForcarDuplicidade: req.auth.permissions.includes(OVERRIDE_PERMISSION), modoSemelhante: 'EXIGIR' };
+  const person = await req.withTenantTransaction((transaction) =>
+    peopleService.createPerson(payload, req.auth.userId, transaction, options).catch((err) => {
+      // DI-M9I-2: a tela oferece "vincular a esta empresa" só a quem tem a permissão people:link (CPF/CNPJ ou contato de outra empresa do grupo).
+      if (err && ['PERSON_TAX_ID_IN_GROUP', 'PERSON_CONTACT_IN_GROUP'].includes(err.code)) {
+        err.details = { ...(err.details || {}), podeVincular: req.auth.permissions.includes('people:link') };
+      }
       throw err;
-    });
-    const warnings = await dedupService.findWeakDuplicateCandidates(
-      { legalName: payload.legalName, birthOrFoundationDate: payload.birthOrFoundationDate, addresses: payload.addresses, excludePersonId: createdPerson.id },
-      transaction
-    );
-    return { person: createdPerson, similarPersonWarnings: warnings };
-  });
-  return success(res, { statusCode: 201, data: person, meta: { similarPersonWarnings } });
+    })
+  );
+  return success(res, { statusCode: 201, data: person });
 });
 
 const list = catchAsync(async (req, res) => {

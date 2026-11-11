@@ -45,7 +45,11 @@ const LOOKUPS_DELIBERADOS = {
   'integration.connections:webhook_channel_lookup': /^\(\(webhook_channel IS NOT NULL\) AND \(\(webhook_channel\)::text = NULLIF\(current_setting\('app\.webhook_channel_lookup'::text, true\), ''::text\)\)\)$/,
   // Só o dono das tabelas (quem roda as migrations), dentro de people.pessoa_vinculada_em_outra_empresa: nunca o runtime.
   'people.person_company_links:person_company_links_checagem_do_dono': /^true$/,
+  // Só o dono, dentro de people.documento_no_grupo / people.contato_no_grupo (deduplicação no grupo, verdadeiro/falso; DI-M3PE-3): nunca o runtime.
+  'people.persons:persons_checagem_do_dono': /^true$/,
+  'people.person_contacts:person_contacts_checagem_do_dono': /^true$/,
 };
+const CHECAGENS_DO_DONO = ['person_company_links_checagem_do_dono', 'persons_checagem_do_dono', 'person_contacts_checagem_do_dono'];
 const PAPEIS_DA_APLICACAO = ['public', 'nayara_runtime', 'nayara_ci', 'nayara_ci_app', 'nayara_analytics_reader'];
 
 // Tabelas SEM company_id com política de leitura (catálogos, linhagem do grupo e contadores por interruptor). Lista fechada.
@@ -147,9 +151,11 @@ test('RLS: as exceções continuam com o predicado exato e a checagem do dono do
     assert.equal(linha.cmd, 'SELECT', `${chave} tem de ser só SELECT`);
     assert.match(linha.qual, esperado, `${chave} mudou de predicado: ${linha.qual}`);
   }
-  const dono = linhas.find((l) => l.politica === 'person_company_links_checagem_do_dono');
-  const papeis = dono.papeis.replace(/[{}"]/g, '').split(',');
-  assert.deepEqual(papeis.filter((p) => PAPEIS_DA_APLICACAO.includes(p)), [], `a checagem do dono vale para ${dono.papeis}`);
+  for (const nome of CHECAGENS_DO_DONO) {
+    const dono = linhas.find((l) => l.politica === nome);
+    const papeis = dono.papeis.replace(/[{}"]/g, '').split(',');
+    assert.deepEqual(papeis.filter((p) => PAPEIS_DA_APLICACAO.includes(p)), [], `a checagem do dono ${nome} vale para ${dono.papeis}`);
+  }
 });
 
 test('RLS: tabelas sem company_id com política de leitura formam uma lista fechada e nenhuma delas tem person_id', async () => {
@@ -164,7 +170,8 @@ test('RLS: tabelas sem company_id com política de leitura formam uma lista fech
 
 test('RLS: people.persons lê por empresa responsável OU vínculo ACTIVE OU prova; escreve só a responsável; nenhuma FOR ALL', async () => {
   const [linhas] = await sequelize.query(`
-    SELECT policyname AS politica, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'people' AND tablename = 'persons' ORDER BY 1`);
+    SELECT policyname AS politica, cmd, qual, with_check FROM pg_policies WHERE schemaname = 'people' AND tablename = 'persons'
+       AND policyname <> 'persons_checagem_do_dono' ORDER BY 1`); // a checagem do dono (só o papel das migrations) é conferida no teste das exceções
   assert.deepEqual(linhas.map((l) => `${l.politica}:${l.cmd}`), [
     'persons_company_delete:DELETE', 'persons_company_insert:INSERT', 'persons_company_select:SELECT', 'persons_company_update:UPDATE',
   ]);

@@ -1,61 +1,82 @@
 'use strict';
 
-const { Op } = require('sequelize');
-const { Person, PersonContact, PersonAddress } = require('../../models');
+const { Op, QueryTypes } = require('sequelize');
+const { Person, PersonAddress } = require('../../models');
 const { onlyDigits } = require('./personDocumentFormat.service');
 
+const { draftContactKeys, contactKeySql, kindSql } = require('./personContactKey');
+const { readDedupParams } = require('./personDedup.settings');
+const { contextCompanyId } = require('./personView');
+
 /**
- * findPotentialDuplicate — checa, dentro do tenant corrente (company_id resolvido via RLS),
- * se já existe uma Person com o mesmo documento (tax_id_normalized/CPF/CNPJ) OU o mesmo valor
- * de contato principal (email/telefone) informado em `personData`.
- *
- * Lógica de aplicação direta (DedupService.findPossibleDuplicates do Caderno) — NÃO é uma
- * entrada no Motor de Regras (sem rule_code do tipo REG-PES-XXX; a dedup de pessoas não usa o
- * motor de regras nomeado, diferente do módulo de Imóveis).
- *
- * Critérios de checagem (nesta ordem — primeiro hit vence):
- *   1. Match forte: `personData.taxIdNormalized` (normalizado para dígitos) contra
- *      `persons.tax_id_normalized` existente — bloqueia criação, retorna a pessoa existente.
- *   2. Match médio: cada item de `personData.contacts` com `isPrimary: true` (ou o único item,
- *      se só um contato for enviado) contra `person_contacts.value_normalized` de contatos
- *      primários existentes, no mesmo `contactType` — sinaliza/bloqueia criação por padrão
- *      (o service que chama esta função decide se bloqueia ou apenas avisa).
- *
- * Match fraco (nome semelhante + endereço/data de nascimento, CRMX-010/seção 4 do Caderno):
- * "abre revisão; não mescla automaticamente" — diferente dos dois matches acima, NUNCA bloqueia
- * a criação (não lança erro, nem é afetado por `allowDuplicate`), só retorna candidatos de
- * revisão. Critério determinístico (não é fuzzy/fonético sofisticado): normaliza o nome
- * (lowercase, sem acento, sem pontuação) e compara por IGUALDADE do primeiro + último token,
- * combinado com (mesma data de nascimento/fundação OU mesmo endereço atual normalizado).
- *
- * Retorna a Person existente (instância Sequelize) ou `null` se nenhuma duplicata foi encontrada.
+ * Deduplicação de Pessoas (livro §4; Guia §3 DedupService.findPossibleDuplicates). Três níveis:
+ *   - forte: CPF/CNPJ normalizado (dígitos; o hash HMAC é a mesma chave) — bloqueia e oferece o cadastro existente;
+ *   - médio: telefone/e-mail iguais, comparados pela chave normalizada (personContactKey.js), em QUALQUER contato do rascunho contra
+ *     QUALQUER contato da empresa (não só o principal; telefone e WhatsApp juntos) — abre revisão;
+ *   - fraco: nome semelhante + endereço/data de nascimento — abre revisão.
+ * Nenhum nível mescla sozinho. A decisão (bloquear, exigir revisão, exceção auditada) fica em personDedupGate.js; aqui só as consultas,
+ * todas pela transação da requisição (RLS: só o que a empresa da sessão enxerga). O que existe nas outras empresas do grupo é consultado
+ * pelas funções do banco people.documento_no_grupo / people.contato_no_grupo (verdadeiro/falso, nunca qual pessoa).
+ */
+
+async function tenantOf(transaction) {
+  const [[row]] = await transaction.sequelize.query(
+    "SELECT NULLIF(current_setting('app.group_id', true), '') AS g, NULLIF(current_setting('app.company_id', true), '') AS c", { transaction }
+  );
+  return { groupId: row ? row.g : null, companyId: (row && row.c) || (await contextCompanyId(transaction)) };
+}
+
+/** Match forte visível nesta empresa (própria ou vinculada): a Person, ou null. */
+async function findStrongInCompany(taxIdDigits, transaction) {
+  if (!taxIdDigits) return null;
+  return Person.findOne({ where: { taxIdNormalized: taxIdDigits }, transaction });
+}
+
+/**
+ * Match médio nesta empresa: [{ personId, legalName, motivo: MESMO_EMAIL|MESMO_TELEFONE, contactType }], sem repetir pessoa, sem as
+ * mescladas e as excluídas. `ddi` vem do parâmetro da empresa.
+ */
+async function findMediumCandidates(contacts, ddi, transaction, { excludePersonId = null } = {}) {
+  const keys = draftContactKeys(contacts, ddi);
+  if (!keys.length) return [];
+  const rows = await transaction.sequelize.query(
+    `SELECT DISTINCT ON (p.id) p.id AS person_id, p.legal_name, ${kindSql('c')} AS kind, c.contact_type
+       FROM people.person_contacts c JOIN people.persons p ON p.id = c.person_id
+      WHERE c.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status <> 'MERGED' AND (CAST(:exclude AS uuid) IS NULL OR p.id <> CAST(:exclude AS uuid))
+        AND (${kindSql('c')} || '|' || ${contactKeySql('c')}) IN (:keys)
+      ORDER BY p.id, c.is_primary DESC`,
+    { type: QueryTypes.SELECT, transaction, replacements: { ddi, exclude: excludePersonId, keys: keys.map((k) => `${k.kind}|${k.key}`) } }
+  );
+  return rows.map((r) => ({ personId: r.person_id, legalName: r.legal_name, motivo: r.kind === 'EMAIL' ? 'MESMO_EMAIL' : 'MESMO_TELEFONE', contactType: r.contact_type }));
+}
+
+/** CPF/CNPJ com cadastro em OUTRA empresa do grupo que esta não enxerga (verdadeiro/falso). */
+async function taxIdInOtherCompany(taxIdDigits, transaction) {
+  if (!taxIdDigits) return false;
+  const [[row]] = await transaction.sequelize.query('SELECT people.documento_no_grupo(:t) AS existe', { replacements: { t: taxIdDigits }, transaction });
+  return Boolean(row && row.existe);
+}
+
+/** Algum telefone/e-mail do rascunho no cadastro de OUTRA empresa do grupo (verdadeiro/falso, sem dizer qual nem de quem). */
+async function contactInOtherCompany(contacts, ddi, transaction) {
+  const keys = draftContactKeys(contacts, ddi);
+  for (const k of keys) {
+    const [[row]] = await transaction.sequelize.query('SELECT people.contato_no_grupo(:kind, :key, :ddi) AS existe', { replacements: { kind: k.kind, key: k.key, ddi }, transaction });
+    if (row && row.existe) return true;
+  }
+  return false;
+}
+
+/**
+ * findPotentialDuplicate — compatível com os chamadores antigos (importação do BCP): o match forte ou o primeiro médio desta empresa, como
+ * Person, ou null. O DDI é o parâmetro da empresa da sessão.
  */
 async function findPotentialDuplicate(personData, transaction) {
-  const taxIdDigits = onlyDigits(personData.taxIdNormalized);
-  if (taxIdDigits) {
-    const byTaxId = await Person.findOne({ where: { taxIdNormalized: taxIdDigits }, transaction });
-    if (byTaxId) return byTaxId;
-  }
-
-  const contacts = Array.isArray(personData.contacts) ? personData.contacts : [];
-  const explicitPrimary = contacts.filter((c) => c.isPrimary);
-  const primaryContacts = explicitPrimary.length > 0 ? explicitPrimary : contacts.length === 1 ? contacts : [];
-
-  for (const contact of primaryContacts) {
-    const value = contact.valueNormalized || contact.value;
-    if (!value || !contact.contactType && !contact.channel) continue;
-    const contactType = String(contact.contactType || contact.channel).toUpperCase();
-    const existingContact = await PersonContact.findOne({
-      where: { contactType, valueNormalized: value, isPrimary: true },
-      transaction,
-    });
-    if (existingContact) {
-      const owner = await Person.findByPk(existingContact.personId, { transaction });
-      if (owner) return owner;
-    }
-  }
-
-  return null;
+  const strong = await findStrongInCompany(onlyDigits(personData.taxIdNormalized), transaction);
+  if (strong) return strong;
+  const { ddi } = await readDedupParams(await tenantOf(transaction), transaction);
+  const [first] = await findMediumCandidates(personData.contacts, ddi, transaction);
+  return first ? Person.findByPk(first.personId, { transaction }) : null;
 }
 
 function normalizeNameKey(name) {
@@ -95,18 +116,17 @@ function normalizeAddressKeyForPerson(address) {
 }
 
 /**
- * findWeakDuplicateCandidates — match fraco isolado: NÃO bloqueia, NÃO é chamado
- * automaticamente por `createPerson` (que só usa forte/médio) — é oferecido como checagem de
- * revisão explícita (ex.: UI de cadastro consulta antes de confirmar, ou listagem periódica).
- * `personData` aceita `legalName`, `birthOrFoundationDate` e opcionalmente `addresses` (mesmo
- * formato de payload de criação — primeiro item é usado).
+ * findWeakDuplicateCandidates — match fraco (livro §4: "nome semelhante + endereço/data de nascimento"). Consultado ANTES de criar
+ * (personDedupGate.js e POST /people/duplicates/check): no cadastro pela tela a criação exige a revisão confirmada; nas criações
+ * automáticas o par vai para a fila de revisão. `personData` aceita `legalName`, `birthOrFoundationDate` e o endereço em `addresses`
+ * (primeiro item) ou `address`, no formato do corpo de criação.
  */
 async function findWeakDuplicateCandidates(personData, transaction) {
   const nameKey = nameFirstLastTokens(personData.legalName);
   if (!nameKey) return [];
 
   const birthDate = personData.birthOrFoundationDate || null;
-  const address = Array.isArray(personData.addresses) ? personData.addresses[0] : null;
+  const address = Array.isArray(personData.addresses) ? personData.addresses[0] : personData.address || null;
   const addressKey = address ? normalizeAddressKeyForPerson(address) : null;
   if (!birthDate && !addressKey) return [];
 
@@ -149,47 +169,26 @@ async function findWeakDuplicateCandidates(personData, transaction) {
 }
 
 /**
- * listPotentialDuplicatePairs — versão "varredura" do mesmo critério de dedup acima, aplicada ao
- * tenant inteiro em vez de a um payload de criação. Serve a listagem de contatos, que sinaliza
- * cadastros suspeitos ("possível duplicata") e oferece o merge controlado (POST /people/:id/merge).
- *
- * Usa exclusivamente o **match médio** (critério 2 de findPotentialDuplicate): duas pessoas que
- * compartilham o mesmo contato primário (mesmo contact_type + value_normalized). O match forte
- * (mesmo tax_id_normalized) NÃO pode gerar par aqui: `UNIQUE(group_id, tax_id_normalized)` é uma
- * constraint do banco (TAB-0100), então duas pessoas com o mesmo CPF/CNPJ não conseguem coexistir.
- *
- * Pessoas já mescladas (status='MERGED') são ignoradas — o par já foi resolvido.
- *
- * Retorna: [{ contactType, value, personIds: [id, id, ...] }]
+ * listPotentialDuplicatePairs — varredura da empresa pelo match médio (a listagem de Pessoas sinaliza "possível duplicata" e oferece o
+ * merge controlado). Usa a MESMA chave normalizada do cadastro (e-mail em minúsculas e sem espaços; telefone com DDI, telefone e WhatsApp
+ * juntos) e qualquer contato, não só o principal. O forte não gera par: UNIQUE(group_id, tax_id_normalized) impede o mesmo CPF/CNPJ duas
+ * vezes. Mescladas e excluídas ficam de fora. Retorna [{ contactType, value, personIds }], com `value` = a chave comparada.
  */
 async function listPotentialDuplicatePairs(transaction) {
-  const contacts = await PersonContact.findAll({
-    where: { isPrimary: true },
-    transaction,
-  });
-
-  const byValue = new Map();
-  for (const contact of contacts) {
-    const key = `${contact.contactType}|${contact.valueNormalized}`;
-    if (!byValue.has(key)) byValue.set(key, []);
-    byValue.get(key).push(contact);
-  }
-
-  const pairs = [];
-  for (const [key, group] of byValue) {
-    const personIds = [...new Set(group.map((c) => c.personId))];
-    if (personIds.length < 2) continue;
-
-    // Descarta os já mesclados antes de decidir se ainda sobra um par de verdade.
-    const persons = await Person.findAll({ where: { id: personIds }, transaction });
-    const openIds = persons.filter((p) => p.status !== 'MERGED').map((p) => p.id);
-    if (openIds.length < 2) continue;
-
-    const [contactType, value] = key.split('|');
-    pairs.push({ contactType, value, personIds: openIds });
-  }
-
-  return pairs;
+  const { ddi } = await readDedupParams(await tenantOf(transaction), transaction);
+  const rows = await transaction.sequelize.query(
+    `SELECT ${kindSql('c')} AS kind, ${contactKeySql('c')} AS chave, array_agg(DISTINCT p.id::text) AS ids
+       FROM people.person_contacts c JOIN people.persons p ON p.id = c.person_id
+      WHERE c.deleted_at IS NULL AND p.deleted_at IS NULL AND p.status <> 'MERGED' AND c.value_normalized IS NOT NULL AND btrim(c.value_normalized) <> ''
+      GROUP BY 1, 2 HAVING count(DISTINCT p.id) > 1 ORDER BY 1, 2`,
+    { type: QueryTypes.SELECT, transaction, replacements: { ddi } }
+  );
+  return rows
+    .filter((r) => (r.kind === 'EMAIL' ? r.chave.includes('@') : r.chave.length >= 8 + ddi.length))
+    .map((r) => ({ contactType: r.kind === 'EMAIL' ? 'EMAIL' : 'PHONE', value: r.chave, personIds: [...r.ids].sort() }));
 }
 
-module.exports = { findPotentialDuplicate, listPotentialDuplicatePairs, findWeakDuplicateCandidates };
+module.exports = {
+  findPotentialDuplicate, findStrongInCompany, findMediumCandidates, taxIdInOtherCompany, contactInOtherCompany, listPotentialDuplicatePairs,
+  findWeakDuplicateCandidates, tenantOf,
+};

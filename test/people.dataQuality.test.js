@@ -7,6 +7,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
+const { randomCpf } = require('./helpers/pessoasVinculo');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const contactsService = require('../src/features/people/personContacts.service');
@@ -49,7 +50,7 @@ test('qualidade do cadastro: pessoa recém-criada (só nome) tem score baixo e l
 test('qualidade do cadastro: pessoa completa (exceto documento) pontua mais alto e documento some de missing depois de preenchido', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const taxIdNormalized = `22233344${suffix}`.slice(0, 11).padEnd(11, '1');
+    const taxIdNormalized = randomCpf(); // M3-01: CPF com dígito verificador certo
     const created = await peopleService.createPerson(
       { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Pessoa Score Completa ${suffix}`, taxIdNormalized },
       tenant.userId,

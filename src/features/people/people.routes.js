@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const peopleController = require('./people.controller');
 const personLinksController = require('./personLinks.controller');
+const personDedupController = require('./personDedup.controller');
 
 const peopleRouter = Router();
 
@@ -16,6 +17,9 @@ peopleRouter.get('/people', requirePermission('people:read'), peopleController.l
 peopleRouter.post('/people/links', requirePermission('people:link'), personLinksController.link);
 // Precisa vir ANTES de '/people/:id', senão "duplicates" seria capturado como um :id.
 peopleRouter.get('/people/duplicates', requirePermission('people:read'), peopleController.listDuplicates);
+// Consulta de duplicidade ANTES de criar (DI-M3PE-4) e catálogo de papéis da empresa (DI-M3PE-2).
+peopleRouter.post('/people/duplicates/check', requirePermission('people:create'), personDedupController.check);
+peopleRouter.get('/people/roles-catalog', requirePermission('people:read'), personDedupController.rolesCatalog);
 peopleRouter.get('/people/:id', requirePermission('people:read'), peopleController.getOne);
 peopleRouter.patch('/people/:id', requirePermission('people:update'), peopleController.update);
 peopleRouter.delete('/people/:id', requirePermission('people:delete'), peopleController.remove);

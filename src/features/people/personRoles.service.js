@@ -3,31 +3,26 @@
 const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PersonRole, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { sessionCompanyId } = require('./personView');
+const { sessionCompanyId, contextCompanyId } = require('./personView');
+const { readRoleCatalog } = require('./personRoles.settings');
 
-// Valores confirmados pelo Caderno (citação literal, lista aberta/não exaustiva): CLIENTE,
-// PROPRIETARIO, LOCATARIO, FORNECEDOR — mais CORRETOR, já usado no mock do frontend.
-//
-// COMPRADOR, FIADOR, COLABORADOR e LOCADOR foram adicionados depois: o próprio Caderno já
-// qualifica essa lista como "aberta/não exaustiva", então ampliar não fere a fonte — é
-// exatamente o que ela permite. COMPRADOR/FIADOR já eram usados pelo formulário do front
-// (lib/mock/people.js) sem existir no backend, rejeitados com PERSON_ROLE_VALIDATION.
-// COLABORADOR (pessoa que atua como equipe interna) e LOCADOR (proprietário que loca o
-// imóvel — papel comercial distinto de PROPRIETARIO no dia a dia da imobiliária) foram
-// pedidos por feedback direto da cliente: um contato pode acumular vários desses papéis ao
-// mesmo tempo (ex.: é PROPRIETARIO e também LOCADOR e também COLABORADOR), e o formulário
-// não oferecia opção nenhuma pra isso.
-const VALID_ROLES = [
-  'CLIENTE',
-  'PROPRIETARIO',
-  'LOCATARIO',
-  'FORNECEDOR',
-  'CORRETOR',
-  'COMPRADOR',
-  'FIADOR',
-  'COLABORADOR',
-  'LOCADOR',
-];
+// M3-02 / CRMX-002 (DI-M3PE-2): a lista de papéis aceitos é o catálogo configurável da empresa (personRoles.settings.js, parâmetro
+// `people.papeis`), com os cinco papéis do livro sempre presentes (cliente, proprietário, vendedor, locatário, fornecedor). Antes era uma
+// constante neste arquivo, sem VENDEDOR.
+
+/** Recusa (400 PERSON_ROLE_VALIDATION) o código que não está no catálogo vigente da empresa; devolve o código normalizado. */
+async function assertRoleInCatalog(roleCode, tenant, transaction) {
+  const normalized = String(roleCode || '').trim().toUpperCase();
+  const catalog = await readRoleCatalog(tenant, transaction);
+  if (!catalog.some((role) => role.code === normalized)) {
+    throw AppError.badRequest(
+      `O papel "${normalized || '(vazio)'}" não está no catálogo de papéis desta empresa. Papéis aceitos: ${catalog.map((r) => r.label).join(', ')}.`,
+      'PERSON_ROLE_VALIDATION',
+      { fields: [{ field: 'roleCode', message: 'Escolha um papel do catálogo.' }], aceitos: catalog.map((r) => r.code) }
+    );
+  }
+  return normalized;
+}
 
 async function assertPersonExists(personId, transaction) {
   const person = await Person.findByPk(personId, { transaction });
@@ -38,17 +33,12 @@ async function assertPersonExists(personId, transaction) {
 async function createRole(personId, payload, actorUserId, transaction) {
   const person = await assertPersonExists(personId, transaction);
   const { roleCode, startsAt, endsAt } = payload;
-  const normalizedRole = String(roleCode || '').toUpperCase();
-  if (!VALID_ROLES.includes(normalizedRole)) {
-    throw AppError.badRequest(
-      `O campo "roleCode" deve ser um de: ${VALID_ROLES.join(', ')}.`,
-      'PERSON_ROLE_VALIDATION'
-    );
-  }
+  const companyId = await sessionCompanyId(person, transaction); // DI-M9I-3: o dado é da empresa da sessão (vinculada ou responsável)
+  const normalizedRole = await assertRoleInCatalog(roleCode, { groupId: person.groupId, companyId }, transaction);
   return PersonRole.create(
     {
       groupId: person.groupId,
-      companyId: await sessionCompanyId(person, transaction), // DI-M9I-3: o dado é da empresa da sessão (vinculada ou responsável)
+      companyId,
       personId,
       roleCode: normalizedRole,
       startsAt: startsAt || null,
@@ -98,4 +88,10 @@ async function deleteRole(personId, roleId, actorUserId, transaction) {
   return { id: roleId };
 }
 
-module.exports = { createRole, listRoles, getRole, updateRole, deleteRole, VALID_ROLES };
+/** Catálogo de papéis da empresa da sessão (GET /people/roles-catalog): a tela de cadastro monta as opções a partir dele. */
+async function listRoleCatalog(tenant, transaction) {
+  const companyId = (await contextCompanyId(transaction)) || tenant.companyId;
+  return readRoleCatalog({ groupId: tenant.groupId, companyId }, transaction);
+}
+
+module.exports = { createRole, listRoles, getRole, updateRole, deleteRole, assertRoleInCatalog, listRoleCatalog };

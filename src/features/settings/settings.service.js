@@ -7,6 +7,7 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
 const { PEOPLE_LINK_SETTINGS_SCHEMA } = require('../people/personLink.settings');
+const { PEOPLE_M3PE_SETTINGS_SCHEMA } = require('../people/people.settings');
 const { runSettingGuard } = require('./settingGuards');
 const { isPlatformOnly } = require('./settingPlatform');
 const { assertMfaForSettingWrite } = require('./settingMfa');
@@ -221,6 +222,8 @@ const SETTINGS_SCHEMA = {
   ...GOVERNANCE_SETTINGS_SCHEMA,
   // Pessoas (DI-M9I-5): limite de tentativas de vínculo que não conferem por usuário e janela.
   ...PEOPLE_LINK_SETTINGS_SCHEMA,
+  // Pessoas (DI-M3PE-2/3/6): catálogo de papéis, deduplicação (DDI, motivo mínimo da exceção, contato no grupo) e cadastro por documento.
+  ...PEOPLE_M3PE_SETTINGS_SCHEMA,
   // Marco 9, M9-D003 — chave geral da NAY (ia.habilitada, padrão Desligado) e chave por agente (ai.agents.enabled).
   ...AI_SETTINGS_SCHEMA,
   // Marco 9, M9-D402 — Marketing: tetos de mensagem em massa e nomes dos perfis da concessão padrão.

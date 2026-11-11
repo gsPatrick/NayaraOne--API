@@ -12,6 +12,8 @@
 // propositalmente, já que a nota alimenta decisão de negócio (ex: priorizar cadastro incompleto
 // antes de publicar oferta) e precisa ser explicável.
 
+const { isValidTaxIdDigits } = require('./personDocumentFormat.service');
+
 const CHECKS = [
   { key: 'taxId', weight: 1, label: 'CPF/CNPJ informado', test: (p) => Boolean(p.taxIdNormalized) },
   { key: 'legalName', weight: 1, label: 'Nome/razão social informado', test: (p) => Boolean(p.legalName && p.legalName.trim()) },
@@ -42,6 +44,17 @@ const CHECKS = [
 ];
 
 /**
+ * Marcas de revisão (M3-01, DI-M3PE-1): cadastro antigo gravado com CPF/CNPJ de dígito verificador errado NÃO é apagado nem alterado; a
+ * ficha mostra a marca para alguém conferir o documento original, e a regra PERSON_TAX_ID_VALID (CRITICAL) da qualidade de cadastro da
+ * governança põe o cadastro na fila de revisão do steward. Não entra na nota (a nota mede completude).
+ */
+function revisaoDoCadastro(person) {
+  const digits = String((person && person.taxIdNormalized) || '').replace(/\D/g, '');
+  if (!digits) return [];
+  return isValidTaxIdDigits(digits) ? [] : [{ key: 'TAX_ID_DIGITO_INVALIDO', label: 'CPF/CNPJ com dígito verificador inválido: confira o documento original e corrija.' }];
+}
+
+/**
  * Pontuação determinística de completude do cadastro (0 a 100) + lista do que falta.
  * `person` deve vir com `contacts`/`addresses`/`documents`/`roles` carregados (mesmo shape de
  * PERSON_INCLUDE em person.service.js); campos ausentes são tratados como "não preenchido".
@@ -60,7 +73,8 @@ function scorePersonDataQuality(person) {
   return {
     score: Math.round((earned / totalWeight) * 100),
     missing,
+    revisao: revisaoDoCadastro(person),
   };
 }
 
-module.exports = { scorePersonDataQuality };
+module.exports = { scorePersonDataQuality, revisaoDoCadastro };
