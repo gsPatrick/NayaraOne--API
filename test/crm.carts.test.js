@@ -58,7 +58,7 @@ test('carts.service: cria carrinho versionado, gera link público sanitizado e r
   const personService = require('../src/features/people/person.service');
   const propertiesService = require('../src/features/properties/properties.service');
   const propertyOccurrencesService = require('../src/features/properties/propertyInternalOccurrences.service');
-  const { OutboxEvent, Cart, CartVersion, CartShareRouting } = require('../src/models');
+  const { OutboxEvent, Cart, CartShareRouting } = require('../src/models');
 
   // ATENÇÃO (correção pós-entrega): o endpoint público (getPublicCartByToken/
   // recordPublicCartClick) resolve o tenant via CartShareRouting SEM contexto de transação —
@@ -136,11 +136,11 @@ test('carts.service: cria carrinho versionado, gera link público sanitizado e r
     // precisam ser apagados explicitamente para não sujar o banco de dev compartilhado.
     // CartShareRouting não tem RLS (ver carts.service.js); Cart/CartVersion/OutboxEvent têm, e
     // por isso precisam de uma transação com tenant setado para o DELETE ser permitido.
+    // Marco 3 §14 (verificação de 11/11/2026): view/click agora ficam no rastreio append-only crm.cart_events, que referencia o
+    // carrinho — o carrinho não é mais apagado na limpeza: o link é desfeito e o carrinho fica REVOKED (banco descartável).
     await CartShareRouting.destroy({ where: { cartId } });
     await withTenantTransaction(tenant, async (transaction) => {
-      await OutboxEvent.destroy({ where: { aggregateId: cartId }, transaction });
-      await CartVersion.destroy({ where: { cartId }, transaction });
-      await Cart.destroy({ where: { id: cartId }, transaction });
+      await Cart.update({ status: 'REVOKED' }, { where: { id: cartId }, transaction });
     });
   }
 });
