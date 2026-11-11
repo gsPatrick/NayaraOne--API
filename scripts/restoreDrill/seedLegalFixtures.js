@@ -49,7 +49,7 @@ function parseArgs(argv) {
   return out;
 }
 
-const { sequelize, Group, Company, User } = require('../../src/models');
+const { sequelize, Group, Company, User, UserMembership } = require('../../src/models');
 const guaranteesService = require('../../src/modules/legal/leasing/guarantee.service');
 const filesService = require('../../src/features/files/files.service');
 const peopleService = require('../../src/features/people/people.service');
@@ -380,6 +380,9 @@ async function main() {
   const admin = await User.findOne({ where: { email: 'admin@nayaraone.dev' } });
   const tenantA = { groupId: group.id, companyId: company.id, userId: admin.id };
   const approver = await User.create({ name: 'DRILL Aprovador', email: `drill-approver-${Date.now()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' });
+  // Escalonamento do processo e aprovador precisam ter vínculo ativo com a empresa (regra do Marco 5: responsável e
+  // escalonamento de outra empresa são recusados — achado do pentest).
+  await inTenant(tenantA, (t) => UserMembership.create({ userId: approver.id, groupId: tenantA.groupId, companyId: tenantA.companyId, status: 'ACTIVE' }, { transaction: t }));
 
   const a = await seedTenantA(tenantA, approver.id);
   const bankPayment = await seedConfirmedBankPayment(tenantA, approver.id);
