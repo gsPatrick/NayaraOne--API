@@ -19,7 +19,7 @@ const { financeProjection } = require('./financeProjection.services');
 function buildToolServices(transaction, scope = {}, { includeWrite = false } = {}) {
   const services = {
     crmOpportunities: crmOpportunities(transaction, scope),
-    crmCustomers: crmCustomers(transaction),
+    crmCustomers: crmCustomers(transaction, scope),
     radarMatches: radarMatches(transaction, scope),
     financeHealth: financeHealth(transaction),
     constructionProjects: constructionProjects(transaction),
