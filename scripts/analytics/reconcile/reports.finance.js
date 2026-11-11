@@ -23,6 +23,10 @@ async function report({ ctx, now, transaction }) {
 }
 
 const brl = (n) => money.money(String(n));
+// M4LR (DI-M4LR-7): o "caixa disponível" do relatório passou a ser o CONCILIADO próprio (Caderno §19). O KPI do BI fin.free_cash é a
+// conta do extrato inteiro menos o dinheiro de terceiros retido; a referência dele segue essa mesma conta, com as partes que o relatório
+// devolve (extrato importado e terceiros retidos pelo ledger, cada recebimento uma vez).
+const extractMinusThirdParty = (r) => money.toString(money.sub(brl(r.freeCash.grossBankBalance), brl(r.freeCash.thirdPartyHeld)));
 const pick = (label, read) => async (args) => ({ value: brl(read(await report(args))), label: `${SOURCE}: ${label}` });
 
 /** Parcelas de comissão sem lançamento a pagar: o componente da necessidade que o relatório de saúde não traz (vem do detalhe do componente no snapshot). */
@@ -34,7 +38,7 @@ async function commissionsUnlinked({ ctx, snapshot, asOfDate, transaction }) {
 
 const breathingNeed = async (args) => {
   const r = await report(args);
-  const gross = money.sub(money.sum([brl(r.overdue.payable.total), brl(r.dueNext30Days.payable.total), await commissionsUnlinked(args)]), brl(r.freeCash.value));
+  const gross = money.sub(money.sum([brl(r.overdue.payable.total), brl(r.dueNext30Days.payable.total), await commissionsUnlinked(args)]), extractMinusThirdParty(r));
   return { value: money.cmp(gross, 0) > 0 ? money.money(gross) : money.money(0), label: `${SOURCE}: vencidas + a pagar em 30 dias + comissões sem lançamento - caixa livre` };
 };
 
@@ -45,7 +49,7 @@ const windowReports = Object.fromEntries(Object.entries(WINDOWS).flatMap(([days,
 ]));
 
 const FINANCE_REPORTS = Object.freeze({
-  'fin.free_cash': pick('caixa livre (saldo do extrato menos dinheiro de terceiros retido)', (r) => r.freeCash.value),
+  'fin.free_cash': pick('caixa livre (saldo do extrato menos dinheiro de terceiros retido)', (r) => extractMinusThirdParty(r)),
   'fin.third_party_cash': pick('dinheiro de terceiros retido em caixa', (r) => r.freeCash.thirdPartyHeld),
   'fin.overdue_payables': pick('contas a pagar vencidas', (r) => r.overdue.payable.total),
   'fin.overdue_receivables': pick('contas a receber vencidas', (r) => r.overdue.receivable.total),

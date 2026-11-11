@@ -10,10 +10,10 @@ async function financeEntry({ id, transaction, itemsMax }) {
   const [intents] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.payment_intents WHERE financial_entry_id = :id AND status NOT IN ('CANCELLED')`, { id });
   const [kids] = await rows(transaction, `SELECT COUNT(*)::int AS n, ${centsSql('amount')} AS cents FROM finance.financial_entries WHERE (third_party_origin_entry_id = :id OR parent_entry_id = :id) AND status NOT IN ('REVERSED','CANCELLED')`, { id });
   // M4LR (Caderno §6): o valor que volta é o REALIZADO — baixas parciais menos os estornos delas, ou o movimento menos estornos
-  // parciais; previsto não realizado não devolve nada (o estorno só anula o previsto, sem ledger).
+  // parciais; previsto não realizado: o valor que sai de a pagar/a receber (o estorno só anula o previsto, sem ledger).
   const [realized] = await rows(transaction, `SELECT ${centsSql(`CASE WHEN finance.entry_has_settlement_children(e.id) THEN finance.entry_realized_by_children(e.id)
       WHEN e.status = 'SETTLED' AND e.settled_at IS NOT NULL THEN e.amount - COALESCE((SELECT SUM(x.amount) FROM finance.financial_entries x WHERE x.reversal_of_entry_id = e.id), 0)
-      ELSE 0 END`)} AS cents FROM finance.financial_entries e WHERE e.id = :id`, { id });
+      ELSE e.amount END`)} AS cents FROM finance.financial_entries e WHERE e.id = :id`, { id });
   const blockers = [];
   if (e.status === 'REVERSED') blockers.push(blocker('ENTRY_ALREADY_REVERSED', 'o lançamento já foi estornado'));
   if (e.status === 'CANCELLED') blockers.push(blocker('ENTRY_CANCELLED', 'o lançamento está cancelado e não pode ser estornado'));

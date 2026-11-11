@@ -26,8 +26,9 @@ async function seedMargin(e, t, { withoutCenter = null } = {}) {
   await entry(e, t, { nature: 'RECEIVABLE', amount: '6666.00', center: CENTER.vendas, month: '2026-09' });
   await entry(e, t, { nature: 'PAYABLE', amount: '5555.00', center: CENTER.vendas, reversalOf: ledger.uuid() });
   if (withoutCenter) {
-    await entry(e, t, { nature: 'RECEIVABLE', amount: withoutCenter.revenue, center: null });
-    await entry(e, t, { nature: 'PAYABLE', amount: withoutCenter.cost, center: null });
+    // Caderno M4 §7 (CHECK amount > 0, M4LR): lançamento de valor zero não existe — "custo 0" é a ausência do lançamento.
+    if (Number(withoutCenter.revenue) > 0) await entry(e, t, { nature: 'RECEIVABLE', amount: withoutCenter.revenue, center: null });
+    if (Number(withoutCenter.cost) > 0) await entry(e, t, { nature: 'PAYABLE', amount: withoutCenter.cost, center: null });
   }
 }
 
