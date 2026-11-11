@@ -59,6 +59,7 @@ function buildPropertyPrompt(approved) {
 }
 
 /** Texto da fonte (o que o modelo lê e o que o aterramento confere): "rótulo: valor" por fato. */
-const factsText = (approved) => `Fatos públicos aprovados do imóvel ${approved.publicCode}. ${approved.facts.map((f) => `${f.label}: ${f.value}`).join('. ')}${approved.facts.length ? '.' : 'Nenhum atributo público preenchido.'}`;
+// O código público não encosta em pontuação (o aterramento lê "IMV-X." como outro identificador).
+const factsText = (approved) => `Fatos públicos aprovados do imóvel ${approved.publicCode} : ${approved.facts.length ? `${approved.facts.map((f) => `${f.label}: ${f.value}`).join('. ')}.` : 'nenhum atributo público preenchido.'}`;
 
 module.exports = { onlyApprovedPublicFacts, loadApprovedFacts, buildPropertyPrompt, factsText, INSTRUCTION };
