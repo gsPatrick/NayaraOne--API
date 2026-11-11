@@ -2443,12 +2443,20 @@
    "updated_by"
   ],
   "finance.approval_requests": [
+   "amount",
    "created_by",
    "lock_version_at_request",
+   "payload_json",
+   "reason",
    "related_entity_id",
    "related_entity_type",
    "requested_by_user_id",
+   "required_approvals",
    "risk_level",
+   "risk_source",
+   "rule_version_id",
+   "snapshot_hash",
+   "snapshot_json",
    "status",
    "updated_by"
   ],
@@ -2753,6 +2761,7 @@
    "utility_obligation_id"
   ],
   "finance.payment_intents": [
+   "amount",
    "approval_request_id",
    "approved_at",
    "approved_by_user_id",
@@ -2768,6 +2777,7 @@
    "failure_reason",
    "financial_entry_id",
    "idempotency_key",
+   "installment_number",
    "last_reconciled_at",
    "payment_method",
    "reconciled_at",
@@ -2776,6 +2786,7 @@
    "snapshot_hash",
    "snapshot_json",
    "status",
+   "submission_phase",
    "submitted_at",
    "uncertain_since",
    "updated_by"
