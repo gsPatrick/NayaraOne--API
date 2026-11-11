@@ -213,7 +213,7 @@ test('mergePersons: duas pessoas genuinamente duplicadas (mesmo telefone e mesmo
 
     const result = await mergePersons(canonical.id, absorbed.id, tenant.userId, transaction);
     assert.equal(result.status, 'MERGED');
-    assert.equal(result.remappedReferences['people.person_addresses'], 1);
+    assert.equal(result.remappedReferences['people.person_addresses.person_id'], 1); // chave = tabela.coluna (DI-M3PE-5)
 
     const canonicalCurrentAddresses = await PersonAddress.findAll({
       where: { personId: canonical.id, isCurrent: true },
