@@ -17,9 +17,10 @@ const RM = Object.freeze(Object.fromEntries(DEFINITIONS.map((d) => [d.metricCode
 const NO_RESTRICTION = { sql: 'TRUE', replacements: {} };
 const windowOf = (filter) => (filter.equals || {}).tecWindow;
 
-/** Última janela fechada de cada connection ATIVA na janela configurada; sem o marcador (consulta bruta da prova da M9-D712) a origem é a tabela inteira da empresa. */
+/** Última janela FECHADA (DI-BI-5) de cada connection ATIVA na janela configurada; sem o marcador (consulta bruta da prova da M9-D712) a origem é a tabela inteira da empresa. */
 const lastActiveWindow = (filter) => (windowOf(filter) === undefined ? NO_RESTRICTION : {
-  sql: `(t."window_minutes" = :tecWindow AND t."window_start" = (SELECT max(h."window_start") FROM integration.provider_health h WHERE h."connection_id" = t."connection_id" AND h."window_minutes" = t."window_minutes")
+  sql: `(t."window_minutes" = :tecWindow AND t."window_start" = (SELECT max(h."window_start") FROM integration.provider_health h WHERE h."connection_id" = t."connection_id" AND h."window_minutes" = t."window_minutes"
+      AND h."window_start" + make_interval(mins => h."window_minutes") <= now())
     AND EXISTS (SELECT 1 FROM integration.connections c WHERE c."id" = t."connection_id" AND c."company_id" = t."company_id" AND c."status" = 'ACTIVE'))`,
   replacements: { tecWindow: windowOf(filter) },
 });

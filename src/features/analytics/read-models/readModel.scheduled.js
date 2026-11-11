@@ -56,11 +56,15 @@ async function refreshModel(def, scope, params, now, transaction) {
   return { readModel: def.name, rows, refreshId: done.id };
 }
 
-/** Passada agendada da empresa (já com o contexto de tenant na transação). Devolve o resumo por read model. */
-async function refreshCompanyScheduled(scope, params, transaction, { now = clock.now() } = {}) {
+/**
+ * Passada agendada da empresa (já com o contexto de tenant na transação). Devolve o resumo por read model. DI-BI-3: `cadence` restringe aos read models que têm agenda
+ * própria (`ownCadence`, ex.: 'tech', recalculados pelo job deles) e `skipOwnCadence` os deixa de fora (a agenda geral não disputa a trava do agregado com o job próprio).
+ */
+async function refreshCompanyScheduled(scope, params, transaction, { now = clock.now(), cadence = null, skipOwnCadence = false } = {}) {
   await enableAnalyticsWriter(transaction);
   const out = [];
-  for (const def of listReadModels()) {
+  const selected = listReadModels().filter((def) => (cadence ? def.ownCadence === cadence : !(skipOwnCadence && def.ownCadence)));
+  for (const def of selected) {
     const r = await refreshModel(def, scope, params, now, transaction);
     if (r) out.push(r);
   }
