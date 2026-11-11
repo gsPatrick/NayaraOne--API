@@ -101,7 +101,7 @@ test('m9d802 VISIT: visita agendada, reagendada, concluída e cancelada na orige
 });
 
 test('m9d802 LEGAL_DEADLINE: prazo criado, alterado, concluído e reaberto pelo serviço do Jurídico', { skip: skip() }, async () => {
-  const deadlines = require('../../../src/features/legal/legalDeadlines.service');
+  const deadlines = require('../../../src/modules/legal/cases/deadline.service');
   await run(async (tx) => {
     const lc = await origin.legalCase(T(), tx);
     const deadline = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', sourceFileId: await require('../../helpers/prazoOrigem').origemNaTransacao(T(), tx), responsibleUserId: T().userId }, T().userId, tx);
@@ -141,7 +141,7 @@ test('m9d802 RENEWAL (apólice): tarefa criada, concluída e cancelada na origem
 });
 
 test('m9d802 RENEWAL (contrato): término do contrato projetado e fechado ao encerrar', { skip: skip() }, async () => {
-  const { publishContractRenewalChange } = require('../../../src/features/legal/legalDeadlineCalendarEvents.service');
+  const { publishContractRenewalChange } = require('../../../src/modules/legal/cases/legalDeadlineCalendarEvents.service');
   const { leaseContract } = env;
   await run(async (tx) => {
     const contract = await leaseContract(T(), tx);

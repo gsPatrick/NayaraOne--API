@@ -16,15 +16,15 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../src/features/legal/contractTemplates.service');
-const contractAmendmentsService = require('../src/features/legal/contractAmendments.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
+const contractAmendmentsService = require('../src/modules/legal/contracts/application/contractAmendments.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
 const { File, ContractClause, ContractAmendment, Notification, LegalDeadline, OutboxEvent } = require('../src/models');
 

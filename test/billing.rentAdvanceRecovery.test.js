@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { Op } = require('sequelize');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const rentAdvanceService = require('../src/features/billing/rentAdvance.service');
 const guaranteedRentService = require('../src/features/billing/guaranteedRent.service');
 const AppError = require('../src/utils/AppError');

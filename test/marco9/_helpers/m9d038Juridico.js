@@ -2,11 +2,11 @@
 
 // Fábricas jurídicas dos testes da NAY Jurídica (M9-D038): contrato com duas versões, requisitos, processo e prazo, pelos serviços de
 // aplicação do Marco 5, na transação do teste (rollback). `semVersao` cria o contrato sem nenhuma versão (prazo sem fonte exata).
-const contractsService = require('../../../src/features/legal/contracts.service');
-const contractVersionsService = require('../../../src/features/legal/contractVersions.service');
-const requirementsService = require('../../../src/features/legal/requirements.service');
-const legalCasesService = require('../../../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../../../src/features/legal/legalDeadlines.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
+const requirementsService = require('../../../src/modules/legal/contracts/application/requirement.service');
+const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../../../src/modules/legal/cases/deadline.service');
 const { ContractRequirement } = require('../../../src/models');
 const { uniqueSuffix } = require('../../testHelpers');
 const { origemNaTransacao } = require('../../helpers/prazoOrigem');

@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 const { getSeedTenant, withTenantTransaction } = require('./testHelpers');
 const { prepararOrigem } = require('./helpers/prazoOrigem');
 const { sequelize, newUser, concludedCriticalWithoutCaseResponsible: setup } = require('./legal.deadlineFinalState.helpers');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { LegalDeadline, AuditLog } = require('../src/models');
 const { createRaceLog } = require('./legal.raceSessionLog.helpers');
 

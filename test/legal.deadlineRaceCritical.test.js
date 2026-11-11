@@ -11,8 +11,8 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { LegalDeadline, LegalCase } = require('../src/models');
 const { createRaceLog } = require('./legal.raceSessionLog.helpers');
 

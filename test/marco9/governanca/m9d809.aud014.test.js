@@ -6,7 +6,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d802Env');
 const { locacaoAtiva } = require('../_helpers/m9d809Lease');
-const guaranteesService = require('../../../src/features/legal/guarantees.service');
+const guaranteesService = require('../../../src/modules/legal/leasing/guarantee.service');
 const { Guarantee } = require('../../../src/models');
 
 require('../../../src/features/core-governance'); // carrega o módulo como em produção: registra o projetor no outbox

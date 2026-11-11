@@ -3,8 +3,8 @@
 // Apoio dos testes do fechamento do Marco 5, área Jurídico (não é teste): usuário, processo, prazo e arquivo fictícios.
 const crypto = require('node:crypto');
 const { uniqueSuffix } = require('./testHelpers');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { File, User, UserMembership, OutboxEvent } = require('../src/models');
 const { origemNaTransacao } = require('./helpers/prazoOrigem');
 

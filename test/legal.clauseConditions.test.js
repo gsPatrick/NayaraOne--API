@@ -12,11 +12,11 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../src/features/legal/contractTemplates.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const { evaluateCondition, validateCondition } = require('../src/features/legal/clauseConditions');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const { evaluateCondition, validateCondition } = require('../src/modules/legal/contracts/application/clauseConditions');
 const { User, File } = require('../src/models');
 
 let tenant;
@@ -256,7 +256,7 @@ test('F01: mudar a condição cria nova versão; a versão anterior e o document
       tenant.userId,
       transaction
     );
-    await require('../src/features/legal/guarantees.service').createGuarantee(
+    await require('../src/modules/legal/leasing/guarantee.service').createGuarantee(
       contract.id,
       await require('./m5fech.locacao.helpers').completeGuarantor(tenant, transaction, guarantor.id),
       tenant.userId,

@@ -11,10 +11,10 @@ const crypto = require('node:crypto');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const { newCase, fakeFile, sha256 } = require('./m5fech.juridico.helpers');
 const filesService = require('../src/features/files/files.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const legalHoldGuard = require('../src/features/core-governance/data-quality/legalHold.guard');
-const legalRouter = require('../src/features/legal/legal.routes');
+const legalRouter = require('../src/modules/legal/shared/legal.routes');
 const { AuditLog, EvidencePackageAccessLog, File } = require('../src/models');
 
 let tenant;
@@ -111,8 +111,8 @@ test('JR sem exclusão destrutiva: a API jurídica não tem rota DELETE de proce
     if (layer.route && layer.route.methods.delete) deletes.push(layer.route.path);
   }
   assert.deepEqual(deletes, ['/legal/guarantees/:id'], 'só a garantia (fora da lista do JUR-011 e guardada pela retenção legal) tem DELETE');
-  for (const file of ['legalCases', 'legalDeadlines', 'evidencePackages', 'contracts', 'signatures', 'inspections', 'contractVersions', 'legalCaseDocuments']) {
-    const service = require(`../src/features/legal/${file}.service`);
+  for (const file of ['cases/legal-case', 'cases/deadline', 'cases/evidence-package', 'contracts/application/contract', 'signatures/signature', 'inspections/inspection', 'contracts/application/contractVersions', 'cases/legalCaseDocuments']) {
+    const service = require(`../src/modules/legal/${file}.service`);
     const destructive = Object.keys(service).filter((name) => /^(delete|remove|destroy|purge)/i.test(name));
     assert.deepEqual(destructive, [], `${file}.service exporta exclusão: ${destructive.join(', ')}`);
   }

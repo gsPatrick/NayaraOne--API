@@ -85,7 +85,7 @@ test('Guia §4 assertEditableState: contrato assinado não recebe versão e o ba
 
 test('JUR-001: a partir de APPROVED valor, vigência, imóvel e número não são reescritos — a correção é por aditivo', async (t) => {
   if (pular) return t.skip(pular);
-  const contractsService = require('../src/features/legal/contracts.service');
+  const contractsService = require('../src/modules/legal/contracts/application/contract.service');
   const c = await h.contratoEmRevisao('A:gestor');
   const mfa = await h.http('A:gestor', 'PATCH', `/legal/contracts/${c.contractId}/correct`, { reason: 'tentativa', totalValue: 9999 });
   assert.equal(mfa.code, 'MFA_REQUIRED_NOT_ENABLED', 'a rota de correção continua exigindo MFA');

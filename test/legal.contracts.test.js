@@ -6,10 +6,10 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const personContactsService = require('../src/features/people/personContacts.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const signaturesService = require('../src/features/legal/signatures.service');
-const requirementsService = require('../src/features/legal/requirements.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
+const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
 const AppError = require('../src/utils/AppError');
 const { File, TenantSetting, OutboxEvent } = require('../src/models');
 
@@ -278,7 +278,7 @@ test('máquina de estados: TERMINATED -> CLOSED (closeContract)', async () => {
 
 test('máquina de estados: terminateContract é bloqueado com garantia ACTIVE pendente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
     const contract = await createLeaseWithParties(transaction);
     contract.status = 'ACTIVE';
     await contract.save({ transaction });

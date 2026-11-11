@@ -4,10 +4,10 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractAmendmentsService = require('../src/features/legal/contractAmendments.service');
-const noticesService = require('../src/features/legal/notices.service');
-const contractTimelineService = require('../src/features/legal/contractTimeline.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractAmendmentsService = require('../src/modules/legal/contracts/application/contractAmendments.service');
+const noticesService = require('../src/modules/legal/contracts/application/notices.service');
+const contractTimelineService = require('../src/modules/legal/contracts/application/contractTimeline.service');
 const { CollectionCase, BillingSchedule } = require('../src/models');
 
 let tenant;
@@ -84,7 +84,7 @@ test('AUD-017: getContractTimeline reúne aditivo, notificação e inadimplênci
       transaction
     );
     // Matriz M5 (§13): o aditivo referencia a versão base do contrato.
-    await require('../src/features/legal/contractVersions.service').createContractVersion(contract.id, { content: `Contrato base ${uniqueSuffix()}`, requireDocument: false }, tenant.userId, transaction);
+    await require('../src/modules/legal/contracts/application/contractVersions.service').createContractVersion(contract.id, { content: `Contrato base ${uniqueSuffix()}`, requireDocument: false }, tenant.userId, transaction);
 
     const amendment = await contractAmendmentsService.createAmendment(
       contract.id,

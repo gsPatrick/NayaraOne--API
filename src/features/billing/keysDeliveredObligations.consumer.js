@@ -28,7 +28,7 @@ function addDays(ymd, days) {
 
 async function startLeaseObligationsOnKeysDelivered(event, transaction) {
   const payload = event.payload || event.payloadJson || {};
-  const { isLeaseLikeContractType } = require('../legal/contracts.service');
+  const { isLeaseLikeContractType } = require('../../modules/legal/contracts/application/contract.service');
   const contract = payload.contractId ? await Contract.findByPk(payload.contractId, { transaction }) : null;
   if (!contract || !isLeaseLikeContractType(contract.contractType)) return { started: 0, deadlines: 0, skipped: true };
   const delivery = payload.id ? await KeyDelivery.findByPk(payload.id, { transaction }) : null;

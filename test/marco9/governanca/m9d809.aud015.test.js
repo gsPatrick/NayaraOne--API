@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { clone, lint, rulesOf } = require('../_helpers/m9d840Contracts');
 const { operacaoDoContrato } = require('../_helpers/m9d809Http');
-const { CONTRACT_TYPES } = require('../../../src/features/legal/contracts.service');
+const { CONTRACT_TYPES } = require('../../../src/modules/legal/contracts/application/contract.service');
 
 const DOZE = ['SALE', 'SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS', 'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL', 'PROPERTY_ADMIN', 'SERVICE', 'CONSTRUCTION'];
 

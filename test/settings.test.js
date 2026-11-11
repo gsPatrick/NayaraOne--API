@@ -6,7 +6,7 @@ const { authenticator } = require('otplib');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const settingsService = require('../src/features/settings/settings.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const mfaService = require('../src/features/users/mfa.service');

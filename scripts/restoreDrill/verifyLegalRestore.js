@@ -318,7 +318,7 @@ async function main() {
 
 async function verifyExportAndPermissions(A, B, targetSuper) {
   const { sequelize } = require('../../src/models');
-  const evidencePackagesService = require('../../src/features/legal/evidencePackages.service');
+  const evidencePackagesService = require('../../src/modules/legal/cases/evidence-package.service');
   const filesService = require('../../src/features/files/files.service');
 
   async function inTenant(tenant, fn) {

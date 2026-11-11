@@ -1,7 +1,7 @@
 'use strict';
 
 const { sequelize, Group, Company, Guarantee, LegalCase, Notification, Contract, Task } = require('../../models');
-const { publishGuaranteeExpiring } = require('../../features/legal/legalEvents.service');
+const { publishGuaranteeExpiring } = require('../../modules/legal/shared/legalEvents.service');
 const { getSetting } = require('../../features/settings/settings.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 

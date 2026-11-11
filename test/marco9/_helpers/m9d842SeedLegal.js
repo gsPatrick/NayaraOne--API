@@ -3,7 +3,7 @@
 // Dados de partida do Jurídico para o contract test (M9-D842, não é teste): vistoria com um item e um arquivo para anexar. Banco descartável.
 const { withTenantTransaction } = require('../../testHelpers');
 const propertiesService = require('../../../src/features/properties/properties.service');
-const inspectionsService = require('../../../src/features/legal/inspections.service');
+const inspectionsService = require('../../../src/modules/legal/inspections/inspection.service');
 const { File } = require('../../../src/models');
 
 const suffix = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;

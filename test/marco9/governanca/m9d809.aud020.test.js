@@ -7,11 +7,11 @@ const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d802Env');
 const origin = require('../_helpers/m9d802Origins');
 const { locacaoAtiva } = require('../_helpers/m9d809Lease');
-const guaranteesService = require('../../../src/features/legal/guarantees.service');
-const keyDeliveriesService = require('../../../src/features/legal/keyDeliveries.service');
-const deadlines = require('../../../src/features/legal/legalDeadlines.service');
+const guaranteesService = require('../../../src/modules/legal/leasing/guarantee.service');
+const keyDeliveriesService = require('../../../src/modules/legal/leasing/key-delivery.service');
+const deadlines = require('../../../src/modules/legal/cases/deadline.service');
 const { origemNaTransacao } = require('../../helpers/prazoOrigem');
-const { publishContractRenewalChange } = require('../../../src/features/legal/legalDeadlineCalendarEvents.service');
+const { publishContractRenewalChange } = require('../../../src/modules/legal/cases/legalDeadlineCalendarEvents.service');
 const { OutboxEvent } = require('../../../src/models');
 const locacaoHelpers = require('../../m5fech.locacao.helpers');
 

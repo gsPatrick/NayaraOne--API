@@ -17,7 +17,7 @@ const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.ser
 const RENT_ADVANCE_COST_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const RENT_ADVANCE_RESULT_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const { publishAdvanceCompleted } = require('./billingEvents.service');
-const { isLeaseLikeContractType } = require('../legal/contracts.service');
+const { isLeaseLikeContractType } = require('../../modules/legal/contracts/application/contract.service');
 
 // M45: descrição do lançamento mostra o NÚMERO do contrato (visível ao usuário), nunca o UUID.
 async function contractRef(contractId, transaction) {

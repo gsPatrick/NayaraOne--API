@@ -4,8 +4,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
-const requirementsService = require('../src/features/legal/requirements.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
 const AppError = require('../src/utils/AppError');
 
 let tenant;

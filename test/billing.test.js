@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const rentAdjustmentService = require('../src/features/billing/rentAdjustment.service');
@@ -413,7 +413,7 @@ test('billing: closeout sem pendências avança o contrato ACTIVE até CLOSED', 
 // (antes o financeiro concluía e só o jurídico ficava bloqueado: dois gates diferentes).
 test('billing: closeout bloqueado por garantia ACTIVE pendente (gate único de encerramento)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
     const contract = await createLeaseContract(transaction);
     await activateContract(contract, transaction);
     await guaranteesService.createGuarantee(

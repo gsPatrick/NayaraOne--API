@@ -1,12 +1,12 @@
 'use strict';
 
 const { Contract } = require('../../models');
-const { collectContractClosurePendencies, PENDENCY_LABELS } = require('../legal/contractClosureGate');
+const { collectContractClosurePendencies, PENDENCY_LABELS } = require('../../modules/legal/contracts/domain/contractClosureGate');
 const AppError = require('../../utils/AppError');
 const { UUID_RE } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishCloseoutBlocked, publishCloseoutCompleted } = require('./billingEvents.service');
-const contractsService = require('../legal/contracts.service');
+const contractsService = require('../../modules/legal/contracts/application/contract.service');
 
 /**
  * checkCloseoutEligibility — Frente 5: delega ao GATE ÚNICO de encerramento

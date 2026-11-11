@@ -1,7 +1,7 @@
 'use strict';
 
 const { LegalDeadline } = require('../../../../../models');
-const { createLegalDeadline, updateLegalDeadline } = require('../../../../legal/legalDeadlines.service');
+const { createLegalDeadline, updateLegalDeadline } = require('../../../../../modules/legal/cases/deadline.service');
 const { resolveRef } = require('../refs');
 const { parseOccurredAt } = require('../../bcp.time');
 const { commandRejected } = require('../../bcp.errors');

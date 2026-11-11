@@ -9,10 +9,10 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestResultCenter } = require('./testHelpers');
 const { newCase, fakeFile } = require('./m5fech.juridico.helpers');
-const noticesService = require('../src/features/legal/notices.service');
-const noticeVersions = require('../src/features/legal/noticeVersions.service');
-const receivables = require('../src/features/legal/legalCaseReceivables.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
+const noticesService = require('../src/modules/legal/contracts/application/notices.service');
+const noticeVersions = require('../src/modules/legal/contracts/application/noticeVersions.service');
+const receivables = require('../src/modules/legal/cases/legalCaseReceivables.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
 const { FinancialEntry } = require('../src/models');
 
 let tenant;

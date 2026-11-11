@@ -14,8 +14,8 @@ const app = require('../app'); // eslint-disable-line no-unused-vars
 const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix, createTestResultCenter } = require('./testHelpers');
 const { newUser, newCase, newDeadline, fakeFile } = require('./m5fech.juridico.helpers');
 const peopleService = require('../src/features/people/people.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
-const noticesService = require('../src/features/legal/notices.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
+const noticesService = require('../src/modules/legal/contracts/application/notices.service');
 const { signAccessToken } = require('../src/utils/jwt');
 const { EvidencePackageAccessLog, LegalDeadline } = require('../src/models');
 

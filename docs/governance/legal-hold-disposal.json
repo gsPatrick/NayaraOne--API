@@ -9,7 +9,7 @@
     { "route": "DELETE /properties/:id/owners/:ownerId", "guard": "guarded", "file": "src/features/properties/propertyOwners.service.js", "call": "assertNotOnHold('PROPERTY'", "type": "PROPERTY" },
     { "route": "DELETE /properties/:id/media/:mediaId", "guard": "guarded", "file": "src/features/properties/propertyMedia.service.js", "call": "assertNotOnHold('PROPERTY'", "type": "PROPERTY" },
     { "route": "DELETE /properties/:id/documents/:documentId", "guard": "guarded", "file": "src/features/properties/propertyDocuments.service.js", "call": "assertNotOnHold('PROPERTY'", "type": "PROPERTY" },
-    { "route": "DELETE /legal/guarantees/:id", "guard": "guarded", "file": "src/features/legal/guarantees.service.js", "call": "assertNotOnHold('CONTRACT'", "type": "CONTRACT" },
+    { "route": "DELETE /legal/guarantees/:id", "guard": "guarded", "file": "src/modules/legal/leasing/guarantee.service.js", "call": "assertNotOnHold('CONTRACT'", "type": "CONTRACT" },
     { "route": "DELETE /companies/:id", "guard": "guarded", "file": "src/features/companies/companies.service.js", "call": "assertCompanyNotOnHold", "type": "COMPANY" },
     { "route": "DELETE /groups/:id", "guard": "guarded", "file": "src/features/groups/groups.service.js", "call": "assertGroupNotOnHold", "type": "COMPANY" },
     { "route": "DELETE /calendar/items/:id", "guard": "exempt", "reason": "A rota só responde 404: itens do calendário são derivados e não se apagam." },

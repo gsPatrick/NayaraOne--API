@@ -30,7 +30,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env.migration.l
 const { Client } = require('pg');
 const { sequelize, User } = require('../src/models');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 
 const APPLY = process.argv.includes('--apply');
 

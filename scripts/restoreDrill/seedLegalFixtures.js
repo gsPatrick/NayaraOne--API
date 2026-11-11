@@ -50,20 +50,20 @@ function parseArgs(argv) {
 }
 
 const { sequelize, Group, Company, User } = require('../../src/models');
-const guaranteesService = require('../../src/features/legal/guarantees.service');
+const guaranteesService = require('../../src/modules/legal/leasing/guarantee.service');
 const filesService = require('../../src/features/files/files.service');
 const peopleService = require('../../src/features/people/people.service');
 const propertiesService = require('../../src/features/properties/properties.service');
-const contractsService = require('../../src/features/legal/contracts.service');
-const contractVersionsService = require('../../src/features/legal/contractVersions.service');
-const contractClausesService = require('../../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../../src/features/legal/contractTemplates.service');
-const requirementsService = require('../../src/features/legal/requirements.service');
-const signaturesService = require('../../src/features/legal/signatures.service');
-const inspectionsService = require('../../src/features/legal/inspections.service');
-const legalCasesService = require('../../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../../src/features/legal/evidencePackages.service');
-const { SandboxSignatureAdapter } = require('../../src/features/legal/adapters/SignatureAdapter');
+const contractsService = require('../../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../../src/modules/legal/contracts/application/contractVersions.service');
+const contractClausesService = require('../../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../../src/modules/legal/contracts/application/template.service');
+const requirementsService = require('../../src/modules/legal/contracts/application/requirement.service');
+const signaturesService = require('../../src/modules/legal/signatures/signature.service');
+const inspectionsService = require('../../src/modules/legal/inspections/inspection.service');
+const legalCasesService = require('../../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../../src/modules/legal/cases/evidence-package.service');
+const { SandboxSignatureAdapter } = require('../../src/modules/legal/signatures/providers');
 
 const SIGNED_PDF = Buffer.from(
   `%PDF-1.4\n% Drill restore Nayara One — CONTRATO ASSINADO pelas duas partes\n${crypto.randomBytes(3072).toString('base64')}\n%%EOF\n`,
@@ -227,7 +227,7 @@ async function seedTenantA(tenant, approverId) {
     const versionFile = await upload(t, 'drill-contrato-v1.pdf', 'application/pdf', pdfBytes('contrato-v1'), 'contracts');
     // Versão gerada pelo SERVIDOR a partir do modelo: o texto, as cláusulas incluídas/excluídas
     // e o contexto da condição são calculados no serviço (o cliente só manda variáveis).
-    await require('../../src/features/legal/contractTemplates.service').publishTemplate(template.id, tenant.userId, t); // só a versão publicada gera contrato
+    await require('../../src/modules/legal/contracts/application/template.service').publishTemplate(template.id, tenant.userId, t); // só a versão publicada gera contrato
     const version = await contractVersionsService.createContractVersion(
       contract.id,
       { templateId: template.id, variables: {}, documentFileId: versionFile.id },

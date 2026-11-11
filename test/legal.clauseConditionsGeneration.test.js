@@ -30,11 +30,11 @@ const {
   uniqueSuffix,
 } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../src/features/legal/contractTemplates.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const { User, Company, ContractClause, ContractTemplate, ContractTemplateClause, ContractVersion, ContractParty, Contract } = require('../src/models');

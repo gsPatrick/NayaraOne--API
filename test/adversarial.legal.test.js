@@ -23,18 +23,18 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const contractAmendmentsService = require('../src/features/legal/contractAmendments.service');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../src/features/legal/contractTemplates.service');
-const signaturesService = require('../src/features/legal/signatures.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const contractAmendmentsService = require('../src/modules/legal/contracts/application/contractAmendments.service');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const {
   Company,
   Contract,

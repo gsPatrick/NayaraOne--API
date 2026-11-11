@@ -3,11 +3,11 @@
 // Dados de partida do Jurídico para os testes M9-D809 (não é teste). Cada função grava por commit real (a API enxerga) e só deve rodar em banco descartável.
 const { withTenantTransaction } = require('../../testHelpers');
 const propertiesService = require('../../../src/features/properties/properties.service');
-const inspectionsService = require('../../../src/features/legal/inspections.service');
-const contractsService = require('../../../src/features/legal/contracts.service');
-const contractVersionsService = require('../../../src/features/legal/contractVersions.service');
-const contractAmendmentsService = require('../../../src/features/legal/contractAmendments.service');
-const noticesService = require('../../../src/features/legal/notices.service');
+const inspectionsService = require('../../../src/modules/legal/inspections/inspection.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
+const contractAmendmentsService = require('../../../src/modules/legal/contracts/application/contractAmendments.service');
+const noticesService = require('../../../src/modules/legal/contracts/application/notices.service');
 const { File, BillingSchedule, CollectionCase } = require('../../../src/models');
 
 const sfx = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;

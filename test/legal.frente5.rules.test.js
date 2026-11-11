@@ -12,12 +12,12 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const models = require('../src/models');
-const contractsService = require('../src/features/legal/contracts.service');
-const requirementsService = require('../src/features/legal/requirements.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
 const closeoutService = require('../src/features/billing/closeout.service');
-const closureGate = require('../src/features/legal/contractClosureGate');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
+const closureGate = require('../src/modules/legal/contracts/domain/contractClosureGate');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 
 const { Contract, Person, ContractParty, Property } = models;
 
@@ -239,8 +239,8 @@ for (const contractType of contractsService.CONTRACT_TYPES) {
 test('checklist documental: tipo SEM modelo bloqueia (falha fechado)', async () => {
   // Matriz M5: o checklist é a política REG-JUR-001 do Motor de Regras; publica (em transação desfeita) uma
   // versão sem o modelo de SERVICE e confere que o tipo sem modelo BLOQUEIA.
-  const { DEFAULT_ACTION } = require('../src/features/legal/requirementRules.defaults');
-  const { publishRequirementRules } = require('../src/features/legal/requirementRules.service');
+  const { DEFAULT_ACTION } = require('../src/modules/legal/contracts/application/requirementRules.defaults');
+  const { publishRequirementRules } = require('../src/modules/legal/contracts/application/requirementRules.service');
   const templates = { ...DEFAULT_ACTION.templates };
   delete templates.SERVICE;
   await withRollbackTenantTransaction(tenant, async (t) => {

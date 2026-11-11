@@ -10,12 +10,12 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { newCase, newDeadline, fakeFile, FUTURE } = require('./m5fech.juridico.helpers');
 const peopleService = require('../src/features/people/people.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
-const caseDocumentsService = require('../src/features/legal/legalCaseDocuments.service');
-const timelineService = require('../src/features/legal/legalCaseTimeline.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
-const noticesService = require('../src/features/legal/notices.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
+const caseDocumentsService = require('../src/modules/legal/cases/legalCaseDocuments.service');
+const timelineService = require('../src/modules/legal/cases/legalCaseTimeline.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
+const noticesService = require('../src/modules/legal/contracts/application/notices.service');
 const { FinancialEntry, LegalCase, OutboxEvent } = require('../src/models');
 
 let tenant;

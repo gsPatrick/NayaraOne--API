@@ -11,8 +11,8 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const { buildInspectionSnapshot, canonicalJson } = require('../src/features/legal/inspectionSnapshot');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const { buildInspectionSnapshot, canonicalJson } = require('../src/modules/legal/inspections/inspectionSnapshot');
 const { InspectionMedia, Inspection } = require('../src/models');
 const { uploadTestFile } = require('./m5fech.locacao.helpers');
 

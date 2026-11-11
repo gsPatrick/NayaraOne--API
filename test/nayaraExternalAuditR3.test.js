@@ -29,17 +29,17 @@ const {
   prepareManualSettlement,
 } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 const AppError = require('../src/utils/AppError');
 const { Notification, User, UserMembership } = require('../src/models');
 

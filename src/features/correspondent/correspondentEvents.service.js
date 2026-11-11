@@ -4,7 +4,7 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
 const { OutboxEvent } = require('../../models');
 
 // Publicação dos domain events do módulo correspondent (Transactional Outbox), seguindo o mesmo
-// padrão de src/features/legal/legalEvents.service.js / src/features/finance/financeEvents.service.js
+// padrão de src/modules/legal/shared/legalEvents.service.js / src/features/finance/financeEvents.service.js
 // — sempre dentro da MESMA transação da operação de negócio que originou o evento.
 
 /**

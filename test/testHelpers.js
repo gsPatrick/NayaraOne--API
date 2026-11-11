@@ -210,7 +210,7 @@ async function confirmPeriodChecksForTest(tenant, referenceMonth, actorUserId, t
 // ANTES de transitionContractStatus(..., 'DOCUMENTS_PENDING', ...), nunca depois — o próprio
 // gate roda na transição de ENTRADA também.
 async function waiveAllContractRequirements(contractId, actorUserId, transaction) {
-  const requirementsService = require('../src/features/legal/requirements.service');
+  const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
   await requirementsService.generateRequirementsForContract(contractId, {}, actorUserId, transaction);
   const items = await requirementsService.listRequirements(contractId, transaction);
   for (const item of items) {

@@ -1,8 +1,8 @@
 'use strict';
 
 const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification, Task } = require('../../models');
-const { computeSeverity } = require('../../features/legal/legalDeadlines.service');
-const { publishLegalDeadlineAlert, publishCadernoEvent } = require('../../features/legal/legalEvents.service');
+const { computeSeverity } = require('../../modules/legal/cases/deadline.service');
+const { publishLegalDeadlineAlert, publishCadernoEvent } = require('../../modules/legal/shared/legalEvents.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 
 /**

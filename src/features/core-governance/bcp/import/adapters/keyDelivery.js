@@ -1,6 +1,6 @@
 'use strict';
 
-const { createKeyDelivery, releaseKeyDelivery, cancelKeyDelivery } = require('../../../../legal/keyDeliveries.service');
+const { createKeyDelivery, releaseKeyDelivery, cancelKeyDelivery } = require('../../../../../modules/legal/leasing/key-delivery.service');
 const { KeyDelivery, Contract } = require('../../../../../models');
 const { findPersonByDocument } = require('../people');
 const { resolveRef } = require('../refs');

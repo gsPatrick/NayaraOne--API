@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { sequelize, comTenant, carregarTenants, ctxDe, conexao, config } = require('../../integrations/dispatch/dispatchHelpers');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const { readSsrfParams } = require('../../../src/features/integrations/http/ssrf/ssrf.params');
-const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../../../src/features/legal/adapters/SignatureAdapter');
+const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../../../src/modules/legal/signatures/providers');
 const { montarAmbiente, pdf, HOST } = require('../_helpers/ssrfEnv');
 
 let tenant;

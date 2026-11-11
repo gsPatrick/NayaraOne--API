@@ -43,10 +43,10 @@ const { submitPaymentIntentToBank, confirmBankPayment } = require('../src/featur
 const approvalsService = require('../src/features/finance/approvals.service');
 const filesService = require('../src/features/files/files.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { BankAccount, User, FinancialEntry, EvidencePackageAccessLog, Group, Company } = require('../src/models');
 
 let tenant;

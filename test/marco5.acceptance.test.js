@@ -8,11 +8,11 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
 const { uploadTestFile } = require('./m5fech.locacao.helpers');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const personContactsService = require('../src/features/people/personContacts.service');
 const { File, Person, TenantSetting } = require('../src/models');
@@ -150,7 +150,7 @@ test('M5-22/M5-23 releaseKeyDelivery bloqueia sem vistoria de entrada, libera e 
     await contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction);
     // Assina de verdade via o fluxo real (sandbox) — quando a ÚLTIMA assinatura confirma via
     // webhook, o próprio handleSignatureWebhook já transiciona o contrato pra SIGNED sozinho.
-    const signaturesService = require('../src/features/legal/signatures.service');
+    const signaturesService = require('../src/modules/legal/signatures/signature.service');
     const version = await contractVersionsService.listContractVersions(contract.id, transaction).then((v) => v[0]);
     const parties = await contractsService.listContractParties(contract.id, transaction);
     const signatures = await signaturesService.initiateSignature(version.id, parties.map((p) => p.personId), tenant.userId, transaction);
@@ -233,7 +233,7 @@ test('REGRESSÃO LOC-2026-0002: releaseKeyDelivery usa a vistoria vinculada à e
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, transaction);
     await contractsService.transitionContractStatus(contract, 'SIGNING', tenant.userId, transaction);
-    const signaturesService = require('../src/features/legal/signatures.service');
+    const signaturesService = require('../src/modules/legal/signatures/signature.service');
     const version = await contractVersionsService.listContractVersions(contract.id, transaction).then((v) => v[0]);
     const parties = await contractsService.listContractParties(contract.id, transaction);
     const signatures = await signaturesService.initiateSignature(version.id, parties.map((p) => p.personId), tenant.userId, transaction);

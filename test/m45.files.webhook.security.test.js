@@ -5,7 +5,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { emailFor } = require('../scripts/seed-ci-two-tenants');
 const { sequelize, User } = require('../src/models');
-const { assertSandboxWebhookAllowed } = require('../src/features/legal/legal.controller');
+const { assertSandboxWebhookAllowed } = require('../src/modules/legal/shared/legal.controller');
 
 process.env.PORT = process.env.M45_SEC_HTTP_TEST_PORT || '21611';
 let skipReason = null;

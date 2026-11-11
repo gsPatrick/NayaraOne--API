@@ -1,7 +1,7 @@
 'use strict';
 
 const { SignatureAdapter } = require('../../providers/signature/signature.port');
-const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../../../legal/adapters/SignatureAdapter');
+const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../../../../modules/legal/signatures/providers');
 const { wrapLegacy, mapFrom, verifyOp, hmacVerify } = require('../legacyWrap');
 const { signatureEvent, KINDS } = require('../../providers/signature/sandbox/signature.sandbox.event');
 const { ContractVersion } = require('../../../../models');

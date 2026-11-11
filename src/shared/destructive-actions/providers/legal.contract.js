@@ -29,7 +29,7 @@ async function legalContract({ id, transaction, preview, req, query, itemsMax })
   if (CLOSED.includes(contract.status)) blockers.push(blocker('CONTRACT_ALREADY_CLOSED', `o contrato já está ${contract.status === 'TERMINATED' ? 'rescindido' : 'encerrado ou cancelado'}`));
   const counts = { openInstallments: billing.n, parties: parties.n };
   if (GATE_TARGETS.includes(target)) {
-    const { collectContractClosurePendencies, PENDENCY_LABELS } = require('../../../features/legal/contractClosureGate');
+    const { collectContractClosurePendencies, PENDENCY_LABELS } = require('../../../modules/legal/contracts/domain/contractClosureGate');
     for (const p of await collectContractClosurePendencies(id, transaction)) {
       counts[p.type] = (counts[p.type] || 0) + 1;
       blockers.push(blocker(p.type, `${PENDENCY_LABELS[p.type] || p.type} (${p.detail})`));

@@ -10,7 +10,7 @@ const bi = require('../_helpers/biEnv');
 const readModels = require('../../../src/features/analytics/read-models');
 const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
 const { LOCACAO_DEFAULTS, parseTypes, KEYS } = require('../../../src/features/analytics/read-models/locacao.settings');
-const { LEASE_LIKE_TYPES } = require('../../../src/features/legal/contracts.service');
+const { LEASE_LIKE_TYPES } = require('../../../src/modules/legal/contracts/application/contract.service');
 
 let env;
 before(async () => { env = await bi.setup(); });

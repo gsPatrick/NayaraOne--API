@@ -6,8 +6,8 @@ const AppError = require('../../../../utils/AppError');
 const {
   Contract, ContractVersion, ContractClause, ContractRequirement, LegalCase, LegalDeadline,
 } = require('../../../../models');
-const { contentLines, multisetDiff } = require('../../../legal/legalNay.service');
-const contractsService = require('../../../legal/contracts.service');
+const { contentLines, multisetDiff } = require('../../../../modules/legal/cases/legalNay.service');
+const contractsService = require('../../../../modules/legal/contracts/application/contract.service');
 
 const iso = (d) => (d ? new Date(d).toISOString() : null);
 const day = (d) => (d ? iso(d).slice(0, 10) : null);

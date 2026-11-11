@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const utilitiesService = require('../src/features/billing/utilities.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
 const { upsertSetting } = require('../src/features/settings/settings.service');
 const { nextDueDate } = require('../src/features/billing/leaseObligationSchedule');
 const job = require('../src/engines/jobs/legalGuaranteeExpiryAlertJob');

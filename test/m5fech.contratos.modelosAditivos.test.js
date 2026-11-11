@@ -69,8 +69,8 @@ test('§6/JUR-002: só modelo PUBLICADO gera contrato, publicado não é editado
 
 test('§7/Guia §20: checklist pelo Motor de Regras (REG-JUR-001) com as características das partes — PJ e parte representada mudam a lista; nova versão da regra muda a lista', async (t) => {
   if (pular) return t.skip(pular);
-  const { DEFAULT_ACTION } = require('../src/features/legal/requirementRules.defaults');
-  const { publishRequirementRules } = require('../src/features/legal/requirementRules.service');
+  const { DEFAULT_ACTION } = require('../src/modules/legal/contracts/application/requirementRules.defaults');
+  const { publishRequirementRules } = require('../src/modules/legal/contracts/application/requirementRules.service');
   const ct = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'SALE_CASH', totalValue: 1000 });
   const pj = await h.http('A:gestor', 'POST', '/people', { personType: 'PJ', legalName: `Empresa Fictícia ${h.sfx()}` });
   const pf = await h.pessoa('A:gestor', 'Comprador');

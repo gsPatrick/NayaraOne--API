@@ -7,8 +7,8 @@ const { uniqueCpf } = require('./exportsEnv');
 const { uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('../../testHelpers');
 const peopleService = require('../../../src/features/people/people.service');
 const propertiesService = require('../../../src/features/properties/properties.service');
-const contractsService = require('../../../src/features/legal/contracts.service');
-const inspectionsService = require('../../../src/features/legal/inspections.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const inspectionsService = require('../../../src/modules/legal/inspections/inspection.service');
 const projectsService = require('../../../src/features/construction/projects.service');
 
 async function person(tenant, tx, label, cpf = uniqueCpf()) {

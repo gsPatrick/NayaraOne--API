@@ -13,9 +13,9 @@ const { authenticator } = require('otplib');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, waiveAllContractRequirements, createCommissionSource } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const signaturesService = require('../src/features/legal/signatures.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
 const peopleService = require('../src/features/people/people.service');
 const personContactsService = require('../src/features/people/personContacts.service');
 const rentAdjustmentService = require('../src/features/billing/rentAdjustment.service');
@@ -733,8 +733,8 @@ test('ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o
 // 14/09/2026) — o job de alerta precisa rodar de verdade (não só calcular severidade sob
 // demanda), notificar o responsável e não reavisar do mesmo prazo/severidade repetidamente. ---
 test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e não reavisa duas vezes pela mesma severidade', async () => {
-  const legalCasesService = require('../src/features/legal/legalCases.service');
-  const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+  const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+  const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
   const { processLegalDeadlineAlertsForCompany } = require('../src/engines/jobs/legalDeadlineAlertJob');
   const { LegalCase, LegalDeadline, Notification, OutboxEvent } = require('../src/models');
 

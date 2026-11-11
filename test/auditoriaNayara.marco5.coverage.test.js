@@ -20,9 +20,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const { getSetting } = require('../src/features/settings/settings.service');

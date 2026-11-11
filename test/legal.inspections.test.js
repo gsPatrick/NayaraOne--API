@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const { File, OutboxEvent } = require('../src/models');
 
 let tenant;

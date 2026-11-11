@@ -3,8 +3,8 @@
 // Apoio dos testes de estado final do PATCH de prazo juridico (servico, HTTP e concorrencia).
 const { sequelize, uniqueSuffix } = require('./testHelpers');
 const { origem } = require('./helpers/prazoOrigem');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { LegalCase, LegalDeadline, AuditLog, User, UserMembership } = require('../src/models');
 
 const FUTURE = () => new Date(Date.now() + 20 * 86400000);

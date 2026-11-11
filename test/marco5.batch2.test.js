@@ -25,17 +25,17 @@ const personContactsService = require('../src/features/people/personContacts.ser
 const propertiesService = require('../src/features/properties/properties.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');
 const proposalsService = require('../src/features/crm/proposals.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const signaturesService = require('../src/features/legal/signatures.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
-const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../src/features/legal/adapters/SignatureAdapter');
+const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../src/modules/legal/signatures/providers');
 const {
   File,
   FileLink,

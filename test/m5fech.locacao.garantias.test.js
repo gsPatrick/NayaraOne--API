@@ -8,9 +8,9 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const { getGuaranteeDetail } = require('../src/features/legal/guaranteeDetail.service');
-const closureGate = require('../src/features/legal/contractClosureGate');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const { getGuaranteeDetail } = require('../src/modules/legal/leasing/guaranteeDetail.service');
+const closureGate = require('../src/modules/legal/contracts/domain/contractClosureGate');
 const { upsertSetting } = require('../src/features/settings/settings.service');
 const { computeThirdPartyOriginBalance } = require('../src/features/finance/financialEntries.service');
 const { Contract, Person, ContractParty, FinancialEntry, Guarantee } = require('../src/models');

@@ -4,14 +4,14 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../src/features/legal/contractTemplates.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const signaturesService = require('../src/features/legal/signatures.service');
-const requirementsService = require('../src/features/legal/requirements.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const noticesService = require('../src/features/legal/notices.service');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
+const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const noticesService = require('../src/modules/legal/contracts/application/notices.service');
 const peopleService = require('../src/features/people/people.service');
 const personContactsService = require('../src/features/people/personContacts.service');
 const propertiesService = require('../src/features/properties/properties.service');
@@ -277,7 +277,7 @@ test('G2: renderTemplate respeita sort_order e ignora cláusula desativada', asy
 
 // F01 (conferência Nayara 18/10/2026): o antigo marcador assert.ok(true) que documentava a
 // AUSÊNCIA de cláusulas condicionais foi substituído pela funcionalidade real (regra
-// declarativa na versão da cláusula, ver src/features/legal/clauseConditions.js). Cobertura
+// declarativa na versão da cláusula, ver src/modules/legal/contracts/application/clauseConditions.js). Cobertura
 // completa (operadores, all/any, aprovação, versão, hash) em test/legal.clauseConditions.test.js.
 test('G2: cláusula condicional por regra declarativa entra ou sai do documento conforme o contrato', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {

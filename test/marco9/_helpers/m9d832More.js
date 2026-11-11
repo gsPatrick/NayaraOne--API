@@ -4,7 +4,7 @@
 const env = require('./bcpEnv');
 const { person } = require('./m9d832Base');
 const { createFinancialEntry } = require('../../../src/features/finance/financialEntries.service');
-const legalCasesService = require('../../../src/features/legal/legalCases.service');
+const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
 const financingCasesService = require('../../../src/features/correspondent/cases/financingCases.service');
 const { FinancingCase } = require('../../../src/models');
 
@@ -40,7 +40,7 @@ function createFinancingCase(tenant) {
 /** Contrato ativo, em imóvel próprio, SEM vistoria de entrada: as chaves não podem ser liberadas por nenhum caminho (a trava do serviço normal recusa). */
 function createBareContract(tenant, base) {
   return env.inTx(tenant, async (tx) => {
-    const contractsService = require('../../../src/features/legal/contracts.service');
+    const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
     const property = await require('../../../src/features/properties/properties.service').createProperty(
       { groupId: tenant.groupId, companyId: tenant.companyId, propertyType: 'RESIDENTIAL', title: `BCP QA sem vistoria ${Date.now()}`, internalCode: `BCPSV-${Date.now()}` }, tenant.userId, tx
     );

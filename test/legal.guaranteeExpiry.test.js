@@ -4,8 +4,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
 const { processGuaranteesInTransaction, DEFAULT_ALERT_DAYS } = require('../src/engines/jobs/legalGuaranteeExpiryAlertJob');
 const { OutboxEvent } = require('../src/models');
 

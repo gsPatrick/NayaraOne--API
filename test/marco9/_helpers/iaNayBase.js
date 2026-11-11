@@ -4,7 +4,7 @@
 // de os dados do teste serem criados. Assim a prova é "a resposta mostra o valor do read model" e "os meus dados mudaram o read model em
 // exatamente tanto", e continua valendo num banco que já tem dados de outros testes (o CI roda todos os arquivos no mesmo banco).
 const { getWeeklyHealthReport } = require('../../../src/features/finance/financialHealthReport.service');
-const { getExpiringContracts } = require('../../../src/features/legal/expiringContracts.service');
+const { getExpiringContracts } = require('../../../src/modules/legal/contracts/application/expiringContracts.service');
 const { getPipelineSummary } = require('../../../src/features/crm/pipelineSummary.service');
 
 /** Dinheiro em pt-BR como o servidor escreve: "R$ 12.000,00". */

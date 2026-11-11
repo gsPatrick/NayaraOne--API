@@ -6,7 +6,7 @@ const { sequelize, Person, Property, PropertyOwner, Contract, ContractParty, Fin
 const personService = require('../src/features/people/person.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const propertyOwnersService = require('../src/features/properties/propertyOwners.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const bankAccountsService = require('../src/features/finance/bankAccounts.service');
 const costCentersService = require('../src/features/finance/costCenters.service');
 const resultCentersService = require('../src/features/finance/resultCenters.service');

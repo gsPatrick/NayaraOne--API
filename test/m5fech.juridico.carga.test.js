@@ -19,7 +19,7 @@ const skip = canRun ? false : 'commita dados: rode com scripts/withDisposableDb.
 
 const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { newCase, newDeadline, FUTURE } = require('./m5fech.juridico.helpers');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { LegalDeadline, Task, OutboxEvent, AuditLog } = require('../src/models');
 
 let tenant;

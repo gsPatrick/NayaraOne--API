@@ -7,7 +7,7 @@ process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const h = require('./m5fech.contratos.helpers');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 
 let pular = null;
 before(async () => { pular = await h.pronto(); });
@@ -61,8 +61,8 @@ test('Guia §3/§5: DRAFT -> LEGAL_REVIEW direto com checklist completo; LEGAL_R
 
 test('Guia §5: exigência com etapa SIGNING não bloqueia a revisão jurídica, só o envio para assinatura', async (t) => {
   if (pular) return t.skip(pular);
-  const { DEFAULT_ACTION } = require('../src/features/legal/requirementRules.defaults');
-  const { publishRequirementRules } = require('../src/features/legal/requirementRules.service');
+  const { DEFAULT_ACTION } = require('../src/modules/legal/contracts/application/requirementRules.defaults');
+  const { publishRequirementRules } = require('../src/modules/legal/contracts/application/requirementRules.service');
   const templates = { ...DEFAULT_ACTION.templates, SERVICE: [{ requirementCode: 'SERVICE_SIGNING_ONLY', requirementType: 'SERVICE_SCOPE', description: 'Exigência só para a assinatura.', stage: 'SIGNING' }] };
   await h.comTenant('A:gestor', (tx, tn) => publishRequirementRules(tn, { templates, typeToTemplate: DEFAULT_ACTION.typeToTemplate }, tn.userId, tx));
   try {

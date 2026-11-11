@@ -13,12 +13,12 @@ module.exports = [
   {
     code: 'legal.contract_pdf', label: 'PDF do contrato', mode: 'WORKFLOW_DOCUMENT', onDemand: false,
     reason: 'PDF da versão do contrato gerado pelo fluxo jurídico e guardado na versão; a entrega é o download do arquivo da versão.',
-    sourceFiles: ['features/legal/contractPdf.service.js', 'models/ContractVersion.js'],
+    sourceFiles: ['modules/legal/contracts/application/contractPdf.service.js', 'models/ContractVersion.js'],
   },
   {
     code: 'legal.inspection_report', label: 'Laudo de vistoria em PDF', mode: 'WORKFLOW_DOCUMENT', onDemand: false,
     reason: 'Laudo gerado ao fechar a vistoria e guardado no registro da vistoria.',
-    sourceFiles: ['features/legal/inspections.service.js'],
+    sourceFiles: ['modules/legal/inspections/inspection.service.js'],
   },
   {
     code: 'correspondent.nfse_pdf', label: 'PDF da NFS-e', mode: 'WORKFLOW_DOCUMENT', onDemand: false,

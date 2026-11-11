@@ -7,7 +7,7 @@ const { initToolRegistry } = require('../tools/bootRegistry');
 const { buildToolServices } = require('../toolServices');
 const { buildToolContext } = require('../orchestrator/toolContext');
 const { validateToolArgs } = require('../tools/argsValidator');
-const { listTemplates } = require('../../legal/contractTemplates.service');
+const { listTemplates } = require('../../../modules/legal/contracts/application/template.service');
 
 const LIMITES = Object.freeze({ stringMax: 2000, arrayMax: 100 });
 const READ_KINDS = Object.freeze(['READ_SERVICE', 'RULE_ENGINE', 'FILTER', 'KEYWORD_SEARCH']);

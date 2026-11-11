@@ -10,7 +10,7 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const { newUser, newCase, newDeadline, fakeFile, FUTURE, PAST } = require('./m5fech.juridico.helpers');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { AuditLog, LegalDeadline } = require('../src/models');
 
 let tenant;

@@ -5,7 +5,7 @@ const { Property, OutboxEvent } = require('../../../src/models');
 const { sequelize } = require('../../../src/models');
 const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { DISPOSABLE, SKIP_DISPOSABLE, loadTenants } = require('../../m9d801.helpers');
-const contractsService = require('../../../src/features/legal/contracts.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
 
 const suffix = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;
 

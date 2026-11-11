@@ -74,7 +74,7 @@ test('F-05 (controle): primeira definição da conta e edição sem mudar o retr
 
 // ---- F-07 / F-08: repasse (lista de elegíveis, duplicado e dedução) com mensagens em português
 const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const { Person, Property } = require('../src/models');
 const { createTestResultCenter } = require('./testHelpers');
 
