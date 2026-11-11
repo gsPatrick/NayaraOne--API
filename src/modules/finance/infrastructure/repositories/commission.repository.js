@@ -1,7 +1,7 @@
 'use strict';
 
 // Repositório da COMISSÃO: todo acesso a dados de commission.service.js (comissões, parcelas,
-// regra REG-FIN-002 no Motor de Regras, lançamento de origem e trilha de ajustes). As consultas
+// regra REG-FIN-001 no Motor de Regras, lançamento de origem e trilha de ajustes). As consultas
 // e travas são as mesmas do serviço; cada função recebe a `transaction`.
 
 const { Commission, CommissionInstallment, FinancialEntry, AuditLog, Rule, RuleVersion, RuleScope, RulePublication, sequelize } = require('../../../../models');
@@ -133,6 +133,12 @@ function findEntryById(id, transaction) {
   return FinancialEntry.findByPk(id, { transaction });
 }
 
+// Guia §11: o tipo do contrato vai como fato na avaliação da REG-FIN-001.
+function findContractSummary(id, transaction) {
+  const { Contract } = require('../../../../models');
+  return Contract.findByPk(id, { attributes: ['id', 'contractType'], transaction });
+}
+
 // --- Ajustes (trilha de auditoria append-only) ---------------------------------------------------
 
 function listCancellationAdjustmentLogs(commissionId, transaction) {
@@ -176,6 +182,7 @@ module.exports = {
   findInstallmentByFinancialEntry,
   findCompanyEntryForUpdate,
   findEntryById,
+  findContractSummary,
   listCancellationAdjustmentLogs,
   save,
 };

@@ -239,7 +239,7 @@ async function createThirdPartyLink(tenant, transaction) {
 }
 
 // Frente 3 (Caderno §14): comissão nasce de um fato gerador (lançamento a receber) e o percentual
-// vem da regra REG-FIN-002 do Motor de Regras — nunca do payload. Para testes que só precisam de
+// vem da regra REG-FIN-001 do Motor de Regras (Guia §11, DEC-005) — nunca do payload. Para testes que só precisam de
 // "uma comissão de X% sobre Y", publica a regra (na transação do teste) e cria o recebimento de
 // origem; `received` (padrão true) já liquida o recebimento, liberando 100% para pagamento.
 async function createCommissionSource(tenant, transaction, { baseAmount, percentage, component = 'BROKER', received = true }) {

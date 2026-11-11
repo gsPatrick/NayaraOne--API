@@ -2,7 +2,7 @@
 
 // Parcelas da comissão: geração, liberação proporcional ao recebimento do fato gerador, baixa
 // contra lançamento liquidado e cancelamento com ajuste auditável. A criação da comissão e a
-// regra REG-FIN-002 ficam em commission.service.js, que reexporta estas funções.
+// regra REG-FIN-001 ficam em commission.service.js, que reexporta estas funções.
 
 const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
