@@ -7,7 +7,7 @@ async function financeEntry({ id, transaction, itemsMax }) {
   const e = await one(transaction, 'SELECT id, status, amount, description, entry_type FROM finance.financial_entries WHERE id = :id', { id }, 'Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   const children = await rows(transaction, `SELECT id, amount, status, description FROM finance.financial_entries WHERE (third_party_origin_entry_id = :id OR parent_entry_id = :id) AND status NOT IN ('REVERSED','CANCELLED') ORDER BY created_at LIMIT :limit`, { id, limit: itemsMax });
   const [thirdParty] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.financial_entries WHERE third_party_origin_entry_id = :id AND parent_entry_id IS NULL AND status NOT IN ('REVERSED','CANCELLED')`, { id });
-  const [intents] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.payment_intents WHERE financial_entry_id = :id AND status NOT IN ('CANCELLED')`, { id });
+  const [intents] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.payment_intents WHERE financial_entry_id = :id AND status NOT IN ('CANCELED', 'FAILED')`, { id });
   const [kids] = await rows(transaction, `SELECT COUNT(*)::int AS n, ${centsSql('amount')} AS cents FROM finance.financial_entries WHERE (third_party_origin_entry_id = :id OR parent_entry_id = :id) AND status NOT IN ('REVERSED','CANCELLED')`, { id });
   const blockers = [];
   if (e.status === 'REVERSED') blockers.push(blocker('ENTRY_ALREADY_REVERSED', 'o lançamento já foi estornado'));

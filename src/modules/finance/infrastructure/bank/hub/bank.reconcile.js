@@ -52,7 +52,7 @@ async function reconcileStatements({ group, company }) {
     const entradas = await BankStatementEntry.findAll({ where: { reconciliationStatus: 'PENDING', direction: 'OUT' }, order: [['bookedAt', 'ASC']], limit: BATCH, transaction, lock: transaction.LOCK.UPDATE });
     const resultado = { reconciled: 0, mismatched: 0 };
     if (!entradas.length) return resultado;
-    const pendentes = await PaymentIntent.findAll({ where: { reconciledAt: null, status: { [Op.in]: ['SUBMITTING', 'SUBMITTED', 'EXECUTED'] } }, attributes: ['id'], transaction });
+    const pendentes = await PaymentIntent.findAll({ where: { reconciledAt: null, status: { [Op.in]: ['EXECUTING', 'CONFIRMED'] } }, attributes: ['id'], transaction });
     if (!pendentes.length) return resultado;
     let candidatos = await IntegrationDispatch.findAll({
       where: { companyId: ctx.companyId, aggregateType: PAYMENT_AGGREGATE, status: { [Op.in]: ['SUBMITTED', 'UNKNOWN', 'CONFIRMED'] }, aggregateId: { [Op.in]: pendentes.map((p) => p.id) } }, order: [['created_at', 'ASC']], transaction,

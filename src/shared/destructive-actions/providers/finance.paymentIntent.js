@@ -2,8 +2,9 @@
 
 const { one, shortCode, blocker } = require('./sql');
 
-const NOT_CANCELLABLE = ['SUBMITTING', 'SUBMITTED', 'EXECUTED', 'CANCELLED'];
-const LABELS = { SUBMITTING: 'em envio ao banco', SUBMITTED: 'já enviado ao banco', EXECUTED: 'já executado', CANCELLED: 'já cancelado' };
+// Guia M4 §3 (DEC-056): EXECUTING = em envio/enviado ao banco; CONFIRMED = pago; CANCELED = cancelado.
+const NOT_CANCELLABLE = ['EXECUTING', 'CONFIRMED', 'CANCELED'];
+const LABELS = { EXECUTING: 'em execução no banco', CONFIRMED: 'já pago', CANCELED: 'já cancelado' };
 
 /** Impacto de cancelar um pagamento (linha 2): valor do lançamento, situação e as razões pelas quais o cancelamento é impedido. */
 async function financePaymentIntent({ id, transaction }) {
