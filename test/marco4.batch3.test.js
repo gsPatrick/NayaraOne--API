@@ -335,8 +335,9 @@ test('M4-13 N:M — soma que não bate (nem por um centavo) é rejeitada e nada 
       tenant.userId,
       transaction
     );
+    // Outra linha de R$ 40,00 no mesmo dia: descrição própria (a MESMA linha é barrada pelo UNIQUE do fingerprint, Guia §10).
     const t4 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -40, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -40, transactionDate: new Date(), description: 'segunda tarifa de 40' },
       tenant.userId,
       transaction
     );
