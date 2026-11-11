@@ -4,6 +4,8 @@
  * JUR-TS-014), multiempresa (JUR-013/JUR-TS-013), adapter de assinatura (§8, Guia §7) e caixa de entrada
  * idempotente do webhook (Guia §8). Reaproveita `ctCic` (11/12) e `ctV` (13).
  */
+const { noTenant } = require('../apoio-locacao/preparo');
+
 module.exports = async function contratosChecklistAditivos(R) {
   const H = (o) => R.http(o);
   const novo = (id, tipo, k, req) => H({ id, req, titulo: `Preparação: contrato ${tipo} para o checklist`, quem: 'A:gestor', metodo: 'POST', rota: '/contracts', corpo: { contractType: tipo, totalValue: 1000 }, esperado: { status: 201 }, guardar: (b, c) => { c[k] = b.data.id; } });
@@ -19,12 +21,22 @@ module.exports = async function contratosChecklistAditivos(R) {
   await novo('CT-504', 'SALE_FINANCED', 'ctChkFin', ['M5-A0314-222d75']);
   await gerar('CT-505', 'ctChkFin', {}, ['M5-A0314-222d75'], 'Checklist de venda financiada');
   await tipos('CT-506', 'ctChkFin', ['M5-A0314-222d75'], 'Venda financiada: comprador, vendedor, matrícula, certidões, financiamento, dados de pagamento', ['BUYER_DOCUMENT', 'SELLER_DOCUMENT', 'PROPERTY_REGISTRATION', 'CERTIFICATES', 'FINANCING', 'PAYMENT_DATA']);
-  await novo('CT-507', 'SALE_CASH', 'ctChkNova', ['M5-A0315-c0cefe']);
-  await gerar('CT-508', 'ctChkNova', { templateKey: 'NEW_PROPERTY_DELIVERY' }, ['M5-A0315-c0cefe'], 'Checklist de entrega de casa nova');
-  await tipos('CT-509', 'ctChkNova', ['M5-A0315-c0cefe'], 'Entrega de casa nova: termo, vistoria final, manual do proprietário, fotos, chaves', ['DELIVERY_TERM', 'FINAL_INSPECTION', 'OWNER_MANUAL', 'PHOTOS', 'KEYS']);
-  await novo('CT-510', 'SALE_CASH', 'ctChkUsado', ['M5-A0316-86b11c']);
-  await gerar('CT-511', 'ctChkUsado', { templateKey: 'USED_PROPERTY_DELIVERY' }, ['M5-A0316-86b11c'], 'Checklist de imóvel usado');
-  await tipos('CT-512', 'ctChkUsado', ['M5-A0316-86b11c'], 'Imóvel usado: termo específico conforme modelo jurídico aprovado', ['USED_PROPERTY_TERM']);
+  // §7 "tipo de contrato + regras + características das partes/imóvel" (verificação M5, linha 65): o modelo do checklist vem da
+  // regra pelo tipo do contrato (o corpo não escolhe) e a característica do IMÓVEL decide casa nova x imóvel usado.
+  const RQ7 = ['M5-A0066-b6c17a', 'M5-A0315-c0cefe', 'M5-A0316-86b11c'];
+  await novo('CT-507', 'SALE_CASH', 'ctChkPrinc', RQ7);
+  const imovel = (id, k, titulo) => H({ id, req: RQ7, titulo, quem: 'A:gestor', metodo: 'POST', rota: '/properties', corpo: { title: `${titulo} ${Date.now()}`, internalCode: `CHK-${k}-${Date.now()}`, propertyType: 'RESIDENTIAL' }, esperado: { status: 201 }, guardar: (b, c) => { c[k] = b.data.id; } });
+  await imovel('CT-507a', 'ctImNovo', 'Preparação: imóvel novo');
+  await R.servico({ id: 'CT-507b', req: RQ7, titulo: 'Preparação: obra da empresa para o imóvel (casa nova = imóvel que nasceu de obra)', chamada: 'construction.projects (Project.create)', fn: noTenant(R, (tx, t) => require('../../../src/models').Project.create({ groupId: t.groupId, companyId: t.companyId, name: `Obra fictícia ${Date.now()}`, propertyId: R.ctx.ctImNovo, createdBy: t.userId, updatedBy: t.userId }, { transaction: tx }).then((p) => ({ id: p.id }))), esperado: {} });
+  await imovel('CT-507c', 'ctImUsado', 'Preparação: imóvel usado (sem obra)');
+  const termo = (id, k, im, titulo) => H({ id, req: RQ7, titulo, quem: 'A:gestor', metodo: 'POST', rota: '/contracts', corpo: (c) => ({ contractType: 'KEY_DELIVERY', parentContractId: c.ctChkPrinc, propertyId: c[im] }), esperado: { status: 201 }, guardar: (b, c) => { c[k] = b.data.id; } });
+  await termo('CT-507d', 'ctChkNova', 'ctImNovo', 'Termo de entrega de chaves (KEY_DELIVERY) do imóvel novo');
+  await gerar('CT-508', 'ctChkNova', {}, RQ7, 'Checklist do termo de entrega: a regra escolhe o modelo pelo tipo e o imóvel novo leva ao fluxo de casa nova');
+  await tipos('CT-509', 'ctChkNova', RQ7, 'Entrega de casa nova: termo, vistoria final, manual do proprietário, fotos, chaves', ['DELIVERY_TERM', 'FINAL_INSPECTION', 'OWNER_MANUAL', 'PHOTOS', 'KEYS']);
+  await termo('CT-510', 'ctChkUsado', 'ctImUsado', 'Termo de entrega de chaves (KEY_DELIVERY) do imóvel usado');
+  await gerar('CT-511', 'ctChkUsado', {}, RQ7, 'Checklist do termo de entrega do imóvel usado (mesmo tipo, outra característica do imóvel)');
+  await tipos('CT-512', 'ctChkUsado', RQ7, 'Imóvel usado: termo específico conforme modelo jurídico aprovado', ['USED_PROPERTY_TERM']);
+  await H({ id: 'CT-512b', req: RQ7, titulo: 'O corpo não escolhe o modelo do checklist (templateKey recusado)', quem: 'A:gestor', metodo: 'POST', rota: (c) => `/legal/contracts/${c.ctChkUsado}/requirements/generate`, corpo: { templateKey: 'NEW_PROPERTY_DELIVERY' }, esperado: { status: 400, codigo: 'LEGAL_REQUIREMENT_TEMPLATE_KEY_NOT_ACCEPTED' } });
   await H({ id: 'CT-513', req: ['M5-A0316-86b11c', 'M5-A0029-b27d16'], titulo: 'Entrega de imóvel usado com o termo USED_PROPERTY_DELIVERY gerado pelo servidor', quem: 'A:gestor', metodo: 'POST', rota: '/legal/key-deliveries', corpo: (c) => ({ contractId: c.ctX.id, deliveredToPersonId: c.ctInq, termType: 'USED_PROPERTY_DELIVERY' }), esperado: { status: 201 }, guardar: (b, c) => { c.ctKdUsado = b && b.data ? b.data.id : null; } });
   await H({ id: 'CT-513b', req: ['M5-A0028-81a9e0'], titulo: 'Entrega de chaves com o termo KEY_DELIVERY gerado pelo servidor', quem: 'A:gestor', metodo: 'POST', rota: '/legal/key-deliveries', corpo: (c) => ({ contractId: c.ctX.id, deliveredToPersonId: c.ctInq, termType: 'KEY_DELIVERY' }), esperado: { status: 201 } });
   await H({ id: 'CT-514', req: ['M5-A0316-86b11c'], titulo: 'Termo específico do imóvel usado (natureza/estado), com versão e hash do modelo do servidor', quem: 'A:leitura', metodo: 'GET', rota: (c) => `/legal/key-deliveries/${c.ctKdUsado}/term-preview`, esperado: { status: 200 } });

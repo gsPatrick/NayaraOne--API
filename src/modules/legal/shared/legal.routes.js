@@ -9,6 +9,7 @@ const guaranteeActionsController = require('../leasing/guaranteeActions.controll
 const legalCasesController = require('../cases/legalCases.controller');
 const contractVersionActionsController = require('../contracts/application/contractVersionActions.controller');
 const contractTemplateVersionsController = require('../contracts/application/contractTemplateVersions.controller');
+const requirementRulesController = require('../contracts/application/requirementRules.controller');
 const { confirmAction } = require('../../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 1 do inventário)
 const { requireVersionApprove, requireVersionApproveWhenApproving } = require('./legalPermissions');
 
@@ -54,6 +55,11 @@ legalRouter.post('/legal/contracts/:id/requirements/generate', requirePermission
 legalRouter.get('/legal/contracts/:id/requirements', requirePermission('legal:read'), legalController.listContractRequirements);
 legalRouter.patch('/legal/requirements/:requirementId', requirePermission('legal:update'), legalController.satisfyContractRequirement);
 legalRouter.post('/legal/requirements/:requirementId/waive', requirePermission('legal:waive'), legalController.waiveContractRequirement);
+// Política do checklist (regra REG-JUR-001 do Motor de Regras, Caderno §7/Guia §20): a empresa publica nova versão com a
+// alçada jurídica e motivo; a vigente nunca é editada (verificação M5 linha 65).
+legalRouter.get('/legal/requirement-rules', requirePermission('legal:read'), requirementRulesController.getRequirementRules);
+legalRouter.get('/legal/requirement-rules/versions', requirePermission('legal:read'), requirementRulesController.listRequirementRuleVersions);
+legalRouter.post('/legal/requirement-rules', requirePermission('legal:approve'), requirementRulesController.publishRequirementRules);
 
 // Notices (notificações formais — Caderno Anexo I "13. Aditivos e notificações"). Migration
 // 20260101000292 já aplicada — módulo funcional ponta a ponta.

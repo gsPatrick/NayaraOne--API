@@ -84,12 +84,13 @@ test('§7/Guia §20: checklist pelo Motor de Regras (REG-JUR-001) com as caracte
   const [regra] = await h.sql('A:gestor', "SELECT r.code, v.version_number, v.status FROM legal.contract_requirements q JOIN core.rule_versions v ON v.id = q.rule_version_id JOIN core.rules r ON r.id = v.rule_id WHERE q.contract_id = :id LIMIT 1", { id: ct.data.id });
   assert.equal(regra.code, 'REG-JUR-001');
   assert.equal(regra.status, 'PUBLISHED');
-  const templates = { ...DEFAULT_ACTION.templates, SERVICE: [...DEFAULT_ACTION.templates.SERVICE, { requirementCode: 'SERVICE_EXTRA', requirementType: 'SERVICE_SCOPE', description: 'Exigência da nova versão da regra.' }] };
+  const templates = { ...DEFAULT_ACTION.templates, ADDENDUM: [...DEFAULT_ACTION.templates.ADDENDUM, { requirementCode: 'ADDENDUM_EXTRA', requirementType: 'PF_DOCUMENT', description: 'Exigência da nova versão da regra.' }] };
   await h.comTenant('A:gestor', (tx, tn) => publishRequirementRules(tn, { templates, typeToTemplate: DEFAULT_ACTION.typeToTemplate }, tn.userId, tx));
   try {
-    const s = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'SERVICE', totalValue: 1 });
+    const principal = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'LEASE_RESIDENTIAL', totalValue: 1 });
+    const s = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'ADDENDUM', parentContractId: principal.data.id, totalValue: 1 });
     const gs = await h.http('A:gestor', 'POST', `/legal/contracts/${s.data.id}/requirements/generate`, {});
-    assert.ok(gs.data.some((r) => r.requirementCode === 'SERVICE_EXTRA'), 'a política vem da versão vigente da regra');
+    assert.ok(gs.data.some((r) => r.requirementCode === 'ADDENDUM_EXTRA'), 'a política vem da versão vigente da regra');
   } finally {
     await h.comTenant('A:gestor', (tx, tn) => publishRequirementRules(tn, DEFAULT_ACTION, tn.userId, tx));
   }

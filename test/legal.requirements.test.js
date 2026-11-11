@@ -130,12 +130,18 @@ test('AUD-009: transitionContractStatus BLOQUEIA avanço de status com requireme
 
 test('generateRequirementsForContract: template USED_PROPERTY_DELIVERY gera termo específico', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const contract = await contractsService.createContract(
-      { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'SALE', totalValue: 500000 },
+    // O modelo vem da regra pelo tipo do contrato (Caderno §3/§7): termo de entrega de imóvel usado, vinculado ao principal.
+    const principal = await contractsService.createContract(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'SALE_CASH', totalValue: 500000 },
       tenant.userId,
       transaction
     );
-    const created = await requirementsService.generateRequirementsForContract(contract.id, { templateKey: 'USED_PROPERTY_DELIVERY' }, tenant.userId, transaction);
+    const contract = await contractsService.createContract(
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'USED_PROPERTY_DELIVERY', parentContractId: principal.id },
+      tenant.userId,
+      transaction
+    );
+    const created = await requirementsService.generateRequirementsForContract(contract.id, {}, tenant.userId, transaction);
     assert.equal(created.length, 1);
     assert.equal(created[0].requirementCode, 'USED_PROPERTY_TERM');
   });
