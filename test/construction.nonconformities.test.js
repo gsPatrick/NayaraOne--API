@@ -4,7 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const { setThresholds, createMember } = require('./constructionM6vFixture');
+const { setThresholds } = require('./constructionM6vFixture');
 const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const nonconformitiesService = require('../src/features/construction/nonconformities.service');

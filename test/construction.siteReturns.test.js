@@ -11,7 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const { setThresholds, createMember } = require('./constructionM6vFixture');
+const { setThresholds } = require('./constructionM6vFixture');
 const { InventoryItem, InventoryLocation, LossRecord } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
