@@ -52,6 +52,8 @@ const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { WEBHOOK_SETTINGS_SCHEMA } = require('../integrations/webhooks/webhooks.settings');
 const { SIGNATURE_SETTINGS_SCHEMA } = require('../../modules/legal/signatures/framework/signature.settings');
+const { LEGAL_RULES_SETTINGS_SCHEMA } = require('../../modules/legal/shared/legalRules.settings'); // Fechamento M5 (vistorias/prazos)
+const { LEASE_OBLIGATION_SETTINGS_SCHEMA } = require('../billing/obligations/leaseObligations.settings'); // Fechamento M5 (§12)
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { INSURANCE_SETTINGS_SCHEMA } = require('../procurement/insurance/insurance.settings');
 const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.settings');
@@ -126,6 +128,9 @@ const { BRIEF_SETTINGS_SCHEMA } = require('../../features/analytics/briefSetting
 const { EXPORT_SETTINGS_SCHEMA } = require('../../features/analytics/exports/export.settings');
 const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/acceptance.settings');
 
+// Gancho pós-gravação das chaves de multa/juros/carência (require tardio: o serviço de regras carrega os models).
+const publishPenaltyRule = (key, value, tenant, actorUserId, transaction) => require('../billing/penaltyRules.service').publishFromSetting(key, value, tenant, actorUserId, transaction);
+
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
  * configurações por tenant. `upsertSetting` REJEITA (400) qualquer chave que não esteja aqui
@@ -148,9 +153,10 @@ const SETTINGS_SCHEMA = {
   // medições aprovadas ainda a pagar (src/features/construction/costBasis.js). Gravação exige construction:approve.
   'construction.custo_realizado.base': { type: 'string', enum: ['CAIXA', 'COMPETENCIA'] },
   // parametros.csv exige_mfa_para_alterar = sim (settingMfa.js): multa, juros e carência só mudam com MFA recente de quem altera.
-  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
-  'billing.interest_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
-  'billing.grace_period_days': { type: 'integer', min: 0, requiresMfa: true },
+  // Fechamento M5 (M5-A0330): multa, juros e carência valem pelo Motor de Regras; gravar aqui publica versão nova de REG-LOC-001/002.
+  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true, afterWrite: publishPenaltyRule },
+  'billing.interest_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true, afterWrite: publishPenaltyRule },
+  'billing.grace_period_days': { type: 'integer', min: 0, requiresMfa: true, afterWrite: publishPenaltyRule },
   'billing.default_index_code': { type: 'string' },
   'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120, requiresMfa: true },
   'mfa.required_for_sensitive_roles': { type: 'boolean', requiresMfa: true },
@@ -309,6 +315,10 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D211 — rota pública de webhooks: alias da raiz, limite por minuto (classe WEBHOOK) e tamanho do token do canal.
   ...WEBHOOK_SETTINGS_SCHEMA,
   ...SIGNATURE_SETTINGS_SCHEMA,
+  // Fechamento M5 — fotos da entrega por tipo, fuso e alertas dos prazos jurídicos, bases do recebível do processo.
+  ...LEGAL_RULES_SETTINGS_SCHEMA,
+  // Fechamento M5 — ciclo das obrigações da locação: carência do comprovante, alerta do reembolso e o que segura o encerramento.
+  ...LEASE_OBLIGATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D237 — pagamento bancário: página do extrato, tolerância de data da conciliação, idade mínima da consulta e confirmação sem valor informado.
   ...BANK_SETTINGS_SCHEMA,
   // Marco 9, M9-D232 — portais: intervalo da leitura de status dos anúncios e anúncios por página do sync.
@@ -616,6 +626,8 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction, optio
     },
     transaction
   );
+  // Efeito da chave depois de gravada (ex.: publicar a versão nova da regra que ela alimenta), na mesma transação.
+  if (spec && typeof spec.afterWrite === 'function') await spec.afterWrite(key, value, tenant, actorUserId, transaction);
 
   return row;
 }
