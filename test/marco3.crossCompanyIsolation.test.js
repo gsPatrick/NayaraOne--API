@@ -34,18 +34,14 @@ after(async () => {
   await sequelize.close();
 });
 
-// ACHADO DESTA RODADA (não é bug — é o design correto do CRMX-015 confirmado ao vivo): ao
-// contrário de real_estate.properties e crm.opportunities abaixo, people.persons é isolado por
-// GRUPO (group_id), não por empresa (company_id) — qualquer empresa do mesmo grupo
-// lê/escreve o cadastro mestre de pessoa. Isso é exatamente o que o Caderno Técnico pede:
-// "CRMX-015 — Multiempresa: Cliente pode ter relação com mais de uma empresa [do grupo]."
-// A policy `persons_company_select` até tenta restringir por company_scope_allows(), mas a
-// policy `persons_company_write` é `FOR ALL` (cobre SELECT também, via OR entre policies
-// permissivas do Postgres) e só checa group_id — então, na prática, qualquer empresa do grupo
-// já enxerga/edita a pessoa, que é o comportamento desejado para o cadastro mestre
-// compartilhado. Só crm.opportunities/property_offers (os registros "por empresa") precisam
-// ficar isolados — e esses dois SÃO isolados, confirmado nos dois testes seguintes.
-test('CRMX-015: people.persons é compartilhado por GRUPO (qualquer empresa do mesmo grupo lê/escreve o cadastro mestre) — comportamento correto do CRMX-015, não um vazamento', async () => {
+// REVISTO EM 10/11/2026 (vazamento achado ao vivo na homologação): esta rodada tinha concluído que people.persons era
+// compartilhado por GRUPO e que isso era o CRMX-015. Não é: a política de leitura do próprio Caderno (§26,
+// persons_company_select) restringe por company_scope_allows(company_id, empresa do contexto); só a política de escrita
+// FOR ALL por group_id, somada por OR, anulava essa restrição. A migration 20260101009965 trocou o FOR ALL por políticas
+// de INSERT/UPDATE/DELETE com o mesmo escopo de empresa. Decisão e trecho do livro em
+// Maturacao/demandas/decisoes-de-implementacao.md. As provas com duas empresas do MESMO grupo estão em
+// test/people.mesmoGrupo.rls.test.js e test/people.mesmoGrupo.http.test.js.
+test('CRMX-015/CRM-TS-012: people.persons — outro grupo e outra empresa não enxergam a pessoa', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await peopleService.createPerson(
       { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Isolamento ${uniqueSuffix()}` },
@@ -65,19 +61,14 @@ test('CRMX-015: people.persons é compartilhado por GRUPO (qualquer empresa do m
     });
     assert.equal(fromOtherGroup.length, 0, 'um grupo (tenant) diferente NUNCA deve ver a pessoa de outro grupo');
 
-    // Cenário 2 (comportamento ESPERADO, não um bug): dentro do MESMO grupo, outra empresa
-    // consegue ver a pessoa — CRMX-015 exige isso para o cadastro mestre compartilhado.
+    // Cenário 2: outra empresa (qualquer grupo) também não vê a pessoa: o isolamento é por empresa.
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :otherCompanyId', { replacements: { otherCompanyId }, transaction });
     const [fromOtherCompanySameGroup] = await sequelize.query('SELECT id FROM "people"."persons" WHERE id = :id', {
       replacements: { id: person.id },
       transaction,
     });
-    assert.equal(
-      fromOtherCompanySameGroup.length,
-      1,
-      'outra empresa do MESMO grupo deve ver o cadastro mestre da pessoa (CRMX-015) — se isto quebrar, é uma regressão do requisito, não um fix'
-    );
+    assert.equal(fromOtherCompanySameGroup.length, 0, 'outra empresa não pode ver a pessoa (persons_company_select do Caderno §26)');
   });
 });
 
