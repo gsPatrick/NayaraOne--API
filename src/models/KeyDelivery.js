@@ -113,6 +113,8 @@ module.exports = (sequelize) => {
       // Fechamento M5 (Caderno §10 "Assinatura do termo de entrega", migration 20260101009993): via assinada do termo.
       termEvidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'term_evidence_file_id' },
       termEvidenceSha256: { type: DataTypes.STRING(64), allowNull: true, field: 'term_evidence_sha256' },
+      // Verificação M5 linha 69: versão do modelo jurídico aprovado usada no termo do imóvel usado (migration 20260101015103).
+      termTemplateVersionId: { type: DataTypes.UUID, allowNull: true, field: 'term_template_version_id' },
       termSignatureMethod: { type: DataTypes.STRING(24), allowNull: true, field: 'term_signature_method' },
       // Frente 5 (migration 20260101000460): termo e política gerados pelo SERVIDOR.
       termText: { type: DataTypes.TEXT, allowNull: true, field: 'term_text' },

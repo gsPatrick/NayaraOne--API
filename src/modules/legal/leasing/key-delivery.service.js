@@ -9,6 +9,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { publishKeyDeliveryReleased, publishKeysDelivered } = require('../shared/legalEvents.service');
 const { getContract, isSaleLikeContractType } = require('../contracts/application/contract.service');
+const { resolveUsedPropertyTermModel } = require('./usedPropertyTermModel');
 
 // Caderno Anexo I "3. Tipos de contrato": termos específicos de entrega — KEY_DELIVERY (entrega
 // de chaves padrão) e USED_PROPERTY_DELIVERY (entrega de imóvel usado, termo específico
@@ -29,6 +30,10 @@ const KEY_DELIVERY_TERM_VERSION_V1 = 'KD-TERM-v1';
 // v3 (M45-RECONF F7, 19/10/2026): mesmo texto do v2 sem a linha "Modelo KD-TERM-v2" (código
 // técnico no documento entregue à pessoa). v1/v2 já gravados continuam intactos (texto e hash).
 const KEY_DELIVERY_TERM_VERSION = 'KD-TERM-v3';
+// v4 (verificação M5 linha 69): termo do IMÓVEL USADO com a declaração vinda do modelo jurídico aprovado (usedPropertyTermModel.js),
+// com nome e versão do modelo no texto. O termo de entrega de chaves comum segue no v3.
+const USED_PROPERTY_TERM_VERSION = 'KD-TERM-v4';
+const termVersionOf = (keyDelivery) => (keyDelivery.termType === 'USED_PROPERTY_DELIVERY' ? USED_PROPERTY_TERM_VERSION : KEY_DELIVERY_TERM_VERSION);
 const CLIENT_FORBIDDEN_FIELDS = ['photosRequired', 'photoPolicy', 'termText', 'termVersion', 'termHash', 'policy'];
 
 // Fechamento M5 (Caderno §10 "Exigir vistoria final/entrada assinada quando aplicável"): locação exige
@@ -177,8 +182,12 @@ function buildKeyDeliveryTermV2({ contract, keyDelivery, keysCount, keysIdentifi
       : 'Vistoria de entrada: ainda pendente — a liberação exige a vistoria concluída e assinada.',
     PHOTO_POLICY_TEXT[policy.code] || 'Fotos: conforme a política da empresa para este tipo de entrega.',
   ];
-  if (usedProperty) {
-    lines.push('O imóvel é entregue usado, no estado descrito na vistoria acima, que faz parte deste termo.');
+  if (usedProperty && ctx.usedPropertyModel) {
+    const m = ctx.usedPropertyModel;
+    lines.push(...String(m.text).split('\n'));
+    lines.push(m.pending
+      ? `Declaração conforme o modelo jurídico "${m.templateName}" (versão inicial, registrada na liberação).`
+      : `Declaração conforme o modelo jurídico aprovado "${m.templateName}", versão ${m.versionNumber}.`);
   }
   lines.push('');
   lines.push(signedAt
@@ -311,6 +320,7 @@ async function previewKeyDeliveryTerm(id, query, transaction) {
   const n = Number(q.keysCount);
   const signerId = /^[0-9a-f-]{36}$/i.test(String(q.termSignedByPersonId || '')) ? q.termSignedByPersonId : null;
   const ctx = await gatherTermV2Context({ contract, keyDelivery, termSignedByPersonId: signerId, checkIn }, transaction);
+  if (keyDelivery.termType === 'USED_PROPERTY_DELIVERY') ctx.usedPropertyModel = await resolveUsedPropertyTermModel(contract, { seedIfMissing: false }, transaction);
   const termText = buildKeyDeliveryTermV2({
     contract,
     keyDelivery,
@@ -321,7 +331,7 @@ async function previewKeyDeliveryTerm(id, query, transaction) {
     signedAt: null,
     ctx,
   });
-  return { preview: true, termVersion: KEY_DELIVERY_TERM_VERSION, termText, termHash: null, photoPolicy: policy.code, photosRequired: policy.photosRequired };
+  return { preview: true, termVersion: termVersionOf(keyDelivery), termText, termHash: null, photoPolicy: policy.code, photosRequired: policy.photosRequired };
 }
 
 /**
@@ -497,6 +507,8 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
 
   const signedAt = new Date();
   const ctx = await gatherTermV2Context({ contract, keyDelivery, termSignedByPersonId, checkIn }, transaction);
+  // Verificação M5 linha 69: imóvel usado só com o modelo jurídico aprovado (publicado); sem modelo do tipo, a versão inicial.
+  if (keyDelivery.termType === 'USED_PROPERTY_DELIVERY') ctx.usedPropertyModel = await resolveUsedPropertyTermModel(contract, { actorUserId, seedIfMissing: true }, transaction);
   const termText = buildKeyDeliveryTermV2({
     contract,
     keyDelivery,
@@ -523,7 +535,8 @@ async function releaseKeyDelivery(id, payload, actorUserId, transaction, options
   Object.assign(keyDelivery, termEvidence);
   keyDelivery.termSignedAt = signedAt;
   keyDelivery.termText = termText;
-  keyDelivery.termVersion = KEY_DELIVERY_TERM_VERSION;
+  keyDelivery.termVersion = termVersionOf(keyDelivery);
+  keyDelivery.termTemplateVersionId = ctx.usedPropertyModel ? ctx.usedPropertyModel.templateVersionId : null;
   keyDelivery.termHash = crypto.createHash('sha256').update(termText, 'utf8').digest('hex');
   keyDelivery.photoPolicy = policy.code;
   await keyDelivery.save({ transaction });
@@ -604,5 +617,6 @@ module.exports = {
   buildKeyDeliveryTermV2,
   formatTaxId,
   KEY_DELIVERY_TERM_VERSION,
+  USED_PROPERTY_TERM_VERSION,
   KEY_DELIVERY_TERM_VERSION_V1,
 };
