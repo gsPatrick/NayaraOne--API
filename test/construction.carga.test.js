@@ -83,7 +83,6 @@ test(`Carga do diário: ${P.diarioObras} obras × ${P.diarioDiasPorObra} dias co
 
 test('Carga: a Saúde da obra (read model de custo do Guia §7) responde com p95 dentro da meta do contrato §16 com a empresa já povoada', {
   skip: H.motivoPular,
-  todo: 'ACHADO M6Q-DEF-2 (esteira de qualidade, 11/11/2026): na esteira completa sobre d9a41bb7, com a empresa semente povoada por toda a bateria de Obras, getProjectHealth deu p95 305,1 ms e 305,8 ms (meta 300 ms, contrato §16); 8,7 ms com o banco vazio e 222,0 ms na 1ª execução completa. Máquina com load average 108 a 281 em 8 CPUs; causa não isolada. Desempenho do read model de Obras (service/índices), fora desta entrega; o teste volta a valer quando a leitura ficar abaixo da meta.',
 }, async () => {
   assert.ok(obrasDaCarga.length > 0, 'roda depois do teste de volume');
   const leituras = [];

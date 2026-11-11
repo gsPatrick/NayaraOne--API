@@ -197,6 +197,7 @@ async function computeMarginProjection(projectId, transaction, { extraApprovedCh
     economyAmount,
     commissionAmount,
     costBasis,
+    stages: stagesForProgress, // reaproveitada por getProjectHealth (uma leitura a menos por chamada; M6Q-DEF-2)
   };
 }
 
@@ -251,6 +252,7 @@ async function getProjectHealth(projectId, transaction) {
     economyAmount,
     commissionAmount,
     costBasis,
+    stages,
   } = await computeMarginProjection(projectId, transaction);
 
   // M6-42/M6-17: baselineBudget é a baseline APROVADA (congelada, nunca muda); os aditivos ficam em approvedChanges.
@@ -259,13 +261,10 @@ async function getProjectHealth(projectId, transaction) {
   if (approvedBudget && approvedBudget.baselineAmount !== null) baselineBudget = toNumber(approvedBudget.baselineAmount);
   else if (project.budgetAmount !== null && project.budgetAmount !== undefined) baselineBudget = toNumber(project.budgetAmount);
 
-  const [stages, pendingEntries] = await Promise.all([
-    ProjectStage.findAll({ where: { projectId }, transaction }),
-    FinancialEntry.findAll({
-      where: { constructionProjectId: projectId, nature: 'PAYABLE', status: 'PENDING' },
-      transaction,
-    }),
-  ]);
+  const pendingEntries = await FinancialEntry.findAll({
+    where: { constructionProjectId: projectId, nature: 'PAYABLE', status: 'PENDING', parentEntryId: null },
+    transaction,
+  });
 
   const stageIds = stages.map((s) => s.id);
   const measurements = stageIds.length
