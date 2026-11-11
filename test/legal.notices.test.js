@@ -32,7 +32,7 @@ test('notice sensível (draftedByAi) não pode ser enviada sem passar por PENDIN
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseContract(transaction);
     const notice = await noticesService.createNotice(
-      { contractId: contract.id, channel: 'EMAIL', content: 'Rascunho gerado pela NAY.', draftedByAi: true },
+      { contractId: contract.id, recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'Rascunho gerado pela NAY.', draftedByAi: true },
       tenant.userId,
       transaction
     );
@@ -72,7 +72,7 @@ test('notice NÃO sensível pode ir direto de DRAFT para APPROVED (sem review ob
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseContract(transaction);
     const notice = await noticesService.createNotice(
-      { contractId: contract.id, channel: 'WHATSAPP', content: 'Aviso simples de manutenção programada.' },
+      { contractId: contract.id, recipientDescription: 'Destinatário de teste', channel: 'WHATSAPP', content: 'Aviso simples de manutenção programada.' },
       tenant.userId,
       transaction
     );
@@ -87,7 +87,7 @@ test('registerDeliveryEvidence registra evidência de envio/recebimento e vira D
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await createLeaseContract(transaction);
     const notice = await noticesService.createNotice(
-      { contractId: contract.id, channel: 'POSTAL_MAIL', content: 'Notificação de reajuste.' },
+      { contractId: contract.id, recipientDescription: 'Destinatário de teste', channel: 'POSTAL_MAIL', content: 'Notificação de reajuste.' },
       tenant.userId,
       transaction
     );
@@ -114,7 +114,7 @@ test('registerDeliveryEvidence registra evidência de envio/recebimento e vira D
 test('createNotice exige vínculo com Contract OU LegalCase, nunca os dois nem nenhum', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     await assert.rejects(
-      () => noticesService.createNotice({ channel: 'EMAIL', content: 'sem vínculo' }, tenant.userId, transaction),
+      () => noticesService.createNotice({ recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'sem vínculo' }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_NOTICE_VALIDATION');
         return true;

@@ -94,7 +94,7 @@ test('AUD-017: getContractTimeline reúne aditivo, notificação e inadimplênci
     );
 
     const notice = await noticesService.createNotice(
-      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, channel: 'EMAIL', content: 'Aviso de vencimento próximo' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'Aviso de vencimento próximo' },
       tenant.userId,
       transaction
     );

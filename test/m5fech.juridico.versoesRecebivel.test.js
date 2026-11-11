@@ -24,7 +24,7 @@ const codeIs = (code) => (err) => { assert.equal(err.code, code); return true; }
 test('JR notificação versionada: a versão 1 nasce com a notificação; corrigir cria a versão 2 (a 1 fica intacta), volta a DRAFT e só a versão aprovada sai', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const legalCase = await newCase(tenant, t);
-    const notice = await noticesService.createNotice({ legalCaseId: legalCase.id, channel: 'EMAIL', content: 'Texto v1 da notificação', draftedByAi: true }, tenant.userId, t);
+    const notice = await noticesService.createNotice({ legalCaseId: legalCase.id, recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'Texto v1 da notificação', draftedByAi: true }, tenant.userId, t);
     let versions = await noticeVersions.listNoticeVersions(notice.id, t);
     assert.deepEqual(versions.map((v) => [v.versionNumber, v.content]), [[1, 'Texto v1 da notificação']]);
     assert.match(versions[0].contentSha256, /^[0-9a-f]{64}$/);
@@ -52,7 +52,7 @@ test('JR notificação versionada: a versão 1 nasce com a notificação; corrig
 test('JR notificação versionada: enviar exige que a versão vigente seja a aprovada', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const legalCase = await newCase(tenant, t);
-    const notice = await noticesService.createNotice({ legalCaseId: legalCase.id, channel: 'POSTAL_MAIL', content: 'Aviso v1' }, tenant.userId, t);
+    const notice = await noticesService.createNotice({ legalCaseId: legalCase.id, recipientDescription: 'Destinatário de teste', channel: 'POSTAL_MAIL', content: 'Aviso v1' }, tenant.userId, t);
     await noticesService.approveNotice(notice.id, tenant.userId, t);
     await sequelize.query('UPDATE legal.notices SET current_version = 2 WHERE id = :id', { replacements: { id: notice.id }, transaction: t });
     await assert.rejects(noticesService.sendNotice(notice.id, tenant.userId, t), codeIs('LEGAL_NOTICE_SEND_BLOCKED'));

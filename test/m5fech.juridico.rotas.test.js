@@ -124,7 +124,7 @@ test('JR rotas: recebível do processo exige legal:approve E finance:create e s�
   const fx = await withTenantTransaction(tenant, async (t) => {
     const rc = await createTestResultCenter(tenant, t);
     const legalCase = await newCase(tenant, t, { estimatedAmount: 9000 });
-    const notice = await noticesService.createNotice({ legalCaseId: legalCase.id, channel: 'EMAIL', content: 'Aviso v1' }, tenant.userId, t);
+    const notice = await noticesService.createNotice({ legalCaseId: legalCase.id, recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'Aviso v1' }, tenant.userId, t);
     return { rc, legalCase, notice };
   });
   const body = { basis: 'FINAL_JUDGMENT', basisReference: 'Sentença fictícia transitada', dueAt: '2030-06-01', resultCenterId: fx.rc.id };
