@@ -33,6 +33,8 @@ const ETAPAS = [
   ['fechamento', './cenarios-fechamento'],
   ['relatorio', './cenarios-relatorio'],
   ['guia', './cenarios-guia'],
+  // Correções DI-M4CC (m4fix/conciliacao-comissao): por último, porque publica uma versão nova da regra de comissão.
+  ['m4cc', './cenarios-m4cc'],
 ];
 
 function git(cmd) {
