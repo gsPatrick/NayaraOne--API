@@ -181,7 +181,8 @@ async function checkQualityItem(id, { status, notes, evidenceFileIds, responsibl
         groupId: item.groupId,
         companyId: item.companyId,
         projectStageId: item.projectStageId,
-        severity: severityForQualityCategory(item.category),
+        // Item gerado do checklist por tipo de obra/etapa: a severidade configurada no modelo (M6-12/M6-86).
+        severity: item.failureSeverity || severityForQualityCategory(item.category),
         description: `Checklist de qualidade reprovado: "${item.item}"${notes ? ` — ${notes}` : ''}.`,
         responsibleUserId: responsibleUserId || actorUserId,
         beforeEvidenceFileIds: resolvedEvidenceFileIds,
