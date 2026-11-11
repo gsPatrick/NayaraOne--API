@@ -66,6 +66,7 @@ async function createAnomalyCase(payload, actorUserId, transaction) {
 const CASE_TYPE_TITLES = {
   AMOUNT_OUTLIER: 'Valor fora do padrão',
   FREQUENT_REVERSAL: 'Estornos frequentes',
+  RECURRING_MANUAL_RECONCILIATION: 'Conciliação manual recorrente',
   DUPLICATE_SETTLEMENT: 'Possível pagamento em dobro',
   BENEFICIARY_CHANGED: 'Conta bancária do favorecido trocada',
   LATE_BANK_CONFIRMATION: 'Confirmação do banco após falha',

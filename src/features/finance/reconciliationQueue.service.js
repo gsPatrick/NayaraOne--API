@@ -80,7 +80,8 @@ async function confirmMatch({ groupId, companyId, bankTransactionId, financialEn
     throw AppError.conflict('O lançamento escolhido não é um candidato elegível para esta transação (valor, sentido ou conta não batem).', 'FINANCE_RECONCILIATION_NOT_A_CANDIDATE');
   }
   const reconciliation = await reconciliationService.matchReconciliation(
-    { groupId, companyId, financialEntryId: chosen, bankTransactionId },
+    // §17: só conta como conciliação manual quando a PESSOA escolheu o lançamento.
+    { groupId, companyId, financialEntryId: chosen, bankTransactionId, matchMethod: financialEntryId ? 'MANUAL_CHOICE' : 'SUGGESTION_CONFIRMED' },
     actorUserId,
     transaction
   );
@@ -89,6 +90,7 @@ async function confirmMatch({ groupId, companyId, bankTransactionId, financialEn
     finalClass: suggestion.finalClass,
     confirmedCandidate: { financialEntryId: chosen, score: candidate.score, class: candidate.class, reasons: candidate.reasons },
     method: 'HUMAN_CONFIRMED',
+    matchMethod: reconciliation.matchMethod,
   };
 }
 

@@ -2,7 +2,7 @@
 
 const { Op } = require('sequelize');
 
-const { FinancialEntry, Commission, OwnerRepass, sequelize } = require('../../models');
+const { FinancialEntry, Commission, OwnerRepass, AnomalyCase, sequelize } = require('../../models');
 const { countOpenHighRiskAnomalies } = require('./anomalyCases.service');
 const { startOfBusinessDay } = require('../../utils/businessDate');
 
@@ -191,6 +191,18 @@ async function getWeeklyHealthReport(transaction, options = {}) {
   report.openHighRiskAnomalies = options.companyId
     ? await countOpenHighRiskAnomalies(options.companyId, transaction)
     : null;
+  // §17 "Conciliação manual recorrente -> Alerta gerencial": casos abertos do alerta (MEDIUM, por isso fora do contador HIGH/CRITICAL).
+  const recurringManual = options.companyId
+    ? await AnomalyCase.findAll({ where: { companyId: options.companyId, caseType: 'RECURRING_MANUAL_RECONCILIATION', status: 'OPEN' }, order: [['created_at', 'DESC']], transaction })
+    : [];
+  report.managementAlerts = {
+    recurringManualReconciliation: {
+      label: 'Conciliação manual recorrente',
+      openCases: recurringManual.length,
+      latestReason: recurringManual[0] ? recurringManual[0].reason : 'Nenhum alerta aberto.',
+      latestCaseId: recurringManual[0] ? recurringManual[0].id : null,
+    },
+  };
 
   // GAP REAL CORRIGIDO (Caderno §19, indicador "Caixa disponível"): não existe uma tabela
   // finance.ledger nem um campo de saldo materializado em BankAccount — o saldo bancário real é

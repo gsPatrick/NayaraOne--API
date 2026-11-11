@@ -1,7 +1,7 @@
 'use strict';
 
 const { formatMoneyBR } = require('../../utils/formatBR');
-
+const { checkAfterManualReconciliation } = require('./manualReconciliationAlert'); // §17 conciliação manual recorrente
 const { randomUUID } = require('node:crypto');
 const { Op } = require('sequelize');
 
@@ -62,7 +62,7 @@ function assertDirectionAndAccountCompatible(entry, bankTransaction) {
 }
 
 async function matchReconciliation(payload, actorUserId, transaction) {
-  const { groupId, companyId, financialEntryId, bankTransactionId } = payload;
+  const { groupId, companyId, financialEntryId, bankTransactionId, matchMethod = 'MANUAL' } = payload;
   if (!groupId || !companyId || !financialEntryId || !bankTransactionId) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "financialEntryId" e "bankTransactionId" são obrigatórios.',
@@ -70,16 +70,9 @@ async function matchReconciliation(payload, actorUserId, transaction) {
     );
   }
 
-  // FIX (homologação 23/09/2026 — auditoria adversarial, corrida real de verdade validada):
-  // não existe (e não dá pra existir sem redesenhar o schema — ver comentário em
-  // matchReconciliationGroup sobre por que um financial_entry_id/bank_transaction_id pode
-  // legitimamente se repetir em mais de uma linha dentro do MESMO grupo N:M) uma constraint
-  // única simples que trave "entry/transaction só pode ser conciliado uma vez" no banco. Sem
-  // isso, duas chamadas concorrentes de matchReconciliation para o MESMO entry/transaction
-  // liam "ainda não conciliado" ao mesmo tempo (SELECT-then-INSERT clássico) e as duas
-  // passavam. `FOR UPDATE` na leitura do entry/transaction serializa: a segunda transação
-  // BLOQUEIA até a primeira commitar, e só então reavalia assertNotAlreadyReconciled — que
-  // nesse ponto já enxerga a Reconciliation da primeira e barra corretamente.
+  // Homologação 23/09/2026 (corrida real): sem UNIQUE simples possível (o grupo N:M repete ids), o
+  // FOR UPDATE no lançamento e na transação serializa duas conciliações concorrentes; a segunda
+  // só reavalia assertNotAlreadyReconciled depois que a primeira commita e é barrada.
   const entry = await FinancialEntry.findByPk(financialEntryId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!entry) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   const bankTransaction = await BankTransaction.findByPk(bankTransactionId, { transaction, lock: transaction.LOCK.UPDATE });
@@ -104,6 +97,7 @@ async function matchReconciliation(payload, actorUserId, transaction) {
       bankTransactionId,
       matchedAt: new Date(),
       matchedByUserId: actorUserId || null,
+      matchMethod,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -111,6 +105,7 @@ async function matchReconciliation(payload, actorUserId, transaction) {
   );
 
   await publishReconciliationMatched(reconciliation, transaction);
+  await checkAfterManualReconciliation({ groupId, companyId, matchMethod }, actorUserId, transaction); // §17 alerta gerencial
 
   await registrarAuditoria(
     {
@@ -271,6 +266,7 @@ async function matchReconciliationGroup(payload, actorUserId, transaction) {
     transaction
   );
 
+  await checkAfterManualReconciliation({ groupId, companyId, matchMethod: 'MANUAL' }, actorUserId, transaction); // §17 (o grupo conta 1)
   return { matchGroupId, reconciliations, totalAmount: (entriesCents / 100).toFixed(2) };
 }
 
@@ -515,7 +511,7 @@ async function autoReconcileSuggestion(payload, actorUserId, transaction) {
 
   const top = suggestion.candidates[0];
   const reconciliation = await matchReconciliation(
-    { groupId, companyId, financialEntryId: top.financialEntryId, bankTransactionId },
+    { groupId, companyId, financialEntryId: top.financialEntryId, bankTransactionId, matchMethod: suggestion.finalClass === MATCH_CLASSES.EXACT ? 'AUTO_EXACT' : 'AUTO_STRONG' },
     actorUserId,
     transaction
   );
