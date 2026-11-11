@@ -60,6 +60,7 @@ financeRouter.post('/finance/reconciliations', requirePermission('finance:reconc
 financeRouter.post('/finance/reconciliations/group', requirePermission('finance:reconcile'), financeController.matchReconciliationGroup);
 financeRouter.get('/finance/reconciliations', requirePermission('finance:read'), financeController.listReconciliations);
 financeRouter.get('/finance/bank-transactions/:id/reconciliation-suggestions', requirePermission('finance:read'), financeController.suggestReconciliationMatches);
+financeRouter.get('/finance/reconciliation/policy', requirePermission('finance:read'), financeController.getReconciliationPolicy);
 financeRouter.post('/finance/bank-transactions/:id/auto-reconcile', requirePermission('finance:update'), financeController.autoReconcileSuggestion);
 
 // Approvals (maker-checker)

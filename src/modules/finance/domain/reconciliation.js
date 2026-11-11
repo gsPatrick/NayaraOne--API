@@ -2,6 +2,11 @@
 
 // Regra pura da conciliação: sentido/conta, valor em centavos, pontuação e classificação do
 // match. Sem banco e sem HTTP; os erros são lançados pelo serviço.
+// Limiares, janela de data e folga de empate NÃO são constantes: chegam no objeto `policy` (regra AUTO_STRONG parametrizada, Guia §9 ">= regra
+// AUTO_STRONG: auto conforme policy"; DEC-006), lido dos parâmetros da empresa por application/services/reconciliation-policy.js.
+
+const money = require('./money');
+const { businessDateKey } = require('../../../utils/businessDate');
 
 // Sentido do extrato (R6 / M4-D019 A7): valor negativo = saída (só concilia com DEBIT/PAYABLE),
 // positivo = entrada (só com CREDIT/RECEIVABLE). Conta bancária diferente também nunca concilia
@@ -35,16 +40,14 @@ function directionAndAccountMismatch(entry, bankTransaction) {
 
 // Conciliação 1:1: valor do lançamento igual ao módulo do valor do extrato (tolerância zero).
 function amountsMatchExactly(entry, bankTransaction) {
-  return Number(entry.amount) === Math.abs(Number(bankTransaction.amount));
+  return money.toCents(entry.amount) === Math.abs(money.toCents(bankTransaction.amount));
 }
 
 // Tolerância ZERO no valor, igual ao 1:1: Σ(lançamentos) precisa bater exatamente com
 // Σ(|transações|). A soma é feita em CENTAVOS inteiros — somar DECIMAL como float
 // introduziria erro de arredondamento justamente onde a regra é "bater no centavo".
 
-function toCents(value) {
-  return Math.round(Number(value) * 100);
-}
+const { toCents } = money;
 
 function sumEntriesCents(entries) {
   return entries.reduce((acc, e) => acc + toCents(e.amount), 0);
@@ -99,21 +102,25 @@ function buildGroupPairs(entries, bankTransactions) {
 //   - sameCounterparty: mesma bankAccountId do extrato e do lançamento (nem bank_transactions
 //     nem financial_entries têm um campo dedicado de "contraparte"/contrato — a conta bancária
 //     é o sinal mais próximo disponível no schema atual de "mesmo lado da relação comercial").
-//   - withinDateWindow: data do extrato dentro de +-5 dias da data de vencimento (ou, na
-//     ausência de vencimento, da criação) do lançamento — mesma folga usada pelo antifraude
-//     (M4-21) para não tratar "pagamento com atraso de alguns dias" como anomalia de data.
+//   - withinDateWindow: dia (civil, São Paulo) do extrato dentro de +-N dias do dia de vencimento
+//     (ou, na ausência de vencimento, da criação) do lançamento; N = conciliacao.janela_data_dias.
 // EXATO exige, além do score máximo (1.00 — todos os 4 critérios bateram), que a correspondência
 // de referência tenha vindo do id externo (não só da heurística textual) — é a única forma de
 // "ID externo/fingerprint" que o schema atual suporta sem campo dedicado. Sem id externo, o
 // score máximo possível é FORTE (0.90 — reference textual + counterparty + dateWindow), nunca
 // EXATO — fail-closed em relação à classe mais permissiva de auto-conciliação.
 const MATCH_CLASSES = { EXACT: 'EXACT', STRONG: 'STRONG', PROBABLE: 'PROBABLE', AMBIGUOUS: 'AMBIGUOUS', NO_MATCH: 'NO_MATCH' };
-// Livro / M4-D019: FORTE a partir de 0,90 (valor+ref+contraparte, ou valor+ref+contraparte+janela);
-// 0,85 (valor+ref+janela) ainda é PROVÁVEL.
-const STRONG_THRESHOLD = 0.9;
-const PROBABLE_THRESHOLD = 0.45;
-const DATE_WINDOW_DAYS = 5;
-const AMBIGUITY_SCORE_GAP = 0.05;
+// Política (Guia §9 "regra AUTO_STRONG"): { autoScoreMin, suggestionScoreMin, dateWindowDays, ambiguityGap }.
+//   FORTE    = score >= autoScoreMin           (conciliacao.score_auto_minimo, DEC-006)
+//   PROVÁVEL = suggestionScoreMin <= score < autoScoreMin (conciliacao.score_sugestao_minimo)
+//   empate   = outro candidato a menos de ambiguityGap do topo (conciliacao.folga_ambiguidade, DI-M4CC-3) -> AMBÍGUO
+function assertPolicy(policy) {
+  const ok = policy && ['autoScoreMin', 'suggestionScoreMin', 'dateWindowDays', 'ambiguityGap'].every((k) => Number.isFinite(policy[k]));
+  if (!ok) throw new TypeError('Política de conciliação ausente ou incompleta (autoScoreMin, suggestionScoreMin, dateWindowDays, ambiguityGap).');
+  return policy;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function sameAmount(bankTx, candidate) {
   return toCents(Math.abs(Number(bankTx.amount))) === toCents(Number(candidate.amount));
@@ -137,7 +144,7 @@ function sameCounterparty(bankTx, candidate) {
   return Boolean(bankTx.bankAccountId && candidate.bankAccountId) && bankTx.bankAccountId === candidate.bankAccountId;
 }
 
-function withinDateWindow(bankTx, candidate) {
+function withinDateWindow(bankTx, candidate, policy) {
   // BUG REAL CORRIGIDO (verificação cética adicional, Marco 4, 12/10/2026): o model
   // FinancialEntry (ver src/models/FinancialEntry.js) declara `createdAt: 'created_at'` em
   // conjunto com `underscored: true`, e nesta versão do Sequelize isso faz o ATRIBUTO em si se
@@ -148,8 +155,10 @@ function withinDateWindow(bankTx, candidate) {
   // 0.9, nunca em 1.0). Lendo a chave real `created_at` diretamente.
   const reference = candidate.dueAt || candidate.created_at || candidate.get?.('created_at');
   if (!bankTx.transactionDate || !reference) return false;
-  const diffMs = Math.abs(new Date(bankTx.transactionDate).getTime() - new Date(reference).getTime());
-  return diffMs <= DATE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  // Dia civil de São Paulo dos dois lados (M4-D019 teste 14), diferença em dias inteiros.
+  const dayOf = (v) => Date.parse(`${businessDateKey(v)}T00:00:00Z`);
+  const diffDays = Math.abs(dayOf(bankTx.transactionDate) - dayOf(reference)) / DAY_MS;
+  return diffDays <= assertPolicy(policy).dateWindowDays;
 }
 
 /**
@@ -157,20 +166,21 @@ function withinDateWindow(bankTx, candidate) {
  * (0 a 1) e o detalhe de quais critérios bateram (usado por `classifyMatch` para decidir EXATO
  * vs. FORTE sem recalcular tudo).
  */
-function scoreMatch(bankTx, candidate) {
+function scoreMatch(bankTx, candidate, policy) {
   const amountMatch = sameAmount(bankTx, candidate);
   const referenceMatch = sameReference(bankTx, candidate);
   const counterpartyMatch = sameCounterparty(bankTx, candidate);
-  const dateMatch = withinDateWindow(bankTx, candidate);
+  const dateMatch = withinDateWindow(bankTx, candidate, policy);
 
-  let score = 0;
-  if (amountMatch) score += 0.45;
-  if (referenceMatch.matched) score += 0.3;
-  if (counterpartyMatch) score += 0.15;
-  if (dateMatch) score += 0.1;
+  // Pesos do livro em centésimos inteiros (45/30/15/10): a soma é exata, sem resíduo de float.
+  let points = 0;
+  if (amountMatch) points += 45;
+  if (referenceMatch.matched) points += 30;
+  if (counterpartyMatch) points += 15;
+  if (dateMatch) points += 10;
 
   return {
-    score: Math.round(score * 100) / 100,
+    score: points / 100,
     criteria: { amountMatch, referenceMatch: referenceMatch.matched, byExternalId: referenceMatch.byExternalId, counterpartyMatch, dateMatch },
   };
 }
@@ -180,14 +190,15 @@ function scoreMatch(bankTx, candidate) {
  * `scoreMatch`. EXATO é a única classe fail-closed por campo específico (precisa do id externo
  * batendo, não só o score numérico) — as demais usam só o limiar de score.
  */
-function classifyMatch({ score, criteria }) {
+function classifyMatch({ score, criteria }, policy) {
+  const { autoScoreMin, suggestionScoreMin } = assertPolicy(policy);
   // EXATO (livro §11): ID externo/fingerprint + valor + data. A conta bancária já é checada na
   // elegibilidade (candidato de outra conta nunca chega aqui), então não é exigida de novo.
   if (criteria.amountMatch && criteria.byExternalId && criteria.dateMatch) {
     return MATCH_CLASSES.EXACT;
   }
-  if (score >= STRONG_THRESHOLD) return MATCH_CLASSES.STRONG;
-  if (score >= PROBABLE_THRESHOLD) return MATCH_CLASSES.PROBABLE;
+  if (score >= autoScoreMin) return MATCH_CLASSES.STRONG;
+  if (score >= suggestionScoreMin) return MATCH_CLASSES.PROBABLE;
   return MATCH_CLASSES.NO_MATCH;
 }
 
@@ -212,30 +223,36 @@ function filterEligibleCandidates(bankTx, candidates, reconciledEntryIds) {
 }
 
 // Pontua e classifica os elegíveis; descarta abaixo de PROVÁVEL e ordena do maior score.
-function scoreCandidates(bankTx, eligible) {
+function scoreCandidates(bankTx, eligible, policy) {
+  const { suggestionScoreMin } = assertPolicy(policy);
   return eligible
     .map((candidate) => {
-      const { score, criteria } = scoreMatch(bankTx, candidate);
+      const { score, criteria } = scoreMatch(bankTx, candidate, policy);
       return {
         financialEntryId: candidate.id,
         score,
         criteria,
-        class: classifyMatch({ score, criteria }),
+        class: classifyMatch({ score, criteria }, policy),
         reasons: describeReasons(criteria),
       };
     })
-    .filter((c) => c.score >= PROBABLE_THRESHOLD)
+    .filter((c) => c.class === MATCH_CLASSES.EXACT || c.score >= suggestionScoreMin)
     .sort((a, b) => b.score - a.score);
 }
 
 // AMBÍGUO (livro §11 e Guia §9): mais de um candidato elegível com score parecido -> nunca
 // auto. Só o EXATO por ID externo desempata sozinho (o ID externo identifica um lançamento).
-function resolveFinalClass(scored) {
+function resolveFinalClass(scored, policy) {
+  const { ambiguityGap } = assertPolicy(policy);
   const top = scored[0];
-  const tiedAtTop = scored.filter((c) => top.score - c.score < AMBIGUITY_SCORE_GAP);
+  // Comparação em centésimos inteiros (os scores têm 2 casas).
+  const gap = (c) => Math.round((top.score - c.score) * 100);
+  const tiedAtTop = scored.filter((c) => gap(c) === 0 || gap(c) < Math.round(ambiguityGap * 100));
+  // Guia §9 "múltiplos candidatos fortes: AMBIGUOUS, nunca auto" vale qualquer que seja a folga configurada.
+  const strongOnes = scored.filter((c) => c.class === MATCH_CLASSES.STRONG || c.class === MATCH_CLASSES.EXACT);
 
   let finalClass = top.class;
-  if (top.class !== MATCH_CLASSES.EXACT && tiedAtTop.length > 1) {
+  if (top.class !== MATCH_CLASSES.EXACT && (tiedAtTop.length > 1 || strongOnes.length > 1)) {
     finalClass = MATCH_CLASSES.AMBIGUOUS;
   }
   return finalClass;
@@ -248,10 +265,7 @@ function autoMatchMethod(finalClass) {
 
 module.exports = {
   MATCH_CLASSES,
-  STRONG_THRESHOLD,
-  PROBABLE_THRESHOLD,
-  DATE_WINDOW_DAYS,
-  AMBIGUITY_SCORE_GAP,
+  assertPolicy,
   entryDirection,
   bankDirection,
   directionAndAccountMismatch,

@@ -22,6 +22,7 @@ const {
   resolveFinalClass,
   autoMatchMethod,
 } = require('../../domain/reconciliation');
+const { DEFAULT_POLICY, readPolicy, autoConfirmDecision } = require('./reconciliation-policy');
 
 // Motor de conciliação — casa um finance.financial_entries (lançamento) com um
 // finance.bank_transactions (linha real de extrato). Regras duras:
@@ -269,21 +270,26 @@ async function listReconciliations(transaction, filters = {}) {
  * suggestReconciliationMatches — motor de SUGESTÃO (M4-contrato §11). Para uma transação
  * bancária ainda não conciliada, calcula `scoreMatch` contra todos os FinancialEntry em aberto
  * (PENDING/PARTIALLY_SETTLED) da mesma empresa ainda sem Reconciliation, classifica cada
- * candidato, e resolve a classe final do TOPO:
+ * candidato, e resolve a classe final do TOPO com a regra AUTO_STRONG da empresa
+ * (reconciliation-policy.js: limiares, janela de data e folga de empate são parâmetros):
  *   - só 1 candidato com classe EXATO/FORTE -> mantém essa classe;
- *   - 2+ candidatos empatados (gap de score < 0.05) na faixa FORTE/EXATO -> AMBÍGUO, "nunca
+ *   - 2+ candidatos fortes, ou empatados no topo (diferença < folga) -> AMBÍGUO, "nunca
  *     auto conciliar" (contrato, literal);
- *   - nenhum candidato com score >= 0.45 -> SEM CORRESPONDÊNCIA (fila de pendência).
+ *   - nenhum candidato com score >= mínimo de sugestão -> SEM CORRESPONDÊNCIA (fila de pendência).
  * NUNCA executa a conciliação — só sugere. `autoReconcileSuggestion` (abaixo) é quem decide se
- * executa, e só para EXATO/FORTE sem ambiguidade.
+ * executa. A resposta leva a política usada (`policy`) e a origem da linha (`source`, `sourceTrusted`).
+
+ * @returns {Promise<any>}
  */
-async function suggestReconciliationMatches(bankTransactionId, transaction) {
+async function suggestReconciliationMatches(bankTransactionId, transaction, policy) {
   const bankTx = await reconciliationRepository.findBankTransactionById(bankTransactionId, transaction);
   if (!bankTx) throw AppError.notFound('Transação bancária não encontrada.', 'FINANCE_BANK_TRANSACTION_NOT_FOUND');
+  const effective = policy || (await readPolicy({ groupId: bankTx.groupId, companyId: bankTx.companyId }, transaction));
+  const origin = { source: bankTx.source || null, sourceTrusted: bankTx.sourceTrusted === true };
 
   const alreadyReconciled = await reconciliationRepository.findReconciliationByBankTransaction(bankTransactionId, transaction);
   if (alreadyReconciled) {
-    return { bankTransactionId, finalClass: null, candidates: [], alreadyReconciled: true };
+    return { bankTransactionId, finalClass: null, candidates: [], alreadyReconciled: true, policy: effective, ...origin };
   }
 
   const candidates = await reconciliationRepository.findOpenFinancialEntriesByCompany(bankTx.companyId, transaction);
@@ -295,42 +301,38 @@ async function suggestReconciliationMatches(bankTransactionId, transaction) {
   // Elegibilidade (M4-D019 A7): valor igual, mesmo sentido e mesma conta (regra no domínio).
   const eligible = filterEligibleCandidates(bankTx, candidates, reconciledEntryIds);
 
-  const scored = scoreCandidates(bankTx, eligible);
+  const scored = scoreCandidates(bankTx, eligible, effective);
 
   if (scored.length === 0) {
-    return { bankTransactionId, finalClass: MATCH_CLASSES.NO_MATCH, candidates: [] };
+    return { bankTransactionId, finalClass: MATCH_CLASSES.NO_MATCH, candidates: [], policy: effective, ...origin };
   }
 
-  // AMBÍGUO: empate no topo nunca é auto (regra no domínio).
-  const finalClass = resolveFinalClass(scored);
+  // AMBÍGUO: empate no topo ou vários fortes nunca é auto (regra no domínio).
+  const finalClass = resolveFinalClass(scored, effective);
 
-  return { bankTransactionId, finalClass, candidates: scored };
+  return { bankTransactionId, finalClass, candidates: scored, policy: effective, ...origin };
 }
 
 /**
- * autoReconcileSuggestion — só EXECUTA a conciliação (via matchReconciliation) quando a classe
- * final resolvida por `suggestReconciliationMatches` é EXATO ou FORTE SEM ambiguidade. Para
- * PROVÁVEL (sugestão — humano confirma), AMBÍGUO (nunca auto) e SEM CORRESPONDÊNCIA (fila), só
- * retorna a sugestão sem tocar em nada — fail closed em relação à auto-conciliação.
+ * autoReconcileSuggestion — só EXECUTA a conciliação (via matchReconciliation) quando a regra de
+ * confirmação conforme risco permite (FIN-009; reconciliation-policy.js#autoConfirmDecision):
+ * EXATO de fonte confiável (livro §11 "auto confirmado se fonte confiável"); FORTE de fonte
+ * confiável com a política AUTO_STRONG ligada e score >= mínimo automático. Linha digitada à mão
+ * (fonte não confiável), PROVÁVEL, AMBÍGUO e SEM CORRESPONDÊNCIA só devolvem a sugestão, com o
+ * motivo em `autoBlockedReason` — fail closed em relação à auto-conciliação.
  */
 async function autoReconcileSuggestion(payload, actorUserId, transaction) {
   const { groupId, companyId, bankTransactionId } = payload;
-  const suggestion = await suggestReconciliationMatches(bankTransactionId, transaction);
-
-  if (suggestion.finalClass !== MATCH_CLASSES.EXACT && suggestion.finalClass !== MATCH_CLASSES.STRONG) {
-    return { ...suggestion, autoReconciled: false };
-  }
-
-  // Livro §11: EXATO é auto-confirmado; FORTE é "auto ou revisão conforme regra" — por padrão
-  // fica para revisão humana, e só confirma sozinho se a política estiver ligada na empresa
-  // (setting finance.reconciliation.auto_strong). Ambíguo nunca chega aqui.
-  if (suggestion.finalClass === MATCH_CLASSES.STRONG) {
-    const { getSetting } = require('../../../../features/settings/settings.service');
-    const autoStrong = await getSetting('finance.reconciliation.auto_strong', { groupId, companyId }, transaction, false);
-    if (!autoStrong) return { ...suggestion, autoReconciled: false };
-  }
+  const policy = await readPolicy({ groupId, companyId }, transaction);
+  const suggestion = await suggestReconciliationMatches(bankTransactionId, transaction, policy);
+  if (suggestion.alreadyReconciled) return { ...suggestion, autoReconciled: false, autoBlockedReason: 'ALREADY_RECONCILED' };
 
   const top = suggestion.candidates[0];
+  const bankTx = { sourceTrusted: suggestion.sourceTrusted };
+  const entry = top ? await reconciliationRepository.findFinancialEntryById(top.financialEntryId, transaction) : null;
+  const decision = autoConfirmDecision({ finalClass: suggestion.finalClass, topScore: top ? top.score : 0, bankTx, entry }, policy);
+  if (!decision.allowed) return { ...suggestion, autoReconciled: false, autoBlockedReason: decision.reason };
+
   const reconciliation = await matchReconciliation(
     { groupId, companyId, financialEntryId: top.financialEntryId, bankTransactionId, matchMethod: autoMatchMethod(suggestion.finalClass) },
     actorUserId,
@@ -349,8 +351,9 @@ module.exports = {
   matchReconciliation,
   matchReconciliationGroup,
   listReconciliations,
-  scoreMatch,
-  classifyMatch,
+  // Pontuação/classe com a política padrão (DEC-006) quando chamadas sem política (uso em teste e diagnóstico).
+  scoreMatch: (bankTx, candidate, policy = DEFAULT_POLICY) => scoreMatch(bankTx, candidate, policy),
+  classifyMatch: (scored, policy = DEFAULT_POLICY) => classifyMatch(scored, policy),
   suggestReconciliationMatches,
   autoReconcileSuggestion,
   MATCH_CLASSES,

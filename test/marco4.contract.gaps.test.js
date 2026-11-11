@@ -220,7 +220,9 @@ test('contrato §11 autoReconcileSuggestion concilia automaticamente só nas cla
         externalTransactionId: `auto-exact-${suffix}`,
       },
       tenant.userId,
-      transaction
+      transaction,
+      // Caderno §11 "auto confirmado se fonte confiável" (DI-M4CC-2): arquivo importado por quem tem finance:reconcile.
+      { source: 'FILE_IMPORT', canReconcile: true }
     );
 
     const autoResult = await reconciliationService.autoReconcileSuggestion(

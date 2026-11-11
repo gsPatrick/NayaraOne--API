@@ -56,6 +56,8 @@ const FINANCE_SETTINGS_SCHEMA = Object.freeze({
   // §11 "Forte: auto ou revisão conforme regra" (reconciliation.service.js autoReconcileSuggestion): desligado, a correspondência FORTE espera revisão humana.
   // Equivalente a conciliacao.auto_confirmacao_ativa do catálogo (marcada com MFA).
   [KEYS.reconciliationAutoStrong]: { type: 'boolean', requiresMfa: true },
+  // Guia §9 "regra AUTO_STRONG" parametrizada (DEC-006): limiares, janela de data e folga de empate (reconciliation-policy.js).
+  ...require('./reconciliation-policy').RECONCILIATION_SETTINGS_SCHEMA,
 });
 
 /** Padrão que vale enquanto a empresa não gravou nada (o mesmo que cada leitor usa como fallback). */

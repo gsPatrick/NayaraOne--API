@@ -18,10 +18,11 @@ const settingsService = require('../src/features/settings/settings.service');
 const flagsService = require('../src/features/core-governance/feature-flags/feature-flags.service');
 const { TenantSetting, User } = require('../src/models');
 
-// Lista fechada (vale também no CI, sem a pasta Maturacao): as 19 chaves do catálogo com MFA que existem no dicionário + a equivalente
+// Lista fechada (vale também no CI, sem a pasta Maturacao): as 20 chaves do catálogo com MFA que existem no dicionário + a equivalente
 // finance.reconciliation.auto_strong (= conciliacao.auto_confirmacao_ativa do catálogo). O teste meta (settings.mfaCatalogo.meta) confere contra o CSV.
 const EXPECTED = [
   'billing.grace_period_days', 'billing.interest_percentage', 'billing.late_fee_percentage',
+  'conciliacao.score_auto_minimo',
   'finance.antifraud_new_account_threshold', 'finance.bank_account_cooldown_hours', 'finance.reconciliation.auto_strong',
   'governanca.flags.kill_teste_dias', 'ia.fallback.max_saltos',
   'integration.admin.mfa_on_prod_connection_change', 'integration.admin.mfa_on_prod_test_connection', 'integration.admin.mfa_on_secret_rotation',
@@ -30,7 +31,7 @@ const EXPECTED = [
   'integration.secret.rotation_max_age_days.BANK',
   'mfa.required_for_sensitive_roles', 'mfa.step_up_ttl_minutes',
 ];
-const SAMPLE_OVERRIDES = { 'integration.secret.expiry_alert_days': '30,14,7' };
+const SAMPLE_OVERRIDES = { 'integration.secret.expiry_alert_days': '30,14,7', 'conciliacao.score_auto_minimo': 0.95 };
 function sample(key) {
   if (SAMPLE_OVERRIDES[key] !== undefined) return SAMPLE_OVERRIDES[key];
   const spec = settingsService.SETTINGS_SCHEMA[key];

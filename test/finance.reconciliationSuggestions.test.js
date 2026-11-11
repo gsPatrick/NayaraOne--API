@@ -189,11 +189,14 @@ async function newAccount(transaction) {
   );
 }
 
-function newBankTx(transaction, account, overrides) {
+// `origin`: por padrão a linha é digitada à mão (MANUAL, não confiável); TRUSTED é o arquivo importado por quem tem finance:reconcile (DI-M4CC-2).
+const TRUSTED = { source: 'FILE_IMPORT', canReconcile: true };
+function newBankTx(transaction, account, overrides, origin) {
   return bankTransactionsService.createBankTransaction(
     { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, transactionDate: new Date(), ...overrides },
     tenant.userId,
-    transaction
+    transaction,
+    origin
   );
 }
 
@@ -237,11 +240,11 @@ test('R6 AMBÍGUO: 2 lançamentos de mesmo valor (só valor+data) NÃO são "Pro
   });
 });
 
-test('R6: FORTE não confirma sozinho por padrão; EXATO confirma e informa método AUTO_EXACT', async () => {
+test('R6: FORTE não confirma sozinho por padrão; EXATO de fonte confiável confirma e informa método AUTO_EXACT', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await newAccount(transaction);
     const strongEntry = await createEntry(transaction, { amount: 413.0, bankAccountId: account.id });
-    const strongTx = await newBankTx(transaction, account, { amount: -413.0, description: `ref ${strongEntry.id}` });
+    const strongTx = await newBankTx(transaction, account, { amount: -413.0, description: `ref ${strongEntry.id}` }, TRUSTED);
     const a = await reconciliationService.autoReconcileSuggestion(
       { groupId: tenant.groupId, companyId: tenant.companyId, bankTransactionId: strongTx.id }, tenant.userId, transaction
     );
@@ -250,7 +253,7 @@ test('R6: FORTE não confirma sozinho por padrão; EXATO confirma e informa mét
 
     const key = `r6-${uniqueSuffix()}`;
     const exactEntry = await createEntry(transaction, { amount: 414.0, bankAccountId: account.id, idempotencyKey: key });
-    const exactTx = await newBankTx(transaction, account, { amount: -414.0, externalTransactionId: key });
+    const exactTx = await newBankTx(transaction, account, { amount: -414.0, externalTransactionId: key }, TRUSTED);
     const b = await reconciliationService.autoReconcileSuggestion(
       { groupId: tenant.groupId, companyId: tenant.companyId, bankTransactionId: exactTx.id }, tenant.userId, transaction
     );

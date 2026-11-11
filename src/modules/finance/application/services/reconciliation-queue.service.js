@@ -14,14 +14,17 @@ const { BankTransaction, Reconciliation } = require('../../../../models');
 const AppError = require('../../../../utils/AppError');
 const reconciliationService = require('./reconciliation.service');
 const { listClassificationPendings } = require('./classification-pending.service');
+const { readPolicy } = require('./reconciliation-policy');
+const money = require('../../domain/money');
 
 const { MATCH_CLASSES } = reconciliationService;
 
-function toCents(value) {
-  return Math.round(Math.abs(Number(value)) * 100);
-}
+const toCents = (value) => Math.abs(money.toCents(value));
 
-async function listPendingQueue(transaction, { includeSuggestions = false } = {}) {
+// `tenant` (grupo e empresa da requisição) define a regra AUTO_STRONG usada nas sugestões; a fila devolve essa regra em `policy` para a tela mostrar.
+/** @param {any} transaction @param {{ includeSuggestions?: boolean, tenant?: any }} [options] */
+async function listPendingQueue(transaction, { includeSuggestions = false, tenant = null } = {}) {
+  const policy = await readPolicy(tenant, transaction);
   const [bankTransactions, reconciliations, classification] = await Promise.all([
     BankTransaction.findAll({ order: [['transaction_date', 'DESC']], transaction }),
     Reconciliation.findAll({ attributes: ['bankTransactionId'], transaction }),
@@ -33,7 +36,7 @@ async function listPendingQueue(transaction, { includeSuggestions = false } = {}
   for (const b of unmatched) {
     const item = { ...b.toJSON(), pendingType: 'BANK_TRANSACTION_UNMATCHED' };
     if (includeSuggestions) {
-      const s = await reconciliationService.suggestReconciliationMatches(b.id, transaction);
+      const s = await reconciliationService.suggestReconciliationMatches(b.id, transaction, policy);
       item.suggestion = { finalClass: s.finalClass, candidates: s.candidates.length, topCandidate: s.candidates[0] || null };
     }
     items.push(item);
@@ -41,6 +44,7 @@ async function listPendingQueue(transaction, { includeSuggestions = false } = {}
   return {
     bankTransactions: items,
     classificationPendings: classification,
+    policy,
     totals: {
       bankTransactions: items.length,
       bankTransactionsAmount: (items.reduce((acc, b) => acc + toCents(b.amount), 0) / 100).toFixed(2),
@@ -57,7 +61,7 @@ async function listPendingQueue(transaction, { includeSuggestions = false } = {}
  * POST /finance/reconciliations (valor, sentido, conta, sem duplicidade, auditoria, evento).
  */
 async function confirmMatch({ groupId, companyId, bankTransactionId, financialEntryId }, actorUserId, transaction) {
-  const suggestion = await reconciliationService.suggestReconciliationMatches(bankTransactionId, transaction);
+  const suggestion = await reconciliationService.suggestReconciliationMatches(bankTransactionId, transaction, await readPolicy({ groupId, companyId }, transaction));
   if (suggestion.alreadyReconciled) {
     throw AppError.conflict('Esta transação de extrato já está conciliada com outro lançamento.', 'FINANCE_RECONCILIATION_TRANSACTION_ALREADY_MATCHED');
   }
