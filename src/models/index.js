@@ -71,6 +71,7 @@ const modelDefiners = {
   ContractNumberSequence: require('./ContractNumberSequence'),
   ContractAmendment: require('./ContractAmendment'),
   TemplateVersion: require('./TemplateVersion'),
+  NayDraftSuggestion: require('./NayDraftSuggestion'),
   ClauseLibrary: require('./ClauseLibrary'),
   AddendumSignature: require('./AddendumSignature'),
   LegalCase: require('./LegalCase'),

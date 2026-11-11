@@ -143,9 +143,14 @@ test('NAY-JUR-03: minuta sugerida só com cláusulas homologadas — condição 
       t
     );
     assert.equal(conditional.conditionStatus, 'PENDING_APPROVAL');
+    // Verificação M5 linha 124: homologada = aprovada por outra pessoa, não só "ativa".
+    const naoHomologada = await contractClausesService.createClause({ ...ctx(), code: `NAYJUR-N-${sfx}`, title: 'Multa', bodyText: 'Multa de 10%.', category: 'GENERAL' }, tenant.userId, t);
+    const revisor = await require('./m5fech.juridico.helpers').newUser(tenant, t);
+    await require('../src/modules/legal/contracts/application/clauseHomologation.service').homologateClauseVersion(plain.id, revisor.id, t);
     const out = await nay.suggestClauses(ctx(), { category: 'GENERAL' }, tenant.userId, t);
     const ids = out.clausulasSugeridas.map((c) => c.id);
-    assert.ok(ids.includes(plain.id), 'cláusula ativa sem condição é sugerida');
+    assert.ok(ids.includes(plain.id), 'cláusula homologada sem condição é sugerida');
+    assert.ok(!ids.includes(naoHomologada.id), 'cláusula ativa mas não homologada não entra');
     assert.ok(!ids.includes(conditional.id), 'condição não aprovada não entra');
     assert.ok(out.clausulasNaoHomologadasOmitidas >= 1);
     assert.match(out.aviso, /validação profissional/);

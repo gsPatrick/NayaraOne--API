@@ -10,6 +10,7 @@ const legalCasesController = require('../cases/legalCases.controller');
 const contractVersionActionsController = require('../contracts/application/contractVersionActions.controller');
 const contractTemplateVersionsController = require('../contracts/application/contractTemplateVersions.controller');
 const requirementRulesController = require('../contracts/application/requirementRules.controller');
+const nayDraftController = require('../cases/nayDraft/nayDraft.controller');
 const { confirmAction } = require('../../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 1 do inventário)
 const { requireVersionApprove, requireVersionApproveWhenApproving } = require('./legalPermissions');
 
@@ -109,6 +110,8 @@ legalRouter.post('/legal/clauses/:code/versions', requirePermission('legal:creat
 legalRouter.post('/legal/clauses/:id/deactivate', requirePermission('legal:update'), legalController.deactivateClause);
 // F01: aprovação da regra declarativa de uma versão de cláusula (mesma alçada das transições de contrato).
 legalRouter.post('/legal/clauses/:id/approve-condition', requirePermission('legal:approve'), legalController.approveClauseCondition);
+// Caderno §4 "legal.clause_versions | Versões homologadas": homologar o texto da versão (alçada jurídica, quem escreveu não homologa).
+legalRouter.post('/legal/clauses/:id/homologate', requirePermission('legal:approve'), nayDraftController.homologateClause);
 // Preview de renderização (só leitura — não persiste nada, ver renderContractTemplate).
 legalRouter.post('/legal/contract-templates/:id/render', requirePermission('legal:read'), legalController.renderContractTemplate);
 
@@ -215,6 +218,11 @@ legalRouter.get('/legal/nay/contracts/:id/compare', requirePermission('legal:rea
 legalRouter.get('/legal/nay/cases/:id/summary', requirePermission('legal:read'), legalController.nayCaseSummary);
 legalRouter.get('/legal/nay/cases/:id/dossier', requirePermission('legal:read'), legalController.nayCaseDossier);
 legalRouter.get('/legal/nay/clause-suggestions', requirePermission('legal:read'), legalController.nayClauseSuggestions);
+// §17 "Sugere minuta usando biblioteca homologada": a NAY sugere (PENDING_REVIEW); uma pessoa aceita (vira versão DRAFT) ou descarta.
+legalRouter.post('/legal/nay/contracts/:id/draft-suggestions', requirePermission('legal:create'), nayDraftController.suggestDraft);
+legalRouter.get('/legal/nay/contracts/:id/draft-suggestions', requirePermission('legal:read'), nayDraftController.listDraftSuggestions);
+legalRouter.post('/legal/nay/draft-suggestions/:id/accept', requirePermission('legal:create'), nayDraftController.acceptDraftSuggestion);
+legalRouter.post('/legal/nay/draft-suggestions/:id/discard', requirePermission('legal:create'), nayDraftController.discardDraftSuggestion);
 legalRouter.post('/legal/nay/deadline-suggestions', requirePermission('legal:read'), legalController.nayDeadlineSuggestions);
 
 module.exports = legalRouter;

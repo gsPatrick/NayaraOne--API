@@ -16,6 +16,7 @@ const {
   Person,
 } = require('../../../models');
 const AppError = require('../../../utils/AppError');
+const { isUsableForDraft } = require('../contracts/application/clauseHomologation.service');
 
 /**
  * NAY Jurídica — Caderno Marco 5 §17, JUR-008 ("IA não decide direito: NAY resume/sugere;
@@ -235,8 +236,10 @@ async function compareContractVersions(tenant, contractId, fromNumber, toNumber,
   const a = versions.find((v) => v.versionNumber === from);
   const b = versions.find((v) => v.versionNumber === to);
   if (!a || !b) throw AppError.notFound('Versão do contrato não encontrada.', 'LEGAL_CONTRACT_VERSION_NOT_FOUND');
-  const ca = Array.isArray(a.clauseVersionIds) ? a.clauseVersionIds : [];
-  const cb = Array.isArray(b.clauseVersionIds) ? b.clauseVersionIds : [];
+  // clause_version_ids é gravado como [{ contractClauseId, code, versionNumber }] (contractVersions.service.js); aceita também id solto.
+  const idsOf = (list) => (Array.isArray(list) ? list.map((x) => (x && typeof x === 'object' ? x.contractClauseId : x)).filter((x) => typeof x === 'string' && UUID_RE.test(x)) : []);
+  const ca = idsOf(a.clauseVersionIds);
+  const cb = idsOf(b.clauseVersionIds);
   const clauseIds = [...new Set([...ca, ...cb])];
   const clauses = clauseIds.length ? await ContractClause.findAll({ where: { id: clauseIds }, attributes: ['id', 'code', 'title', 'versionNumber'], transaction }) : [];
   const label = new Map(clauses.map((c) => [c.id, { id: c.id, codigo: c.code, titulo: c.title, versao: c.versionNumber }]));
@@ -261,18 +264,21 @@ async function compareContractVersions(tenant, contractId, fromNumber, toNumber,
   return result;
 }
 
-/** Sugestão de minuta: só cláusulas HOMOLOGADAS (ativas; com condição, só se aprovada). */
+/**
+ * Cláusulas que a minuta pode usar: só versões HOMOLOGADAS (aprovadas por pessoa, clauseHomologation.service) e vigentes; com
+ * condição, só se a condição também estiver aprovada. A minuta montada é POST /legal/nay/contracts/:id/draft-suggestions.
+ */
 async function suggestClauses(tenant, filters, actorUserId, transaction) {
   const where = { isActive: true };
   if (filters && filters.category) where.category = String(filters.category);
   const clauses = await ContractClause.findAll({ where, order: [['category', 'ASC'], ['code', 'ASC']], transaction });
-  const homologadas = clauses.filter((c) => !c.conditionJson || c.conditionStatus === 'APPROVED');
+  const homologadas = clauses.filter(isUsableForDraft);
   const foraDaSugestao = clauses.length - homologadas.length;
   const result = {
     agente: 'NAY Jurídica',
     metodo: 'RULE_BASED',
     aviso: AVISO,
-    criterio: 'Somente cláusulas ativas da biblioteca; cláusula condicional só entra se a condição estiver aprovada por outra pessoa.',
+    criterio: 'Somente versões de cláusula homologadas por outra pessoa e vigentes; cláusula condicional só entra se a condição também estiver aprovada.',
     clausulasSugeridas: homologadas.map((c) => ({ id: c.id, codigo: c.code, titulo: c.title, categoria: c.category, versao: c.versionNumber, condicional: Boolean(c.conditionJson) })),
     clausulasNaoHomologadasOmitidas: foraDaSugestao,
     fontes: [{ tabela: 'legal.clause_versions', registros: clauses.length }],
