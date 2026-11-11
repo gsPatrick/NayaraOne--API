@@ -59,9 +59,31 @@ function deriveCompetenceMonth(dueAt) {
   return toCompetenceMonth(new Date());
 }
 
+// FIN-008 (verificação M4 11/11/2026, sonda P1): "1e-3" passava como valor positivo e o numeric(18,2) gravava 0,00 em
+// silêncio. Dinheiro só entra como decimal simples (texto "123.45" ou número finito): notação científica, hexadecimal,
+// vírgula ou espaço no meio são recusados, e o valor precisa valer pelo menos 1 centavo depois do arredondamento ao
+// centavo — nada vira 0,00 no banco. Chamadas internas que CALCULAM valores (rateio, juros) continuam podendo passar
+// números com mais casas: o arredondamento ao centavo é delas (ver money-precision.middleware.js).
+const PLAIN_DECIMAL_TEXT = /^[+-]?\d+(?:\.\d+)?$/;
+
+/** Centavos inteiros de um valor monetário, ou null quando o formato não é decimal simples. */
+function parseAmountCents(amount) {
+  if (typeof amount === 'number') return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+  if (typeof amount !== 'string') return null;
+  const text = amount.trim();
+  if (!PLAIN_DECIMAL_TEXT.test(text)) return null;
+  const numeric = Number(text);
+  return Number.isFinite(numeric) ? Math.round(numeric * 100) : null;
+}
+
+function isPlainDecimalAmount(amount) {
+  return parseAmountCents(amount) !== null;
+}
+
+/** Positivo de verdade: decimal simples que vale pelo menos R$ 0,01 depois do arredondamento ao centavo. */
 function isPositiveAmount(amount) {
-  const numeric = Number(amount);
-  return Number.isFinite(numeric) && numeric > 0;
+  const cents = parseAmountCents(amount);
+  return cents !== null && cents >= 1;
 }
 
 // FIX AUD-2026-09-14 (reportado pela cliente: sistema aceitou vencimento no ano "92026"): fail
@@ -148,6 +170,8 @@ module.exports = {
   isValidCompetenceMonth,
   deriveCompetenceMonth,
   isPositiveAmount,
+  parseAmountCents,
+  isPlainDecimalAmount,
   DUE_DATE_MIN_YEAR,
   DUE_DATE_MAX_YEAR,
   isDueYearPlausible,

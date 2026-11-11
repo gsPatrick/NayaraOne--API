@@ -28,7 +28,8 @@ const { invalidateStaleOpenPaymentIntents } = require('./payment-intent-invalida
 
 function assertPositiveAmount(amount) {
   if (!isPositiveAmount(amount)) {
-    throw AppError.badRequest('Informe um valor maior que zero.', 'FINANCE_ENTRY_VALIDATION');
+    // FIN-008: decimal simples de pelo menos R$ 0,01 ("1e-3" e 0.004 virariam 0,00 no banco).
+    throw AppError.badRequest('Informe um valor maior que zero, em decimal simples (ex.: 0.30), de pelo menos R$ 0,01.', 'FINANCE_ENTRY_VALIDATION');
   }
 }
 
