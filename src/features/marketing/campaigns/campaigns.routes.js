@@ -8,4 +8,6 @@ const { CAMPAIGN_MANAGE_PERMISSION } = require('./campaigns.constants');
 module.exports = buildMarketingRouter([
   { method: 'post', path: '/marketing/campaigns', permission: CAMPAIGN_MANAGE_PERMISSION, handler: controller.create },
   { method: 'get', path: '/marketing/campaigns/:id', permission: CAMPAIGN_MANAGE_PERMISSION, handler: controller.get },
+  // Verificação K=7 (item 5): entregas FAILED por falha transitória voltam à fila, com motivo e auditoria (I14 da D435).
+  { method: 'post', path: '/marketing/campaigns/:id/deliveries/reprocess', permission: CAMPAIGN_MANAGE_PERMISSION, handler: controller.reprocess },
 ]);

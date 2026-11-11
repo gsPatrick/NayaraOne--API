@@ -52,10 +52,19 @@ const getHealth = catchAsync(async (req, res) => {
     database = 'down';
   }
 
+  // Verificação K=7 (item 7b): o estado do cofre de segredos (ok, unusable, not_configured, invalid), o driver e o código; nunca caminho, valor, chave ou endereço.
+  let secretStore;
+  try {
+    secretStore = await withTimeout(require('../integrations/secrets').secretStoreHealth(), HEALTH_CHECK_TIMEOUT_MS);
+  } catch (err) {
+    secretStore = { status: 'unknown' };
+  }
+
   return success(res, {
     data: {
       status: 'ok',
       database,
+      secretStore,
       commit,
       deployedAt,
       uptimeSeconds: process.uptime(),

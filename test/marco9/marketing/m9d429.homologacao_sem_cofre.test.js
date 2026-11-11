@@ -71,16 +71,17 @@ async function cenarioOptOut(t) {
   return { campaign, ok, optOut, porPessoa, mensagens };
 }
 
-test('homologacao_sem_cofre_o_email_de_campanha_falha_com_MKT_UNSUBSCRIBE_KEY_UNAVAILABLE', async () => {
+test('homologacao_sem_cofre_o_email_de_campanha_nao_sai_e_fica_RETRY_sem_virar_FAILED_definitivo', async () => {
   semCofre();
   await withRollbackTenantTransaction(A, async (t) => {
     const r = await cenarioOptOut(t);
-    // exatamente as duas linhas lidas do banco da homologação (campanha cfc5c8e1, 10/11/2026 19:07:20)
-    assert.deepEqual(r.porPessoa[r.ok], ['FAILED', 'MKT_UNSUBSCRIBE_KEY_UNAVAILABLE']);
+    // na homologação (campanha cfc5c8e1, 10/11/2026 19:07:20) o código antigo gravou FAILED MKT_UNSUBSCRIBE_KEY_UNAVAILABLE e nunca mais tentou; desde a
+    // verificação K=7 (item 5) a falta do cofre é falha TRANSITÓRIA: a entrega fica RETRY com hora de voltar e o step continua aberto.
+    assert.deepEqual(r.porPessoa[r.ok], ['RETRY', 'MKT_UNSUBSCRIBE_KEY_UNAVAILABLE']);
     assert.deepEqual(r.porPessoa[r.optOut], ['BLOCKED', 'SUPPRESSED']);
     assert.equal((await r.mensagens(r.ok)).length, 0, 'sem cofre, o contato com consentimento fica sem mensagem');
     assert.equal(adapters.sandboxRecordCount(A.companyId, 'EMAIL'), 0, 'o provedor de testes não recebe nada');
-    assert.equal((await loadSteps(t, r.campaign.id))[0].status, 'SENT', 'o step fecha como SENT (houve um FAILED processado)');
+    assert.equal((await loadSteps(t, r.campaign.id))[0].status, 'SCHEDULED', 'o step não fecha com entrega aberta');
   });
 });
 

@@ -2,7 +2,9 @@
 
 const AppError = require('../../../utils/AppError');
 const { SecretValue } = require('./SecretValue');
-const { secretNotFound, storeUnavailable, rotationFailed } = require('./secrets.errors');
+const { secretNotFound, storeUnavailable, rotationFailed, storeUnusable } = require('./secrets.errors');
+
+const CANARY_REF = 'platform/secret-store/canario';
 const { assertValue, assertRef } = require('./storeContract');
 const { createSandboxTransport } = require('./vaultTransport.sandbox');
 const { createHttpTransport } = require('./vaultTransport.http');
@@ -31,6 +33,19 @@ function createHttpVaultStore({ mode, transport, baseUrl, token, timeoutMs, cloc
 
   return {
     driver: 'http-vault',
+    /**
+     * Prova de uso real (boot e health): o cofre externo responde e aceita a credencial. Lê a referência canário (não precisa existir: 404 = alcançável e
+     * autorizado); rede, prazo, 401/403 e 5xx viram INTEGRATION_SECRET_STORE_UNUSABLE. Nunca grava.
+     */
+    async selfTest() {
+      try {
+        await via.request({ method: 'GET', path: caminho(CANARY_REF, '/meta') });
+      } catch (err) {
+        if (err?.status === 404) return { ok: true };
+        throw storeUnusable(`o cofre externo não respondeu ou recusou a credencial (${err?.status ? `HTTP ${err.status}` : (err?.name || 'rede')}); confira SECRET_STORE_VAULT_URL e SECRET_STORE_VAULT_TOKEN.`);
+      }
+      return { ok: true };
+    },
     async get(ref, { version } = {}) {
       assertRef(ref);
       return entrega(await chamar('GET', caminho(ref, `/versions/${version === undefined || version === null ? 'current' : Number(version)}`)));

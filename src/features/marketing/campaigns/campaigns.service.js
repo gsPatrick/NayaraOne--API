@@ -14,6 +14,7 @@ const { parseInstant } = require('./campaigns.time');
 const { carriesNoData, matchesStored } = require('./campaigns.replay');
 const { campaignDto } = require('./campaigns.dto');
 const { campaignReach } = require('./campaigns.reach');
+const { deliverySummary } = require('./delivery/delivery.summary');
 const { assertSegmentsNotSensitive } = require('./segment.guard');
 const { campaignNotFound, codeDuplicate, validation, ownerInvalid, campaignIncomplete, campaignNotEditable } = require('./campaigns.errors');
 
@@ -26,7 +27,8 @@ async function loadDto(id, tenant, transaction) {
   const [audiences, steps] = await Promise.all([audienceRepo.listAudiences(id, tenant, transaction), stepsRepo.listSteps(id, tenant, transaction)]);
   const size = row.status === 'DRAFT' ? null : await audienceRepo.countDistinctMembers(id, tenant, transaction);
   const reach = row.status === 'DRAFT' ? null : await campaignReach({ id, channels: row.channels }, tenant, transaction);
-  return campaignDto(row, audiences, steps, size, reach);
+  const deliveries = row.status === 'DRAFT' ? null : await deliverySummary(id, tenant, transaction);
+  return campaignDto(row, audiences, steps, size, reach, deliveries);
 }
 
 /** Consulta de MKT-009 (GET /marketing/campaigns/:id): objetivo, público (só a contagem), custo e resultado. */

@@ -87,6 +87,9 @@ function outcomeOf(result) {
   return { status: 'FAILED', reason: result.error && result.error.message ? `${STATUS_TEXT.FAILED} ${result.error.message}` : STATUS_TEXT.FAILED };
 }
 
+/** Erro do canal reduzido (classe, código, HTTP e Retry-After), para quem chama decidir a nova tentativa por classe; nunca o corpo da resposta. */
+const providerErrorOf = (result) => (result && result.error ? { class: result.error.class || null, code: result.error.code || null, httpStatus: result.error.httpStatus ?? null, retryAfterMs: result.error.retryAfterMs ?? null } : null);
+
 function view(row, extra = {}) {
   return { status: row.deliveryStatus || row.status, messageId: row.id, channel: row.channel, purpose: row.purpose, providerRef: row.externalMessageId || null, replayed: false, sent: false, ...extra };
 }
@@ -108,7 +111,7 @@ async function resumeExisting(ctx, row, rebuild) {
   const message = await rebuild();
   const result = await sendToChannel(row.channel, message, { tenant, transaction, idempotencyKey: row.actionKey, now: ctx.now, mode: ctx.mode, scenario: ctx.scenario, campaignId: ctx.campaignId, automationId: ctx.automationId });
   const out = outcomeOf(result);
-  return view(await moveOutbound(row, { ...out, providerRef: result.providerRef }, transaction), { replayed: true, sent: out.status === 'SENT', contingency: result.contingency, sandbox: result.sandbox });
+  return view(await moveOutbound(row, { ...out, providerRef: result.providerRef }, transaction), { replayed: true, sent: out.status === 'SENT', contingency: result.contingency, sandbox: result.sandbox, providerError: providerErrorOf(result) });
 }
 
 /**
@@ -157,7 +160,7 @@ async function sendMarketingMessage(ctx, rawInput) {
   const row = await recordOutbound({ tenant, input, message: { subject: message.subject, text: message.text }, ...out, providerRef: result.providerRef }, transaction);
   await audit(tenant, 'marketing.message.sent', 'Message', row.id, { channel: input.channel, purpose: input.purpose, status: out.status, sandbox: result.sandbox, decision: result.contingency && result.contingency.action },
     `Mensagem de ${input.channel} ${out.status === 'SENT' ? 'aceita pelo canal' : `não confirmada (${out.status})`}.`, transaction);
-  return view(row, { sent: out.status === 'SENT', contingency: result.contingency, sandbox: result.sandbox, previewRedacted: message.text !== text });
+  return view(row, { sent: out.status === 'SENT', contingency: result.contingency, sandbox: result.sandbox, previewRedacted: message.text !== text, providerError: providerErrorOf(result) });
 }
 
 module.exports = { sendMarketingMessage };

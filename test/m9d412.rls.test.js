@@ -88,9 +88,12 @@ test('migration_754_e_idempotente_e_reversivel', async (t) => {
   try {
     assert.equal(await count(), 2);
     await migration.up(qi); // segunda vez: sem erro
+    const retry = require(path.resolve(__dirname, '../migrations/20260101000757-marketing-campaign-delivery-retry.js'));
+    await retry.down(qi); // a 757 (estados abertos da entrega) altera a tabela: sai antes e volta depois, para o banco seguir no esquema atual
     await migration.down(qi);
     assert.equal(await count(), 0);
     await migration.up(qi);
+    await retry.up(qi);
     assert.equal(await count(), 2);
   } finally { await admin.close(); }
 });

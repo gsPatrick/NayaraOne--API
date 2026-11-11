@@ -16,6 +16,9 @@ const storeNotConfigured = (dica) => AppError.internal(`Cofre de segredos não c
 
 const storeConfig = (motivo) => AppError.internal(`Cofre de segredos com configuração inválida: ${motivo}`, 'INTEGRATION_SECRET_STORE_CONFIG');
 
+/** Cofre configurado, mas que não grava/lê de verdade (diretório sem escrita, chave mestra que não abre os segredos gravados, cofre externo inalcançável). */
+const storeUnusable = (motivo) => AppError.internal(`Cofre de segredos configurado mas inutilizável: ${motivo}`, 'INTEGRATION_SECRET_STORE_UNUSABLE');
+
 const refInvalid = (motivo) => AppError.unprocessable(motivo || 'Referência do cofre em formato inválido. Use letras minúsculas, números, "/", "-" e "_" (de 6 a 159 caracteres).', 'INTEGRATION_SECRET_REF_INVALID');
 
 const refForeignCompany = () => AppError.unprocessable('A referência do cofre pertence a outra empresa.', 'INTEGRATION_SECRET_REF_FOREIGN_COMPANY');
@@ -27,6 +30,6 @@ const bankWorkerOnly = () => AppError.forbidden('A credencial bancária só é l
 const secretExpired = () => AppError.conflict('A credencial desta integração venceu; renove o segredo no cofre.', 'INTEGRATION_SECRET_EXPIRED');
 
 module.exports = {
-  secretNotFound, storeUnavailable, rotationFailed, driverForbidden, storeNotConfigured, storeConfig,
+  secretNotFound, storeUnavailable, rotationFailed, driverForbidden, storeNotConfigured, storeConfig, storeUnusable,
   refInvalid, refForeignCompany, refShared, bankWorkerOnly, secretExpired,
 };

@@ -13,6 +13,10 @@ const { readRecipientBatch } = require('./campaigns.settings');
 const { STEP_CONTENT_STATUSES } = require('./campaigns.constants');
 const { checkApproval } = require('../content').approval;
 const { massStepReason } = require('./massStep.guard');
+const deliveries = require('./delivery/delivery.repository');
+const { processRecipient } = require('./delivery/delivery.recipient');
+const { readDeliveryPolicy } = require('./delivery/delivery.policy');
+const { closeOpenOfClosedSteps } = require('./delivery/delivery.closing');
 
 /** action_key = sha256(campaign_id:step_id:person_id): ocupa o lugar da chave de run da M9-D415 (step de campanha não tem run). */
 const actionKeyOf = (campaignId, stepId, personId) => crypto.createHash('sha256').update(`${campaignId}:${stepId}:${personId}`).digest('hex');
@@ -37,39 +41,6 @@ async function skipReasonOf(step, tenant, transaction) {
   if (!item || !STEP_CONTENT_STATUSES.includes(item.status)) return 'CONTENT_NOT_APPROVED';
   const check = await checkApproval(tenant, null, step.content_item_id, transaction, { origin: 'CAMPAIGN_STEP' });
   return check.invalidated ? 'APPROVAL_INVALID' : null;
-}
-
-const pendingRecipients = (campaignId, stepId, tenant, limit, transaction) => run(
-  `SELECT DISTINCT m.person_id FROM marketing.campaign_audience_members m
-    WHERE m.campaign_id = :campaignId AND m.company_id = :companyId
-      AND NOT EXISTS (SELECT 1 FROM marketing.campaign_step_deliveries d WHERE d.step_id = :stepId AND d.person_id = m.person_id)
-    ORDER BY m.person_id LIMIT :limit`, { campaignId, stepId, companyId: tenant.companyId, limit }, transaction);
-
-const recordDelivery = (tenant, campaignId, stepId, personId, actionKey, status, reason, externalRef, transaction) => run(
-  `INSERT INTO marketing.campaign_step_deliveries (group_id, company_id, campaign_id, step_id, person_id, action_key, status, reason, external_ref)
-   VALUES (:groupId, :companyId, :campaignId, :stepId, :personId, :actionKey, :status, :reason, :externalRef) ON CONFLICT (company_id, action_key) DO NOTHING RETURNING id`,
-  { groupId: tenant.groupId, companyId: tenant.companyId, campaignId, stepId, personId, actionKey, status, reason: reason || null, externalRef: externalRef || null }, transaction);
-
-/** Um destinatário: canSend (M9-D418) e, se permitido, o envio pelo adapter do canal (M9-D429). Exceção do adapter vira FAILED. */
-async function processRecipient(port, ctx, transaction) {
-  const { tenant, campaign, step, personId, now } = ctx;
-  const actionKey = actionKeyOf(campaign.id, step.id, personId);
-  const portCtx = { tenant, campaign: { id: campaign.id, code: campaign.code, channels: campaign.channels }, step: { id: step.id, stepNo: step.step_no, channel: step.channel, templateId: step.template_id, contentItemId: step.content_item_id }, personId, actionKey, now, transaction };
-  let decision;
-  try { decision = await port.canSend(portCtx); } catch (err) { logger.error({ err: err.message, stepId: step.id }, 'marketing.campaign.cansend.failed'); decision = { allowed: false, reason: 'CANSEND_ERROR' }; }
-  // Horário de silêncio (M9-D429/M9-D418): a mensagem é reagendada, não perdida; sem registro de entrega, o destinatário continua pendente e sai na primeira rodada fora do silêncio.
-  if (decision && decision.allowed !== true && decision.reason === 'QUIET_HOURS') return 'DEFERRED';
-  if (!decision || decision.allowed !== true) {
-    await recordDelivery(tenant, campaign.id, step.id, personId, actionKey, 'BLOCKED', (decision && decision.reason) || 'NOT_ALLOWED', null, transaction);
-    return 'BLOCKED';
-  }
-  let sent;
-  try { sent = await port.send(portCtx); } catch (err) { logger.error({ err: err.message, stepId: step.id }, 'marketing.campaign.send.failed'); sent = { ok: false, errorCode: 'SEND_EXCEPTION' }; }
-  // Kill switch ligado no meio do lote (M9-D425): nada é registrado para o destinatário, que continua pendente e sai depois da reativação.
-  if (sent && sent.errorCode === 'MKT_KILL_SWITCH_ACTIVE') return 'DEFERRED';
-  const ok = Boolean(sent && sent.ok);
-  await recordDelivery(tenant, campaign.id, step.id, personId, actionKey, ok ? 'SENT' : 'FAILED', ok ? null : (sent && sent.errorCode) || 'SEND_FAILED', sent && sent.externalRef, transaction);
-  return ok ? 'SENT' : 'FAILED';
 }
 
 async function finishStep(campaign, step, tenant, transaction) {
@@ -105,12 +76,14 @@ async function processStep(port, stepId, tenant, now, transaction, totals) {
     return;
   }
   const batch = await readRecipientBatch(tenant, transaction);
-  const recipients = await pendingRecipients(campaign.id, step.id, tenant, batch, transaction);
-  for (const { person_id: personId } of recipients) {
-    const outcome = await processRecipient(port, { tenant, campaign, step, personId, now }, transaction);
+  const policy = await readDeliveryPolicy(tenant, transaction);
+  const recipients = await deliveries.dueRecipients(campaign.id, step.id, tenant, now, batch, transaction);
+  for (const { personId, delivery } of recipients) {
+    const outcome = await processRecipient(port, { tenant, campaign, step, personId, now, delivery, actionKey: actionKeyOf(campaign.id, step.id, personId) }, policy, transaction);
     totals[outcome.toLowerCase()] += 1;
   }
-  if ((await pendingRecipients(campaign.id, step.id, tenant, 1, transaction)).length === 0) {
+  // Fecha só quando ninguém ficou sem entrega E nenhuma entrega está aberta (RETRY/UNKNOWN voltam em next_attempt_at; o step segue SCHEDULED até lá).
+  if (await deliveries.stepComplete(campaign.id, step.id, tenant, transaction)) {
     if (await finishStep(campaign, step, tenant, transaction) === 'SENT') totals.stepsDone += 1; else totals.skipped += 1;
   }
 }
@@ -120,11 +93,13 @@ async function processStep(port, stepId, tenant, now, transaction, totals) {
  * idempotente por action_key). Sem porta de envio registrada nada é disparado (os steps continuam SCHEDULED e entram em `deferred`).
  */
 async function dispatchDueSteps(tenant, transaction, now) {
-  const totals = { sent: 0, blocked: 0, failed: 0, skipped: 0, stepsDone: 0, deferred: 0 };
+  const totals = { sent: 0, blocked: 0, failed: 0, skipped: 0, stepsDone: 0, deferred: 0, retry: 0, unknown: 0 };
   totals.blocked += await countBlocked(tenant, now, transaction);
   const due = await dueSteps(tenant, now, transaction);
   const port = getCampaignSendPort();
   if (!port) { totals.deferred = due.length; return totals; }
+  // Entregas abertas de step que fechou (campanha encerrada, step pulado): RETRY cancelada, UNKNOWN só reconciliado (nunca reenviado).
+  totals.closing = await closeOpenOfClosedSteps(tenant, { port, now, sequelize }, transaction);
   for (const { id } of due) {
     try {
       await sequelize.transaction({ transaction }, (inner) => processStep(port, id, tenant, now, inner, totals));

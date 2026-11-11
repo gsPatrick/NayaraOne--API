@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 817. Rotas só com login ou públicas: 42.
+Rotas com permissão exigida: 818. Rotas só com login ou públicas: 42.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -629,6 +629,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/marketing/automations/:id/pause` | `marketing:automation:manage` | não |
 | `POST` | `/api/v1/marketing/automations/:id/publish` | `marketing:automation:publish` | não |
 | `POST` | `/api/v1/marketing/automations` | `marketing:automation:manage` | não |
+| `POST` | `/api/v1/marketing/campaigns/:id/deliveries/reprocess` | `marketing:campaign:manage` | não |
 | `GET` | `/api/v1/marketing/campaigns/:id` | `marketing:campaign:manage` | não |
 | `POST` | `/api/v1/marketing/campaigns` | `marketing:campaign:manage` | não |
 | `POST` | `/api/v1/marketing/content/:id/approve` | `marketing:content:approve` | não |

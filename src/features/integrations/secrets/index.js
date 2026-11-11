@@ -5,6 +5,7 @@ const { SecretValue, REDACTED } = require('./SecretValue');
 const { createFileMountedStore } = require('./fileMountedStore');
 const { createHttpVaultStore } = require('./httpVaultStore');
 const store = require('./secretStoreFactory');
+const probe = require('./secretStoreProbe');
 const policy = require('./secretPolicy');
 const refs = require('./secretRef');
 const incidents = require('./secretIncidents');
@@ -19,6 +20,8 @@ module.exports = {
   SecretValue, REDACTED, createFileMountedStore, createHttpVaultStore,
   buildSecretStoreFromEnv: store.buildSecretStoreFromEnv, getSecretStore: store.getSecretStore,
   setSecretStoreForTests: store.setSecretStoreForTests, assertSecretStoreAtBoot: store.assertSecretStoreAtBoot,
+  verifySecretStoreAtBoot: probe.verifySecretStoreAtBoot, checkSecretStore: probe.checkSecretStore, gateListenOnSecretStore: probe.gateListenOnSecretStore,
+  secretStoreHealth: probe.secretStoreHealth, resetSecretStoreHealth: probe.resetSecretStoreHealth,
   assertDriverAllowed: policy.assertDriverAllowed, isValidRef: refs.isValidRef, webhookRefOf: refs.webhookRefOf,
   registerSecretIncidentReporter: incidents.registerSecretIncidentReporter, clearSecretIncidentReporters: incidents.clearSecretIncidentReporters,
   clearSecretCache: cache.clearSecretCache,
