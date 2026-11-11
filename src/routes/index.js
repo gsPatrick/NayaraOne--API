@@ -15,6 +15,7 @@ const portalListingsRouter = require('../features/integrations/portal/portal.rou
 const crmRouter = require('../features/crm/crm.routes');
 const crmController = require('../features/crm/crm.controller');
 const radarRouter = require('../features/radar/radar.routes');
+const crmLivroRouter = require('../features/crm/crm.livroApi.routes');
 const financeRouter = require('../features/finance/finance.routes');
 const financeExportRouter = require('../features/finance/financeExport.routes');
 const legalRouter = require('../features/legal/legal.routes');
@@ -125,6 +126,8 @@ router.use('/v1', propertiesRouter);
 router.use('/v1', portalListingsRouter);
 router.use('/v1', crmRouter);
 router.use('/v1', radarRouter);
+// Guia do Marcelo §13 (Marco 3): APIs mínimas no caminho do livro, delegando aos mesmos services.
+router.use('/v1', crmLivroRouter);
 router.use('/v1', financeRouter);
 router.use('/v1', financeExportRouter);
 router.use('/v1', legalRouter);

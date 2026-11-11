@@ -83,6 +83,39 @@ function validateCriticalFields(documentType, fields) {
   return { valid: true, missing: [] };
 }
 
+/**
+ * Motivo de pendência de revisão de uma leitura (null quando a leitura está completa). Usado no envio do documento e na
+ * troca do arquivo (personDocumentReplacement.service.js): o arquivo novo passa pela mesma régua.
+ */
+function reviewPendingReason(extraction, documentType) {
+  if (extraction.illegible) return 'Documento ilegível: OCR/IA não conseguiu extrair dados suficientes.';
+  if (extraction.confidence < CONFIDENCE_THRESHOLD) {
+    return `Confiança da extração (${extraction.confidence}) abaixo do mínimo exigido (${CONFIDENCE_THRESHOLD}).`;
+  }
+  const validation = validateCriticalFields(documentType, extraction.fields || {});
+  return validation.valid ? null : `Campos críticos ausentes ou inválidos: ${validation.missing.join(', ')}.`;
+}
+
+/** Pendência de revisão manual do documento (core.tasks polimórfica, vinculada à pessoa). */
+function openReviewTask({ groupId, companyId, personId, actorUserId, title, reason }, transaction) {
+  return Task.create(
+    {
+      groupId,
+      companyId,
+      assignedToUserId: actorUserId || null,
+      title,
+      description: reason,
+      relatedEntityType: 'people.persons',
+      relatedEntityId: personId,
+      status: 'OPEN',
+      priority: 'NORMAL',
+      createdBy: actorUserId || null,
+      updatedBy: actorUserId || null,
+    },
+    { transaction }
+  );
+}
+
 async function ingestPersonDocument(payload, actorUserId, transaction) {
   const { groupId, companyId, personId, fileName, mimeType, contentBase64, documentType, category } = payload;
 
@@ -138,26 +171,10 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
   const ocrAdapter = await resolveOcrAdapter(tenant, transaction);
   const extraction = await ocrAdapter.extract(buffer, classifiedType);
 
-  let verificationStatus;
-  let pendingReason = null;
-
-  if (extraction.illegible) {
-    // "Documento ilegível gera pendência, não dado inventado" — fields fica vazio.
-    verificationStatus = 'PENDING';
-    pendingReason = 'Documento ilegível: OCR/IA não conseguiu extrair dados suficientes.';
-  } else if (extraction.confidence < CONFIDENCE_THRESHOLD) {
-    verificationStatus = 'PENDING';
-    pendingReason = `Confiança da extração (${extraction.confidence}) abaixo do mínimo exigido (${CONFIDENCE_THRESHOLD}).`;
-  } else {
-    const validation = validateCriticalFields(classifiedType, extraction.fields || {});
-    if (!validation.valid) {
-      verificationStatus = 'PENDING';
-      pendingReason = `Campos críticos ausentes ou inválidos: ${validation.missing.join(', ')}.`;
-    } else {
-      verificationStatus = 'PENDING'; // "IA nunca sobrescreve cadastro existente silenciosamente" — confirmação humana é sempre exigida antes de VERIFIED.
-      pendingReason = null;
-    }
-  }
+  // "IA nunca sobrescreve cadastro existente silenciosamente": a versão nasce sempre PENDING; a confirmação humana é
+  // exigida antes de VERIFIED. Ilegível, baixa confiança ou campo crítico ausente abrem pendência de revisão.
+  const verificationStatus = 'PENDING';
+  const pendingReason = reviewPendingReason(extraction, classifiedType);
 
   const personDocument = await PersonDocument.create(
     {
@@ -181,25 +198,9 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
     { transaction }
   );
 
-  let pendingTask = null;
-  if (pendingReason) {
-    pendingTask = await Task.create(
-      {
-        groupId: tenant.groupId,
-        companyId: tenant.companyId,
-        assignedToUserId: actorUserId || null,
-        title: `Revisar documento ${classifiedType} ilegível/baixa confiança — ${person.legalName}`,
-        description: pendingReason,
-        relatedEntityType: 'people.persons',
-        relatedEntityId: personId,
-        status: 'OPEN',
-        priority: 'NORMAL',
-        createdBy: actorUserId || null,
-        updatedBy: actorUserId || null,
-      },
-      { transaction }
-    );
-  }
+  const pendingTask = pendingReason
+    ? await openReviewTask({ ...tenant, personId, actorUserId, title: `Revisar documento ${classifiedType} ilegível/baixa confiança — ${person.legalName}`, reason: pendingReason }, transaction)
+    : null;
 
   await registrarAuditoria(
     {
@@ -220,4 +221,4 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
   return { file, personDocument, extraction, pendingTask };
 }
 
-module.exports = { ingestPersonDocument, validateCriticalFields, CRITICAL_FIELDS_BY_TYPE, CONFIDENCE_THRESHOLD };
+module.exports = { ingestPersonDocument, validateCriticalFields, reviewPendingReason, openReviewTask, CRITICAL_FIELDS_BY_TYPE, CONFIDENCE_THRESHOLD };

@@ -41,7 +41,8 @@ function have(bin) {
 
 function clamdReachable() {
   return new Promise((resolve) => {
-    const socket = net.createConnection({ host: '127.0.0.1', port: 3310 });
+    // Mesmo endereço que o ClamAvAdapter usa (CLAMAV_HOST/CLAMAV_PORT), para o teste não pular quando o daemon roda em outra porta.
+    const socket = net.createConnection({ host: process.env.CLAMAV_HOST || '127.0.0.1', port: Number(process.env.CLAMAV_PORT || 3310) });
     socket.setTimeout(1500, () => { socket.destroy(); resolve(false); });
     socket.on('error', () => resolve(false));
     socket.on('connect', () => { socket.write('zPING\0'); });

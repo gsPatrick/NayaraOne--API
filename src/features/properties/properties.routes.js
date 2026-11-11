@@ -35,6 +35,7 @@ propertiesRouter.get('/properties/:id/occurrences', requirePermission('propertie
 propertiesRouter.post('/properties/:id/media', requirePermission('properties:update'), propertiesController.createMedia);
 propertiesRouter.get('/properties/:id/media', requirePermission('properties:read'), propertiesController.listMedia);
 propertiesRouter.delete('/properties/:id/media/:mediaId', requirePermission('properties:update'), propertiesController.removeMedia);
+propertiesRouter.patch('/properties/:id/media/:mediaId/quality', requirePermission('properties:update'), propertiesController.reviewMediaQuality);
 
 propertiesRouter.get('/properties/:id/price-history', requirePermission('properties:read'), propertiesController.listPriceHistory);
 

@@ -4,6 +4,7 @@ const { Property, PropertyOffer, PropertyMedia, PropertyDocument } = require('..
 const AppError = require('../../utils/AppError');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { publishPropertyPublished } = require('./propertyEvents.service');
+const { PHOTO_MEDIA_TYPES } = require('./propertyMediaQuality.service');
 
 /**
  * publishOffer — POST /offers/:id/publish
@@ -55,7 +56,7 @@ async function publishOffer(offerId, tenant, actorUserId, transaction) {
   // NÃO é hard-coded aqui (§18 "Não hard-code quantidade mínima de fotos/vídeo.") — o número
   // fica em REG-IMO-PHOTO-MIN.condition_ast_json.value, resolvido por evaluateRule.
   const approvedPhotoCount = await PropertyMedia.count({
-    where: { propertyId: property.id, mediaType: 'PHOTO', qualityStatus: 'APPROVED' },
+    where: { propertyId: property.id, mediaType: PHOTO_MEDIA_TYPES, qualityStatus: 'APPROVED' },
     transaction,
   });
 

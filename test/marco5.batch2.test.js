@@ -470,7 +470,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
         companyId: tenant.companyId,
         personId: lessee.id,
         propertyId: property.id,
-        stage: 'NEGOTIATION',
+        stage: 'PROPOSAL',
         nextAction: 'Fechar contrato de locação',
         nextActionDueAt: new Date(Date.now() + 86400000),
       },

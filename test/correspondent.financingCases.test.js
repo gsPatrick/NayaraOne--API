@@ -210,7 +210,7 @@ test('CORRESPONDENT-CASE-11: aceita opportunityId quando a oportunidade existe d
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: principal.id,
-        stage: 'NEGOTIATION',
+        stage: 'FINANCING',
         createdBy: tenant.userId,
         updatedBy: tenant.userId,
       },

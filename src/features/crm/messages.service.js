@@ -16,7 +16,17 @@ const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
  * quebrava silenciosamente qualquer filtro/relatório por canal. Enum fechado, mesmo padrão de
  * `direction`/`authorType`.
  */
-const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'INSTAGRAM', 'OTHER'];
+// SITE: livro do Marco 3 §12 ("WhatsApp, telefone, e-mail, site, presencial e portal geram interaction").
+const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'SITE', 'INSTAGRAM', 'OTHER'];
+
+/** Guia §10 occurredAt: quando o contato aconteceu. Data válida e não no futuro (tolerância de 5 minutos de relógio). */
+function parseOccurredAt(value) {
+  if (value === undefined || value === null || value === '') return new Date();
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw AppError.badRequest('O campo "occurredAt" precisa ser uma data válida.', 'MESSAGE_VALIDATION');
+  if (date.getTime() > Date.now() + 5 * 60 * 1000) throw AppError.badRequest('O campo "occurredAt" não pode estar no futuro.', 'MESSAGE_VALIDATION');
+  return date;
+}
 
 /**
  * "crm"."messages" não tem `deleted_at`/paranoid no model (ver src/models/Message.js) — é
@@ -26,6 +36,7 @@ const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'I
  */
 async function createMessage(payload, actorUserId, transaction) {
   const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose, actionKey, connectionId, dispatchId, deliveryStatus, conversationId, mediaQuarantineId } = payload;
+  const occurredAt = parseOccurredAt(payload.occurredAt);
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
@@ -93,6 +104,7 @@ async function createMessage(payload, actorUserId, transaction) {
       authorType: normalizedAuthorType,
       authorUserId: authorUserId || null,
       body: body || null,
+      occurredAt,
       status: deliveryStatus || 'RECEIVED',
       externalMessageId: externalMessageId || null,
       connectionId: connectionId || null,

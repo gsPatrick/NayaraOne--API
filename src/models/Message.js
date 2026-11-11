@@ -70,6 +70,12 @@ module.exports = (sequelize) => {
         defaultValue: 'RECEIVED',
         field: 'status',
       },
+      occurredAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'occurred_at',
+        comment: 'Quando o contato aconteceu (Guia §10 occurredAt); vazio nas antigas, que usam created_at.',
+      },
       externalMessageId: {
         type: DataTypes.STRING(128),
         allowNull: true,

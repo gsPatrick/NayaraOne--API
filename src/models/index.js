@@ -51,6 +51,7 @@ const modelDefiners = {
   PropertyInternalOccurrence: require('./PropertyInternalOccurrence'),
   Opportunity: require('./Opportunity'),
   PropertyRadar: require('./PropertyRadar'),
+  RadarMatch: require('./RadarMatch'),
   Cart: require('./Cart'),
   CartVersion: require('./CartVersion'),
   CartShareRouting: require('./CartShareRouting'),

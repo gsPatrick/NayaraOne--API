@@ -53,7 +53,8 @@ async function requestExport({ tenant, actorUserId, body, idempotencyKey, transa
   const ctx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: actorUserId };
   const estimatedRows = await parsed.entry.estimate(ctx, parsed.filter, transaction);
   const decision = await guardService.decide(tenant, {
-    action: 'EXPORT', kind: 'EXPORT', resourceType: parsed.entry.code, query: { filter: parsed.filter, columns: parsed.columns, format: parsed.format }, purpose: parsed.purpose,
+    // minClassification: piso de classe declarado pelo recurso do catálogo (ex.: crm.opportunities = HIGH, livro do Marco 3 §18), nunca abaixo do registro.
+    action: 'EXPORT', kind: 'EXPORT', resourceType: parsed.entry.code, minClassification: parsed.entry.minClassification, query: { filter: parsed.filter, columns: parsed.columns, format: parsed.format }, purpose: parsed.purpose,
     justification: parsed.justification, estimatedRows, mfaOk: await hasRecentMfa(actorUserId, transaction), originPermission: parsed.entry.permission, watermarkRequested: parsed.watermark,
     idempotencyKey: key, actorUserId,
   });
