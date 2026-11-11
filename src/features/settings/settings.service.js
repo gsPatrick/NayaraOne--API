@@ -8,6 +8,7 @@ const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
 const { runSettingGuard } = require('./settingGuards');
 const { isPlatformOnly } = require('./settingPlatform');
+const { assertMfaForSettingWrite } = require('./settingMfa');
 require('./ambienteBi.guard'); // M9-D708: trava de PRODUCAO do ambiente do BI (aceite dos owners)
 require('./legadoEmpresa.guard'); // M9-D900: o código da empresa no sistema antigo é único no grupo
 require('../marketing/mass.settingGuard'); // M9-D402: o teto absoluto de destinatários nunca fica abaixo do limite sem aprovação
@@ -146,12 +147,13 @@ const SETTINGS_SCHEMA = {
   // (Construção §5 actual_financial_cost). CAIXA = só o pago (padrão, comportamento anterior); COMPETENCIA = soma as
   // medições aprovadas ainda a pagar (src/features/construction/costBasis.js). Gravação exige construction:approve.
   'construction.custo_realizado.base': { type: 'string', enum: ['CAIXA', 'COMPETENCIA'] },
-  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100 },
-  'billing.interest_percentage': { type: 'number', min: 0, max: 100 },
-  'billing.grace_period_days': { type: 'integer', min: 0 },
+  // parametros.csv exige_mfa_para_alterar = sim (settingMfa.js): multa, juros e carência só mudam com MFA recente de quem altera.
+  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
+  'billing.interest_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
+  'billing.grace_period_days': { type: 'integer', min: 0, requiresMfa: true },
   'billing.default_index_code': { type: 'string' },
-  'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120 },
-  'mfa.required_for_sensitive_roles': { type: 'boolean' },
+  'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120, requiresMfa: true },
+  'mfa.required_for_sensitive_roles': { type: 'boolean', requiresMfa: true },
   'legal.signature_provider': { type: 'string', enum: ['sandbox', 'sandbox-alt', 'clicksign', 'zapsign'] },
   // Campos abaixo são segredos de provedor externo — CRIPTOGRAFADOS em repouso (AES-256-GCM,
   // ver src/utils/mfaCrypto.js) seguindo o mesmo padrão já usado para o segredo TOTP
@@ -273,12 +275,12 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
-  'integration.admin.mfa_on_prod_test_connection': { type: 'boolean' },
-  'integration.admin.mfa_on_prod_connection_change': { type: 'boolean' },
+  'integration.admin.mfa_on_prod_test_connection': { type: 'boolean', requiresMfa: true },
+  'integration.admin.mfa_on_prod_connection_change': { type: 'boolean', requiresMfa: true },
   // Tamanho mínimo (caracteres) de texto base64/hex sem espaço tratado como segredo embutido em config_json/policy_json.
-  'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256 },
+  'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256, requiresMfa: true },
   // Resolução por domínio quando há mais de uma conexão ACTIVE no mesmo domínio e ambiente.
-  'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'] },
+  'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'], requiresMfa: true },
   // M9-D204: esperas (ms) entre as tentativas de publicação interna do outbox; o tamanho da lista é o limite de tentativas.
   'integration.outbox.backoff_ms': {
     type: 'string',
@@ -564,6 +566,8 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction, optio
   if (isPlatformOnly(SETTINGS_SCHEMA[key]) && options.platform !== true) {
     throw AppError.forbidden('Este parâmetro só é alterado pela equipe da plataforma.', 'SETTING_PLATFORM_ONLY', { key });
   }
+  // Chave sensível (`requiresMfa`, settingMfa.js): MFA recente de quem altera, em todo caminho, antes de olhar o valor e de qualquer escrita.
+  await assertMfaForSettingWrite(key, SETTINGS_SCHEMA[key], actorUserId, transaction);
   validateAgainstSchema(key, value);
   // Trava de gravação do dono da regra (M9-D034): recusa o valor antes de qualquer escrita.
   await runSettingGuard(key, value, tenant, actorUserId, transaction);

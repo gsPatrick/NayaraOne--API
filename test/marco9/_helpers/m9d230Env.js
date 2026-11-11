@@ -4,7 +4,6 @@
 // Estende o apoio da mensageria do CRM (M9-D229). Roda em banco descartável (os testes COMMITAM). Quem usa define process.env.PORT ANTES de requerer este arquivo.
 const env = require('./m9d229Env');
 const dataClassification = require('../../../src/shared/data-classification/scale');
-const settingsService = require('../../../src/features/settings/settings.service');
 const personConsents = require('../../../src/features/people/personConsents.service');
 const filesService = require('../../../src/features/files/files.service');
 
@@ -16,7 +15,8 @@ const modelo = (name, extra = {}) => ({ name, language: 'pt_BR', category: 'UTIL
 /** Connection de mensageria ativa com os modelos informados (além do padrão). */
 const conectarComModelos = (tenant, modelos, provider = 'messaging-sandbox', extra = {}) => env.conectar(tenant, provider, { config: { templates: [...env.MODELOS_PADRAO, ...modelos], ...extra } });
 
-const parametro = (tenant, chave, valor) => comTenant(tenant, (t) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t));
+// Parâmetro sensível (requiresMfa, ex.: integration.registry.domain_resolution): gravado por um operador com MFA recente real (DI-DEC007-1).
+const parametro = (tenant, chave, valor) => comTenant(tenant, (t) => require('../../helpers/mfaRecente').gravarParametro(chave, valor, tenant, t));
 const restaurar = (tenant, chaves) => sql(tenant, 'DELETE FROM core.tenant_settings WHERE company_id = :c AND key IN (:k)', { c: tenant.companyId, k: chaves });
 
 /** Consentimento do WhatsApp: status OPT_IN (concedido) ou OPT_OUT (revogado). */

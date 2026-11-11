@@ -6,7 +6,7 @@
 const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, uniqueSuffix } = require('../testHelpers');
 const { Group, Company } = require('../../src/models');
-const settingsService = require('../../src/features/settings/settings.service');
+const { gravarParametroSensivel } = require('./mfaRecente');
 
 async function setupEnv() {
   const tenant = await getSeedTenant();
@@ -24,7 +24,8 @@ async function setupEnv() {
   await sequelize.transaction(async (t) => {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
-    await settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', false, tenant, tenant.userId, t);
+    // Parâmetro sensível (requiresMfa): gravado por um operador com MFA recente real (test/helpers/mfaRecente.js).
+    await gravarParametroSensivel('integration.admin.mfa_on_prod_connection_change', false, tenant, t);
   });
   return { tenant, ctx, otherTenant };
 }

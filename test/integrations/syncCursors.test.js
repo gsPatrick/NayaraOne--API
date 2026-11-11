@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, uniqueSuffix } = require('../testHelpers');
 const { Group, Company, OutboxEvent, AuditLog, IntegrationConnection, IntegrationProvider, IntegrationSyncCursor } = require('../../src/models');
 const registry = require('../../src/features/integrations/registry/registry.service');
-const settingsService = require('../../src/features/settings/settings.service');
+const { gravarParametro } = require('../helpers/mfaRecente');
 const { publishDomainEvent } = require('../../src/engines/events/outbox');
 const { runSyncCycle } = require('../../src/features/integrations/sync/sync.runner');
 const { detectStalledSyncs } = require('../../src/features/integrations/sync/sync.stalled');
@@ -37,7 +37,7 @@ async function comTenant(t0, fn) {
 const commit = (fn) => comTenant(tenant, fn);
 
 async function config(chave, valor) {
-  await commit((t) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t));
+  await commit((t) => gravarParametro(chave, valor, tenant, t)); // sensível (requiresMfa): operador com MFA recente real
 }
 
 before(async () => {

@@ -16,7 +16,7 @@ const FALLBACK_SETTING_DEFAULTS = Object.freeze({
 });
 
 const FALLBACK_SETTINGS_SCHEMA = {
-  [FALLBACK_KEYS.maxHops]: { type: 'integer', min: 1, max: 5 },
+  [FALLBACK_KEYS.maxHops]: { type: 'integer', min: 1, max: 5, requiresMfa: true }, // parametros.csv exige_mfa_para_alterar = sim (settings/settingMfa.js)
   [FALLBACK_KEYS.requireGreen]: { type: 'boolean' },
 };
 

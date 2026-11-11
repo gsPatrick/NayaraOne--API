@@ -7,6 +7,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('../_helpers/m9d870Http');
 const { SETTINGS_SCHEMA, upsertSetting } = require('../../../src/features/settings/settings.service');
+const { gravarParametroSensivel } = require('../../helpers/mfaRecente');
 const { resetDeniedWindows } = require('../../../src/features/settings/settingDenied');
 const { restrictedPermissionOf } = require('../../../src/features/settings/settingRestricted');
 const { isPlatformOnly } = require('../../../src/features/settings/settingPlatform');
@@ -25,7 +26,9 @@ const live = async (companyId, key) => (await http.adminQuery('SELECT 1 FROM cor
 /** Grava pelo caminho interno (sem permissões de sessão) um valor que o dicionário aceita para a chave. */
 async function seedInternally(key, spec) {
   for (const value of [sample(spec), 'publicId', 'piscina', 'tipo', 'bloquear', 'exemplo.com.br', '1,3', '09:00', '1', '[]', '99.5% / p95 5 s / p99 12 s / backlog 15 min']) {
-    const ok = await openTenantTx(tenantA(), (tx) => upsertSetting(key, value, tenantA(), null, tx)).then(() => true, () => false);
+    // Parâmetro sensível (requiresMfa, DI-DEC007-1): o caminho interno sem pessoa é recusado; quem semeia é um operador com MFA recente real.
+    const write = spec.requiresMfa === true ? (tx) => gravarParametroSensivel(key, value, tenantA(), tx) : (tx) => upsertSetting(key, value, tenantA(), null, tx);
+    const ok = await openTenantTx(tenantA(), write).then(() => true, () => false);
     if (ok) return value;
   }
   throw new Error(`sem valor aceito para ${key}`);

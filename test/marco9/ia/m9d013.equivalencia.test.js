@@ -36,7 +36,8 @@ const unsafe = (r) => { assert.equal(r.e && r.e.code, 'AI_FALLBACK_UNSAFE', r.e 
 test('m9d013_parametros_do_fallback_no_esquema_com_o_padrao_do_livro', () => {
   assert.equal(AI_SETTING_DEFAULTS['ia.fallback.max_saltos'], 2);
   assert.equal(AI_SETTING_DEFAULTS['ia.fallback.exigir_avaliacao_verde'], true);
-  assert.deepEqual(AI_SETTINGS_SCHEMA['ia.fallback.max_saltos'], { type: 'integer', min: 1, max: 5 });
+  // requiresMfa: parametros.csv exige_mfa_para_alterar = sim (DI-DEC007-1, src/features/settings/settingMfa.js).
+  assert.deepEqual(AI_SETTINGS_SCHEMA['ia.fallback.max_saltos'], { type: 'integer', min: 1, max: 5, requiresMfa: true });
   assert.equal(AI_SETTINGS_SCHEMA['ia.fallback.exigir_avaliacao_verde'].type, 'boolean');
 });
 

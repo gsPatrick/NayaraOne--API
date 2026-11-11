@@ -109,13 +109,13 @@ test('m9d872 sem PASS há mais de 30 dias alerta CRITICAL', { skip: skip() }, ()
 
 test('m9d872 a periodicidade vem do parâmetro do administrador', { skip: skip() }, () => run(async (tx) => {
   const A = tenants.A;
-  const { upsertSetting } = require('../../../src/features/settings/settings.service');
   const { KEYS } = require('../../../src/features/core-governance/feature-flags/flags.settings');
   const sw = await env.mkSwitch(A, tx);
   await env.insertDrill(A, tx, sw, { daysAgo: 10 });
   const row = await env.repo.findAnywhere(A, sw.id, tx);
   assert.equal((await env.status.evaluate(A, row, { now: env.NOW, transaction: tx })).stale, false);
-  await upsertSetting(KEYS.killDays, 7, A, A.userId, tx);
+  // governanca.flags.kill_teste_dias é sensível (requiresMfa): gravado por um operador com MFA recente real.
+  await require('../../helpers/mfaRecente').gravarParametroSensivel(KEYS.killDays, 7, A, tx);
   assert.equal((await env.status.evaluate(A, row, { now: env.NOW, transaction: tx })).stale, true, 'com 7 dias, 10 dias sem PASS vence');
 }));
 
