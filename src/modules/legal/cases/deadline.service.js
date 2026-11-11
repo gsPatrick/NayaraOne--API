@@ -9,6 +9,7 @@ const { publishDeadlineChange } = require('./legalDeadlineCalendarEvents.service
 const { assertCriticalDeadlineAccountability, assertHasResponsible } = require('./legalDeadlineAccountability');
 const { normalizeOptionalText, requireText } = require('../shared/legalText');
 const { parseDueAt } = require('./legalDeadlineDates');
+const { legalDeadlineZone, legalDeadlineWindows, windowFor } = require('../shared/legalRules.params');
 const { resolveDeadlineSource } = require('./legalDeadlineSource');
 const { createDeadlineTask, syncDeadlineTask } = require('./legalDeadlineTask');
 const { assertResponsibleInTenant } = require('./legalDeadlineResponsible');
@@ -22,14 +23,16 @@ const { DEADLINE_CRITICALITIES, normalizeCriticality, assertFinalDeadlineState }
  * status PENDING"). Além de OVERDUE, adicionamos DUE_SOON (próximas 48h) e NORMAL como
  * granularidade extra útil pra UI de prazos — não pedida explicitamente, mas consistente com
  * o único caso citado no doc.
+ * Fechamento M5 (§15 "Alertas escalonados por regra"): a antecedência do DUE_SOON é o parâmetro por criticidade
+ * `legal.prazos.alerta_antecedencia_horas.<CRITICIDADE>` (padrão 48 h); `windows` vem de legalDeadlineWindows.
  */
-function computeSeverity(deadline, now = new Date()) {
+function computeSeverity(deadline, now = new Date(), windows = null) {
   if (deadline.status === 'CANCELLED') return 'CANCELLED';
   if (deadline.status !== 'PENDING') return 'DONE';
   const dueAt = new Date(deadline.dueAt);
   if (dueAt.getTime() < now.getTime()) return 'OVERDUE';
   const hoursUntilDue = (dueAt.getTime() - now.getTime()) / (1000 * 60 * 60);
-  if (hoursUntilDue <= 48) return 'DUE_SOON';
+  if (hoursUntilDue <= windowFor(windows, deadline.criticality).dueSoonHours) return 'DUE_SOON';
   return 'NORMAL';
 }
 
@@ -53,7 +56,7 @@ async function createLegalDeadline(legalCaseId, payload, actorUserId, transactio
   }
   // Texto obrigatorio: sem espacos/invisiveis so, so texto, dentro do tamanho da coluna.
   const description = requireText(payload.description, 'description', { max: 255 });
-  const dueAt = parseDueAt(payload.dueAt, 'dueAt');
+  const dueAt = parseDueAt(payload.dueAt, 'dueAt', await legalDeadlineZone(legalCase, transaction));
   const source = await resolveDeadlineSource(payload, legalCase, transaction, options);
 
   // ACHADO REAL (auditoria técnica independente da Nayara, A07): prazo que já nasce vencido exige responsável
@@ -114,9 +117,10 @@ async function listLegalDeadlines(transaction, filters = {}) {
 
   const deadlines = await LegalDeadline.findAll({ where, order: [['due_at', 'ASC']], transaction });
   const now = new Date();
+  const windows = deadlines.length ? await legalDeadlineWindows(deadlines[0], transaction) : null;
   const withSeverity = deadlines.map((d) => {
     const json = d.toJSON();
-    json.severity = computeSeverity(d, now);
+    json.severity = computeSeverity(d, now, windows);
     return json;
   });
 
@@ -164,7 +168,7 @@ async function updateLegalDeadline(id, payload, actorUserId, transaction, option
   const finalStatus = status !== undefined ? status : deadline.status;
   assertTransitionAllowed(deadline.status, finalStatus);
   const description = payload.description !== undefined ? requireText(payload.description, 'description', { max: 255 }) : undefined;
-  const dueAt = payload.dueAt !== undefined ? parseDueAt(payload.dueAt, 'dueAt') : undefined;
+  const dueAt = payload.dueAt !== undefined ? parseDueAt(payload.dueAt, 'dueAt', await legalDeadlineZone(legalCase, transaction)) : undefined;
   if (conclusionEvidenceFileId !== undefined && conclusionEvidenceFileId !== null && !UUID_RE.test(String(conclusionEvidenceFileId))) {
     throw AppError.badRequest('"conclusionEvidenceFileId" deve ser o identificador (UUID) de um arquivo.', 'LEGAL_DEADLINE_VALIDATION');
   }

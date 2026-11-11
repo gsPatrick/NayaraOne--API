@@ -1,7 +1,8 @@
 'use strict';
 
 const { Task, LegalDeadline } = require('../../../models');
-const { formatSaoPaulo } = require('./legalDeadlineDates');
+const { formatInZone } = require('./legalDeadlineDates');
+const { legalDeadlineZone } = require('../shared/legalRules.params');
 
 /**
  * Tarefa do prazo (Guia do Marcelo §12: `tasks.create({ responsibleUserId: d.responsibleUserId, dueAt: d.dueAt,
@@ -16,25 +17,28 @@ const TASK_STATUS = { PENDING: 'OPEN', DONE: 'DONE', CANCELLED: 'CANCELLED' };
 
 const effectiveResponsible = (deadline, legalCase) => deadline.responsibleUserId || (legalCase && legalCase.responsibleUserId) || null;
 
-function describe(deadline, legalCase) {
+function describe(deadline, legalCase, zone) {
   const origem = deadline.sourceFileId ? `arquivo ${deadline.sourceFileId}` : deadline.sourceEventId ? `evento ${deadline.sourceEventId}` : deadline.sourceDocument || deadline.sourceEvent || 'não informada';
-  return `Processo ${legalCase.caseNumber || legalCase.id}. Origem: ${origem}. Vence em ${formatSaoPaulo(deadline.dueAt)}. Criticidade ${deadline.criticality}.`;
+  return `Processo ${legalCase.caseNumber || legalCase.id}. Origem: ${origem}. Vence em ${formatInZone(deadline.dueAt, zone)}. Criticidade ${deadline.criticality}.`;
 }
 
-function taskFields(deadline, legalCase) {
+function taskFields(deadline, legalCase, zone) {
   return {
     assignedToUserId: effectiveResponsible(deadline, legalCase),
     title: `Prazo jurídico: ${deadline.description}`.slice(0, 255),
-    description: describe(deadline, legalCase),
+    description: describe(deadline, legalCase, zone),
     dueAt: deadline.dueAt,
     status: TASK_STATUS[deadline.status] || 'OPEN',
     priority: deadline.criticality || 'MEDIUM',
   };
 }
 
+// Fechamento M5 (§15): o texto da tarefa mostra o vencimento no fuso da empresa.
+const zoneOf = (deadline, transaction) => legalDeadlineZone({ groupId: deadline.groupId, companyId: deadline.companyId }, transaction);
+
 async function createDeadlineTask(deadline, legalCase, actorUserId, transaction) {
   const task = await Task.create(
-    { groupId: deadline.groupId, companyId: deadline.companyId, relatedEntityType: SOURCE_TYPE, relatedEntityId: deadline.id, ...taskFields(deadline, legalCase), createdBy: actorUserId || null, updatedBy: actorUserId || null },
+    { groupId: deadline.groupId, companyId: deadline.companyId, relatedEntityType: SOURCE_TYPE, relatedEntityId: deadline.id, ...taskFields(deadline, legalCase, await zoneOf(deadline, transaction)), createdBy: actorUserId || null, updatedBy: actorUserId || null },
     { transaction }
   );
   deadline.taskId = task.id;
@@ -46,7 +50,7 @@ async function createDeadlineTask(deadline, legalCase, actorUserId, transaction)
 async function syncDeadlineTask(deadline, legalCase, actorUserId, transaction) {
   const task = deadline.taskId ? await Task.findByPk(deadline.taskId, { transaction, lock: transaction ? transaction.LOCK.UPDATE : undefined }) : null;
   if (!task) return deadline.status === 'PENDING' ? createDeadlineTask(deadline, legalCase, actorUserId, transaction) : null;
-  Object.assign(task, taskFields(deadline, legalCase), { updatedBy: actorUserId || null });
+  Object.assign(task, taskFields(deadline, legalCase, await zoneOf(deadline, transaction)), { updatedBy: actorUserId || null });
   if (task.changed()) await task.save({ transaction });
   return task;
 }

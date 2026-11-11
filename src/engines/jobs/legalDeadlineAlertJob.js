@@ -1,7 +1,10 @@
 'use strict';
 
-const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification, Task } = require('../../models');
+const { sequelize, Group, Company, LegalDeadline, LegalCase, Notification } = require('../../models');
 const { computeSeverity } = require('../../modules/legal/cases/deadline.service');
+const { legalDeadlineWindows, legalDeadlineZone, windowFor } = require('../../modules/legal/shared/legalRules.params');
+const { needsOccurrence, openDeadlineOccurrence } = require('../../modules/legal/cases/legalDeadlineOccurrence');
+const { formatInZone } = require('../../modules/legal/cases/legalDeadlineDates');
 const { publishLegalDeadlineAlert, publishCadernoEvent } = require('../../modules/legal/shared/legalEvents.service');
 const { registrarAuditoria } = require('../audit/auditLog.service');
 
@@ -27,14 +30,16 @@ const SEVERITY_RANK = { NORMAL: 0, DUE_SOON: 1, OVERDUE: 2, DONE: -1 };
  * marca `escalated_at` — que serve de guarda de idempotência: escalona uma vez, não a cada
  * rodada de 30 minutos.
  */
-const ESCALATION_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+// Fechamento M5 (§15 "Alertas escalonados por regra"): a janela é o parâmetro por criticidade
+// `legal.prazos.escalonamento_horas.<CRITICIDADE>` (padrão 24 h, o valor que era fixo aqui); esta constante é só o padrão.
+const ESCALATION_WINDOW_MS = 24 * 60 * 60 * 1000; // padrão de 24h
 
 /**
  * processEscalations — segunda passada do job, independente da regra de "severidade piorou":
  * varre os prazos ainda PENDING que já foram alertados como OVERDUE, e escalona os que
  * estouraram a janela sem terem sido escalados ainda.
  */
-async function processEscalations(transaction, now) {
+async function processEscalations(transaction, now, windows = null, zone = undefined) {
   // Failure drill M5 (J10): FOR UPDATE SKIP LOCKED — duas instâncias do job (ou o job x uma conclusão em curso) nunca
   // escalam o mesmo prazo duas vezes; quem chega depois pula a linha travada e, na rodada seguinte, já vê escalated_at.
   const candidates = await LegalDeadline.findAll({
@@ -47,7 +52,8 @@ async function processEscalations(transaction, now) {
   for (const deadline of candidates) {
     if (!deadline.firstOverdueAlertedAt) continue;
     const elapsed = now.getTime() - new Date(deadline.firstOverdueAlertedAt).getTime();
-    if (elapsed <= ESCALATION_WINDOW_MS) continue;
+    const windowMs = windowFor(windows, deadline.criticality).escalationHours * 60 * 60 * 1000;
+    if (elapsed <= windowMs) continue;
 
     const legalCase = await LegalCase.findByPk(deadline.legalCaseId, { transaction });
     if (!legalCase || !legalCase.escalationUserId) {
@@ -66,7 +72,7 @@ async function processEscalations(transaction, now) {
         title: 'ESCALONAMENTO — prazo jurídico vencido sem tratativa',
         body:
           `"${deadline.description}" (processo ${legalCase.caseNumber || 'sem número'}) está VENCIDO desde ` +
-          `${new Date(deadline.dueAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} e continua sem ação mais de 24h após o primeiro alerta ao responsável.`,
+          `${formatInZone(deadline.dueAt, zone)} e continua sem ação mais de ${windowFor(windows, deadline.criticality).escalationHours} h após o primeiro alerta ao responsável.`,
         createdBy: null,
         updatedBy: null,
       },
@@ -87,7 +93,7 @@ async function processEscalations(transaction, now) {
         entityId: deadline.id,
         beforeJson: beforeEscalation,
         afterJson: { escalatedAt: deadline.escalatedAt, lastAlertedSeverity: deadline.lastAlertedSeverity || null, escalationUserId: legalCase.escalationUserId },
-        reason: `Prazo "${deadline.description}" vencido há mais de 24h sem ação: escalado para o usuário ${legalCase.escalationUserId}.`,
+        reason: `Prazo "${deadline.description}" vencido há mais de ${windowFor(windows, deadline.criticality).escalationHours} h sem ação: escalado para o usuário ${legalCase.escalationUserId}.`,
       },
       transaction
     );
@@ -111,14 +117,25 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
     const deadlines = await LegalDeadline.findAll({ where: { status: 'PENDING' }, transaction, ...(transaction ? { lock: transaction.LOCK.UPDATE, skipLocked: true } : {}) });
     const now = nowOverride || new Date();
     let alerted = 0;
+    const tenant = deadlines[0] ? { groupId: deadlines[0].groupId, companyId: deadlines[0].companyId } : null;
+    const windows = tenant ? await legalDeadlineWindows(tenant, transaction) : null;
+    const zone = tenant ? await legalDeadlineZone(tenant, transaction) : undefined;
 
     for (const deadline of deadlines) {
-      const severity = computeSeverity(deadline, now);
+      const severity = computeSeverity(deadline, now, windows);
       // Só alerta OVERDUE/DUE_SOON, e só quando é PIOR que a última vez que alertamos —
       // evita reavisar a cada rodada do job (a cada 30 min) pelo mesmo prazo parado.
       if (severity !== 'OVERDUE' && severity !== 'DUE_SOON') continue;
       const previousRank = SEVERITY_RANK[deadline.lastAlertedSeverity] ?? -1;
-      if (SEVERITY_RANK[severity] <= previousRank) continue;
+      if (SEVERITY_RANK[severity] <= previousRank) {
+        // Fechamento M5 (§15): já alertado como vencido, mas a criticidade subiu para HIGH/CRITICAL depois — abre a ocorrência.
+        if (needsOccurrence(deadline, severity)) {
+          const legalCaseLate = await LegalCase.findByPk(deadline.legalCaseId, { transaction });
+          await openDeadlineOccurrence(deadline, { legalCase: legalCaseLate, recipientUserId: deadline.responsibleUserId || legalCaseLate?.responsibleUserId || null, now, zone }, transaction);
+          await deadline.save({ transaction });
+        }
+        continue;
+      }
 
       const legalCase = await LegalCase.findByPk(deadline.legalCaseId, { transaction });
 
@@ -139,7 +156,7 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
             userId: recipientUserId,
             channel: 'IN_APP',
             title: severity === 'OVERDUE' ? 'Prazo jurídico VENCIDO' : 'Prazo jurídico próximo de vencer',
-            body: `"${deadline.description}" (processo ${legalCase ? legalCase.caseNumber || 'sem número' : 'não encontrado'}) vence em ${new Date(deadline.dueAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}.`,
+            body: `"${deadline.description}" (processo ${legalCase ? legalCase.caseNumber || 'sem número' : 'não encontrado'}) vence em ${formatInZone(deadline.dueAt, zone)}.`,
             createdBy: null,
             updatedBy: null,
           },
@@ -153,25 +170,8 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
         // M45 (Caderno M5 §15 "Prazo crítico vencido abre ocorrência HIGH/CRITICAL"): prazo de
         // criticidade HIGH/CRITICAL vencido abre UMA ocorrência (tarefa) com essa prioridade,
         // atribuída ao responsável; occurrence_task_id impede abrir de novo.
-        if (['HIGH', 'CRITICAL'].includes(deadline.criticality) && !deadline.occurrenceTaskId) {
-          const occurrence = await Task.create(
-            {
-              groupId: deadline.groupId,
-              companyId: deadline.companyId,
-              assignedToUserId: recipientUserId,
-              title: `Ocorrência ${({ HIGH: 'alta', CRITICAL: 'crítica' })[deadline.criticality] || 'importante'}: prazo jurídico vencido`,
-              description: `"${deadline.description}" (processo ${legalCase ? legalCase.caseNumber || 'sem número' : 'não encontrado'}) venceu em ${new Date(deadline.dueAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} sem conclusão.`,
-              relatedEntityType: 'legal.legal_deadlines',
-              relatedEntityId: deadline.id,
-              dueAt: now,
-              status: 'OPEN',
-              priority: deadline.criticality,
-              createdBy: null,
-              updatedBy: null,
-            },
-            { transaction }
-          );
-          deadline.occurrenceTaskId = occurrence.id;
+        if (needsOccurrence(deadline, severity)) {
+          await openDeadlineOccurrence(deadline, { legalCase, recipientUserId, now, zone }, transaction);
         }
       }
 
@@ -203,7 +203,7 @@ async function processDeadlinesInTransaction(transaction, nowOverride) {
       alerted += 1;
     }
 
-    const escalated = await processEscalations(transaction, now);
+    const escalated = await processEscalations(transaction, now, windows, zone);
 
     return { deadlinesChecked: deadlines.length, alerted, escalated };
 }
