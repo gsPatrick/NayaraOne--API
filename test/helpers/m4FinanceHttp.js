@@ -6,10 +6,38 @@
  * banco DESCARTÁVEL do teste — NUNCA pelo endpoint de MFA, nunca com token forjado de outra forma
  * que não a assinatura de teste já usada pelas baterias HTTP (signAccessToken).
  */
+const { randomUUID } = require('node:crypto');
+const { Sequelize } = require('sequelize');
 const { signAccessToken } = require('../../src/utils/jwt');
 const { encryptSecret } = require('../../src/utils/mfaCrypto');
 const { User, MfaCredential, MfaStepUp } = require('../../src/models');
-const { withTenantTransaction, uniqueSuffix } = require('../testHelpers');
+const { withTenantTransaction, uniqueSuffix, getSeedTenant } = require('../testHelpers');
+
+let admin = null;
+
+/**
+ * isolatedTenant — grupo e empresa NOVOS só para o arquivo de teste (criados pelo superusuário do
+ * banco descartável, como os testes de BI fazem). Os testes HTTP gravam de verdade (commit): numa
+ * empresa própria eles não mudam os números que outras baterias conferem na empresa do seed.
+ */
+async function isolatedTenant(label) {
+  if (!process.env.DATABASE_ADMIN_URL || !/@127\.0\.0\.1:/.test(process.env.DATABASE_ADMIN_URL)) {
+    throw new Error('DATABASE_ADMIN_URL do banco descartável ausente: rode via scripts/withDisposableDb.js.');
+  }
+  admin = admin || new Sequelize(process.env.DATABASE_ADMIN_URL, { dialect: 'postgres', logging: false });
+  const seed = await getSeedTenant();
+  const groupId = randomUUID();
+  const companyId = randomUUID();
+  const name = `M4 teste ${label} ${companyId.slice(0, 8)}`;
+  await admin.query('INSERT INTO core.groups (id, name) VALUES (:groupId, :name)', { replacements: { groupId, name } });
+  await admin.query('INSERT INTO core.companies (id, group_id, name) VALUES (:companyId, :groupId, :name)', { replacements: { companyId, groupId, name } });
+  return { groupId, companyId, userId: seed.userId };
+}
+
+async function closeIsolated() {
+  if (admin) await admin.close();
+  admin = null;
+}
 
 const FINANCE_ALL = [
   'finance:read', 'finance:create', 'finance:update', 'finance:settle', 'finance:approve',
@@ -55,4 +83,4 @@ function client(baseUrl) {
   };
 }
 
-module.exports = { createUser, tokenFor, client, FINANCE_ALL };
+module.exports = { createUser, tokenFor, client, isolatedTenant, closeIsolated, FINANCE_ALL };

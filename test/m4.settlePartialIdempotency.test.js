@@ -12,8 +12,8 @@ const assert = require('node:assert/strict');
 
 process.env.PORT = process.env.M4_IDEMP_TEST_PORT || '21611';
 require('../app');
-const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize, createTestResultCenter } = require('./testHelpers');
-const { createUser, tokenFor, client } = require('./helpers/m4FinanceHttp');
+const { uniqueSuffix, withTenantTransaction, sequelize, createTestResultCenter } = require('./testHelpers');
+const { createUser, tokenFor, client, isolatedTenant, closeIsolated } = require('./helpers/m4FinanceHttp');
 const financialEntriesService = require('../src/features/finance/financialEntries.service');
 const { FinancialEntry } = require('../src/models');
 
@@ -23,7 +23,7 @@ let token;
 let resultCenterId;
 
 before(async () => {
-  tenant = await getSeedTenant();
+  tenant = await isolatedTenant('baixa-parcial');
   http = client(`http://127.0.0.1:${process.env.PORT}/api/v1`);
   const user = await createUser(tenant, 'baixa');
   token = tokenFor(tenant, user.id);
@@ -32,6 +32,7 @@ before(async () => {
 });
 
 after(async () => {
+  await closeIsolated();
   await sequelize.close();
   process.exit(0);
 });
