@@ -140,11 +140,11 @@ test('FIN-TS-004: lançamento não pode usar bankAccount de outra empresa (mesmo
       tenant.userId,
       transaction
     );
-    // createCompany muda SET LOCAL app.company_id pra empresa recém-criada (documentado no
-    // próprio service: assume ser a última operação da transação). A conta bancária que
-    // criamos AQUI é da outra empresa de propósito (simula o cadastro feito por quem tem
-    // acesso a ela), então o contexto já está certo pra isso; só precisamos devolver pra
-    // empresa do tenant DEPOIS, antes de continuar operando nela.
+    // createCompany devolve o contexto da transação para a empresa de quem age (M3-05, commit 7c544fb5).
+    // A conta bancária criada AQUI é da outra empresa de propósito (simula o cadastro feito por quem tem
+    // acesso a ela): o contexto vai para a outra empresa só para esse cadastro e volta para a empresa do
+    // tenant logo depois, antes de continuar operando nela.
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: otherCompany.id }, transaction });
     const foreignBank = await bankAccountsService.createBankAccount(
       { groupId: tenant.groupId, companyId: otherCompany.id, bankCode: '999', agency: '0001', accountNumber: `fints004-${suffix}` },
       tenant.userId,
