@@ -21,8 +21,10 @@ const peopleService = require('../src/features/people/people.service');
 const utilitiesService = require('../src/features/billing/utilities.service');
 const filesService = require('../src/features/files/files.service');
 const { runEventConsumers } = require('../src/engines/events/consumers');
-const { processLeaseObligations } = require('../src/features/billing/obligations/leaseObligationOverdue');
-const { OutboxEvent, UtilityObligation, LeaseObligationCycle } = require('../src/models');
+const processLeaseObligations = (...a) => require('../src/features/billing/obligations/leaseObligationOverdue').processLeaseObligations(...a);
+const models = require('../src/models');
+
+const { OutboxEvent, UtilityObligation } = models;
 require('../src/features/billing/billing.routes'); // registra o consumidor locacao.obrigacoes, como a API em produção
 
 let tenant;
@@ -77,6 +79,6 @@ test('M5-A0086/§10: keys.delivered da liberação real inicia a cadência pós-
     const started = await UtilityObligation.findByPk(obligation.id, { transaction: t });
     assert.ok(started.startsOn && started.nextDueOn, 'obrigação iniciada pela entrega');
     await processLeaseObligations(t, { now: new Date() });
-    assert.equal(await LeaseObligationCycle.count({ where: { obligationId: obligation.id, dueOn: started.nextDueOn }, transaction: t }), 1, 'primeiro vencimento vira ciclo');
+    assert.equal(await models.LeaseObligationCycle.count({ where: { obligationId: obligation.id, dueOn: started.nextDueOn }, transaction: t }), 1, 'primeiro vencimento vira ciclo');
   });
 });

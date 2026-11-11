@@ -22,9 +22,12 @@ const utilitiesService = require('../src/features/billing/utilities.service');
 const maintenanceService = require('../src/features/construction/maintenanceCases.service');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { getContractTimeline } = require('../src/modules/legal/contracts/application/contractTimeline.service');
-const { processLeaseObligations } = require('../src/features/billing/obligations/leaseObligationOverdue');
+// Lazy: o ciclo das obrigações é desta correção (na base o teste (2) falha por não existir).
+const processLeaseObligations = (...a) => require('../src/features/billing/obligations/leaseObligationOverdue').processLeaseObligations(...a);
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
-const { Contract, Guarantee, AuditLog, LeaseObligationCycle, OutboxEvent, Notification, LegalDeadline } = require('../src/models');
+const models = require('../src/models');
+
+const { Contract, Guarantee, AuditLog, OutboxEvent, Notification, LegalDeadline } = models;
 const { completeInsurance, paymentProof } = require('./m5fech.locacao.helpers');
 const { newUser, newCase, newDeadline, PAST, FUTURE } = require('./m5fech.juridico.helpers');
 
@@ -71,7 +74,7 @@ test('M5-A0002 (2): histórico completo de garantias (substituída preservada e 
     await processLeaseObligations(t, { now: new Date('2027-03-20T12:00:00Z') });
     await utilitiesService.recordUtilityPayment(obligation.id, { amount: 600, paidByParty: 'TENANT', ...(await paymentProof(tenant, t, '2027-02-05')) }, tenant.userId, t);
     await processLeaseObligations(t, { now: new Date('2027-03-20T12:00:00Z') });
-    const cycles = await LeaseObligationCycle.findAll({ where: { obligationId: obligation.id }, order: [['dueOn', 'ASC']], transaction: t });
+    const cycles = await models.LeaseObligationCycle.findAll({ where: { obligationId: obligation.id }, order: [['dueOn', 'ASC']], transaction: t });
     assert.deepEqual(cycles.map((c) => [c.dueOn, c.status]), [['2027-01-05', 'OVERDUE'], ['2027-02-05', 'PAID'], ['2027-03-05', 'OVERDUE'], ['2027-04-05', 'OPEN']]);
   });
 });

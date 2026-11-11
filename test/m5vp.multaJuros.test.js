@@ -13,10 +13,9 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./t
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
-const { publishPenaltyPatch } = require('../src/features/billing/penaltyRules.service');
 const { seedBillingRules } = require('../scripts/seedBillingRules');
 const { gravarParametroSensivel } = require('./helpers/mfaRecente');
-const { TenantSetting, RuleVersion, AuditLog } = require('../src/models');
+const { TenantSetting, Rule, RuleVersion, RuleScope, RulePublication, AuditLog } = require('../src/models');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });
@@ -24,6 +23,22 @@ after(async () => { await sequelize.close(); });
 
 const base = () => ({ groupId: tenant.groupId, companyId: tenant.companyId });
 let periodSeq = 0;
+
+/** Publica versão nova da regra com a ação dada (fecha a vigente), direto no Motor de Regras — sem passar pelo código sob teste. */
+async function publishRule(code, patch, t) {
+  const rule = await Rule.findOne({ where: { code, ...base() }, transaction: t });
+  const vigente = await RuleVersion.findOne({ where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, order: [['versionNumber', 'DESC']], transaction: t });
+  const now = new Date();
+  await RuleVersion.update({ effectiveUntil: new Date(now.getTime() - 1) }, { where: { ruleId: rule.id, status: 'PUBLISHED', effectiveUntil: null }, transaction: t });
+  const last = await RuleVersion.findOne({ where: { ruleId: rule.id }, order: [['versionNumber', 'DESC']], transaction: t });
+  const v = await RuleVersion.create({
+    ...base(), ruleId: rule.id, versionNumber: last.versionNumber + 1, conditionAstJson: vigente.conditionAstJson, contentHash: vigente.contentHash,
+    actionJson: { ...vigente.actionJson, ...patch }, effectiveFrom: now, effectiveUntil: null, status: 'PUBLISHED', publishedByUserId: tenant.userId, createdBy: tenant.userId, updatedBy: tenant.userId,
+  }, { transaction: t });
+  await RuleScope.create({ ...base(), ruleVersionId: v.id, scopeType: 'GLOBAL', scopeRefId: null, precedence: 7, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
+  await RulePublication.create({ ...base(), ruleVersionId: v.id, publishedByUserId: tenant.userId, publishedAt: now, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
+  return v;
+}
 
 async function overdueSchedule(t) {
   const contract = await contractsService.createContract({ ...base(), contractType: 'LEASE', totalValue: 3000 }, tenant.userId, t);
@@ -36,8 +51,8 @@ test('M5-A0330: multa 7%, juros 3% ao mês e carência 5 dias vêm da regra publ
   await withRollbackTenantTransaction(tenant, async (t) => {
     await seedBillingRules({ ...base(), userId: tenant.userId }, t);
     await TenantSetting.destroy({ where: { companyId: tenant.companyId, key: ['billing.late_fee_percentage', 'billing.interest_percentage', 'billing.grace_period_days'] }, transaction: t });
-    const v1 = await publishPenaltyPatch('REG-LOC-001', { penaltyPercentage: 7, monthlyInterestPercentage: 3 }, base(), tenant.userId, t, 'teste');
-    const v2 = await publishPenaltyPatch('REG-LOC-002', { graceDays: 5 }, base(), tenant.userId, t, 'teste');
+    const v1 = await publishRule('REG-LOC-001', { penaltyPercentage: 7, monthlyInterestPercentage: 3 }, t);
+    const v2 = await publishRule('REG-LOC-002', { graceDays: 5 }, t);
     const schedule = await overdueSchedule(t);
     await assert.rejects(() => collectionCaseService.openCollectionCase(schedule.id, 4, tenant.userId, t), (err) => err.code === 'COLLECTION_CASE_WITHIN_GRACE_PERIOD');
     const cc = await collectionCaseService.openCollectionCase(schedule.id, 15, tenant.userId, t);
@@ -52,9 +67,10 @@ test('M5-A0330: multa 7%, juros 3% ao mês e carência 5 dias vêm da regra publ
 test('M5-A0330: gravar a multa na configuração (com MFA) publica versão nova da regra, e é ela que o caso usa; número antigo gravado é alinhado com auditoria', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     await seedBillingRules({ ...base(), userId: tenant.userId }, t);
-    await publishPenaltyPatch('REG-LOC-001', { penaltyPercentage: 7, monthlyInterestPercentage: 3 }, base(), tenant.userId, t, 'teste');
+    await publishRule('REG-LOC-001', { penaltyPercentage: 7, monthlyInterestPercentage: 3 }, t);
     await gravarParametroSensivel('billing.late_fee_percentage', 4, tenant, t);
     const published = await AuditLog.findOne({ where: { action: 'billing.penalty_rule.publish', companyId: tenant.companyId }, order: [['created_at', 'DESC']], transaction: t });
+    assert.ok(published, 'gravar o número publica versão nova da regra');
     assert.equal(published.afterJson.action.penaltyPercentage, 4);
     assert.equal(published.afterJson.action.monthlyInterestPercentage, 3, 'o resto da ação é preservado');
     const cc = await collectionCaseService.openCollectionCase((await overdueSchedule(t)).id, 15, tenant.userId, t);
