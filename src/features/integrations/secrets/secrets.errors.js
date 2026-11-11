@@ -12,7 +12,7 @@ const rotationFailed = () => AppError.unprocessable('A nova credencial não pass
 
 const driverForbidden = () => AppError.internal('Cofre local não é permitido para integração bancária em produção.', 'INTEGRATION_SECRET_DRIVER_FORBIDDEN');
 
-const storeNotConfigured = () => AppError.internal('Cofre de segredos não configurado.', 'INTEGRATION_SECRET_STORE_NOT_CONFIGURED');
+const storeNotConfigured = (dica) => AppError.internal(`Cofre de segredos não configurado.${dica ? ` ${dica}` : ''}`, 'INTEGRATION_SECRET_STORE_NOT_CONFIGURED');
 
 const storeConfig = (motivo) => AppError.internal(`Cofre de segredos com configuração inválida: ${motivo}`, 'INTEGRATION_SECRET_STORE_CONFIG');
 
