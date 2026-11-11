@@ -5,6 +5,7 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const crmController = require('./crm.controller');
 const { requireOpportunityInScope } = require('./opportunityScope.guard');
+require('./financingStatus.consumer'); // CAD-09: status do financiamento atualiza a oportunidade por evento
 
 const crmRouter = Router();
 

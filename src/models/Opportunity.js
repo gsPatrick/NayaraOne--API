@@ -94,6 +94,23 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'next_action_due_at',
       },
+      // CAD-09 (Marco 3 §9): retrato do financiamento vinculado, escrito só pelo consumidor do evento do Correspondente
+      // (crm/financingStatus.consumer.js). Só referência, status e data — nenhum dado bancário no CRM.
+      financingCaseId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'financing_case_id',
+      },
+      financingStatus: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'financing_status',
+      },
+      financingStatusAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'financing_status_at',
+      },
       lockVersion: {
         type: DataTypes.INTEGER,
         allowNull: false,

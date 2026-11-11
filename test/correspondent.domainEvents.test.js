@@ -3,7 +3,7 @@
 // Marco 8, Fase 9 — Eventos de domínio (CRM/Financeiro). Confirma que cada evento mínimo do
 // Caderno é emitido no momento certo (lendo a tabela de outbox depois da ação), que nenhum
 // payload carrega conteúdo de documento restrito, e que a atualização da oportunidade do CRM
-// acontece via audit log (nunca escrita direta no registro da Opportunity).
+// acontece por evento: o Correspondente publica, o consumidor do CRM aplica no despacho (CAD-09).
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -16,6 +16,8 @@ const submissionsService = require('../src/features/correspondent/cases/submissi
 const webhooksService = require('../src/features/correspondent/webhooks.service');
 const settingsService = require('../src/features/settings/settings.service');
 const { Person, File, OutboxEvent, AuditLog, Opportunity, FinancingCase } = require('../src/models');
+require('../src/features/crm/financingStatus.consumer'); // CAD-09: consumidor do CRM registrado para o despacho
+const { despacharNaTransacao, reabrirEventos } = require('./helpers/outboxEmTransacao');
 
 let tenant;
 const createdFinancingCaseIds = [];
@@ -234,7 +236,7 @@ test('CORRESPONDENT-EVT-06: webhook fora de ordem (ignorado) NÃO emite financin
   assert.equal(countAfter, countBefore, 'webhook fora de ordem (não aplicado) não deveria emitir financing.status.changed de novo');
 });
 
-test('CORRESPONDENT-EVT-07: status aplicado com opportunityId vinculado atualiza a oportunidade via audit log, nunca escrita direta', async () => {
+test('CORRESPONDENT-EVT-07: status aplicado com opportunityId vinculado publica o evento e o CRM só se atualiza no despacho (consumidor do CRM), nunca escrita direta', async () => {
   const person = await withTenantTransaction(tenant, (t) =>
     Person.create(
       { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Cliente Evt ${uniqueSuffix()}`, createdBy: tenant.userId, updatedBy: tenant.userId },
@@ -251,18 +253,42 @@ test('CORRESPONDENT-EVT-07: status aplicado com opportunityId vinculado atualiza
 
   const secret = `wh-secret-${uniqueSuffix()}`;
   await setWebhookSecret(secret);
-  const { externalCaseId } = await createSubmittedCase({ opportunityId: opportunity.id });
+  const { financingCaseId, externalCaseId } = await createSubmittedCase({ opportunityId: opportunity.id });
 
   const body = { externalCaseId, externalEventId: `evt-${uniqueSuffix()}`, status: 'APPROVED' };
   const { rawBody, headers } = signedWebhookRequest(secret, body);
   const result = await webhooksService.processFinancingWebhook('sandbox', rawBody, headers, body);
   assert.equal(result.applied, true, 'pré-condição do teste: a transição precisa ter sido aplicada');
 
-  const auditEntry = await withTenantTransaction(tenant, (t) => AuditLog.findOne({ where: { entityType: 'Opportunity', entityId: opportunity.id, action: 'crm.opportunity.financing_status_changed' }, transaction: t }));
-  assert.ok(auditEntry, 'audit log de atualização da oportunidade não foi criado');
+  // CAD-09: o webhook só publica o evento (com a referência da oportunidade); o CRM ainda não foi escrito.
+  const statusEvents = await withTenantTransaction(tenant, (t) => OutboxEvent.findAll({ where: { eventType: 'financing.status.changed', aggregateId: financingCaseId }, transaction: t }));
+  const approved = statusEvents.find((e) => e.payloadJson.status === 'APPROVED');
+  assert.ok(approved, 'financing.status.changed da aprovação publicado');
+  assert.equal(approved.payloadJson.opportunityId, opportunity.id);
+  assert.equal(approved.status, 'PENDING');
+  const auditAntes = await withTenantTransaction(tenant, (t) => AuditLog.count({ where: { entityType: 'Opportunity', entityId: opportunity.id, action: 'crm.opportunity.financing_status_changed' }, transaction: t }));
+  assert.equal(auditAntes, 0, 'nenhuma escrita no CRM antes do despacho (o webhook não chama o CRM)');
+
+  // Despacho do outbox (mesmo código do job): o consumidor do CRM atualiza a oportunidade.
+  const ids = (await withTenantTransaction(tenant, (t) => OutboxEvent.findAll({ where: { aggregateId: financingCaseId, eventType: ['financing.case.created', 'financing.status.changed'] }, transaction: t }))).map((e) => e.id);
+  await withTenantTransaction(tenant, (t) => despacharNaTransacao(tenant, t, { id: ids }));
+
+  const auditEntries = await withTenantTransaction(tenant, (t) => AuditLog.findAll({ where: { entityType: 'Opportunity', entityId: opportunity.id, action: 'crm.opportunity.financing_status_changed' }, transaction: t }));
+  assert.equal(auditEntries.length, ids.length, 'um item de linha do tempo por evento despachado');
+  assert.ok(auditEntries.some((a) => /Aprovado/.test(a.reason)), 'a aprovação aparece na linha do tempo da oportunidade');
 
   const reloaded = await withTenantTransaction(tenant, (t) => Opportunity.findOne({ where: { id: opportunity.id }, transaction: t }));
+  assert.equal(reloaded.financingStatus, 'APPROVED', 'retrato do financiamento atualizado pelo consumidor');
+  assert.equal(reloaded.financingCaseId, financingCaseId);
   assert.equal(reloaded.stage, 'FINANCING', 'o módulo de financiamento nunca deve escrever direto no stage da oportunidade');
+
+  // Reenvio dos mesmos eventos: não duplica.
+  await withTenantTransaction(tenant, async (t) => {
+    await reabrirEventos(ids, t);
+    await despacharNaTransacao(tenant, t, { id: ids });
+  });
+  const auditDepois = await withTenantTransaction(tenant, (t) => AuditLog.count({ where: { entityType: 'Opportunity', entityId: opportunity.id, action: 'crm.opportunity.financing_status_changed' }, transaction: t }));
+  assert.equal(auditDepois, ids.length, 'reprocesso não duplica a linha do tempo');
 });
 
 test('CORRESPONDENT-EVT-08: case sem opportunityId não quebra e não gera audit log de oportunidade', async () => {
