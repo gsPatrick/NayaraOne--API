@@ -115,6 +115,9 @@ async function errorHandler(err, req, res, next) { // eslint-disable-line no-unu
   }
 
   if (err && err.name === 'SequelizeUniqueConstraintError') {
+    // FIN-TS-001: a unicidade de idempotência do Financeiro vira o código de negócio (quem perde a corrida recebe o mesmo 409 da checagem).
+    const financeMapped = require('../features/finance/financeUniqueViolations').mapFinanceUniqueViolation(err);
+    if (financeMapped) return failure(res, financeMapped);
     return failure(res, {
       statusCode: 409,
       code: 'UNIQUE_CONSTRAINT_VIOLATION',
