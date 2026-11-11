@@ -21,7 +21,7 @@ const slice = ({ where }) => `
            CASE WHEN r.id IS NULL THEN 'SEM_PERFIL' WHEN r.opportunity_id IS NOT NULL THEN 'COM_OPORTUNIDADE' ELSE 'AVULSO' END AS origin,
            COALESCE(r.created_by::text, CAST(:noBroker AS text)) AS b,
            EXISTS (SELECT 1 FROM crm.opportunities o
-                    WHERE o.company_id = e.company_id AND o.deleted_at IS NULL AND o.stage = 'CLOSED_WON'
+                    WHERE o.company_id = e.company_id AND o.deleted_at IS NULL AND o.stage = 'WON'
                       AND o.person_id::text = e.payload_json->>'personId' AND o.property_id::text = e.payload_json->>'propertyId') AS converted,
            EXISTS (SELECT 1 FROM crm.visits v
                     WHERE v.company_id = e.company_id AND v.deleted_at IS NULL AND v.status <> 'CANCELED' AND v.created_at >= e.occurred_at

@@ -64,7 +64,7 @@ const slice = () => `
         SELECT f.campaign_id FROM marketing.attribution_events f WHERE f.company_id = o.company_id AND f.person_id = o.person_id AND f.valid AND f.deleted_at IS NULL
            AND 'FIRST' = ANY(f.touch_roles) AND f.campaign_id IS NOT NULL AND f.occurred_at <= o.created_at ORDER BY f.occurred_at DESC, f.id LIMIT 1) = ${AGG}`, { leads_first: '1' })}
     UNION ALL
-    ${part(`${sqlMonth('o.closed_at')} AS month ${OPPORTUNITY} AND o.stage = 'CLOSED_WON' AND o.closed_at IS NOT NULL AND o.campaign_id = ${AGG} AND o.attribution_valid IS DISTINCT FROM false`, { sales_last: '1' })}
+    ${part(`${sqlMonth('o.closed_at')} AS month ${OPPORTUNITY} AND o.stage = 'WON' AND o.closed_at IS NOT NULL AND o.campaign_id = ${AGG} AND o.attribution_valid IS DISTINCT FROM false`, { sales_last: '1' })}
     UNION ALL
     ${part(`${sqlMonth('a.occurred_at')} AS month FROM marketing.attribution_events a WHERE a.company_id = :companyId AND ${AGG} = '${NIL}' AND a.event_type = 'SALE' AND a.valid AND a.deleted_at IS NULL
        AND a.evidence_json->>'attribution' = 'NAO_ATRIBUIDA' AND a.evidence_json->>'reason' = 'SEM_TOQUE_VALIDO_NA_JANELA'`, { outside_window: '1' })}

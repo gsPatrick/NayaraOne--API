@@ -14,7 +14,7 @@ const { NO_BROKER, incomplete, sumCounts } = require('./_bizKpi');
 /** Linhas { brokerId, won, lost }; a reconciliação do detalhe (M9-D611) entrega as oportunidades cruas (stage e owner_user_id), convertidas aqui. */
 function rowsOf(input) {
   if (!Array.isArray(input)) return input.rows || [];
-  return input.map((r) => ({ brokerId: r.owner_user_id || NO_BROKER, won: r.stage === 'CLOSED_WON' ? 1 : 0, lost: r.stage === 'CLOSED_LOST' ? 1 : 0 }));
+  return input.map((r) => ({ brokerId: r.owner_user_id || NO_BROKER, won: r.stage === 'WON' ? 1 : 0, lost: r.stage === 'LOST' ? 1 : 0 }));
 }
 
 function perBroker(rows) {

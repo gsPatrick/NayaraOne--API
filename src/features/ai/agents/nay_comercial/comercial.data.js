@@ -8,7 +8,7 @@ const opportunityService = require('../../../crm/opportunity.service');
 const { getOpportunityTimeline } = require('../../../crm/opportunityTimeline.service');
 const { daysBetween } = require('./comercial.format');
 
-const CLOSED_STAGES = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
+const { CLOSED_STAGE_CODES: CLOSED_STAGES } = require('../../../crm/opportunityStages');
 const OPEN_TASK = ['OPEN', 'IN_PROGRESS'];
 const INCOMPLETE_DOCUMENT = ['PENDING', 'REJECTED', 'EXPIRED'];
 

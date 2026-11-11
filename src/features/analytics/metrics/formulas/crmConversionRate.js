@@ -23,7 +23,7 @@ function brokerDimensions(rows) {
 }
 
 /** Linhas-fonte da reconciliação (M9-D611, RECOMPUTE): cada oportunidade fechada vira uma ganha ou uma perdida pelo estágio. */
-const fromSourceRows = (list) => list.map((r) => ({ brokerId: '-', won: r.stage === 'CLOSED_WON' ? 1 : 0, lost: r.stage === 'CLOSED_LOST' ? 1 : 0 }));
+const fromSourceRows = (list) => list.map((r) => ({ brokerId: '-', won: r.stage === 'WON' ? 1 : 0, lost: r.stage === 'LOST' ? 1 : 0 }));
 
 function compute(input, params = {}) {
   const minSample = Number.isInteger(params.minSample) ? params.minSample : 5;
@@ -63,8 +63,8 @@ const testCases = [
     expected: ok('50.00', '1', '1', [{ key: 'corretor:b1:taxa_pct', value: '50.00' }, { key: 'corretor:b1:fechadas_qtd', value: '2' }], '2'),
   },
   {
-    kind: 'typical', name: 'linhas-fonte da reconciliação: 6 CLOSED_WON e 14 CLOSED_LOST => 30,00%', params: { minSample: 1 },
-    input: [...Array(6).fill({ stage: 'CLOSED_WON' }), ...Array(14).fill({ stage: 'CLOSED_LOST' })],
+    kind: 'typical', name: 'linhas-fonte da reconciliação: 6 WON e 14 LOST => 30,00%', params: { minSample: 1 },
+    input: [...Array(6).fill({ stage: 'WON' }), ...Array(14).fill({ stage: 'LOST' })],
     expected: ok('30.00', '6', '14', [{ key: 'corretor:-:taxa_pct', value: '30.00' }, { key: 'corretor:-:fechadas_qtd', value: '20' }], '1'),
   },
   { kind: 'rounding', name: '1 ganha em 3 fechadas => 33,33% (meio para cima, 2 casas)', params: { minSample: 3 }, input: { rows: [row(1, 2)] }, expected: ok('33.33', '1', '2', [{ key: 'corretor:b1:taxa_pct', value: '33.33' }, { key: 'corretor:b1:fechadas_qtd', value: '3' }], '3') },

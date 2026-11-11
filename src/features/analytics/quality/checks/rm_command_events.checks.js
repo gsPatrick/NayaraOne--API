@@ -22,7 +22,7 @@ const COMPLETENESS = `SELECT (c.total + o.total + p.total)::int AS total, (c.nul
   (SELECT count(*) AS total, count(*) FILTER (WHERE NOT EXISTS (SELECT 1 FROM legal.signatures s JOIN legal.contract_versions v ON v.id = s.contract_version_id AND v.company_id = s.company_id
       WHERE v.contract_id = k.id AND s.company_id = k.company_id AND s.status = 'SIGNED' AND s.signed_at IS NOT NULL)) AS nulls
      FROM legal.contracts k WHERE k.company_id = :companyId AND k.deleted_at IS NULL AND k.status IN (${SIGNED})) c,
-  (SELECT count(*) AS total, count(*) FILTER (WHERE closed_at IS NULL) AS nulls FROM crm.opportunities WHERE company_id = :companyId AND deleted_at IS NULL AND stage = 'CLOSED_WON') o,
+  (SELECT count(*) AS total, count(*) FILTER (WHERE closed_at IS NULL) AS nulls FROM crm.opportunities WHERE company_id = :companyId AND deleted_at IS NULL AND stage = 'WON') o,
   (SELECT count(*) AS total, count(*) FILTER (WHERE settled_at IS NULL) AS nulls FROM finance.financial_entries
      WHERE company_id = :companyId AND entry_type = 'DEBIT' AND nature = 'PAYABLE' AND reversal_of_entry_id IS NULL AND status = 'SETTLED') p`;
 const INVARIANT = '(is_reversal AND (count_effect <> -1 OR COALESCE(amount, 0) > 0)) OR (NOT is_reversal AND count_effect <> 1)';
