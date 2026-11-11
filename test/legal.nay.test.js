@@ -213,7 +213,7 @@ test('NAY-JUR-07 (HTTP): resumo e sugestão de prazos com legal:read = 200; sem 
     return { status: res.status, body: await res.json().catch(() => null) };
   };
   const writer = token(ctx(), ['legal:create', 'legal:read']);
-  const created = await http(writer, 'POST', '/legal/contracts', { contractType: 'SERVICE', totalValue: 100 });
+  const created = await http(writer, 'POST', '/legal/contracts', { contractType: 'LEASE_RESIDENTIAL', totalValue: 100 });
   assert.equal(created.status, 201, JSON.stringify(created.body));
   const id = created.body.data.id;
 

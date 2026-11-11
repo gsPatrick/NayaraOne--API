@@ -57,20 +57,25 @@ test('AUD-015: subtipos de venda (SALE_CASH/SALE_FINANCED/SALE_TRADE/SALE_INSTAL
   });
 });
 
-test('AUD-015: contratos LEASE/SALE genéricos (dados já existentes) continuam funcionando sem quebra', async () => {
+test('AUD-015: contratos LEASE/SALE genéricos (dados já existentes) continuam funcionando sem quebra; contrato novo é gravado com o código do Caderno §3', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    // DI-M5CT-2: na entrada, o código legado é convertido explicitamente (e auditado) para o código do livro.
     const lease = await contractsService.createContract(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', totalValue: 1000 },
       tenant.userId,
       transaction
     );
-    assert.equal(lease.contractType, 'LEASE');
+    assert.equal(lease.contractType, 'LEASE_RESIDENTIAL');
     const sale = await contractsService.createContract(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'SALE', totalValue: 100000 },
       tenant.userId,
       transaction
     );
-    assert.equal(sale.contractType, 'SALE');
+    assert.equal(sale.contractType, 'SALE_CASH');
+    // Linha antiga gravada com o código genérico continua legível.
+    const { Contract } = require('../src/models');
+    const antigo = await Contract.create({ groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', contractNumber: `LEG-${uniqueSuffix()}`, status: 'DRAFT' }, { transaction });
+    assert.equal((await contractsService.getContract(antigo.id, transaction)).contractType, 'LEASE');
   });
 });
 

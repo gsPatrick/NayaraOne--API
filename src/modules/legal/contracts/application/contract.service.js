@@ -28,14 +28,10 @@ const { assertUuidFields } = require('../../shared/legalIds');
 // quebram), e ADICIONADOS os subtipos específicos que a auditora cobrou de verdade —
 // locação residencial/comercial/temporada e administração de imóvel (sem contrato de
 // locação por trás, só gestão) são o uso real do dia a dia da imobiliária.
-const CONTRACT_TYPES = [
-  'SALE', 'SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS',
-  'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL',
-  'PROPERTY_ADMIN',
-  'SERVICE', 'CONSTRUCTION',
-  // Matriz M5 (Caderno §3): tipos VINCULADOS ao contrato principal (exigem parentContractId).
-  'ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY',
-];
+// Correção da verificação do Marco 5 (DI-M5CT-2): contrato NOVO só com os 12 códigos do Caderno §3; os legados SALE/LEASE
+// entram só pela conversão explícita e auditada e SERVICE é recusado (contracts/domain/contractTypes.js). CONTRACT_TYPES
+// continua listando todo código que pode estar GRAVADO (linhas antigas seguem legíveis).
+const { STORED_CONTRACT_TYPES: CONTRACT_TYPES, resolveNewContractType } = require('../domain/contractTypes');
 const LINKED_CONTRACT_TYPES = ['ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY'];
 
 // Subtipos de LOCAÇÃO/VENDA usam exatamente as mesmas regras de negócio (gate de partes,
@@ -324,15 +320,15 @@ async function assertActivationGate(contract, transaction) {
 }
 
 async function createContract(payload, actorUserId, transaction) {
-  const { groupId, companyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt, constructionProjectId, parentContractId } = payload;
+  const { groupId, companyId, opportunityId, contractNumber, totalValue, startsAt, endsAt, constructionProjectId, parentContractId } = payload;
   let { propertyId } = payload;
   assertUuidFields(payload, ['propertyId', 'opportunityId', 'constructionProjectId', 'parentContractId']);
-  if (!groupId || !companyId || !contractType) {
+  if (!groupId || !companyId || !payload.contractType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "contractType" são obrigatórios.', 'LEGAL_CONTRACT_VALIDATION');
   }
-  if (!CONTRACT_TYPES.includes(contractType)) {
-    throw AppError.badRequest(`"contractType" deve ser um de: ${CONTRACT_TYPES.join(', ')}.`, 'LEGAL_CONTRACT_VALIDATION');
-  }
+  // Caderno §3: contrato novo só com os 12 códigos do livro; SALE/LEASE legados só pela conversão explícita e auditada
+  // (contracts/domain/contractTypes.js); SERVICE não existe no livro e é recusado.
+  const { contractType, convertedFrom } = resolveNewContractType(payload.contractType);
   // M6-104: contrato de empreitada (CONSTRUCTION) precisa nascer já vinculado à obra —
   // sem isso não há como o Marco 6 amarrar o contrato à execução física da obra.
   if (contractType === 'CONSTRUCTION' && !constructionProjectId) {
@@ -395,8 +391,10 @@ async function createContract(payload, actorUserId, transaction) {
       action: 'legal.contract.create',
       entityType: 'Contract',
       entityId: contract.id,
-      afterJson: contract.toJSON(),
-      reason: `Contrato do tipo "${contractType}" criado em DRAFT.`,
+      afterJson: convertedFrom ? { ...contract.toJSON(), conversaoDeTipo: { contractTypeInformado: convertedFrom, contractTypeGravado: contractType } } : contract.toJSON(),
+      reason: convertedFrom
+        ? `Contrato do tipo "${contractType}" criado em DRAFT (código legado "${convertedFrom}" convertido para o código do Caderno §3).`
+        : `Contrato do tipo "${contractType}" criado em DRAFT.`,
     },
     transaction
   );
