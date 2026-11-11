@@ -148,8 +148,9 @@ test('catalogo_providers_existentes_migrados', async () => {
     }
     // Os códigos antigos não existem mais: viraram os novos (connections seguem o código por UPDATE CASCADE).
     assert.equal(await IntegrationProvider.count({ where: { code: ['sandbox', 'manual'] }, transaction }), 0);
-    // Os 5 adapters existentes estão mapeados e o provider do catálogo existe para cada um.
-    assert.equal(new Set(catalog.LEGACY_ADAPTERS.map((a) => a.file)).size, 5, 'os 5 arquivos de adapter existentes');
+    // Os adapters existentes estão mapeados e o provider do catálogo existe para cada um. Desde o fechamento do Marco 5
+    // (Guia §2 signatures/providers/) a assinatura tem um arquivo por provedor (sandbox e Clicksign): 6 arquivos.
+    assert.equal(new Set(catalog.LEGACY_ADAPTERS.map((a) => a.file)).size, 6, 'os 6 arquivos de adapter existentes');
     for (const a of catalog.LEGACY_ADAPTERS) {
       const modulo = require(`../../${a.file}`);
       assert.equal(typeof modulo[a.className], 'function', `${a.className} existe em ${a.file}`);

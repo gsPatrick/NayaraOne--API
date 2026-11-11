@@ -96,7 +96,10 @@ async function buildFacts(contract, templateKey, transaction) {
 
 /** Itens que se aplicam ao contrato: modelo do tipo (ou `templateKey`) filtrado pelas condições sobre os fatos. */
 async function resolveRequirementItems(contract, { templateKey } = {}, actorUserId, transaction) {
-  const { action, ruleVersionId } = await resolveRequirementPolicy({ groupId: contract.groupId, companyId: contract.companyId }, actorUserId, transaction);
+  // A primeira publicação da política padrão (lazy) precisa de autor: quem age ou, em chamada sem ator (job,
+  // geração interna), quem criou o contrato. A publicação nunca fica sem autor (rule_publications.published_by NOT NULL).
+  const autor = actorUserId || contract.createdBy || contract.updatedBy || null;
+  const { action, ruleVersionId } = await resolveRequirementPolicy({ groupId: contract.groupId, companyId: contract.companyId }, autor, transaction);
   const key = templateKey || action.typeToTemplate[contract.contractType];
   const template = key ? action.templates[key] : null;
   if (!template) return { key, items: null, ruleVersionId, facts: null };
