@@ -8,12 +8,14 @@
  *  - FRESH: o status gravado no snapshot.
  * Um status pior gravado no snapshot (DEGRADED, INCOMPLETE) nunca é melhorado. Leitura de dia passado (histórica) devolve o registro como foi
  * gravado, com a freshness da época. O relógio é o injetável do BI.
+ * DI-BI-2: para hoje, a idade conta da leitura mais recente da fonte que CONFIRMOU o mesmo número (snapshotConfirmation), não do primeiro cálculo do dia.
  */
 const clock = require('./clock');
 const { STATES, computeFreshness, maxStalenessOf } = require('./freshness');
 const { readFreshnessParams } = require('./freshness.settings');
 const { assessQuality } = require('../quality/status.service');
 const { worstStatus, isUnreliable } = require('../quality/status.priority');
+const { effectiveTimes } = require('./snapshotConfirmation');
 
 const WORSE = new Set(['DEGRADED', 'INCOMPLETE']);
 
@@ -31,8 +33,9 @@ function resolveStatus(recorded, state) {
 async function presentSnapshot({ definition, version, snapshot, rawValue, asOfDate, scope, transaction, visited, now = clock.now() }) {
   const params = await readFreshnessParams(scope, transaction);
   const historical = asOfDate < clock.businessToday(now);
+  const times = historical ? { sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at, confirmedAt: null } : await effectiveTimes(snapshot, transaction);
   const freshness = computeFreshness({
-    asOfDate, sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at,
+    asOfDate, sourceSnapshotAt: times.sourceSnapshotAt, refreshedAt: times.refreshedAt,
     maxStalenessMinutes: maxStalenessOf(version.refresh_policy, definition.domain, params), factor: params.factor, now, historical, futureToleranceMinutes: params.futureToleranceMinutes,
   });
   const base = historical && !freshness.futureStamp ? snapshot.status : resolveStatus(snapshot.status, freshness.state);
@@ -40,6 +43,7 @@ async function presentSnapshot({ definition, version, snapshot, rawValue, asOfDa
   const status = worstStatus(base, assessed.status);
   const unreliable = isUnreliable(status);
   const hidden = unreliable || (freshness.futureStamp || (!historical && (freshness.state === STATES.UNKNOWN || freshness.state === STATES.EXPIRED)));
+  if (times.confirmedAt) freshness.recordedSourceAt = snapshot.source_snapshot_at; // o número é o do snapshot gravado nesse instante; a fonte foi relida e confirmou o mesmo depois
   return {
     value: hidden ? null : rawValue, status, valueReliable: !unreliable, freshness,
     quality: { degradedBy: assessed.degradedBy, inheritedFrom: assessed.inheritedFrom },

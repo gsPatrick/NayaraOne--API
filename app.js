@@ -72,6 +72,7 @@ const { startAnalyticsBriefJob } = require('./src/engines/jobs/analyticsBriefJob
 const { startAnalyticsExportWorkerJob } = require('./src/engines/jobs/analyticsExportWorkerJob');
 const { startAnalyticsExportCleanupJob } = require('./src/engines/jobs/analyticsExportCleanupJob');
 const { startAnalyticsTechProbeJob } = require('./src/engines/jobs/analyticsTechProbeJob');
+const { startAnalyticsTechRefreshJob } = require('./src/engines/jobs/analyticsTechRefreshJob');
 const { startDependencyAuditJob } = require('./src/engines/jobs/dependencyAuditJob');
 const { startIntegrationRetentionJob } = require('./src/engines/jobs/integrationRetentionJob');
 const { startIntegrationDispatchWorkerJob } = require('./src/engines/jobs/integrationDispatchWorkerJob');
@@ -453,6 +454,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAnalyticsExportWorkerJob(); // M9-D701: fila de exportações do BI (QUEUED -> RUNNING -> READY), um worker por job com FOR UPDATE SKIP LOCKED
   startAnalyticsExportCleanupJob(); // M9-D701: apaga o arquivo vencido (EXPIRED) e dá como falho o job preso em andamento
   startAnalyticsTechProbeJob(); // M9-D628: sondas de saúde (API, banco, fila, storage) a cada analytics.tec.intervalo_sonda_s
+  startAnalyticsTechRefreshJob(); // DI-BI-3: read models de Tecnologia e IA a cada analytics.tec.recalculo_min (fora da agenda geral do BI)
 }
 
 // Marco 9, M9-D223 — teste de saúde ativo de cada fornecedor com connection ACTIVE, a cada integration.health.check_interval_s.

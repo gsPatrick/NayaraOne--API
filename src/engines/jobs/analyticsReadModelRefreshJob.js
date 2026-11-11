@@ -9,7 +9,8 @@ const { readRefreshParams, refreshCompanyScheduled, scheduleDue, afterRun } = re
  * analyticsReadModelRefreshJob (Marco 9, M9-D607 3.3): recalcula os read models do BI que dependem do relógio (vencimentos 7/30/60,
  * vencidos) e os agregados adiados por passar do teto de linhas. A agenda vem de `analytics.refresh.schedule` de cada empresa
  * (padrão: a cada 15 min e às 00:05 de America/Sao_Paulo). O relógio acorda de minuto em minuto; cada empresa roda quando a agenda manda.
- * Falha de uma empresa não derruba as demais.
+ * Falha de uma empresa não derruba as demais. DI-BI-3: no servidor, os read models com agenda própria (Tecnologia e IA) ficam com o analyticsTechRefreshJob;
+ * chamada direta sem `skipOwnCadence` (teste, execução manual) recalcula todos.
  */
 const TICK_MS = 60 * 1000;
 const stateByCompany = new Map();
@@ -21,14 +22,15 @@ async function tenantTx(group, company, fn) {
   });
 }
 
-async function runCompany(group, company, now, force, summary) {
+async function runCompany(group, company, now, force, summary, skipOwnCadence) {
   const scope = { groupId: group.id, companyId: company.id };
   const { params, due, local } = await tenantTx(group, company, async (transaction) => {
     const p = await readRefreshParams(scope, transaction);
     return { params: p, ...scheduleDue(now, p.schedule, stateByCompany.get(company.id)) };
   });
   if (!due && !force) return;
-  const refreshed = await tenantTx(group, company, (transaction) => refreshCompanyScheduled(scope, params, transaction, { now }));
+  // DI-BI-3: os read models com agenda própria (Tecnologia e IA) são do analyticsTechRefreshJob
+  const refreshed = await tenantTx(group, company, (transaction) => refreshCompanyScheduled(scope, params, transaction, { now, skipOwnCadence }));
   stateByCompany.set(company.id, afterRun(now, params.schedule, local));
   summary.companies += 1;
   summary.readModels += refreshed.length;
@@ -36,7 +38,7 @@ async function runCompany(group, company, now, force, summary) {
 }
 
 /** Uma passada por todas as empresas. `force` ignora a agenda (teste e execução manual). */
-async function runAnalyticsReadModelRefreshJob({ now = clock.now(), force = false } = {}) {
+async function runAnalyticsReadModelRefreshJob({ now = clock.now(), force = false, skipOwnCadence = false } = {}) {
   if (force) stateByCompany.clear();
   const summary = { companies: 0, readModels: 0, rows: 0, errors: 0 };
   const groups = await Group.findAll();
@@ -47,7 +49,7 @@ async function runAnalyticsReadModelRefreshJob({ now = clock.now(), force = fals
     });
     for (const company of companies) {
       try {
-        await runCompany(group, company, now, force, summary);
+        await runCompany(group, company, now, force, summary, skipOwnCadence);
       } catch (err) {
         summary.errors += 1;
         logger.error({ err, companyId: company.id }, '[AnalyticsReadModelRefreshJob] falha na empresa');
@@ -62,7 +64,7 @@ function startAnalyticsReadModelRefreshJob({ tickMs = TICK_MS } = {}) {
   return setInterval(() => {
     if (running) return;
     running = true;
-    runAnalyticsReadModelRefreshJob().finally(() => { running = false; }).catch((err) => {
+    runAnalyticsReadModelRefreshJob({ skipOwnCadence: true }).finally(() => { running = false; }).catch((err) => {
       logger.error({ err }, '[AnalyticsReadModelRefreshJob] falha na execução agendada');
     });
   }, tickMs);

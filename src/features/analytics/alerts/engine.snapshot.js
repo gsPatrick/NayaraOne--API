@@ -12,6 +12,7 @@ const { resolveStatus } = require('../metrics/freshness.present');
 const { readFreshnessParams } = require('../metrics/freshness.settings');
 const { assessQuality } = require('../quality/status.service');
 const { worstStatus } = require('../quality/status.priority');
+const { effectiveTimes } = require('../metrics/snapshotConfirmation');
 
 const BLOCKING = new Set(['DEGRADED', 'INCOMPLETE']);
 
@@ -42,8 +43,9 @@ async function loadAlertInput(def, scope, { now = clock.now() } = {}, transactio
   const snapshot = rows[0];
   if (!snapshot) return { hold: 'NO_SNAPSHOT' };
   const params = await readFreshnessParams(scope, transaction);
+  const times = await effectiveTimes(snapshot, transaction); // DI-BI-2: a leitura mais recente que confirmou o mesmo número
   const freshness = computeFreshness({
-    asOfDate: String(snapshot.as_of_date), sourceSnapshotAt: snapshot.source_snapshot_at, refreshedAt: snapshot.refreshed_at,
+    asOfDate: String(snapshot.as_of_date), sourceSnapshotAt: times.sourceSnapshotAt, refreshedAt: times.refreshedAt,
     maxStalenessMinutes: maxStalenessOf(snapshot.refresh_policy, metric.domain, params), factor: params.factor, now, futureToleranceMinutes: params.futureToleranceMinutes,
   });
   const assessed = await assessQuality({ metricCode: def.metric_code, scope, asOfDate: clock.businessToday(now), transaction }); // M9-D697: check BLOCK falho ou componente ruim

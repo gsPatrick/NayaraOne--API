@@ -11,6 +11,7 @@ const logger = require('../../../utils/logger');
 const clock = require('./clock');
 const { STATES, computeFreshness, maxStalenessOf } = require('./freshness');
 const { readFreshnessParams } = require('./freshness.settings');
+const { CONFIRMED_SOURCE_SQL, CONFIRMED_REFRESHED_SQL, CONFIRMATION_JOIN_SQL } = require('./snapshotConfirmation');
 
 const EVENT_TYPE = 'analytics.freshness.stale';
 const listeners = [];
@@ -24,10 +25,11 @@ function onFreshnessStale(fn) {
 async function latestSnapshots(companyId, transaction) {
   const [rows] = await sequelize.query(
     `SELECT DISTINCT ON (d.id) d.id AS "metricId", d.metric_code AS "metricCode", d.domain, d.name, v.refresh_policy AS "refreshPolicy",
-            s.id AS "snapshotId", s.as_of_date::text AS "asOfDate", s.source_snapshot_at AS "sourceSnapshotAt", s.refreshed_at AS "refreshedAt"
+            s.id AS "snapshotId", s.as_of_date::text AS "asOfDate", ${CONFIRMED_SOURCE_SQL} AS "sourceSnapshotAt", ${CONFIRMED_REFRESHED_SQL} AS "refreshedAt"
        FROM analytics.metric_definitions d
        JOIN analytics.metric_versions v ON v.id = d.current_version_id
        JOIN analytics.metric_snapshots s ON s.metric_id = d.id AND s.scope_type = 'COMPANY' AND s.scope_id = :companyId AND s.dimension_key = ''
+       ${CONFIRMATION_JOIN_SQL}
       WHERE d.status = 'PUBLISHED' AND d.criticality = 'CRITICAL' AND (d.company_id = :companyId OR d.company_id IS NULL)
       ORDER BY d.id, s.as_of_date DESC, s.revision_no DESC, s.refreshed_at DESC`,
     { replacements: { companyId }, transaction }

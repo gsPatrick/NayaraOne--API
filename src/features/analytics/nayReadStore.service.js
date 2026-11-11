@@ -6,6 +6,7 @@
  * Só lê o schema analytics, sempre sob o RLS do tenant da transação; nenhum texto de consulta vem do chamador (valores por parâmetro).
  */
 const { sequelize } = require('../../models');
+const { CONFIRMED_SOURCE_SQL, CONFIRMED_REFRESHED_SQL, CONFIRMATION_JOIN_SQL } = require('./metrics/snapshotConfirmation');
 
 const escapeLike = (text) => String(text).replace(/[\\%_]/g, (c) => `\\${c}`);
 
@@ -47,8 +48,8 @@ async function listAlertInstances({ companyId, status, severity, limit }, transa
 /** Último dia (até `upTo`) com número gravado da métrica na empresa, com os instantes da fonte e da gravação; null se nunca houve. */
 async function latestSnapshotFreshness({ metricId, companyId, upTo }, transaction) {
   const [rows] = await sequelize.query(
-    `SELECT s.as_of_date AS "asOfDate", s.source_snapshot_at AS "sourceSnapshotAt", s.refreshed_at AS "refreshedAt", s.status
-       FROM analytics.metric_snapshots s
+    `SELECT s.as_of_date AS "asOfDate", ${CONFIRMED_SOURCE_SQL} AS "sourceSnapshotAt", ${CONFIRMED_REFRESHED_SQL} AS "refreshedAt", s.status
+       FROM analytics.metric_snapshots s ${CONFIRMATION_JOIN_SQL}
       WHERE s.metric_id = :metricId AND s.scope_type = 'COMPANY' AND s.scope_id = :companyId AND s.dimension_key = '' AND s.as_of_date <= :upTo
       ORDER BY s.as_of_date DESC, s.revision_no DESC LIMIT 1`,
     { replacements: { metricId, companyId, upTo }, transaction }

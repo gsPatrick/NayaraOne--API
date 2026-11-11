@@ -7,18 +7,21 @@
  * `rate_limit_count`, `auth_failures`, `retries`, `dlq`, `backlog` e `quota_remaining` (soma; nulo quando nenhuma connection informou cota). `error_limit_pct` = 100 menos o
  * sucesso mínimo do SLO da criticidade do fornecedor (integration.slo.<CRITICIDADE>, Bloco B) e `connections` quantas entraram. Só contagens e códigos: sem segredo, URL, payload ou nome de pessoa.
  */
+// DI-BI-5: "última janela FECHADA" (DI-D680-3): a janela que o health ainda está preenchendo (início + duração depois de agora) não entra; antes, no começo de cada hora a
+// janela aberta, com um minuto de dados, fazia "Integrações com erro" sair sem chamadas (INCOMPLETE).
 const { select, defineCompanyWideModel, toRow } = require('./common');
 const { INTEGRATION_EVENTS } = require('./events');
 const { readSloTargets } = require('../../../integrations/health/sloTargets.readRepository');
 
 const KEY = ['provider', 'family', 'environment', 'window_minutes'];
 
-async function build({ companyId, groupId, transaction }) {
+async function build({ companyId, groupId, now, transaction }) {
   const slo = await readSloTargets({ companyId, groupId }, transaction);
   const records = await select(
     `WITH last AS (
        SELECT DISTINCT ON (h.connection_id, h.window_minutes) h.* FROM integration.provider_health h
-        WHERE h.company_id = :companyId AND h.window_minutes > 0 ORDER BY h.connection_id, h.window_minutes, h.window_start DESC)
+        WHERE h.company_id = :companyId AND h.window_minutes > 0 AND h.window_start + make_interval(mins => h.window_minutes) <= CAST(:now AS timestamptz)
+        ORDER BY h.connection_id, h.window_minutes, h.window_start DESC)
      SELECT l.provider_code AS provider, p.domain AS family, c.environment, l.window_minutes, p.criticality,
             COALESCE(sum(l.calls_total), 0)::int AS calls, COALESCE(sum(l.calls_failed), 0)::int AS errors,
             CASE WHEN COALESCE(sum(l.calls_total), 0) = 0 THEN NULL ELSE round(100.0 * sum(l.calls_success) / sum(l.calls_total), 2) END AS success_rate,
@@ -28,7 +31,7 @@ async function build({ companyId, groupId, transaction }) {
        FROM last l JOIN integration.connections c ON c.id = l.connection_id AND c.company_id = l.company_id AND c.status = 'ACTIVE'
        JOIN integration.providers p ON p.code = l.provider_code
       GROUP BY l.provider_code, p.domain, c.environment, l.window_minutes, p.criticality ORDER BY 1, 2, 3, 4`,
-    { companyId }, transaction
+    { companyId, now }, transaction
   );
   return records.map(({ criticality, ...record }) => toRow(KEY)({ ...record, error_limit_pct: slo.errorLimitPct(criticality) }));
 }

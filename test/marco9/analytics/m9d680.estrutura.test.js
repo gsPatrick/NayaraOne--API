@@ -16,7 +16,8 @@ const { TECH_KPI_DEFAULTS, KEYS } = require('../../../src/features/analytics/rea
 const API = path.join(__dirname, '..', '..', '..');
 const OWNER = 'Tecnologia (papel ti-gestor)';
 const EXPECT = {
-  'tec.availability': { model: 'rm_tech_availability', unit: 'PERCENT', critical: false, dimensions: ['serviço', 'período'], cron: '* * * * *', stale: 1 },
+  // DI-BI-3: recálculo a cada 5 minutos pelo job próprio de Tecnologia (a v1 pedia 1 minuto, que nenhum job cumpria); empresa nova já nasce com a definição vigente
+  'tec.availability': { model: 'rm_tech_availability', unit: 'PERCENT', critical: false, dimensions: ['serviço', 'período'], cron: '*/5 * * * *', stale: 5 },
   'tec.queues_dlq': { model: 'rm_tech_queues', unit: 'COUNT', critical: false, dimensions: ['fila', 'tipo de evento'], cron: '*/5 * * * *', stale: 5 },
   'tec.integration_errors': { model: 'rm_tech_integrations', unit: 'PERCENT', critical: true, dimensions: ['provider', 'conexão', 'família', 'ambiente'], cron: '*/5 * * * *', stale: 5 },
   'tec.freshness': { model: 'rm_tech_freshness', unit: 'COUNT', critical: false, dimensions: ['read model'], cron: '*/5 * * * *', stale: 5 },
@@ -98,7 +99,7 @@ test('m9d680 nenhum KPI desta demanda é calculado no Front, as fórmulas são p
   }
   const front = path.join(API, '..', 'NayaraOne--FRONT', 'app', 'painel', 'configuracoes');
   const group = fs.readFileSync(path.join(front, 'biTecnologiaKpiGroups.js'), 'utf8');
-  for (const key of [...Object.keys(EXPECT).map((c) => `analytics.owner.${c}`), ...Object.values(KEYS), 'analytics.tec.historico_dias', 'analytics.tec.sondas', 'analytics.tec.intervalo_sonda_s', 'analytics.tec.sinais_retencao_dias']) assert.ok(group.includes(key), key);
+  for (const key of [...Object.keys(EXPECT).map((c) => `analytics.owner.${c}`), ...Object.values(KEYS), 'analytics.tec.historico_dias', 'analytics.tec.sondas', 'analytics.tec.intervalo_sonda_s', 'analytics.tec.sinais_retencao_dias', 'analytics.tec.recalculo_min']) assert.ok(group.includes(key), key);
   const size = spawnSync('node', ['scripts/check-file-size.js'], { cwd: API, encoding: 'utf8' });
   assert.equal(size.status, 0, size.stdout + size.stderr);
 });
