@@ -2,42 +2,38 @@
 
 const { ApprovalRequest, ApprovalStep } = require('../../../../models');
 const AppError = require('../../../../utils/AppError');
-const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
-const { publishApprovalRequestCreated, publishApprovalStepDecided } = require('./finance-events.service');
-const { assertRecentMfa } = require('../../../../features/users/mfa.service');
 const { ENTITY_MODELS, resolveRelatedEntityLabels } = require('./approval-related-entities');
+const workflow = require('./approval-workflow');
+const { centsText } = require('../../domain/payment-intent');
+const { buildEntitySnapshot, resolveSubjectPolicy, snapshotStillMatches, approvalRequiresMfa } = require('./approval-subject');
 
-// Motor genérico de dupla aprovação (maker-checker) — 03_MOTORES_TRANSVERSAIS.md: "Quem cria
-// não aprova; quem aprova não altera; quem executa valida o hash aprovado."
+// Motor genérico de dupla aprovação (maker-checker) — 03_MOTORES_TRANSVERSAIS.md: "Quem cria não aprova; quem aprova não altera; quem
+// executa valida o hash aprovado." Caderno M4 §2 FIN-005: "Limites vêm do Motor de Regras; aprovação usa snapshot/hash".
 //
-// `finance.approval_requests` é polimórfico (`related_entity_type` + `related_entity_id`) e
-// NÃO tem uma coluna de snapshot/hash (ver nota em finance-antifraud.service.js). A proteção
-// equivalente aqui é lock otimista: quem decide pode informar `expectedLockVersion` (o
-// lock_version que viu ao revisar o pedido); se a entidade mudou desde então, a decisão é
-// recusada com FINANCE_APPROVAL_STALE em vez de aprovar algo que já não é mais o que foi visto.
+// M4PG (verificação independente do Marco 4, sondas V2-P2 e P9): o risco e o nº de aprovadores NÃO vêm mais do pedido. São calculados
+// pelo valor da entidade (REG-FIN-002 ou as faixas da DEC-004 — approval-subject.js); o pedido guarda o retrato da entidade e o hash
+// dele, conferidos de novo na decisão (além do lock_version capturado no servidor, achado A10). `riskLevel` no corpo é ignorado.
 
 const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-// Nº de aprovações independentes exigidas por nível de risco. Não há essa configuração no
-// documento/schema (approval_requests não tem uma coluna "required_steps") — é uma decisão de
-// implementação razoável e documentada aqui, não um valor extraído de alguma fonte.
-const REQUIRED_STEPS_BY_RISK = { LOW: 1, MEDIUM: 1, HIGH: 2, CRITICAL: 2 };
+// Compatibilidade de leitura: o nº de aprovações dos pedidos antigos (sem required_approvals). Pedidos novos usam a regra.
+const REQUIRED_STEPS_BY_RISK = workflow.LEGACY_REQUIRED_STEPS_BY_RISK;
 
 async function createApprovalRequest(payload, actorUserId, transaction) {
-  const { groupId, companyId, relatedEntityType, relatedEntityId, riskLevel } = payload;
+  const { groupId, companyId, relatedEntityType, relatedEntityId } = payload;
   if (!groupId || !companyId || !relatedEntityType || !relatedEntityId) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "relatedEntityType" e "relatedEntityId" são obrigatórios.',
       'FINANCE_APPROVAL_VALIDATION'
     );
   }
-  const normalizedRisk = riskLevel ? String(riskLevel).toUpperCase() : 'MEDIUM';
-  if (!RISK_LEVELS.includes(normalizedRisk)) {
-    throw AppError.badRequest(`O campo "riskLevel" deve ser um de: ${RISK_LEVELS.join(', ')}.`, 'FINANCE_APPROVAL_VALIDATION');
+  if (workflow.DEDICATED_TYPES[relatedEntityType]) {
+    throw AppError.badRequest(
+      `Pedido de aprovação de ${relatedEntityType} nasce do próprio fluxo (${workflow.DEDICATED_TYPES[relatedEntityType]}), não por aqui.`,
+      'FINANCE_APPROVAL_USE_DEDICATED_FLOW'
+    );
   }
 
-  // E1 (revisão independente, conferência 18/10/2026): a fila aceitava qualquer tipo e qualquer
-  // id — inclusive entidade de outra empresa ou inexistente — criando pedidos órfãos. Agora o
-  // tipo precisa ser um dos aprováveis e a entidade precisa existir NESTA empresa (a busca roda
+  // E1 (revisão independente, 18/10/2026): o tipo precisa ser um dos aprováveis e a entidade precisa existir NESTA empresa (a busca roda
   // sob o RLS do tenant, então uma entidade de outra empresa simplesmente não é encontrada).
   const RelatedModel = ENTITY_MODELS[relatedEntityType];
   if (!RelatedModel) {
@@ -46,37 +42,17 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
       'FINANCE_APPROVAL_VALIDATION'
     );
   }
-  const relatedEntityForCheck = await RelatedModel.findOne({ where: { id: relatedEntityId, companyId }, transaction });
-  if (!relatedEntityForCheck) throw AppError.notFound('A entidade a ser aprovada não foi encontrada nesta empresa.', 'FINANCE_APPROVAL_RELATED_ENTITY_NOT_FOUND');
-  if (relatedEntityType === 'FinancialEntry') await require('./payment-anomaly-gate').evaluateAndAssertPreparable(relatedEntityForCheck, transaction); // §17 + DEC-007 (achado bloqueante)
+  const entity = await RelatedModel.findOne({ where: { id: relatedEntityId, companyId }, transaction });
+  if (!entity) throw AppError.notFound('A entidade a ser aprovada não foi encontrada nesta empresa.', 'FINANCE_APPROVAL_RELATED_ENTITY_NOT_FOUND');
+  if (relatedEntityType === 'FinancialEntry') await require('./payment-anomaly-gate').evaluateAndAssertPreparable(entity, transaction); // §17 + DEC-007 (achado bloqueante)
 
-  let existingPending = await ApprovalRequest.findOne({
-    where: { relatedEntityType, relatedEntityId, status: 'PENDING' },
-    transaction,
-  });
-  // R2 (reconferência 20/10/2026): um pedido pendente cujo lançamento mudou depois dele (versão
-  // diferente do retrato) não pode travar um novo pedido — vira STALE e libera o novo.
-  if (existingPending && existingPending.lockVersionAtRequest !== null && existingPending.lockVersionAtRequest !== undefined
-      && 'lockVersion' in relatedEntityForCheck.dataValues
-      && Number(existingPending.lockVersionAtRequest) !== Number(relatedEntityForCheck.lockVersion)) {
-    const before = existingPending.toJSON();
-    existingPending.status = 'STALE';
-    existingPending.updatedBy = actorUserId || null;
-    await existingPending.save({ transaction });
-    await registrarAuditoria(
-      {
-        groupId,
-        companyId,
-        actorUserId,
-        action: 'finance.approval_request.stale',
-        entityType: 'ApprovalRequest',
-        entityId: existingPending.id,
-        beforeJson: before,
-        afterJson: existingPending.toJSON(),
-        reason: 'Invalidada: o lançamento foi alterado depois do pedido.',
-      },
-      transaction
-    );
+  let existingPending = await workflow.findPendingFor(relatedEntityType, relatedEntityId, transaction);
+  // R2 (reconferência 20/10/2026): um pedido pendente cuja entidade mudou depois dele (versão ou retrato diferente) não trava um novo.
+  const changedSinceRequest = (req) =>
+    (req.lockVersionAtRequest !== null && req.lockVersionAtRequest !== undefined && 'lockVersion' in entity.dataValues
+      && Number(req.lockVersionAtRequest) !== Number(entity.lockVersion)) || !snapshotStillMatches(req, relatedEntityType, entity);
+  if (existingPending && changedSinceRequest(existingPending)) {
+    await workflow.markStale(existingPending, 'Invalidada: a entidade foi alterada depois do pedido.', actorUserId, transaction);
     existingPending = null;
   }
   if (existingPending) {
@@ -85,52 +61,26 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
     });
   }
 
-  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A10, 15/10/2026): o snapshot de
-  // versão precisa ser capturado AQUI, no servidor, no momento da solicitação — nunca confiado
-  // do que o decisor manda depois (um cliente mal-intencionado ou desatualizado podia omitir
-  // `expectedLockVersion` na decisão e pular a checagem de staleness inteira).
-  let lockVersionAtRequest = null;
-  const RequestModel = ENTITY_MODELS[relatedEntityType];
-  if (RequestModel) {
-    const relatedEntity = await RequestModel.findByPk(relatedEntityId, { transaction });
-    if (relatedEntity && 'lockVersion' in relatedEntity.dataValues) {
-      lockVersionAtRequest = Number(relatedEntity.lockVersion);
-    }
-  }
-
-  const approvalRequest = await ApprovalRequest.create(
+  const tenant = { groupId, companyId };
+  const policy = await resolveSubjectPolicy(relatedEntityType, entity, tenant, transaction);
+  return workflow.createApprovalFor(
     {
       groupId,
       companyId,
       relatedEntityType,
       relatedEntityId,
-      requestedByUserId: actorUserId,
-      status: 'PENDING',
-      riskLevel: normalizedRisk,
-      lockVersionAtRequest,
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
+      riskLevel: policy.riskLevel,
+      requiredApprovals: policy.requiredApprovals,
+      ruleVersionId: policy.ruleVersionId,
+      riskSource: policy.riskSource,
+      snapshot: buildEntitySnapshot(relatedEntityType, entity),
+      amount: policy.amountCents === null ? null : centsText(policy.amountCents),
+      // A10: a versão é capturada aqui, no servidor — nunca confiada do decisor.
+      lockVersionAtRequest: 'lockVersion' in entity.dataValues ? Number(entity.lockVersion) : null,
     },
-    { transaction }
-  );
-
-  await publishApprovalRequestCreated(approvalRequest, transaction);
-
-  await registrarAuditoria(
-    {
-      groupId,
-      companyId,
-      actorUserId,
-      action: 'finance.approval_request.create',
-      entityType: 'ApprovalRequest',
-      entityId: approvalRequest.id,
-      afterJson: approvalRequest.toJSON(),
-      reason: `Solicitação de aprovação criada para ${relatedEntityType} (risco ${normalizedRisk}).`,
-    },
+    actorUserId,
     transaction
   );
-
-  return approvalRequest;
 }
 
 async function listApprovalRequests(transaction, filters = {}) {
@@ -149,10 +99,9 @@ async function getApprovalRequest(id, transaction) {
 }
 
 /**
- * decideApprovalStep — maker-checker: quem solicitou não pode decidir a própria solicitação.
- * `expectedLockVersion` (opcional) é comparado contra o lock_version ATUAL da entidade
- * relacionada — se divergir, a entidade mudou depois que o aprovador a revisou e a decisão é
- * recusada (equivalente a invalidar por snapshot alterado, sem precisar de coluna de hash).
+ * decideApprovalStep — maker-checker: quem solicitou não decide. A entidade precisa continuar igual ao retrato do pedido (hash) e à versão
+ * capturada no servidor (A10); `expectedLockVersion`, se vier, também precisa bater (defesa em profundidade). Rejeitar um pedido
+ * desatualizado é sempre permitido. MFA recente: HIGH/CRITICAL sempre, MEDIUM conforme pagamentos.mfa.aprovacao_medio (DEC-058).
  */
 async function decideApprovalStep(approvalRequestId, payload, approverUserId, transaction) {
   const { decision, expectedLockVersion } = payload;
@@ -160,200 +109,69 @@ async function decideApprovalStep(approvalRequestId, payload, approverUserId, tr
   if (!['APPROVED', 'REJECTED'].includes(normalizedDecision)) {
     throw AppError.badRequest('O campo "decision" deve ser "APPROVED" ou "REJECTED".', 'FINANCE_APPROVAL_VALIDATION');
   }
-
-  const approvalRequest = await getApprovalRequest(approvalRequestId, transaction);
-  if (approvalRequest.status === 'STALE') {
+  const approvalRequest = await workflow.getApprovalForUpdate(approvalRequestId, transaction);
+  if (workflow.DEDICATED_TYPES[approvalRequest.relatedEntityType]) {
     throw AppError.conflict(
-      'Invalidada: o lançamento foi alterado depois do pedido; peça a aprovação de novo.',
-      'FINANCE_APPROVAL_STALE'
+      `Esta aprovação tem fluxo próprio: use ${workflow.DEDICATED_TYPES[approvalRequest.relatedEntityType]}.`,
+      'FINANCE_APPROVAL_USE_DEDICATED_FLOW'
     );
   }
-  if (approvalRequest.status !== 'PENDING') {
-    throw AppError.conflict(`Esta solicitação já foi decidida (status "${approvalRequest.status}").`, 'FINANCE_APPROVAL_ALREADY_DECIDED');
-  }
-  if (approvalRequest.requestedByUserId === approverUserId) {
-    throw AppError.forbidden(
-      'Quem solicitou a aprovação não pode aprovar a própria solicitação (segregação de funções — maker-checker).',
-      'FINANCE_APPROVAL_SELF_APPROVAL_FORBIDDEN'
-    );
+  if (approvalRequest.status === 'STALE') {
+    throw AppError.conflict('Invalidada: o lançamento foi alterado depois do pedido; peça a aprovação de novo.', 'FINANCE_APPROVAL_STALE');
   }
 
-  const existingSteps = await ApprovalStep.findAll({ where: { approvalRequestId }, transaction });
-  if (existingSteps.some((s) => s.approverUserId === approverUserId)) {
-    throw AppError.conflict('Você já registrou uma decisão para esta solicitação.', 'FINANCE_APPROVAL_DUPLICATE_DECISION');
-  }
-
-  // Step-up MFA obrigatório para decisões de risco HIGH/CRITICAL (Caderno §3.3: "HIGH = MFA
-  // recente + permissão + auditoria reforçada; CRITICAL = MFA recente + segregação/aprovação +
-  // snapshot/hash + alerta + trilha"). Risco LOW/MEDIUM não exige MFA aqui.
-  if (['HIGH', 'CRITICAL'].includes(approvalRequest.riskLevel)) {
-    await assertRecentMfa(approverUserId, transaction);
-  }
-
-  // GAP REAL CORRIGIDO (auditoria externa Nayara, achado A10, 15/10/2026): a validação de
-  // staleness ERA condicional a `expectedLockVersion !== undefined` — um cliente que omitisse
-  // esse campo (de propósito ou não) pulava a checagem inteira, mesmo que a entidade tivesse
-  // mudado de verdade desde a solicitação. Agora a checagem usa o snapshot CAPTURADO NO
-  // SERVIDOR (`approvalRequest.lockVersionAtRequest`, gravado em createApprovalRequest) e roda
-  // SEMPRE que esse snapshot existir — fail closed, nunca dispensável pelo payload do decisor.
-  // `expectedLockVersion`, se enviado pelo cliente, ainda precisa bater com o valor ATUAL
-  // também (defesa em profundidade, mesmo UI que já viu uma versão mais recente que a
-  // solicitação original não pode aprovar sem recarregar).
   const RelatedModel = ENTITY_MODELS[approvalRequest.relatedEntityType];
-  if (RelatedModel) {
-    const entity = await RelatedModel.findByPk(approvalRequest.relatedEntityId, { transaction });
-    if (entity && 'lockVersion' in entity.dataValues) {
-      const currentLockVersion = Number(entity.lockVersion);
-      const staleAgainstSnapshot =
-        approvalRequest.lockVersionAtRequest !== null &&
-        approvalRequest.lockVersionAtRequest !== undefined &&
-        Number(approvalRequest.lockVersionAtRequest) !== currentLockVersion;
-      const staleAgainstClientValue = expectedLockVersion !== undefined && Number(expectedLockVersion) !== currentLockVersion;
-      if (staleAgainstSnapshot || staleAgainstClientValue) {
-        // R2: rejeitar um pedido desatualizado é sempre permitido (nunca fica sem saída).
-        if (normalizedDecision !== 'REJECTED') {
-          throw AppError.conflict(
-            'O lançamento foi alterado depois do pedido de aprovação; peça a aprovação de novo.',
-            'FINANCE_APPROVAL_STALE'
-          );
-        }
-      }
+  const entity = RelatedModel ? await RelatedModel.findByPk(approvalRequest.relatedEntityId, { transaction }) : null;
+  if (entity && approvalRequest.status === 'PENDING' && normalizedDecision !== 'REJECTED') {
+    const hasVersion = 'lockVersion' in entity.dataValues;
+    const currentLockVersion = hasVersion ? Number(entity.lockVersion) : null;
+    const staleAgainstSnapshot = hasVersion && approvalRequest.lockVersionAtRequest !== null && approvalRequest.lockVersionAtRequest !== undefined
+      && Number(approvalRequest.lockVersionAtRequest) !== currentLockVersion;
+    const staleAgainstClient = hasVersion && expectedLockVersion !== undefined && Number(expectedLockVersion) !== currentLockVersion;
+    const staleAgainstHash = !snapshotStillMatches(approvalRequest, approvalRequest.relatedEntityType, entity);
+    if (staleAgainstSnapshot || staleAgainstClient || staleAgainstHash) {
+      throw AppError.conflict('O lançamento foi alterado depois do pedido de aprovação; peça a aprovação de novo.', 'FINANCE_APPROVAL_STALE');
     }
   }
 
-  // FIX (M4-24, 18/09/2026): a checagem "já decidiu?" acima (existingSteps.some(...)) é um
-  // SELECT no início da função — sob concorrência real (duplo-clique, retry), duas transações
-  // podem passar por ela ao mesmo tempo antes de qualquer uma commitar. A constraint única
-  // approval_steps_request_approver_uk é quem realmente fecha a corrida: a segunda tentativa
-  // falha aqui, convertida no mesmo erro de negócio que a checagem em memória já usava.
-  let step;
-  try {
-    step = await ApprovalStep.create(
-      {
-        groupId: approvalRequest.groupId,
-        companyId: approvalRequest.companyId,
-        approvalRequestId,
-        approverUserId,
-        stepOrder: existingSteps.length + 1,
-        decision: normalizedDecision,
-        decidedAt: new Date(),
-        createdBy: approverUserId || null,
-        updatedBy: approverUserId || null,
-      },
-      { transaction }
-    );
-  } catch (err) {
-    if (err.name === 'SequelizeUniqueConstraintError') {
-      throw AppError.conflict('Você já registrou uma decisão para esta solicitação.', 'FINANCE_APPROVAL_DUPLICATE_DECISION');
-    }
-    throw err;
-  }
-
-  await publishApprovalStepDecided(step, transaction);
-
-  const beforeJson = approvalRequest.toJSON();
-  if (normalizedDecision === 'REJECTED') {
-    approvalRequest.status = 'REJECTED';
-  } else {
-    const approvedCount = existingSteps.filter((s) => s.decision === 'APPROVED').length + 1;
-    const required = REQUIRED_STEPS_BY_RISK[approvalRequest.riskLevel] || 1;
-    if (approvedCount >= required) {
-      approvalRequest.status = 'APPROVED';
-    }
-  }
-  approvalRequest.updatedBy = approverUserId || null;
-  await approvalRequest.save({ transaction });
-
-  await registrarAuditoria(
-    {
-      groupId: approvalRequest.groupId,
-      companyId: approvalRequest.companyId,
-      actorUserId: approverUserId,
-      action: 'finance.approval_step.decide',
-      entityType: 'ApprovalStep',
-      entityId: step.id,
-      beforeJson,
-      afterJson: { step: step.toJSON(), approvalRequest: approvalRequest.toJSON() },
-      reason: `Decisão "${normalizedDecision}" registrada para solicitação de aprovação (etapa ${step.stepOrder}).`,
-    },
-    transaction
-  );
-
+  const requireMfa = normalizedDecision === 'APPROVED'
+    && (await approvalRequiresMfa(approvalRequest.riskLevel, { groupId: approvalRequest.groupId, companyId: approvalRequest.companyId }, transaction));
+  const { step } = await workflow.recordDecision(approvalRequest, { decision: normalizedDecision, approverUserId, requireMfa }, transaction);
   return { step, approvalRequest };
 }
 
 /**
- * isApprovalRequestApproved — helper pra outros services (ex.: financialEntries.settleFinancialEntry)
- * checarem, antes de executar uma ação sensível, se já existe aprovação concluída pra ela.
- * Uso opcional — este módulo não força nenhum outro service a exigir aprovação automaticamente,
- * já que o schema não define um limiar de valor/risco que dispare isso obrigatoriamente.
+ * isApprovalRequestApproved — outros serviços (ex.: a baixa de um PAYABLE sem intenção) checam se já existe aprovação concluída para a
+ * entidade.
  */
 async function isApprovalRequestApproved(relatedEntityType, relatedEntityId, transaction) {
-  const approvalRequest = await ApprovalRequest.findOne({
-    where: { relatedEntityType, relatedEntityId, status: 'APPROVED' },
-    transaction,
-  });
+  const approvalRequest = await ApprovalRequest.findOne({ where: { relatedEntityType, relatedEntityId, status: 'APPROVED' }, transaction });
   return Boolean(approvalRequest);
 }
 
 /**
- * listApprovedDeciders — quem decidiu (APPROVED) as solicitações ainda válidas (não STALE) de
- * uma entidade. Usado pela baixa manual com comprovante (F03/A4): quem anexou o comprovante não
- * pode ser quem aprovou a exceção.
+ * listApprovedDeciders — quem decidiu (APPROVED) as solicitações ainda válidas (não STALE) de uma entidade. Usado pela baixa manual com
+ * comprovante (F03/A4): quem anexou o comprovante não pode ser quem aprovou a exceção.
  */
 async function listApprovedDeciders(relatedEntityType, relatedEntityId, transaction) {
-  const approved = await ApprovalRequest.findAll({
-    where: { relatedEntityType, relatedEntityId, status: 'APPROVED' },
-    transaction,
-  });
+  const approved = await ApprovalRequest.findAll({ where: { relatedEntityType, relatedEntityId, status: 'APPROVED' }, transaction });
   if (approved.length === 0) return [];
-  const steps = await ApprovalStep.findAll({
-    where: { approvalRequestId: approved.map((r) => r.id), decision: 'APPROVED' },
-    transaction,
-  });
+  const steps = await ApprovalStep.findAll({ where: { approvalRequestId: approved.map((r) => r.id), decision: 'APPROVED' }, transaction });
   return steps.map((s) => s.approverUserId).filter(Boolean);
 }
 
 /**
- * markApprovalRequestsStale — BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-18 —
- * variante do A10): a decisão já validava staleness (decideApprovalStep,
- * FINANCE_APPROVAL_STALE), mas uma ApprovalRequest já APPROVED sobre a versão 1 do lançamento
- * continuava valendo depois que ele mudava pra versão 2. "Alteração após aprovação deve
- * invalidar efetivamente a decisão" (FIN-005).
- *
- * O ponto de invalidação é a EDIÇÃO do usuário (updateFinancialEntry), não uma comparação de
- * lockVersion no consumo: a própria liquidação parcial incrementa o lockVersion do lançamento
- * (optimistic locking do Sequelize) e uma comparação crua no consumo invalidaria a aprovação
- * no meio de um fluxo de baixas parciais legítimo (provado por ADV-F21). Edição real do
- * usuário → todas as aprovações APPROVED viram STALE (nunca mais contam em
- * isApprovalRequestApproved); uma nova rodada de revisão sobre a versão atual volta a liberar.
+ * markApprovalRequestsStale — FIN-005 "Alteração após aprovação deve invalidar efetivamente a decisão": edição real (do lançamento ou do
+ * favorecido) → as aprovações APPROVED/PENDING viram STALE e nunca mais contam em isApprovalRequestApproved. O ponto de invalidação é a
+ * edição, não a comparação no consumo: a baixa parcial muda o lockVersion e não pode invalidar um fluxo legítimo (ADV-F21).
  */
 async function markApprovalRequestsStale(relatedEntityType, relatedEntityId, reason, actorUserId, transaction) {
-  const approvedRequests = await ApprovalRequest.findAll({
+  const requests = await ApprovalRequest.findAll({
     where: { relatedEntityType, relatedEntityId, status: ['APPROVED', 'PENDING'] },
     transaction,
   });
-  for (const request of approvedRequests) {
-    const beforeJson = request.toJSON();
-    request.status = 'STALE';
-    request.updatedBy = actorUserId || null;
-    await request.save({ transaction });
-    await registrarAuditoria(
-      {
-        groupId: request.groupId,
-        companyId: request.companyId,
-        actorUserId,
-        action: 'finance.approval_request.stale',
-        entityType: 'ApprovalRequest',
-        entityId: request.id,
-        beforeJson,
-        afterJson: request.toJSON(),
-        reason,
-      },
-      transaction
-    );
-  }
-  return approvedRequests.length;
+  for (const request of requests) await workflow.markStale(request, reason, actorUserId, transaction);
+  return requests.length;
 }
 
 module.exports = {

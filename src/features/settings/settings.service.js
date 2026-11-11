@@ -58,6 +58,7 @@ const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.sett
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
 const { BANK_SETTINGS_SCHEMA } = require('../../modules/finance/infrastructure/bank/hub/bank.settings');
 const { FINANCE_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/finance-settings');
+const { PAYMENT_APPROVAL_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/payment-approval-settings'); // M4PG: pagamento, estorno e reabertura
 const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
 const { STORAGE_SETTINGS_SCHEMA } = require('../integrations/storage/storage.settings');
 const { IDENTITY_SETTINGS_SCHEMA } = require('../integrations/identity/identity.settings');
@@ -139,6 +140,8 @@ const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics
 const SETTINGS_SCHEMA = {
   // Financeiro (aba "Financeiro" de Configurações): antifraude FIN-005, conciliação manual recorrente (§17) e política AUTO_STRONG (§11), com faixas.
   ...FINANCE_SETTINGS_SCHEMA,
+  // Autorização financeira (DEC-004/DEC-003, DI-M4PG-4): faixas e aprovadores do pagamento, MFA no risco médio, estorno e reabertura de período.
+  ...PAYMENT_APPROVAL_SETTINGS_SCHEMA,
   // EST-013 / Guia §12 (NAY Estoque, inventoryNay.service.js): lead time padrão (dias) usado
   // pela sugestão de compra quando o item ainda não tem histórico real de reposição
   // (pedido de compra -> recebimento) para medir o prazo observado.
