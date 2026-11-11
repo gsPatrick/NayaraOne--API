@@ -60,7 +60,8 @@ async function assertResponsibleUser(userId, companyId, transaction) {
 
 /**
  * Responsável de quem não informou: quem cria (usuário autenticado); lead que chega sem usuário (WhatsApp, parceiro) recebe o
- * `crm.lead_automatico.responsavel_padrao`; sem ele configurado (ou inativo), o gestor mais antigo da empresa. Nunca nulo.
+ * `crm.lead_automatico.responsavel_padrao`; sem ele configurado (ou inativo), o gestor mais antigo da empresa; sem gestor, o membro
+ * ativo mais antigo. Nunca nulo (empresa sem nenhum membro ativo recusa com OPPORTUNITY_RESPONSIBLE_REQUIRED).
  */
 async function resolveOwnerUserId({ ownerUserId, actorUserId }, tenant, transaction) {
   if (ownerUserId) return assertResponsibleUser(ownerUserId, tenant.companyId, transaction);
@@ -68,7 +69,12 @@ async function resolveOwnerUserId({ ownerUserId, actorUserId }, tenant, transact
   const configured = await readDefaultLeadOwner(tenant, transaction);
   if (configured && (await isActiveMember(configured, tenant.companyId, transaction))) return configured;
   const [manager] = await managerUserIds(tenant, transaction);
-  return assertResponsibleUser(manager || null, tenant.companyId, transaction);
+  if (manager) return manager;
+  // Empresa sem ninguém com a permissão da gerência: o membro ativo mais antigo (mesma ordem da migration 20261111031002).
+  const [oldest] = await sequelize.query(`${ACTIVE_MEMBER_SQL} ORDER BY um.created_at ASC, um.user_id ASC LIMIT 1`, {
+    replacements: { companyId: tenant.companyId }, type: QueryTypes.SELECT, transaction,
+  });
+  return assertResponsibleUser(oldest ? oldest.user_id : null, tenant.companyId, transaction);
 }
 
 module.exports = { isActiveMember, managerUserIds, assertResponsibleUser, resolveOwnerUserId };
