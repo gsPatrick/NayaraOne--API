@@ -9,12 +9,14 @@ const peopleRouter = Router();
 
 peopleRouter.use(authMiddleware, tenantMiddleware);
 
-peopleRouter.post('/people', requirePermission('people:create'), peopleController.create);
+// Rodada 7 (DI-M9R-21): tipo e tamanho dos campos de texto e de identificador conferidos na porta.
+const { validarCriacaoDePessoa, validarAtualizacaoDePessoa } = require('./people.schema');
+peopleRouter.post('/people', requirePermission('people:create'), validarCriacaoDePessoa, peopleController.create);
 peopleRouter.get('/people', requirePermission('people:read'), peopleController.list);
 // Precisa vir ANTES de '/people/:id', senão "duplicates" seria capturado como um :id.
 peopleRouter.get('/people/duplicates', requirePermission('people:read'), peopleController.listDuplicates);
 peopleRouter.get('/people/:id', requirePermission('people:read'), peopleController.getOne);
-peopleRouter.patch('/people/:id', requirePermission('people:update'), peopleController.update);
+peopleRouter.patch('/people/:id', requirePermission('people:update'), validarAtualizacaoDePessoa, peopleController.update);
 peopleRouter.delete('/people/:id', requirePermission('people:delete'), peopleController.remove);
 
 peopleRouter.post('/people/:id/contacts', requirePermission('people:update'), peopleController.createContact);

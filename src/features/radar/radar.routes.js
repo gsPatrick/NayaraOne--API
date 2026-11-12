@@ -9,7 +9,8 @@ const radarRouter = Router();
 
 radarRouter.use(authMiddleware, tenantMiddleware);
 
-radarRouter.post('/radar', requirePermission('radar:create'), radarController.create);
+// Rodada 7 (DI-M9R-21): tipo dos campos de identificador e de texto conferido na porta.
+radarRouter.post('/radar', requirePermission('radar:create'), require('./radar.schema').validarCriacaoDeRadar, radarController.create);
 radarRouter.get('/radar', requirePermission('radar:read'), radarController.list);
 radarRouter.get('/radar/:id', requirePermission('radar:read'), radarController.getOne);
 radarRouter.patch('/radar/:id', requirePermission('radar:update'), radarController.update);

@@ -8,7 +8,8 @@ const authRouter = Router();
 
 // Rotas de auth são públicas por definição (não exigem auth.middleware) — são o próprio
 // ponto de entrada da autenticação.
-authRouter.post('/auth/login', authController.login);
+// Rodada 7 (DI-M9R-21): tipo dos campos conferido na porta (antes, `email` com um objeto dava 500).
+authRouter.post('/auth/login', require('./auth.schema').validarLogin, authController.login);
 authRouter.post('/auth/refresh', authController.refresh);
 authRouter.post('/auth/logout', authController.logout);
 

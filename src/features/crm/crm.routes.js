@@ -34,7 +34,8 @@ crmRouter.get('/crm/feedback-cases/:id', requirePermission('crm:feedback:read'),
 crmRouter.patch('/crm/feedback-cases/:id/resolve', requirePermission('crm:feedback:update'), crmController.resolveFeedbackCase);
 crmRouter.patch('/crm/feedback-cases/:id/escalate', requirePermission('crm:feedback:update'), crmController.escalateFeedbackCase);
 
-crmRouter.post('/opportunities', requirePermission('crm:opportunities:create'), crmController.createOpportunity);
+// Rodada 7 (DI-M9R-21): tipo e tamanho dos campos de texto e de identificador conferidos na porta.
+crmRouter.post('/opportunities', requirePermission('crm:opportunities:create'), require('./opportunities.schema').validarCriacaoDeOportunidade, crmController.createOpportunity);
 crmRouter.get('/opportunities', requirePermission('crm:opportunities:read'), crmController.listOpportunities);
 crmRouter.get('/opportunities/:id', requirePermission('crm:opportunities:read'), crmController.getOpportunity);
 crmRouter.patch('/opportunities/:id', requirePermission('crm:opportunities:update'), crmController.updateOpportunity);

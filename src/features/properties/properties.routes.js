@@ -11,10 +11,12 @@ const propertiesRouter = Router();
 
 propertiesRouter.use(authMiddleware, tenantMiddleware);
 
-propertiesRouter.post('/properties', requirePermission('properties:create'), propertiesController.create);
+// Rodada 7 (DI-M9R-21): tipo e tamanho dos campos de texto e de identificador conferidos na porta.
+const { validarCriacaoDeImovel, validarAtualizacaoDeImovel } = require('./properties.schema');
+propertiesRouter.post('/properties', requirePermission('properties:create'), validarCriacaoDeImovel, propertiesController.create);
 propertiesRouter.get('/properties', requirePermission('properties:read'), propertiesController.list);
 propertiesRouter.get('/properties/:id', requirePermission('properties:read'), propertiesController.getOne);
-propertiesRouter.patch('/properties/:id', requirePermission('properties:update'), propertiesController.update);
+propertiesRouter.patch('/properties/:id', requirePermission('properties:update'), validarAtualizacaoDeImovel, propertiesController.update);
 propertiesRouter.delete('/properties/:id', requirePermission('properties:delete'), confirmAction('property.delete'), propertiesController.remove);
 
 propertiesRouter.post('/properties/:id/owners', requirePermission('properties:update'), propertiesController.createOwner);
