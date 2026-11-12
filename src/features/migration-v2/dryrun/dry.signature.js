@@ -12,12 +12,8 @@ const signingKey = () => {
   return key.length >= MIN_KEY ? key : null;
 };
 
-/** JSON canônico (chaves em ordem) para a assinatura não depender da ordem dos campos. */
-function canonical(value) {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
-  return JSON.stringify(value === undefined ? null : value);
-}
+// JSON canônico (chaves em ordem) para a assinatura não depender da ordem dos campos. Iterativo desde a rodada 7 (DI-M9R-18).
+const { canonicalJson: canonical } = require('../../../utils/canonicalJson');
 
 const payload = (body) => canonical(SIGNED.reduce((acc, field) => ({ ...acc, [field]: body[field] }), {}));
 const mac = (body, key) => crypto.createHmac('sha256', key).update(payload(body)).digest('hex');

@@ -287,7 +287,7 @@ const SETTINGS_SCHEMA = {
     type: 'string',
     validate: (key, value) => {
       if (!parseBackoffList(value)) {
-        throw AppError.badRequest(`O valor de "${key}" deve ser uma lista de milissegundos inteiros positivos separados por vírgula (ex.: 60000,300000).`, 'SETTING_INVALID_VALUE', { key, value });
+        throw AppError.badRequest(`O valor de "${key}" deve ser uma lista de milissegundos inteiros positivos separados por vírgula (ex.: 60000,300000).`, 'SETTING_INVALID_VALUE', { key });
       }
     },
   },
@@ -445,6 +445,15 @@ const SETTINGS_SCHEMA = {
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
 };
 
+/** Tira de `details` o valor recebido (`value`) de uma recusa de configuração; o resto do erro fica igual. */
+function semValorRecebido(err) {
+  if (err && err.details && typeof err.details === 'object' && !Array.isArray(err.details) && Object.prototype.hasOwnProperty.call(err.details, 'value')) {
+    const { value: _recebido, ...resto } = err.details;
+    err.details = resto;
+  }
+  return err;
+}
+
 function validateAgainstSchema(key, value) {
   const spec = SETTINGS_SCHEMA[key];
   if (!spec) {
@@ -453,23 +462,23 @@ function validateAgainstSchema(key, value) {
 
   if (spec.type === 'number' || spec.type === 'integer') {
     if (typeof value !== 'number' || Number.isNaN(value)) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser numérico.`, 'SETTING_INVALID_VALUE', { key, value });
+      throw AppError.badRequest(`O valor de "${key}" deve ser numérico.`, 'SETTING_INVALID_VALUE', { key });
     }
     if (spec.type === 'integer' && !Number.isInteger(value)) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser um número inteiro.`, 'SETTING_INVALID_VALUE', { key, value });
+      throw AppError.badRequest(`O valor de "${key}" deve ser um número inteiro.`, 'SETTING_INVALID_VALUE', { key });
     }
     if (spec.min !== undefined && value < spec.min) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser >= ${spec.min}.`, 'SETTING_INVALID_VALUE', { key, value });
+      throw AppError.badRequest(`O valor de "${key}" deve ser >= ${spec.min}.`, 'SETTING_INVALID_VALUE', { key });
     }
     if (spec.max !== undefined && value > spec.max) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser <= ${spec.max}.`, 'SETTING_INVALID_VALUE', { key, value });
+      throw AppError.badRequest(`O valor de "${key}" deve ser <= ${spec.max}.`, 'SETTING_INVALID_VALUE', { key });
     }
     return;
   }
 
   if (spec.type === 'boolean') {
     if (typeof value !== 'boolean') {
-      throw AppError.badRequest(`O valor de "${key}" deve ser booleano.`, 'SETTING_INVALID_VALUE', { key, value });
+      throw AppError.badRequest(`O valor de "${key}" deve ser booleano.`, 'SETTING_INVALID_VALUE', { key });
     }
     if (typeof spec.validate === 'function') spec.validate(key, value); // M9-D852: regra própria da chave (ex.: debug proibido em produção)
     return;
@@ -477,13 +486,13 @@ function validateAgainstSchema(key, value) {
 
   if (spec.type === 'string') {
     if (typeof value !== 'string' || value.trim() === '') {
-      throw AppError.badRequest(`O valor de "${key}" deve ser uma string não vazia.`, 'SETTING_INVALID_VALUE', { key, value });
+      throw AppError.badRequest(`O valor de "${key}" deve ser uma string não vazia.`, 'SETTING_INVALID_VALUE', { key });
     }
     if (Array.isArray(spec.enum) && !spec.enum.includes(value)) {
       throw AppError.badRequest(
         `O valor de "${key}" deve ser um dos seguintes: ${spec.enum.join(', ')}.`,
         'SETTING_INVALID_VALUE',
-        { key, value }
+        { key }
       );
     }
     // Validação própria da chave (ex.: lista de itens de um catálogo fechado).
@@ -560,9 +569,15 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction, optio
   if (isPlatformOnly(SETTINGS_SCHEMA[key]) && options.platform !== true) {
     throw AppError.forbidden('Este parâmetro só é alterado pela equipe da plataforma.', 'SETTING_PLATFORM_ONLY', { key });
   }
-  validateAgainstSchema(key, value);
-  // Trava de gravação do dono da regra (M9-D034): recusa o valor antes de qualquer escrita.
-  await runSettingGuard(key, value, tenant, actorUserId, transaction);
+  // Rodada 7 (DI-M9R-19): a recusa nunca devolve o valor recebido (podia ser um segredo, ou uma estrutura enorme que derrubava a resposta de erro);
+  // `details` leva só a chave. Vale para as regras próprias das chaves (whatsapp.settings.js, identity.settings.js ...) e para a trava do dono.
+  try {
+    validateAgainstSchema(key, value);
+    // Trava de gravação do dono da regra (M9-D034): recusa o valor antes de qualquer escrita.
+    await runSettingGuard(key, value, tenant, actorUserId, transaction);
+  } catch (err) {
+    throw semValorRecebido(err);
+  }
 
   // Campos marcados `encrypted: true` no schema são criptografados ANTES de tocar o banco —
   // a coluna `value` (JSONB) nunca guarda o segredo em texto plano. `beforeJson`/`afterJson`

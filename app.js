@@ -146,6 +146,8 @@ const isWebhookRoute = (req) => req.method === 'POST' && isFrameworkWebhookPath(
 app.use((req, res, next) => (isWebhookRoute(req) ? next() : (req.path.includes('/correspondent/webhooks/') ? webhookJsonParser(req, res, next) : jsonParser(req, res, next))));
 const urlencodedParser = guardBodyReader(express.urlencoded({ extended: true }));
 app.use((req, res, next) => (isWebhookRoute(req) ? next() : urlencodedParser(req, res, next)));
+// Rodada 7 (DI-M9R-18): forma do pedido (profundidade, quantidade de valores, número finito) conferida antes de qualquer rota e de qualquer outro percurso do corpo.
+app.use(require('./src/middlewares/requestShape.middleware').rejectOversizedShape);
 // Rodada 6 (DI-M9R-15): texto com caractere nulo ou metade solta de par sub-rogado (o banco não grava) é recusado na porta, no corpo e na consulta.
 app.use(require('./src/middlewares/storableText.middleware').rejectUnstorableText);
 
@@ -201,6 +203,9 @@ const listen = () => {
   app.server = server;
   return server;
 };
+// Rodada 7 da verificação do Marco 9 (DI-M9R-19): promessa rejeitada ou exceção sem tratamento vira registro (erro ou fatal), não queda da API.
+// Instalada depois das conferências do boot acima, que continuam encerrando o processo quando a configuração está errada.
+require('./src/utils/processGuards').installProcessGuards({ log: logger });
 require('./src/features/integrations/secrets').gateListenOnSecretStore(listen, { log: logger });
 
 // Job periódico de matching do Radar — não roda em ambiente de teste (evita efeitos
