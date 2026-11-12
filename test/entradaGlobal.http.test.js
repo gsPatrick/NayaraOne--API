@@ -6,7 +6,8 @@
 //  2. tipo errado no corpo (objeto, lista ou número onde a rota espera texto ou id): 400 com o campo, nas rotas citadas (DI-M9R-21);
 //  3. JSON aninhado fundo (corpo inteiro e campo, com e sem Idempotency-Key): 400 REQUEST_BODY_TOO_DEEP; número infinito: 400 (DI-M9R-18);
 //  4. texto maior que a coluna: 400 com o campo, nunca o valor (DI-M9R-20, DI-M9R-21);
-//  5. o mecanismo geral fora das rotas validadas: erro de dado do banco (classe 22) e erro de tipo com prova no pedido viram 400 (DI-M9R-20/21).
+//  5. o mecanismo geral fora das rotas validadas: erro de dado do banco (classes 22 e 23) e erro de tipo com prova no pedido viram 400 (DI-M9R-20/21);
+//  6. o tamanho dos textos nos esquemas da porta é o tamanho da coluna no banco (o limite vem do modelo e o modelo não pode divergir do banco).
 // Toda resposta é medida: nenhuma passa de 2 s. GRAVA de verdade: só em banco descartável (DISPOSABLE_DB=1) ou no CI, depois do seed de dois tenants.
 
 process.env.PORT = process.env.ENTRADA_GLOBAL_HTTP_TEST_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
@@ -161,6 +162,49 @@ rodar('4. texto maior que a coluna: 400 com o campo e sem o valor (antes: 500 va
   // o limite conta caracteres como o banco (um emoji é 1): 200 emojis cabem em legalName
   const emoji = await pedir('POST', '/people', { corpo: json({ personType: 'PF', legalName: '🙂'.repeat(200), allowDuplicate: true }) });
   assert.equal(emoji.status, 201, json(emoji.json));
+});
+
+rodar('5. mecanismo geral, em rotas sem esquema na porta: tipo errado, identificador inexistente e texto longo viram 400 com o campo', async () => {
+  // "Invalid value" do Sequelize (objeto como valor de uma consulta) e 42883 (número comparado com texto): 400 INVALID_FIELD_TYPE
+  const mov = await pedir('POST', '/inventory/movements', { corpo: json({ inventoryItemId: { x: 1 }, movementType: 'OUT', quantity: 2, sourceType: 'MANUAL', reason: 'CI' }) });
+  assert.deepEqual([mov.status, codigo(mov), campos(mov)], [400, 'INVALID_FIELD_TYPE', ['inventoryItemId']], json(mov.json));
+  const clausula = await pedir('POST', '/legal/clauses', { corpo: json({ code: 12345, title: 'CI', bodyText: 'Texto.', category: 'GENERAL' }) });
+  assert.deepEqual([clausula.status, codigo(clausula)], [400, 'INVALID_FIELD_TYPE'], json(clausula.json));
+  // identificador que não existe (chave estrangeira, classe 23): 400 REFERENCE_NOT_FOUND com o campo e sem o id
+  const inexistente = '9d3b6a0e-0000-4000-8000-0000000000ff';
+  const tx = await pedir('POST', '/finance/bank-transactions', { corpo: json({ bankAccountId: inexistente, amount: -10.5, transactionDate: new Date().toISOString() }) });
+  assert.deepEqual([tx.status, codigo(tx), campos(tx)], [400, 'REFERENCE_NOT_FOUND', ['bankAccountId']], json(tx.json));
+  assert.ok(!JSON.stringify(tx.json).includes(inexistente), 'o id do detalhe do banco não volta');
+  // texto maior que a coluna numa rota sem esquema (classe 22): 400 VALUE_TOO_LONG com o campo, pelo comando do Sequelize
+  const centro = await pedir('POST', '/finance/cost-centers', { corpo: json({ name: 'N'.repeat(5000), code: `CI${SUFIXO}`.slice(0, 20) }) });
+  assert.deepEqual([centro.status, codigo(centro), campos(centro)], [400, 'VALUE_TOO_LONG', ['name']], json(centro.json));
+  assert.ok(!JSON.stringify(centro.json).includes('NNNNNNNNNN'), 'o texto não volta na resposta');
+});
+
+rodar('6. o tamanho de texto dos esquemas da porta é o tamanho da coluna no banco', async () => {
+  const { sequelize } = require('../src/models');
+  const esquemas = [require('../src/features/people/people.schema').ESQUEMAS, require('../src/features/properties/properties.schema').ESQUEMAS,
+    require('../src/features/crm/opportunities.schema').ESQUEMAS, require('../src/features/radar/radar.schema').ESQUEMAS, require('../src/features/auth/auth.schema').ESQUEMAS];
+  const comColuna = [];
+  const pilha = esquemas.flatMap((e) => Object.values(e));
+  while (pilha.length) {
+    const no = pilha.pop();
+    if (!no || typeof no !== 'object') continue;
+    if (typeof no.coluna === 'string') comColuna.push(no);
+    for (const v of Object.values(no)) if (v && typeof v === 'object') pilha.push(v);
+  }
+  assert.ok(comColuna.length >= 20, `campos com coluna: ${comColuna.length}`);
+  const divergentes = [];
+  for (const no of comColuna) {
+    const [modelo, atributo] = no.coluna.split('.');
+    const M = sequelize.models[modelo];
+    const tabela = M.getTableName();
+    const [linhas] = await sequelize.query('SELECT character_maximum_length AS n FROM information_schema.columns WHERE table_schema = :s AND table_name = :t AND column_name = :c',
+      { replacements: { s: tabela.schema || 'public', t: tabela.tableName || tabela, c: M.rawAttributes[atributo].field } });
+    const banco = linhas.length === 1 ? (linhas[0].n === null ? undefined : Number(linhas[0].n)) : 'sem coluna';
+    if (banco !== no.maxCaracteres) divergentes.push(`${no.coluna}: banco ${banco}, esquema ${no.maxCaracteres}`);
+  }
+  assert.deepEqual([...new Set(divergentes)], []);
 });
 
 rodar('nenhuma resposta passou de 2 s', async () => {

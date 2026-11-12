@@ -56,21 +56,25 @@ test('node app.js: PUT /settings com value de 50 mil níveis não derruba a API 
   const login = await fetch(`${BASE}/api/v1/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: EMAIL, password: process.env.CI_TENANT_USERS_PASSWORD, companyId: process.env.CI_QUEDA_COMPANY }) });
   assert.equal(login.status, 200);
   const tk = (await login.json()).data.accessToken;
+  const respostas = [];
   for (const [chave, niveis] of [['integration.messaging.inbound_lead_prazo_horas', 5000], ['integration.messaging.inbound_lead_prazo_horas', 50000], ['integration.whatsapp.max_text_chars', 50000], ['integration.whatsapp.max_text_chars', 500000]]) {
     const corpo = `{"value":${'{"a":'.repeat(niveis)}1${'}'.repeat(niveis)}}`;
     let r;
     try {
       const x = await fetch(`${BASE}/api/v1/settings/${chave}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tk}` }, body: corpo, signal: AbortSignal.timeout(15000) });
-      r = { status: x.status, body: await x.json() };
+      const b = await x.json();
+      r = `${x.status} ${b.error ? b.error.code : ''}`;
     } catch (e) {
-      r = { status: `sem resposta (${e.cause ? e.cause.code : e.name})` };
+      r = `sem resposta (${e.cause ? e.cause.code : e.name})`;
     }
-    assert.equal(r.status, 400, `${chave} ${niveis} níveis -> ${r.status}`);
-    assert.equal(r.body.error.code, 'REQUEST_BODY_TOO_DEEP');
+    respostas.push(`${chave} ${niveis} níveis -> ${r}`);
     await espera(500);
-    assert.equal(saiu, null, `o processo da API terminou: ${JSON.stringify(saiu)} (saída: ${saida.slice(-600)})`);
-    assert.equal(await saude(), 200, `a API responde depois de ${niveis} níveis`);
+    // primeiro a pergunta da rodada: a API continua viva e respondendo?
+    assert.equal(saiu, null, `o processo da API terminou: ${JSON.stringify(saiu)}; respostas: ${respostas.join('; ')} (saída: ${saida.slice(-300)})`);
+    assert.equal(await saude(), 200, `a API responde depois de ${niveis} níveis; respostas: ${respostas.join('; ')}`);
   }
+  // e cada pedido teve resposta: 400 na porta, pela profundidade
+  assert.deepEqual(respostas.map((x) => x.replace(/^.* -> /, '')), ['400 REQUEST_BODY_TOO_DEEP', '400 REQUEST_BODY_TOO_DEEP', '400 REQUEST_BODY_TOO_DEEP', '400 REQUEST_BODY_TOO_DEEP'], respostas.join('; '));
   const lista = await fetch(`${BASE}/api/v1/settings`, { headers: { Authorization: `Bearer ${tk}` } });
   assert.equal(lista.status, 200, 'e atende pedidos autenticados normalmente');
   assert.doesNotMatch(saida, /Maximum call stack size exceeded|PROCESS_UNHANDLED_REJECTION|PROCESS_UNCAUGHT_EXCEPTION/, 'sem estouro de pilha nem rejeição sem tratamento no registro');

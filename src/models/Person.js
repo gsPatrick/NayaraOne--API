@@ -63,7 +63,8 @@ module.exports = (sequelize) => {
         field: 'birth_or_foundation_date',
       },
       status: {
-        type: DataTypes.STRING(30),
+        // Rodada 7: o tamanho da coluna (migration 20260101000023, varchar(32)); o modelo dizia 30 e o esquema da porta lê o tamanho daqui.
+        type: DataTypes.STRING(32),
         allowNull: false,
         defaultValue: 'ACTIVE',
         field: 'status',

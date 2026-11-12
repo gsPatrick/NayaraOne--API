@@ -97,11 +97,18 @@ const INTEGRIDADE = Object.freeze({
   '23P01': [409, 'CONFLICTING_RECORD', () => 'O registro conflita com outro já existente (por exemplo, no mesmo período).'],
 });
 
-/** Coluna de um erro de integridade: o campo `column` (23502) ou o nome dentro de "Key (coluna)=" do detalhe (23503); sem o valor. */
+/**
+ * Coluna de um erro de integridade, sem o valor: o campo `column` (23502), o nome dentro de "Key (coluna)=" do detalhe (23503; o banco omite o
+ * detalhe quando quem grava não pode ler a tabela referenciada) ou, sem detalhe, o nome padrão da restrição do Postgres "<tabela>_<coluna>_fkey".
+ */
 function colunaDaIntegridade(pg) {
   if (typeof pg.column === 'string' && pg.column) return pg.column;
   const m = /^Key \(("?)([a-z_][a-z0-9_]*)\1\)=/i.exec(String(pg.detail || ''));
-  return m ? m[2] : null;
+  if (m) return m[2];
+  const tabela = typeof pg.table === 'string' ? pg.table : '';
+  const restricao = typeof pg.constraint === 'string' ? pg.constraint : '';
+  if (tabela && restricao.startsWith(`${tabela}_`) && restricao.endsWith('_fkey')) return restricao.slice(tabela.length + 1, -'_fkey'.length) || null;
+  return null;
 }
 
 /**
