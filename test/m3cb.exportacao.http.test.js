@@ -6,6 +6,8 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./helpers/m3cbCarteiraEnv');
+const T = require('./testHelpers');
+const { gravarParametroSensivel } = require('./helpers/mfaRecente');
 
 let env; let company;
 const as = (who) => env.tokens[`A:${who}`];
@@ -100,10 +102,23 @@ test('M3-21 DEC-049: o teto próprio da exportação do CRM (exportacao.crm.linh
   } finally {
     await H.admin('DELETE FROM core.tenant_settings WHERE company_id = $1 AND key = $2', [company.id, KEY]);
   }
-  const desligar = await env.call('PUT', '/settings/exportacao.crm.exige_mfa', as('gestor'), { value: false });
-  assert.equal(desligar.status, 422, JSON.stringify(desligar.body));
-  assert.equal((await env.call('PUT', '/settings/exportacao.crm.exige_mfa', as('gestor'), { value: true })).status, 200, 'ligado (com MFA recente de quem altera) é aceito');
-  await H.admin('DELETE FROM core.tenant_settings WHERE company_id = $1 AND key = $2', [company.id, 'exportacao.crm.exige_mfa']);
+  // exportacao.crm.exige_mfa: alterar exige MFA real de quem altera (pela rota, o gestor do seed não tem MFA habilitado: 403 e nada gravado) ...
+  const MFA_KEY = 'exportacao.crm.exige_mfa';
+  const semMfaReal = await env.call('PUT', `/settings/${MFA_KEY}`, as('gestor'), { value: false });
+  assert.deepEqual([semMfaReal.status, semMfaReal.body.error.code], [403, 'MFA_REQUIRED_NOT_ENABLED'], JSON.stringify(semMfaReal.body));
+  assert.equal((await H.admin('SELECT count(*)::int AS n FROM core.tenant_settings WHERE company_id = $1 AND key = $2', [company.id, MFA_KEY])).rows[0].n, 0);
+  // ... e, com MFA recente REAL (TOTP pela camada de serviço, operador novo, transação desfeita no fim), Desligado é recusado e Ligado é aceito.
+  const tenant = { groupId: company.group_id, companyId: company.id, userId: env.ids.gestor };
+  await T.withRollbackTenantTransaction(tenant, async (t) => {
+    await assert.rejects(gravarParametroSensivel(MFA_KEY, false, tenant, t), (err) => {
+      assert.deepEqual([err.statusCode, err.code], [400, 'SETTING_INVALID_VALUE'], `${err.code} ${err.message}`);
+      return true;
+    });
+  });
+  await T.withRollbackTenantTransaction(tenant, async (t) => {
+    const row = await gravarParametroSensivel(MFA_KEY, true, tenant, t);
+    assert.equal(row.value, true, 'ligado (com MFA recente de quem altera) é aceito');
+  });
 });
 
 test('M3-21 aprovado: APPROVED -> READY com MFA; o corretor de escopo próprio exporta só a própria carteira; pedido, geração e download auditados', { skip: H.SKIP }, async () => {

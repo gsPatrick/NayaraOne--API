@@ -12,7 +12,7 @@ const { Person, Opportunity } = require('../src/models');
 const policyService = require('../src/features/core-governance/dlp/policy.service');
 const { withOwnTenantTransaction } = require('../src/features/core-governance/dlp/guard.tx');
 const { decideExport, ENTRY } = require('./helpers/m3cbExportGuard');
-const { readCrmExportMaxRows } = require('../src/features/core-governance/dlp/exports/catalog/crmOpportunities.settings');
+const { readCrmExportMaxRows } = require('../src/features/crm/opportunitiesExport.settings');
 
 const PERMS = ['governance:dlp:export', 'crm:opportunities:export', 'crm:opportunities:read'];
 

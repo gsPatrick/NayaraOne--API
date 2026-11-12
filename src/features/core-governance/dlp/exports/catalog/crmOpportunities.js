@@ -4,7 +4,7 @@ const { collectOpportunityRows, EXPORT_FIELDS } = require('../../../../crm/oppor
 const { pick, UUID } = require('./filters');
 const { getEffectiveAccess } = require('../../../../memberships/effectivePermissions.service');
 const { resolveOpportunityOwnerScope } = require('../../../../crm/opportunityScope.guard');
-const { readCrmExportMaxRows } = require('./crmOpportunities.settings');
+const { readCrmExportMaxRows } = require('../../../../crm/opportunitiesExport.settings');
 
 /** Escopo de carteira de quem pede (livro do Marco 3 §18; CRM-TS-012): permissões efetivas de agora, como o resto do pedido. */
 async function ownerScopeOf(ctx, transaction) {
