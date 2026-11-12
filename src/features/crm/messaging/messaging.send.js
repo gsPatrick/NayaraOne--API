@@ -8,6 +8,7 @@ const { resolveConnection } = require('../../integrations/registry/connections.r
 const adapterRegistry = require('../../integrations/registry/adapterRegistry');
 const { createMessage } = require('../messages.service');
 const { assertConversationRefsInScope } = require('../messages.refs');
+const { idOrNull } = require('../messages.input');
 const { readMessagingParams } = require('./messaging.params');
 const { assertE164 } = require('./messaging.phone');
 const { readWhatsappParams } = require('./whatsapp.params');
@@ -26,9 +27,13 @@ const invalid = (message) => AppError.badRequest(message, 'MESSAGE_VALIDATION');
  * consentimento" (403) nem ganha conversa, e a conversa de outra empresa nunca chega à resolução da conexão (ISO-R2).
  */
 async function assertRefsInScope(ctx, input, transaction) {
-  if (input.personId && !(await Person.findByPk(input.personId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
-  if (input.opportunityId && !(await Opportunity.findByPk(input.opportunityId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
-  await assertConversationRefsInScope({ companyId: ctx.companyId, conversationId: input.conversationId || null }, transaction);
+  // Rodada 4 (DI-M9R-8): a forma vem antes da consulta; lista ou objeto em qualquer um dos três é 400 MESSAGE_VALIDATION, nunca 500.
+  const personId = idOrNull(input.personId, 'personId');
+  const opportunityId = idOrNull(input.opportunityId, 'opportunityId');
+  const conversationId = idOrNull(input.conversationId, 'conversationId');
+  if (personId && !(await Person.findByPk(personId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
+  if (opportunityId && !(await Opportunity.findByPk(opportunityId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
+  await assertConversationRefsInScope({ companyId: ctx.companyId, conversationId }, transaction);
 }
 
 /** Corpo mínimo por tipo de envio (os campos que o port exige) e o texto que fica no histórico do CRM. */
