@@ -217,3 +217,12 @@ test('teto da redação da IA: acima de REDACTION_AI_MAX_CHARS recusa antes de c
   assert.throws(() => redigirParaIndice('x'.repeat(PADRAO + 1)), (e) => e instanceof Stop && e.status === 'REJECTED' && e.code === 'AI_INGEST_TOO_LARGE');
   assert.equal(redigirParaIndice('e-mail joao@exemplo.com'), 'e-mail [REDIGIDO:email]');
 });
+
+test('tempos do servidor: keep-alive de 65 s (o padrão de 5 s fazia o pedido que reaproveitava a conexão sair sem resposta), cabeçalhos 1 s acima', () => {
+  const { aplicarTemposDoServidor, keepAliveDoAmbiente, PADRAO } = require('../src/utils/httpServerTimeouts');
+  assert.equal(PADRAO, 65000);
+  const s = aplicarTemposDoServidor({}, {});
+  assert.deepEqual([s.keepAliveTimeout, s.headersTimeout], [65000, 66000]);
+  assert.equal(keepAliveDoAmbiente({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '120000' }), 120000);
+  assert.equal(keepAliveDoAmbiente({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '10' }), PADRAO, 'fora da faixa: o padrão');
+});

@@ -7,7 +7,8 @@
 //  3. JSON aninhado fundo (corpo inteiro e campo, com e sem Idempotency-Key): 400 REQUEST_BODY_TOO_DEEP; número infinito: 400 (DI-M9R-18);
 //  4. texto maior que a coluna: 400 com o campo, nunca o valor (DI-M9R-20, DI-M9R-21);
 //  5. o mecanismo geral fora das rotas validadas: erro de dado do banco (classes 22 e 23) e erro de tipo com prova no pedido viram 400 (DI-M9R-20/21);
-//  6. o tamanho dos textos nos esquemas da porta é o tamanho da coluna no banco (o limite vem do modelo e o modelo não pode divergir do banco).
+//  6. o tamanho dos textos nos esquemas da porta é o tamanho da coluna no banco (o limite vem do modelo e o modelo não pode divergir do banco);
+//  7. a conexão keep-alive ociosa por mais de 5 s continua aceitando pedido (DI-M9R-19; na sonda r7, um pedido depois de 6,7 s saiu sem resposta).
 // Toda resposta é medida: nenhuma passa de 2 s. GRAVA de verdade: só em banco descartável (DISPOSABLE_DB=1) ou no CI, depois do seed de dois tenants.
 
 process.env.PORT = process.env.ENTRADA_GLOBAL_HTTP_TEST_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
@@ -205,6 +206,24 @@ rodar('6. o tamanho de texto dos esquemas da porta é o tamanho da coluna no ban
     if (banco !== no.maxCaracteres) divergentes.push(`${no.coluna}: banco ${banco}, esquema ${no.maxCaracteres}`);
   }
   assert.deepEqual([...new Set(divergentes)], []);
+});
+
+rodar('7. conexão keep-alive ociosa por mais de 5 s continua aceitando pedido (antes: ECONNRESET, pedido sem resposta)', async () => {
+  assert.equal(require('../app').server.keepAliveTimeout, 65000, 'o servidor da API usa o prazo de 65 s');
+  const agente = new http.Agent({ keepAlive: true, maxSockets: 1 });
+  const pedirNoAgente = () => new Promise((resolve) => {
+    const req = http.request({ host: '127.0.0.1', port: Number(process.env.PORT), method: 'GET', path: '/api/v1/people', agent: agente, headers: { Authorization: `Bearer ${token}` } }, (res) => {
+      res.resume(); res.on('end', () => resolve({ status: res.statusCode, reused: req.reusedSocket }));
+    });
+    req.on('error', (e) => resolve({ status: 0, erro: e.code }));
+    req.end();
+  });
+  const primeiro = await pedirNoAgente();
+  assert.equal(primeiro.status, 200);
+  await new Promise((s) => setTimeout(s, 6500));
+  const segundo = await pedirNoAgente();
+  agente.destroy();
+  assert.deepEqual([segundo.status, segundo.reused], [200, true], `depois de 6,5 s ociosa a mesma conexão responde (${JSON.stringify(segundo)})`);
 });
 
 rodar('nenhuma resposta passou de 2 s', async () => {

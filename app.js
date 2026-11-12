@@ -200,6 +200,8 @@ const listen = () => {
   const server = app.listen(port, () => {
     logger.info({ port, apiPrefix }, `Nayara One API ouvindo na porta ${port} (prefixo ${apiPrefix})`);
   });
+  // Rodada 7 (DI-M9R-19): conexão keep-alive ociosa fica aberta 65 s (o padrão do Node, 5 s, fazia o pedido que a reaproveitava sair sem resposta).
+  require('./src/utils/httpServerTimeouts').aplicarTemposDoServidor(server);
   app.server = server;
   return server;
 };
