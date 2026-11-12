@@ -48,7 +48,7 @@ test('M6-29: HTTP — construction:update não altera a alçada (403); com a per
   assert.equal(depois, antes, 'alçada inalterada');
   const r3 = await fetch(`${baseUrl}/construction/approval-thresholds`, { headers: { authorization: `Bearer ${tokenCom(['construction:read'])}` } });
   assert.equal(r3.status, 200);
-  assert.deepEqual((await r3.json()).data.map((a) => a.context), ['MATERIAL_LOSS', 'WARRANTY_RESOLUTION']);
+  assert.deepEqual((await r3.json()).data.map((a) => a.context), ['MATERIAL_LOSS', 'WARRANTY_RESOLUTION', 'INVENTORY_LOSS']);
 });
 
 test('M6-29: a rota de alçada exige a permissão própria e o MFA recente (montagem da rota)', () => {
