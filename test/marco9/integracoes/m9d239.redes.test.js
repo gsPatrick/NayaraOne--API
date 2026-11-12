@@ -7,7 +7,7 @@ const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   sequelize, comTenant, carregarTenants, ctxDe, limparTudo, limparConfig, config, erros, restaurar, forcar, ler, dispatch,
-  instalarRedes, removerRedes, criarConteudo, dispatchesDe, conexao, publicar, social, sql,
+  instalarRedes, removerRedes, criarConteudo, limparConteudos, dispatchesDe, conexao, publicar, social, sql,
 } = require('../_helpers/m9d239Env');
 const { clearCircuitCache } = require('../../../src/features/integrations/health');
 const { erroHttp } = require('../_helpers/m9d214Scripted');
@@ -29,7 +29,7 @@ beforeEach(async () => {
   await limparConfig(tenant, CHAVES);
   await limparTudo(tenant);
 });
-after(async () => { await limparConfig(tenant, CHAVES); removerRedes(); restaurar(); await sequelize.close(); });
+after(async () => { await limparConteudos(); await limparConfig(tenant, CHAVES); removerRedes(); restaurar(); await sequelize.close(); });
 
 test('social_erro_em_uma_rede_nao_afeta_outras', async () => {
   const c = await criarConteudo(tenant, {});

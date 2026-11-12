@@ -9,6 +9,7 @@ const { Sequelize } = require('sequelize');
 
 const { sequelize, getSeedTenant, uniqueSuffix } = require('../testHelpers');
 const store = require('../../src/features/analytics/metricStore.service');
+const { removerMetricasPorCodigo } = require('../marco9/_helpers/analyticsResiduo');
 
 const UNITS = ['BRL', 'PERCENT', 'COUNT', 'DAYS', 'HOURS', 'MINUTES', 'SECONDS', 'SCORE', 'NUMBER', 'PP', 'BRL_PER_UNIT'];
 
@@ -28,7 +29,13 @@ async function setupEnv() {
   return { admin, tenantA, tenantB };
 }
 
+// Os testes do M9-D600 COMMITAM definições (inclusive GLOBAL e de grupo). Cada código gerado por `code()` é anotado e apagado no `closeEnv`:
+// a definição global que sobrava (glob.m9d600_*) entrava no catálogo de todas as empresas do banco e derrubava m9d712.tabela e m9d712.semente.
+const codigosCriados = new Set();
+
 async function closeEnv(admin) {
+  await removerMetricasPorCodigo(admin, [...codigosCriados]);
+  codigosCriados.clear();
   await admin.close();
   await sequelize.close();
 }
@@ -53,7 +60,11 @@ async function inTx(tenant, opts, fn) {
 }
 
 const ctxOf = (tenant) => ({ groupId: tenant.groupId, companyId: tenant.companyId, actorUserId: tenant.userId });
-const code = (prefix = 'qa') => `${prefix}.m9d600_${uniqueSuffix()}_${Math.floor(Math.random() * 1000)}`;
+const code = (prefix = 'qa') => {
+  const c = `${prefix}.m9d600_${uniqueSuffix()}_${Math.floor(Math.random() * 1000)}`;
+  codigosCriados.add(c);
+  return c;
+};
 const hash = (s) => createHash('sha256').update(String(s)).digest('hex');
 
 function versionInput(definitionId, extra = {}) {
