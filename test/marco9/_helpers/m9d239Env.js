@@ -12,8 +12,15 @@ const { createContentWithProvenance } = require('../../../src/features/marketing
 const guard = require('../../../src/features/marketing/content/approval.guard');
 const mktRepo = require('../../../src/features/marketing/content/pipeline.repository');
 const social = require('../../../src/features/integrations/social');
+const { removeCommittedContent } = require('./mktContentCleanup');
 
 const { sequelize, comTenant, ctxDe, uniqueSuffix } = base;
+
+// Conteúdos COMMITADOS por este processo de teste. O arquivo que cria apaga no `after` (limparConteudos): um conteúdo que sobra muda a contagem
+// por tipo de outro arquivo no mesmo banco (ex.: m9d409.tipos conta os EDUCATIONAL_BLOG da empresa).
+const criados = [];
+const registrarConteudo = (itemId) => { criados.push(itemId); return itemId; };
+const limparConteudos = () => removeCommittedContent(criados.splice(0));
 
 /** Instala as três redes (adapter programável + conexão ATIVA, desativando a que sobrou de outro teste). Devolve [{ code, Classe, connection }]. */
 async function instalarRedes(tenant) {
@@ -48,6 +55,7 @@ async function criarConteudo(tenant, { estado = 'APPROVED', texto = `Casa nova n
       await mktRepo.setApprover(version.id, aprovador || String(tenant.userId), tenant.userId, t);
     }
     await mktRepo.setStatus(item.id, estado, tenant.userId, t);
+    registrarConteudo(item.id);
     return { itemId: item.id, versionId: version.id, texto };
   });
 }
@@ -57,4 +65,4 @@ const dispatchesDe = (tenant, itemId) => sql(tenant, 'SELECT * FROM integration.
 const conexao = async (tenant, id) => (await sql(tenant, 'SELECT * FROM integration.connections WHERE id = :id', { id }))[0];
 const publicar = (tenant, args) => comTenant(tenant, (t) => social.publishToSocial(ctxDe(tenant), { ...args, transaction: t }));
 
-module.exports = { ...base, instalarRedes, removerRedes, criarConteudo, dispatchesDe, conexao, publicar, sql, social, REDES };
+module.exports = { ...base, instalarRedes, removerRedes, criarConteudo, registrarConteudo, limparConteudos, dispatchesDe, conexao, publicar, sql, social, REDES };

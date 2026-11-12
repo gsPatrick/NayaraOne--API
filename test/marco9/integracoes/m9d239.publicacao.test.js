@@ -6,7 +6,7 @@ const { test, before, after, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   sequelize, comTenant, carregarTenants, ctxDe, limparTudo, limparConfig, config, eventos, restaurar, forcar, ler, dispatch,
-  instalarRedes, removerRedes, criarConteudo, dispatchesDe, publicar, sql, social,
+  instalarRedes, removerRedes, criarConteudo, registrarConteudo, limparConteudos, dispatchesDe, publicar, sql, social,
 } = require('../_helpers/m9d239Env');
 const { clearCircuitCache } = require('../../../src/features/integrations/health');
 const nay = require('../../../src/features/marketing/content/pipeline.nayPort');
@@ -25,7 +25,7 @@ beforeEach(async () => {
   await limparConfig(tenant, CHAVES);
   await limparTudo(tenant);
 });
-after(async () => { await limparConfig(tenant, CHAVES); removerRedes(); nay.clearNayDraftProvider(); restaurar(); await sequelize.close(); });
+after(async () => { await limparConteudos(); await limparConfig(tenant, CHAVES); removerRedes(); nay.clearNayDraftProvider(); restaurar(); await sequelize.close(); });
 
 const recusa = (statusCode, code) => (e) => e.statusCode === statusCode && e.code === code;
 
@@ -84,6 +84,7 @@ test('social_hash_da_versao_aprovada_confere', async () => {
 test('social_nay_gera_somente_rascunho', async () => {
   nay.registerNayDraftProvider(async () => ({ text: 'Texto da NAY para o post.', nayRunId: '11111111-1111-4111-8111-111111111111', modelName: 'qa-modelo' }));
   const criado = await comTenant(tenant, (t) => contentService.createContent({ tenant: ctx(), actor: tenant.userId, input: { type: 'EDUCATIONAL_BLOG', title: 'QA-M9 NAY', tema: 'Financiamento imobiliário', fontes: ['Guia interno da empresa'] } }, t));
+  registrarConteudo(criado.itemId); // o rascunho da NAY é commitado: o `after` o apaga (m9d409.tipos conta os EDUCATIONAL_BLOG da empresa)
   const [item] = await sql(tenant, 'SELECT status, nay_run_id FROM marketing.content_items WHERE id = :id', { id: criado.itemId });
   assert.equal(item.status, 'DRAFT', 'conteúdo da NAY nasce rascunho, nunca aprovado');
   assert.ok(item.nay_run_id);

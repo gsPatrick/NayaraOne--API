@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const {
-  sequelize, carregarTenants, ctxDe, conexaoAtiva, limparTudo, restaurar, ler, dispatch, criarConteudo, dispatchesDe, publicar, sql,
+  sequelize, carregarTenants, ctxDe, conexaoAtiva, limparTudo, restaurar, ler, dispatch, criarConteudo, limparConteudos, dispatchesDe, publicar, sql,
 } = require('../_helpers/m9d239Env');
 const { resetSocialSandbox } = require('../../../src/features/integrations/providers/social/sandbox/social-sandbox.adapter');
 const { PORTS } = require('../../../src/features/integrations/providers/ports');
@@ -30,7 +30,7 @@ beforeEach(async () => {
   await limparTudo(tenant);
   await sql(tenant, "UPDATE integration.connections SET config_json = '{}'::jsonb WHERE id = :id", { id: rede.id });
 });
-after(async () => { await sequelize.close(); });
+after(async () => { await limparConteudos(); await sequelize.close(); });
 
 const falha = (tipo) => sql(tenant, 'UPDATE integration.connections SET config_json = CAST(:c AS jsonb) WHERE id = :id', { id: rede.id, c: JSON.stringify({ sandbox_fault: tipo }) });
 

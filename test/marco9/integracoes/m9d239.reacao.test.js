@@ -29,7 +29,7 @@ before(async () => {
   leitor = { tenant, comTenant, ler: (q, r = {}) => env.sql(tenant, q, { c: tenant.companyId, ...r }) };
 });
 beforeEach(async () => { redes = await instalarRedes(tenant); clearCircuitCache(); await limparTudo(tenant); });
-after(async () => { removerRedes(); restaurar(); await sequelize.close(); process.exit(0); });
+after(async () => { await env.limparConteudos(); removerRedes(); restaurar(); await sequelize.close(); process.exit(0); });
 
 test('social_d220_conteudo_so_muda_por_evento_interno_e_espera_a_rede_em_voo', async () => {
   const c = await criarConteudo(tenant, {});

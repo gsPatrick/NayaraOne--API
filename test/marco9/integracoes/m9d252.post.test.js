@@ -5,7 +5,7 @@
 const { test, before, beforeEach, after } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  sequelize, carregarTenants, ctxDe, limparTudo, limparConfig, restaurar, forcar, ler, dispatch, instalarRedes, removerRedes, criarConteudo, dispatchesDe, publicar,
+  sequelize, carregarTenants, ctxDe, limparTudo, limparConfig, restaurar, forcar, ler, dispatch, instalarRedes, removerRedes, criarConteudo, limparConteudos, dispatchesDe, publicar,
 } = require('../_helpers/m9d239Env');
 const { clearCircuitCache } = require('../../../src/features/integrations/health');
 const { erroHttp } = require('../_helpers/m9d214Scripted');
@@ -18,7 +18,7 @@ const depois = (s) => new Date(Date.now() + s * 1000);
 
 before(async () => { ({ tenant } = await carregarTenants()); });
 beforeEach(async () => { redes = await instalarRedes(tenant); clearCircuitCache(); await limparConfig(tenant, ['integration.social.post_dedup_window_days']); await limparTudo(tenant); });
-after(async () => { await limparConfig(tenant, ['integration.social.post_dedup_window_days']); removerRedes(); restaurar(); await sequelize.close(); });
+after(async () => { await limparConteudos(); await limparConfig(tenant, ['integration.social.post_dedup_window_days']); removerRedes(); restaurar(); await sequelize.close(); });
 
 test('adv_post_duplicado_nao_ocorre_em_retry_e_timeout', async () => {
   const [r1, r2, r3] = redes;
