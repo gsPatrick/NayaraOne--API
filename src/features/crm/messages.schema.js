@@ -11,11 +11,17 @@ const { DIRECTIONS, AUTHOR_TYPES, CHANNELS, MESSAGE_STATUSES, COLUMN_LIMITS } = 
  * `descricao` (anotação, não valida nada) é o que a mensagem de erro diz que o campo deve ser. `enumSemCaixa` é a lista fechada aceita em
  * maiúsculas ou minúsculas (o serviço grava em maiúsculas, como sempre fez); `kind` continua exato, como sempre foi.
  *
+ * A consulta é fechada em TODAS as rotas (rodada 6): só `GET /messages` tem filtros; nas demais, qualquer parâmetro de consulta é 400 com o nome dele.
+ * `textoGravavel`: texto com caractere nulo ou metade solta de par sub-rogado é 400 (o banco não grava; DI-M9R-15). Na rota HTTP a porta da API
+ * (src/middlewares/storableText.middleware.js) já recusa antes com `INVALID_TEXT_CHARACTER`; aqui vale para quem validar o pedido por este esquema.
+ *
  * Limites: os textos que vão a uma coluna limitada seguem a coluna (`externalMessageId` varchar(128), `purpose` pela CHECK da 753, `status`
- * pela lista fechada, que cabe no varchar(32)). Os textos livres (`body` vai a uma coluna TEXT; `text`, `caption` e as variáveis do modelo vão ao
- * envio) não têm limite de tamanho: o livro não fixa um e o banco aceita qualquer tamanho. O destinatário (`to`), o modelo (`templateName`) e o
- * idioma (`language`) são conferidos pela regra da demanda (telefone E.164: 422 `INTEGRATION_MESSAGING_PHONE_INVALID`, M9-D229 3.2 item 4;
- * modelo aprovado no idioma: 422 `INTEGRATION_MESSAGING_TEMPLATE_NOT_APPROVED`, M9-D230 3.1); o esquema exige que sejam texto.
+ * pela lista fechada, que cabe no varchar(32)). Os textos livres têm limite por parâmetro da empresa, conferido pelo serviço (DI-M9R-16; o livro não
+ * fixa um): `body` de `POST /messages` por `integration.messaging.record_body_max_chars`; `text`, `caption` e cada variável do modelo de
+ * `POST /messages/send` pelos limites do canal (`integration.whatsapp.max_text_chars`, `max_caption_chars` e `max_template_var_chars`). Acima: 400
+ * `MESSAGE_VALIDATION` com o nome do campo. O destinatário (`to`), o modelo (`templateName`) e o idioma (`language`) são conferidos pela regra da
+ * demanda (telefone E.164: 422 `INTEGRATION_MESSAGING_PHONE_INVALID`, M9-D229 3.2 item 4; modelo aprovado no idioma: 422
+ * `INTEGRATION_MESSAGING_TEMPLATE_NOT_APPROVED`, M9-D230 3.1); o esquema exige que sejam texto.
  */
 const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 
@@ -23,17 +29,20 @@ const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
 const referencia = { type: ['string', 'null'], pattern: `^(?:|${UUID_PATTERN.slice(1, -1)})$`, descricao: 'um identificador (UUID) em texto' };
 const idDoCaminho = { type: 'string', pattern: UUID_PATTERN, descricao: 'um identificador (UUID)' };
 const listaFechada = (lista, { nulo = false } = {}) => ({ type: nulo ? ['string', 'null'] : 'string', enumSemCaixa: lista, descricao: `um de: ${lista.join(', ')}` });
-const texto = (max) => ({ type: ['string', 'null'], ...(max ? { maxLength: max } : {}), descricao: max ? `um texto de até ${max} caracteres` : 'um texto' });
+const texto = (max) => ({ type: ['string', 'null'], textoGravavel: true, ...(max ? { maxLength: max } : {}), descricao: max ? `um texto de até ${max} caracteres` : 'um texto' });
 /** Campo que só o servidor define: qualquer valor é descartado pelo controller (DI-M9R-9 e M9-D229), como antes. */
 const doServidor = { descricao: 'definido pelo servidor (o valor enviado é descartado)' };
 
 const objetoFechado = (properties, required = []) => ({ type: 'object', additionalProperties: false, properties, required });
 const semCorpo = objetoFechado({});
+/** Rota sem filtro: a consulta é fechada como o corpo (rodada 6): `GET /messages/:id?x=1` é 400, não um parâmetro ignorado. */
+const semConsulta = objetoFechado({});
 const comId = objetoFechado({ id: idDoCaminho }, ['id']);
 
 const ROTAS = Object.freeze({
   /** POST /messages — registro de interação (livro, Marco 3 §10). */
   criar: {
+    query: semConsulta,
     body: objetoFechado({
       personId: referencia,
       opportunityId: referencia,
@@ -55,16 +64,17 @@ const ROTAS = Object.freeze({
   },
   /** POST /messages/send — envio pelo fornecedor de mensageria (M9-D229, M9-D230). */
   enviar: {
+    query: semConsulta,
     body: objetoFechado({
       kind: { type: 'string', enum: ['text', 'template', 'media'], descricao: 'um de: text, template, media' },
       personId: referencia,
       opportunityId: referencia,
       conversationId: referencia,
-      to: { type: ['string', 'null'], descricao: 'um telefone em texto' },
+      to: { type: ['string', 'null'], textoGravavel: true, descricao: 'um telefone em texto' },
       text: texto(),
       templateName: texto(),
       language: texto(),
-      templateVars: { type: ['array', 'null'], items: { type: 'string' }, descricao: 'uma lista de textos' },
+      templateVars: { type: ['array', 'null'], items: { type: 'string', textoGravavel: true }, descricao: 'uma lista de textos' },
       purpose: { type: ['string', 'null'], pattern: '^(?:|[A-Za-z0-9_]{2,40})$', descricao: 'um texto de 2 a 40 letras sem acento, números ou "_"' },
       mediaRef: { ...referencia, descricao: 'o identificador (UUID) do arquivo, em texto' },
       caption: texto(),
@@ -73,12 +83,13 @@ const ROTAS = Object.freeze({
   /** PATCH /messages/:id/status — só a lista fechada de status da mensagem. */
   status: {
     params: comId,
+    query: semConsulta,
     body: objetoFechado({ status: listaFechada(MESSAGE_STATUSES) }, ['status']),
   },
   /** POST /messages/:id/send-alternate e /refresh-status: só o id do caminho, sem corpo. */
-  porId: { params: comId, body: semCorpo },
+  porId: { params: comId, query: semConsulta, body: semCorpo },
   /** GET /messages/:id. */
-  ler: { params: comId },
+  ler: { params: comId, query: semConsulta },
   /** GET /messages — filtros por pessoa e oportunidade (um UUID cada). */
   listar: {
     query: objetoFechado({ personId: { ...referencia, type: 'string' }, opportunityId: { ...referencia, type: 'string' } }),

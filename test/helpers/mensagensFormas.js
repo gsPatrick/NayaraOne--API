@@ -34,7 +34,7 @@ const e422 = (code) => ({ status: 422, code });
  * Regras por campo:
  * - `recusa`: qualquer forma da lista é errada (UUID, lista fechada, campo fora da rota);
  * - `texto`: só a forma que não é texto é errada; o texto vale (`aceito`) ou vai à regra da demanda (`regra`);
- * - `textoLimitado`: além disso, o texto longo é errado (coluna limitada);
+ * - `textoLimitado`: além disso, o texto longo é errado (coluna limitada, ou limite do canal no envio: DI-M9R-16);
  * - `formato`: texto só no formato (finalidade, CHECK da migration 753): longo e fora do formato são errados, os nomes do protótipo são válidos;
  * - `servidor`: o valor é descartado (autor, empresa, ligação com o fornecedor): sempre `aceito`;
  * - `listaDeTextos`: só lista de textos; a lista vazia e a de UUIDs vão à regra do modelo.
@@ -75,8 +75,9 @@ const CAMPOS_ENVIAR = Object.freeze({
     templateVars: { tipo: 'listaDeTextos' },
     purpose: { tipo: 'formato', aceito: ok(202) },
   },
-  text: { kind: { tipo: 'recusa' }, text: { tipo: 'texto', aceito: ok(202) }, caption: { tipo: 'texto', aceito: ok(202) } },
-  media: { mediaRef: { tipo: 'recusa' }, caption: { tipo: 'texto', aceito: ok(202) } },
+  // Rodada 6 (DI-M9R-16): `text` e `caption` têm o limite do canal (4096 e 1024 caracteres, parâmetros da empresa): o texto longo (5000) é 400.
+  text: { kind: { tipo: 'recusa' }, text: { tipo: 'textoLimitado', aceito: ok(202) }, caption: { tipo: 'textoLimitado', aceito: ok(202) } },
+  media: { mediaRef: { tipo: 'recusa' }, caption: { tipo: 'textoLimitado', aceito: ok(202) } },
 });
 const DESCONHECIDOS_ENVIAR = Object.freeze([...PROTO_CAMPOS, 'mediaQuarantineId', 'groupId', 'companyId', 'authorUserId', 'body', 'channel', 'direction', 'status', 'actionKey', 'connectionId']);
 

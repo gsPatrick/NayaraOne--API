@@ -12,6 +12,7 @@ const { idOrNull } = require('../messages.input');
 const { readMessagingParams } = require('./messaging.params');
 const { assertE164 } = require('./messaging.phone');
 const { readWhatsappParams } = require('./whatsapp.params');
+const { assertSendTextLimits } = require('./messaging.textLimits');
 const { assertConsent } = require('./whatsapp.consent');
 const { assertTemplate } = require('./whatsapp.templates');
 const { prepareOutboundMedia } = require('./whatsapp.media');
@@ -89,6 +90,7 @@ async function sendMessage(ctx, input, actorUserId, transaction, opts = {}) {
   await assertRefsInScope(ctx, pedido, transaction);
   const params = await readMessagingParams(ctx, transaction);
   const wa = await readWhatsappParams(ctx, transaction);
+  assertSendTextLimits(pedido, wa); // DI-M9R-16: limite do canal antes de gravar, enfileirar ou redigir o texto
   const to = assertE164(pedido.to, params.countryCode);
   const connection = await resolveConnection({ companyId: ctx.companyId, domain: 'MESSAGING' }, transaction);
   if (operacaoPedida === 'sendTemplate') assertTemplate(connection, pedido);

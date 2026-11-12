@@ -161,6 +161,18 @@ campos recusados em `details.fields`. Nenhuma forma de entrada chega ao banco ou
 - `send-alternate` e `refresh-status` não têm corpo (qualquer campo é 400); `GET /messages`
   aceita só `personId` e `opportunityId`. Id de caminho que não é UUID: 400 `MESSAGE_VALIDATION`
   (antes `INVALID_ID_FORMAT`, pelo erro do banco).
+- Rodada 6 (12/11/2026): a consulta é fechada em todas as rotas; só `GET /messages` tem filtros
+  (`GET /messages/:id?x=1` é 400 com o nome do parâmetro, antes era ignorado).
+- Tamanho do texto livre (DI-M9R-16), por parâmetro da empresa com o teto do canal: `text` até
+  `integration.whatsapp.max_text_chars` (4096), `caption` até `max_caption_chars` (1024), cada item
+  de `templateVars` até `max_template_var_chars` (1024; teto 32768) e o `body` de `POST /messages`
+  até `integration.messaging.record_body_max_chars` (65536). Caractere = ponto de código (emoji = 1).
+  Acima: 400 `MESSAGE_VALIDATION` com o campo e `details.maxChars`.
+- Para toda a API (DI-M9R-14 e DI-M9R-15): corpo em charset ou `Content-Encoding` não aceito é 415
+  (`REQUEST_BODY_CHARSET_UNSUPPORTED`, `REQUEST_BODY_ENCODING_UNSUPPORTED`), corpo comprimido
+  quebrado é 400 `REQUEST_BODY_DECOMPRESSION_FAILED`, escape `%` malformado no caminho é 400
+  `INVALID_ID_FORMAT`, e texto com caractere nulo ou metade solta de par sub-rogado, no corpo ou na
+  consulta, é 400 `INVALID_TEXT_CHARACTER` (o banco não grava esses caracteres).
 
 ```json
 {

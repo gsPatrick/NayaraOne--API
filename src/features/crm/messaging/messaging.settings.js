@@ -17,6 +17,8 @@ const MESSAGING_SETTINGS_SCHEMA = Object.freeze({
   },
   // Prazo (horas) da primeira ação da oportunidade criada para quem escreve pela primeira vez (lead provisório).
   'integration.messaging.inbound_lead_prazo_horas': { type: 'integer', min: 1, max: 720 },
+  // DI-M9R-16: tamanho máximo, em caracteres, do texto (`body`) do registro manual de interação (POST /messages). O livro não fixa; padrão 65536.
+  'integration.messaging.record_body_max_chars': { type: 'integer', min: 1, max: 1048576 },
   ...WHATSAPP_SETTINGS_SCHEMA,
   ...WHATSAPP_CONTINGENCY_SETTINGS_SCHEMA,
 });

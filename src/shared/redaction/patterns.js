@@ -5,13 +5,22 @@
  * dado sensível (segredo, documento, cartão, e-mail, telefone). Nenhum outro arquivo de src/ pode ter
  * detecção própria (teste de arquitetura `redaction_biblioteca_unica_sem_regex_de_deteccao_duplicada`).
  * Perfis (log, erro, texto livre público, ...) só mudam o formato de saída.
+ *
+ * TEMPO LINEAR (verificação do Marco 9, rodada 6, 12/11/2026; DI-M9R-17). Toda regra roda em tempo proporcional ao texto, porque o texto livre das
+ * mensagens passa por aqui no laço de eventos (um `text` de 256 KB sem espaço prendia a API por 147 s). Duas formas de custo quadrático foram tiradas,
+ * sem mudar o que cada regra redige (posições e grupos idênticos aos de antes; prova em test/integrations/redaction/redaction.tempoLinear.test.js):
+ * 1. Recomeço em cada posição de uma sequência longa (jwt, connectionPassword, email, emailLoose, emailSimple): a correspondência mais à esquerda só
+ *    pode começar no INÍCIO da sequência; um lookbehind recusa as outras posições em tempo constante (para a regra `email`, também logo depois de
+ *    um e-mail anterior, que é onde a busca global recomeça).
+ * 2. Separadores `\s*` encostados (rgLabeled, agencyLabeled, pixLabeled, cepLabeled, accountLabeled): `\s*X?\s*` vira `\s*(?:X\s*)?`, a mesma
+ *    linguagem sem as N^2 divisões de um espaço longo; addressPattern ver o comentário da regra.
  */
 const SOURCES = Object.freeze({
-  jwt: 'eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]*',
+  jwt: '(?=eyJ)(?<=(?:^|[^\\w-])(?:(?!eyJ)[\\w-])*)eyJ[\\w-]+\\.[\\w-]+\\.[\\w-]*',
   bearer: '\\bBearer\\s+[A-Za-z0-9._~+/=-]+',
   pem: '-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----(?:[\\s\\S]*?-----END (?:[A-Z]+ )*PRIVATE KEY-----|[\\s\\S]*$)',
   pemHeader: '-----BEGIN ',
-  connectionPassword: '([a-z][a-z0-9+.-]*:\\/\\/[^/\\s:@]+:)([^@\\s/]+)(@)',
+  connectionPassword: '(?=[a-z])(?<=(?:^|[^a-z0-9+.-])[0-9+.-]*)([a-z][a-z0-9+.-]*:\\/\\/[^/\\s:@]+:)([^@\\s/]+)(@)',
   assignment: '\\b(api[_-]?key|x-api-key|client[_-]?secret|webhook[_-]?secret|secret|(?:access|refresh|id)[_-]?token|token|password|passwd|senha|private[_-]?key)(["\']?\\s*[:=]\\s*["\']?)([^\\s"\',;&]+)',
   keywordValue: '\\b(token|secret|segredo|password|senha|apikey|credential|credencial)(\\s+)([^\\s"\',;]{8,})',
   // Token na própria URL das rotas públicas por link (M9-D823: /public/share/<token>): o log de requisição não pode gravá-lo em claro.
@@ -30,28 +39,32 @@ const SOURCES = Object.freeze({
   cnpjFormatted: '(?<![\\w.])\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}(?![\\w])',
   cnpjBare: '(?<![\\w.-])\\d{14}(?![\\w.-])',
   cardCandidate: '(?<![\\w.-])\\d(?:[ -]?\\d){12,18}(?![\\w.-])',
-  email: '[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+',
+  email: '(?:(?<![A-Za-z0-9._%+-])|(?=[._%+])(?!\\.[A-Za-z0-9-])(?<=@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+))[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+',
   phone: '(?:\\+55[\\s.-]?)?\\(\\d{2}\\)[\\s.-]?9?\\d{4}[\\s.-]?\\d{4}(?!\\d)|\\+55[\\s.-]?\\d{2}[\\s.-]?9?\\d{4}[\\s.-]?\\d{4}(?!\\d)|(?<!\\d)\\d{2}\\s9\\d{4}[\\s-]?\\d{4}(?!\\d)',
   phoneLoose: '(?:\\+?55\\s?)?\\(?\\d{2}\\)?\\s?9?\\d{4}[-\\s]?\\d{4}',
   localPhone: '(?<![\\d-])9?\\d{4}-\\d{4}(?!\\d)',
   cpfLoose: '\\d{3}\\.?\\d{3}\\.?\\d{3}-?\\d{2}',
   cnpjLoose: '\\d{2}\\.?\\d{3}\\.?\\d{3}\\/?\\d{4}-?\\d{2}',
-  emailLoose: '[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
-  emailSimple: '[^\\s@]+@[^\\s@]+',
+  emailLoose: '(?<![^\\s@])[^\\s@]+@[^\\s@]+\\.[^\\s@]+',
+  emailSimple: '(?<![^\\s@])[^\\s@]+@[^\\s@]+',
   // Perfil `ai` (M9-D027): tipos além de documento/cartão/e-mail/telefone. Os rótulos ("RG", "conta", "agência", "pix") evitam
   // mascarar número comum; o que tem formato próprio (linha digitável, CEP com hífen) dispensa rótulo.
-  rgLabeled: '(\\bRG\\b\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{1,2}\\.?\\d{3}\\.?\\d{3}-?[\\dxX]\\b)',
+  rgLabeled: '(\\bRG\\b\\s*(?:n[º°o]\\.?\\s*)?(?:[:=-]\\s*)?)(\\d{1,2}\\.?\\d{3}\\.?\\d{3}-?[\\dxX]\\b)',
   rgFormatted: '(?<![\\d.])\\d{2}\\.\\d{3}\\.\\d{3}-[\\dxX](?![\\w-])',
-  pixLabeled: '(\\b(?:chave\\s+)?pix\\b\\s*[:=-]?\\s*)([A-Za-z0-9._%+@-]{8,})',
+  pixLabeled: '(\\b(?:chave\\s+)?pix\\b\\s*(?:[:=-]\\s*)?)([A-Za-z0-9._%+@-]{8,})',
   boletoFormatted: '(?<!\\d)\\d{5}\\.\\d{5}\\s\\d{5}\\.\\d{6}\\s\\d{5}\\.\\d{6}\\s\\d\\s\\d{14}(?!\\d)',
   boletoDigits: '(?<![\\d.-])(?:\\d{47}|\\d{48})(?![\\d.-])',
-  agencyLabeled: '(\\bag(?:[eê]ncia|\\.)?\\s*(?:n[º°o]\\.?)?\\s*[:=-]?\\s*)(\\d{3,5}(?:-[\\dxX])?\\b)',
+  agencyLabeled: '(\\bag(?:[eê]ncia|\\.)?\\s*(?:n[º°o]\\.?\\s*)?(?:[:=-]\\s*)?)(\\d{3,5}(?:-[\\dxX])?\\b)',
   // O rótulo é uma palavra solta e tem separador depois dele: um UUID que começa com "cc" (cc823232-...) não é "cc 823232-8".
-  accountLabeled: '((?<![\\w.-])(?:conta(?:\\s+(?:corrente|poupan[cç]a))?|c\\/c|cc|c\\.c\\.)(?:\\s+|\\s*[:=-]\\s*)(?:n[º°o]\\.?\\s*[:=-]?\\s*)?)(\\d{4,12}-?[\\dxX]\\b)',
-  addressPattern: '\\b(?:rua|avenida|av\\.|alameda|travessa|rodovia|estrada|pra[cç]a)\\s+[^\\n,;.]{2,60}?,?\\s*(?:n[º°o]?\\.?\\s*)?\\d{1,6}(?:\\s*[,-]\\s*[^\\n,;]{2,40})?',
+  accountLabeled: '((?<![\\w.-])(?:conta(?:\\s+(?:corrente|poupan[cç]a))?|c\\/c|cc|c\\.c\\.)(?:\\s+|\\s*[:=-]\\s*)(?:n[º°o]\\.?\\s*(?:[:=-]\\s*)?)?)(\\d{4,12}-?[\\dxX]\\b)',
+  // Endereço (DI-M9R-17): na forma antiga, `\s+` depois da palavra e o trecho de 2 a 60 caracteres disputavam o mesmo espaço e cada divisão relia o
+  // espaço até o fim (N^2 x 60). Equivalente linear: (a) só os pontos de partida a até 60 espaços do fim do espaço podem dar resultado diferente, e o
+  // trecho que termina dentro de um espaço só é conferido uma vez por espaço; (b) partida mais longe que 60 só casa como "espaço inteiro e número
+  // logo depois", e só se houver dois espaços sem quebra de linha a 61 ou mais do fim (onde a forma antiga encaixava o trecho de 2 caracteres).
+  addressPattern: '\\b(?:rua|avenida|av\\.|alameda|travessa|rodovia|estrada|pra[cç]a)(?:\\s+(?=\\s{0,60}(?!\\s))(?:[^\\n,;.]{2}|[^\\n,;.]{3,60}?(?!(?<=\\s)\\s)),?\\s*(?:n[º°o]?\\.?\\s*)?\\d{1,6}(?:\\s*[,-]\\s*[^\\n,;]{2,40})?|\\s(?=\\s*?[^\\S\\n]{2}\\s{59})\\s*(?:n[º°o]?\\.?\\s*)?\\d{1,6}(?:\\s*[,-]\\s*[^\\n,;]{2,40})?)',
   // Sem letra ou dígito colado antes ou depois: um UUID (0bd60392-200b-...) tem "60392-200" no meio e não é CEP.
   cepFormatted: '(?<![\\w.-])\\d{5}-\\d{3}(?![\\w-])',
-  cepLabeled: '(\\bCEP\\b\\s*[:=-]?\\s*)(\\d{8}\\b)',
+  cepLabeled: '(\\bCEP\\b\\s*(?:[:=-]\\s*)?)(\\d{8}\\b)',
 });
 
 /** Cria uma RegExp nova (nunca compartilhada: flag `g` guarda estado em `lastIndex`). */
