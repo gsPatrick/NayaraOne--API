@@ -14,7 +14,7 @@ const { spawn } = require('node:child_process');
 const secrets = require('../../../src/features/integrations/secrets');
 
 const ROOT = path.resolve(__dirname, '../../..');
-const PORT = Number(process.env.M9E_BOOT_PORT || 47591);
+const PORT = Number(process.env.M9E_BOOT_PORT || require('../_helpers/portaLivre').portaLivre());
 const DISPOSABLE = process.env.DISPOSABLE_DB === '1';
 const dirs = [];
 const key = () => crypto.randomBytes(32).toString('hex');

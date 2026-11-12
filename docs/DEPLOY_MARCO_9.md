@@ -1,6 +1,6 @@
 # Deploy do Marco 9 — ordem das migrations e da API
 
-A API antiga (Marcos 3 a 8) tolera as migrations `20260101000650` a `20260101009963`. Os gatilhos de somente leitura do legado do Correspondente (`provider_accounts`, `integration_errors`, `webhook_inbox`) ficam na migration `20260101009964`, a última, e só podem ser aplicados quando a API do Marco 9 já estiver no ar (ela grava pelo registro de integração e define `app.integration_legacy_write='on'` quando precisa gravar no legado).
+A API antiga (Marcos 3 a 8) tolera as migrations `20260101000650` a `20260101009963`. Os gatilhos de somente leitura do legado do Correspondente (`provider_accounts`, `integration_errors`, `webhook_inbox`) ficam na migration `20260101009964` (as três que vêm depois dela, da correção de 10 e 11/11/2026, não tocam o legado) e só podem ser aplicados quando a API do Marco 9 já estiver no ar (ela grava pelo registro de integração e define `app.integration_legacy_write='on'` quando precisa gravar no legado).
 
 ## Cofre de segredos: configurar ANTES de publicar esta versão
 
@@ -46,7 +46,7 @@ Conferência depois de configurar e reiniciar:
 1. Backup novo imediatamente antes (`pg_dump -Fc`, com SHA-256), em `backups/` (ignorado pelo git).
 2. Aplicar as migrations `20260101000650` a `20260101009963` (`npx sequelize-cli db:migrate --env migration --to 20260101009963-relatorio-saneamento-chaves-protegidas.js`). A API antiga continua funcionando.
 3. Deploy da API e do Front do Marco 9 e conferir `/api/health` e `/api/version`.
-4. Aplicar a `20260101009964-fecha-o-legado-com-gatilhos-somente-leitura.js` (`npx sequelize-cli db:migrate --env migration`). É idempotente.
+4. Aplicar a `20260101009964-fecha-o-legado-com-gatilhos-somente-leitura.js` e as três da correção de 10 e 11/11/2026 (`20260101009965`, `20260101009966` e `20260101009970`, seção "Migrations depois da 9964") com um único `npx sequelize-cli db:migrate --env migration`. Todas são idempotentes.
 5. Fumaça: criar e listar uma connection do registro, receber um webhook de financiamento sandbox, abrir o painel do Correspondente.
 6. E-mail de campanha:
    - Conferir `secretStore.status = "ok"` em `/api/health`.
@@ -64,10 +64,17 @@ A `20260101000762-marketing-automation-action-retry.js` (DI-M9F-1) acrescenta o 
 - Entra no passo 2, junto com as demais (número menor que as já aplicadas; o `db:migrate` aplica toda migration pendente).
 - A `down` recusa se alguma run tiver ação em RETRY, porque não apaga nem reescreve dados.
 
+### Migrations depois da 9964
+
+Nenhuma delas toca os gatilhos de somente leitura nem as três tabelas do legado (o teste `m9d200.legado-somente-leitura` confere). A API antiga tolera as três.
+- `20260101009965-isola-pessoas-por-empresa-nas-politicas-rls.js`: troca a política de gravação de `people.persons` (FOR ALL só por grupo) por políticas de INSERT, UPDATE e DELETE por empresa, como a de leitura. Corrige o vazamento de Pessoas entre empresas do mesmo grupo (ponto 5).
+- `20260101009966-pessoas-filhos-so-com-pessoa-da-mesma-empresa.js`: chaves compostas pessoa e empresa nos cadastros filhos (descrita abaixo, em "Ponto 5 do aceite").
+- `20260101009970-create-analytics-metric-snapshot-confirmations.js`: tabela `analytics.metric_snapshot_confirmations` (DI-BI-2), com RLS FORCE, a última confirmação de cada snapshot pela fonte; o snapshot continua imutável.
+
 ## Plano de reversão
 
 - Antes do passo 4: `npx sequelize-cli db:migrate:undo:all --to 20260101000648-dimob-gatilho-congelamento-estrito.js --env migration` (as `down` das migrations aditivas derrubam apenas objetos novos). Se alguma `down` falhar, parar a API e restaurar o backup (`pg_restore --clean --if-exists --no-owner`).
-- Depois do passo 4, se for preciso voltar à API antiga: desfazer só a última (`npx sequelize-cli db:migrate:undo --env migration`), que remove os três gatilhos, e então reimplantar a API antiga.
+- Depois do passo 4, se for preciso voltar à API antiga: desfazer até a 9963 (`npx sequelize-cli db:migrate:undo:all --to 20260101009964-fecha-o-legado-com-gatilhos-somente-leitura.js --env migration`), o que desfaz, nesta ordem, a 9970, a 9966, a 9965 e a 9964 (esta remove os três gatilhos), e então reimplantar a API antiga.
 - A `009962` apaga linhas condicionais (permissão `integration:platform` e chaves `integration.*` gravadas por quem não é operador); a `down` não as restaura, só o backup.
 
 ## Observações conhecidas (documentadas, não corrigidas)

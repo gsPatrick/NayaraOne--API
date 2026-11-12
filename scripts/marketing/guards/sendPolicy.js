@@ -1,6 +1,6 @@
 'use strict';
 
-const { achar, ler, posicao, linhaDe, listar } = require('./source');
+const { achar, ler, linhaDe, listar } = require('./source');
 
 const NOME = 'guard_send_requires_cansend';
 const WRAPPER = 'publications/messaging/message/message.send.js';
@@ -22,11 +22,19 @@ function verificar(raiz) {
   const problemas = [];
   if (texto === null) problemas.push({ arquivo: WRAPPER, linha: 1, regra: 'o wrapper sendMarketingMessage não existe' });
   else {
-    const envio = texto.lastIndexOf('sendToChannel(');
-    const consulta = posicao(texto, /\bcanSend\(/);
-    if (consulta === -1 || envio === -1 || consulta > envio) {
-      problemas.push({ arquivo: WRAPPER, linha: linhaDe(texto, Math.max(envio, 0)), regra: 'o wrapper deve chamar canSend (opt-out, silêncio, limite, consentimento) antes de sendToChannel' });
+    // Cada envio do wrapper (o envio novo e o reenvio da fila, DI-M9F-2) precisa de um canSend próprio entre o envio anterior e ele:
+    // um canSend no começo do arquivo não pode "cobrir" um segundo caminho de envio que deixou de consultar.
+    const envios = [...texto.matchAll(/\bsendToChannel\(/g)].map((m) => m.index);
+    const consultas = [...texto.matchAll(/\bcanSend\(/g)].map((m) => m.index);
+    if (envios.length === 0 || consultas.length === 0) {
+      problemas.push({ arquivo: WRAPPER, linha: 1, regra: 'o wrapper deve chamar canSend (opt-out, silêncio, limite, consentimento) antes de sendToChannel' });
     }
+    envios.forEach((envio, k) => {
+      const inicio = k === 0 ? -1 : envios[k - 1];
+      if (!consultas.some((c) => c > inicio && c < envio)) {
+        problemas.push({ arquivo: WRAPPER, linha: linhaDe(texto, envio), regra: 'o wrapper deve chamar canSend (opt-out, silêncio, limite, consentimento) antes de cada sendToChannel' });
+      }
+    });
   }
   const semArquivos = listar(raiz).length === 0 ? [{ arquivo: '(raiz)', linha: 1, regra: 'nenhum arquivo do Marketing encontrado na raiz informada' }] : [];
   return [...semArquivos, ...diretas, ...operacao, ...problemas];

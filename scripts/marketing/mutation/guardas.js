@@ -19,7 +19,10 @@ module.exports = [
     { arquivo: `${S}/campaigns/violacao.envio.js`, criar: "'use strict';\n\nconst { sendToChannel } = require('../publications/adapters/sendToChannel');\n\nmodule.exports = (ctx) => sendToChannel('WHATSAPP', { to: 'x', text: 'y' }, ctx);\n" },
   ] },
   { id: 'g2_sem_cansend', guarda: 'guard_send_requires_cansend', teste: `${T}/guard_send_requires_cansend.test.js`, descricao: 'o wrapper deixa de consultar o canSend antes do canal', edicoes: [
-    { arquivo: `${S}/publications/messaging/message/message.send.js`, de: 'const decision = await canSend(', para: 'const decision = await Promise.resolve({ allowed: true }) || (' },
+    { arquivo: `${S}/publications/messaging/message/message.send.js`, de: 'const decision = await canSend(input.personId, input.channel,', para: 'const decision = await Promise.resolve({ allowed: true }) || (input.personId, input.channel,' },
+  ] },
+  { id: 'g2_reenvio_sem_cansend', guarda: 'guard_send_requires_cansend', teste: `${T}/guard_send_requires_cansend.test.js`, descricao: 'o reenvio da fila (DI-M9F-2) deixa de consultar o canSend antes do canal', edicoes: [
+    { arquivo: `${S}/publications/messaging/message/message.send.js`, de: 'const decision = await canSend(input.personId, row.channel,', para: 'const decision = await Promise.resolve({ allowed: true }) || (input.personId, row.channel,' },
   ] },
   { id: 'g3_pula_factual', guarda: 'guard_ai_output_requires_factual_validation', teste: `${T}/guard_ai_output_requires_factual_validation.test.js`, descricao: 'o passo de marca deixa de exigir a validação factual', edicoes: [
     { arquivo: `${S}/content/pipeline.core.js`, de: "branding: { from: 'FACT_CHECKED', to: 'BRANDED', prereq: 'factual' }", para: "branding: { from: 'FACT_CHECKED', to: 'BRANDED', prereq: 'facts' }" },

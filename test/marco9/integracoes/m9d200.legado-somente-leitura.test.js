@@ -65,6 +65,15 @@ test('legado_nenhuma_das_migrations_650_656_658_cria_gatilho_de_somente_leitura'
 });
 
 test('legado_9964_e_a_ultima_migration', () => {
+  // A 9964 fecha o plano do Marco 9 (docs/DEPLOY_MARCO_9.md). As que vêm depois são da correção de 10 e 11/11/2026: nenhuma pode
+  // tocar os gatilhos de somente leitura nem as três tabelas do legado, e cada uma precisa estar no roteiro de deploy.
   const todas = fs.readdirSync(DIR).filter((f) => /^\d{14}-.*\.js$/.test(f)).sort();
-  assert.match(todas[todas.length - 1], /^20260101009964-/);
+  const i = todas.findIndex((f) => /^20260101009964-/.test(f));
+  assert.ok(i >= 0, 'a 9964 existe');
+  const roteiro = fs.readFileSync(path.join(__dirname, '../../../docs/DEPLOY_MARCO_9.md'), 'utf8');
+  for (const f of todas.slice(i + 1)) {
+    const texto = fs.readFileSync(path.join(DIR, f), 'utf8');
+    assert.doesNotMatch(texto, /read_only|provider_accounts|integration_errors|webhook_inbox/, `${f} não pode mexer no legado nem nos gatilhos da 9964`);
+    assert.ok(roteiro.includes(f.replace(/\.js$/, '')), `${f} precisa estar no roteiro docs/DEPLOY_MARCO_9.md`);
+  }
 });

@@ -503,6 +503,13 @@
    "status",
    "updated_by"
   ],
+  "analytics.metric_snapshot_confirmations": [
+   "confirmations",
+   "confirmed_at",
+   "metric_id",
+   "snapshot_id",
+   "source_confirmed_at"
+  ],
   "analytics.metric_snapshots": [
    "as_of_date",
    "calc_hash",
@@ -4696,12 +4703,16 @@
   ],
   "marketing.campaign_step_deliveries": [
    "action_key",
+   "attempts",
    "campaign_id",
    "created_by",
    "external_ref",
+   "next_attempt_at",
    "person_id",
    "processed_at",
+   "rate_deferrals",
    "reason",
+   "reconcile_attempts",
    "status",
    "step_id"
   ],
