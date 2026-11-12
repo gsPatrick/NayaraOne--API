@@ -32,7 +32,29 @@ Conferência depois de configurar e reiniciar:
   - cofre externo inalcançável ou credencial recusada.
 - Se faltar o cofre, a mensagem é `INTEGRATION_SECRET_STORE_NOT_CONFIGURED`, com as variáveis a definir.
 
-## Ordem
+## Deploy desta entrega sobre a homologação atual (API 14217771, migrations até a 9964 já aplicadas)
+
+É o caso da homologação em 12/11/2026. O banco já está com todo o esquema do Marco 9 até a `20260101009964`; esta entrega acrescenta só cinco migrations, todas toleradas pela API 14217771 que está no ar: `20260101000757`, `20260101000762`, `20260101009965`, `20260101009966` e `20260101009970` (descritas nas duas seções "Migration desta correção" e "Migrations depois da 9964").
+
+0. Cofre de segredos antes de tudo: passo 0 da seção "Ordem", abaixo (volume, variáveis, reiniciar a 14217771 e conferir o 404 do descadastro).
+1. Backup novo imediatamente antes (`pg_dump -Fc`, com SHA-256), em `backups/`.
+2. Conferir o que falta aplicar: `npx sequelize-cli db:migrate:status --env migration` precisa listar como `down` exatamente as cinco acima e nenhuma outra.
+3. Aplicar as cinco com um único `npx sequelize-cli db:migrate --env migration`. NÃO use `--to 20260101009963-...`: num banco que já tem a 9963 e a 9964 ele não aplica nada, e as duas de número baixo (757 e 762) ficariam de fora; a API nova sem elas falha já ao criar campanha (`column "next_attempt_at" does not exist`). A 9966 confere antes os dados e para sem alterar nada se achar contato, endereço, documento, papel ou consentimento apontando para pessoa de outra empresa (ver "Ponto 5 do aceite").
+4. Conferir de novo o `db:migrate:status`: nenhuma `down`.
+5. Deploy da API (`entrega/marco9`) e do Front (`entrega/marco9`) juntos; conferir `/api/health` (inclusive `secretStore.status = "ok"`) e `/api/version`.
+6. Recuperar as entregas de campanha que ficaram FAILED por falha transitória antes desta versão (runbook `docs/runbooks/COFRE_DE_SEGREDOS.md`, seção 4) e rodar os roteiros de reteste (seção "Ponto 5 do aceite").
+
+Voltar para a 14217771, se for preciso: reimplantar a API e o Front anteriores e desfazer só as cinco, uma a uma e nesta ordem, pelo nome (o `undo:all --to` desfaria também migrations de que a 14217771 precisa):
+```
+npx sequelize-cli db:migrate:undo --env migration --name 20260101009970-create-analytics-metric-snapshot-confirmations.js
+npx sequelize-cli db:migrate:undo --env migration --name 20260101009966-pessoas-filhos-so-com-pessoa-da-mesma-empresa.js
+npx sequelize-cli db:migrate:undo --env migration --name 20260101009965-isola-pessoas-por-empresa-nas-politicas-rls.js
+npx sequelize-cli db:migrate:undo --env migration --name 20260101000762-marketing-automation-action-retry.js
+npx sequelize-cli db:migrate:undo --env migration --name 20260101000757-marketing-campaign-delivery-retry.js
+```
+As `down` da 762 e da 757 recusam se já houver ação de automação ou entrega de campanha em RETRY/UNKNOWN/CANCELLED (não apagam dados): nesse caso, restaurar o backup do passo 1. A 14217771 tolera as cinco aplicadas, então voltar só a API, sem desfazer migration, também funciona.
+
+## Ordem (banco ainda na API dos Marcos 3 a 8, sem o esquema do Marco 9)
 
 0. Configurar o cofre de segredos **antes** de publicar esta versão:
    - (a) Criar o volume e acertar o dono (seção acima).
@@ -56,12 +78,12 @@ Conferência depois de configurar e reiniciar:
 
 A `20260101000757-marketing-campaign-delivery-retry.js` acrescenta os estados abertos da entrega de campanha (RETRY, UNKNOWN, CANCELLED), os contadores de tentativa, a hora da próxima tentativa e o gatilho que mantém as linhas finais imutáveis. Ela também concede UPDATE ao `nayara_runtime`.
 - É aditiva e a API antiga a tolera: só grava SENT, BLOCKED e FAILED, e as colunas novas têm padrão.
-- Por isso entra no passo 2, junto com as demais. Ela tem número menor que as já aplicadas, mas o `db:migrate` aplica toda migration pendente.
+- Num banco sem o esquema do Marco 9, entra no passo 2 da seção "Ordem", junto com as demais. Na homologação atual (já na 9964), entra no passo 3 da seção "Deploy desta entrega", com `db:migrate` sem `--to`.
 - A `down` recusa se houver entrega em RETRY, UNKNOWN ou CANCELLED, porque não apaga dados.
 
 A `20260101000762-marketing-automation-action-retry.js` (DI-M9F-1) acrescenta o estado RETRY à lista de estados aceitos do resultado por ação das runs de automação (função `marketing.actions_result_valid`), para a ação SEND_MESSAGE com falha transitória esperar a nova tentativa em vez de ficar OK com a mensagem presa na fila.
 - Só troca a função (`CREATE OR REPLACE`), e a lista só cresce: toda linha existente continua válida, e a API antiga não grava RETRY.
-- Entra no passo 2, junto com as demais (número menor que as já aplicadas; o `db:migrate` aplica toda migration pendente).
+- Mesma regra da 757: passo 2 da seção "Ordem" num banco sem o esquema do Marco 9; passo 3 da seção "Deploy desta entrega" na homologação atual (`db:migrate` sem `--to`).
 - A `down` recusa se alguma run tiver ação em RETRY, porque não apaga nem reescreve dados.
 
 ### Migrations depois da 9964
