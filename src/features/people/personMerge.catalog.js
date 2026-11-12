@@ -2,7 +2,7 @@
 
 /**
  * Lista REVISADA de toda referência à pessoa que o merge trata (M3-04, DI-M3PE-5). Conferida no catálogo do banco em 11/11/2026: 39 colunas
- * com chave estrangeira para people.persons(id) e 12 sem chave estrangeira. O teste people.merge.referencias compara esta lista com o
+ * com chave estrangeira para people.persons(id) e 13 sem chave estrangeira (12 uuid e 1 lista JSON). O teste people.merge.referencias compara esta lista com o
  * catálogo e FALHA se aparecer FK nova (ou coluna `*person*_id` nova sem FK) que não esteja aqui.
  *
  * Políticas:
