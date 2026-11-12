@@ -40,4 +40,6 @@ async function hourlyProbes(env, { apiDown = 1, hours = 12 } = {}) {
   }
 }
 
-module.exports = { ...kit, ...env628, CODES, setup, seedSources, hourlyProbes, MODELS: env628.MODELS };
+// O kit vem por ÚLTIMO (como no m9d681Env): o m9d628Env espalha o biObrasJuridicoEnv, cujo `teardown` só limpa as empresas do seed. Com ele por cima, as duas
+// empresas novas do kit (cX e cY) ficavam no banco com o catálogo publicado e sem aceite, e a etapa 14 da esteira (m9d708.scripts) as via no arquivo seguinte.
+module.exports = { ...env628, ...kit, CODES, setup, seedSources, hourlyProbes, MODELS: env628.MODELS };

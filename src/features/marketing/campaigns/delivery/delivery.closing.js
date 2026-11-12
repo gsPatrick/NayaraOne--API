@@ -2,7 +2,7 @@
 
 const logger = require('../../../../utils/logger');
 const repo = require('./delivery.repository');
-const { planReconcile, readDeliveryPolicy } = require('./delivery.policy');
+const { planReconcile, readDeliveryPolicy } = require('../../sendRetry.policy');
 const { STATUS, CODES } = require('./delivery.constants');
 const { auditDelivery } = require('./delivery.audit');
 

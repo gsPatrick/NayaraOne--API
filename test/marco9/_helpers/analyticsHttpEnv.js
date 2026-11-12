@@ -33,6 +33,13 @@ async function setup() {
   const { createAnalyticsRouter } = require('../../../src/features/analytics');
   const router = createAnalyticsRouter({ authChain: [fakeAuth, tenantMiddleware] });
   const app = express();
+  // DI-M9F-4: tempo da OPERAÇÃO de cada pedido, medido no servidor (da chegada à resposta inteira entregue ao sistema), sem o cliente HTTP do teste
+  const serverMs = new Map();
+  app.use((req, res, next) => {
+    const started = process.hrtime.bigint();
+    res.on('finish', () => { const id = req.get('x-test-request'); if (id) serverMs.set(id, Number(process.hrtime.bigint() - started) / 1e6); });
+    next();
+  });
   app.use(correlationIdMiddleware);
   app.use(express.json());
   app.use('/v1', router);
@@ -41,13 +48,19 @@ async function setup() {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}/v1`;
 
+  let seq = 0;
   async function call(method, url, { perms = [], tenant = 'A', body } = {}) {
+    const id = String((seq += 1));
     const res = await fetch(`${baseUrl}${url}`, {
       method,
-      headers: { 'Content-Type': 'application/json', 'x-test-tenant': tenant, 'x-test-perms': perms.join(',') },
+      headers: { 'Content-Type': 'application/json', 'x-test-tenant': tenant, 'x-test-perms': perms.join(','), 'x-test-request': id },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    return { status: res.status, body: await res.json().catch(() => null) };
+    const parsed = await res.json().catch(() => null);
+    for (let i = 0; i < 100 && !serverMs.has(id); i += 1) await new Promise((r) => setImmediate(r)); // o 'finish' do servidor vem antes ou logo depois do fim da leitura
+    const ms = serverMs.get(id);
+    serverMs.delete(id);
+    return { status: res.status, body: parsed, serverMs: ms };
   }
   return { admin, tenantA, tenantB, tenants, server, router, call };
 }

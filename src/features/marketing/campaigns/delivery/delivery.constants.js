@@ -1,5 +1,7 @@
 'use strict';
 
+const { RETRY_CODES } = require('../../sendRetry.policy');
+
 /**
  * Estados da entrega por destinatário de um step de campanha (marketing.campaign_step_deliveries; migrations 754 e 757).
  * Fechados: SENT, BLOCKED, FAILED, CANCELLED. Abertos (voltam sozinhos em next_attempt_at): RETRY (falha transitória) e UNKNOWN (resultado incerto, reconciliar antes).
@@ -10,9 +12,7 @@ const ALL_STATUSES = Object.freeze(Object.values(STATUS));
 
 /** Motivos gravados pela própria correção. */
 const CODES = Object.freeze({
-  RETRIES_EXHAUSTED: 'MKT_DELIVERY_RETRIES_EXHAUSTED', // as tentativas de falha transitória acabaram (fila morta: só o reprocessamento do administrador reabre)
-  UNKNOWN_EXHAUSTED: 'MKT_DELIVERY_UNKNOWN_EXHAUSTED', // as consultas do resultado incerto acabaram sem resposta conclusiva (fila morta)
-  RECONCILED_NOT_FOUND: 'MKT_DELIVERY_RECONCILED_NOT_FOUND', // o provedor confirmou que não recebeu: pode reenviar com a mesma chave
+  ...RETRY_CODES, // tentativas ou consultas esgotadas (fila morta: só o reprocessamento do administrador reabre); o provedor confirmou que não recebeu (reenvia com a mesma chave)
   CAMPAIGN_ENDED: 'CAMPAIGN_ENDED',
   CANSEND_ERROR: 'CANSEND_ERROR',
 });

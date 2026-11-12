@@ -13,6 +13,7 @@ const {
 } = require('./helpers/marketingExecucao');
 const { withRollbackTenantTransaction } = require('./testHelpers');
 const { recomporMarketing } = require('./helpers/marketingRecompoe');
+const { guardar, devolver } = require('./helpers/marketingGuarda');
 
 // Migrations posteriores que alteram as tabelas da parte 2 (D414 definição da automação; D431 atribuição e links).
 const RECIBOS = '20260101000772-marketing-automation-action-receipts.js'; // M9-D414: o recibo das ações aponta para automation_runs e cai antes da parte 2
@@ -82,6 +83,7 @@ test('migration_da_parte_2_e_idempotente_e_reversivel', async (t) => {
   const migration = require(path.resolve(__dirname, '../migrations/20260101000751-marketing-schema-parte-2.js'));
   const qi = admin.getQueryInterface();
   const contagem = async () => (await admin.query("SELECT count(*)::int AS n FROM information_schema.tables WHERE table_schema = 'marketing' AND table_name IN (:t)", { replacements: { t: TABLES } }))[0][0].n;
+  const guarda = await guardar(admin); // as linhas que OUTROS arquivos commitaram no schema marketing saem antes do ciclo e voltam no fim (helpers/marketingGuarda)
   try {
     assert.equal(await contagem(), 9);
     await migration.up(qi);
@@ -100,6 +102,7 @@ test('migration_da_parte_2_e_idempotente_e_reversivel', async (t) => {
     // O down derruba as tabelas com tudo que as migrations posteriores acrescentaram (colunas, checks, gatilhos): recompõe na ordem
     // MESMO se uma asserção falhar, para o teste ser reexecutável no mesmo banco sem deixar o schema pela metade.
     await recomporMarketing(admin); // partes 1 e 2, TODAS as migrations posteriores de marketing e o GRANT do runtime (helpers/marketingRecompoe)
+    await devolver(admin, guarda);
     await admin.close();
   }
 });

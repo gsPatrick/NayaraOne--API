@@ -77,6 +77,17 @@ async function readRow(env, tenant, account) {
   return row || null;
 }
 
+/**
+ * O job agendado de verdade (runAnalyticsReadModelRefreshJob) recalcula TODOS os read models registrados, em todas as empresas, com o relógio do teste, e grava
+ * nas tabelas reais (rm_inventory_health, rm_legal_deadlines...) linhas com aquele instante, que os testes seguintes no mesmo banco leem (M9-D618/D619). O teste
+ * do job só confere o read model dele: enquanto roda, os demais saem do registro e voltam depois, na mesma ordem. Devolve a função que os devolve.
+ */
+function onlyOwnModelInJob(env) {
+  const others = readModels.listReadModels().filter((def) => def.name !== env.model);
+  for (const def of others) readModels.unregisterReadModel(def.name);
+  return () => { for (const def of others) if (!readModels.getReadModel(def.name)) readModels.registerReadModel(def); };
+}
+
 async function appliedCount(env, tenant) {
   const [[r]] = await env.admin.query('SELECT count(*)::int AS n FROM analytics.rm_applied_events WHERE read_model = :m AND company_id = :c', { replacements: { m: env.model, c: tenant.companyId } });
   return r.n;
@@ -97,4 +108,4 @@ async function teardown(env) {
   await sequelize.close();
 }
 
-module.exports = { setup, teardown, addSource, makeEvent, readRow, appliedCount, inTx: sup.inTx, sfx: sup.sfx, sequelize };
+module.exports = { setup, teardown, onlyOwnModelInJob, addSource, makeEvent, readRow, appliedCount, inTx: sup.inTx, sfx: sup.sfx, sequelize };

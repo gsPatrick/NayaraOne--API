@@ -13,8 +13,9 @@ const { upsertSetting, SETTINGS_SCHEMA } = require('../../../src/features/settin
 const { inTx, addSource, makeEvent, readRow } = env607;
 let env;
 
-before(async () => { env = await env607.setup(); });
-after(() => env607.teardown(env));
+let restoreModels = () => {};
+before(async () => { env = await env607.setup(); restoreModels = env607.onlyOwnModelInJob(env); });
+after(async () => { restoreModels(); await env607.teardown(env); }); // o job só grava no read model deste teste (os de verdade ficam intactos para os arquivos seguintes)
 
 const inA = (fn, opts) => inTx(env.tenantA, opts || {}, fn);
 const account = () => `conta-${env607.sfx()}`;

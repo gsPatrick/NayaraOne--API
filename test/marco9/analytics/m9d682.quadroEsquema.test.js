@@ -4,6 +4,7 @@
 // analytics (BI-012), responde dentro da meta p95 (1.400 ms), está publicado como versão 2 da definição global com a permissão técnica e a migration do conteúdo é idempotente e reversível.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const { robustP95 } = require('../_helpers/medicaoRobusta');
 const env682 = require('../_helpers/painelTechEnv');
 const q = require('../_helpers/m9d698Queries');
 const migration = require('../../../migrations/20260101009892-publish-analytics-tech-dashboard-content');
@@ -82,16 +83,13 @@ test('m9d682 painel toca só schema analytics', async () => {
 test('m9d682 p95 dentro da meta da definição', async () => {
   const target = (await globalRows()).find((r) => r.status === 'PUBLISHED').p95_target_ms;
   assert.equal(target, 1400, 'meta do livro');
-  const times = [];
-  for (let i = 0; i < 40; i += 1) {
-    const t0 = process.hrtime.bigint();
+  // DI-M9F-4: tempo da operação medido no servidor (sem o cliente HTTP), 5 aberturas de aquecimento e a mediana do p95 de 3 séries de 20; a meta é a da definição
+  const { p95, series } = await robustP95(async () => {
     const res = await openPanel(env, 'tech', { perms: [...TECH_USER, 'analytics:drilldown'] });
-    times.push(Number(process.hrtime.bigint() - t0) / 1e6);
     assert.equal(res.status, 200);
-  }
-  times.sort((a, b) => a - b);
-  const p95 = times[Math.ceil(times.length * 0.95) - 1];
-  assert.ok(p95 <= target, `p95 ${p95.toFixed(0)} ms acima da meta de ${target} ms`);
+    return res.serverMs;
+  });
+  assert.ok(p95 <= target, `p95 ${p95.toFixed(0)} ms acima da meta de ${target} ms (p95 das séries: ${series.map((x) => x.toFixed(0)).join(', ')} ms)`);
 });
 
 test('m9d682 versão 2 vigente do painel, com a permissão técnica e os widgets do livro', async () => {
