@@ -14,6 +14,7 @@ const opportunityTimelineService = require('./opportunityTimeline.service');
 const cartsService = require('./carts.service');
 const { sequelize } = require('../../models');
 const messaging = require('./messaging');
+const { assertRecordBodyLimit } = require('./messaging/messaging.textLimits');
 
 // --- Opportunities ---
 
@@ -153,9 +154,11 @@ const createMessage = catchAsync(async (req, res) => {
   // DI-M9R-9: o autor também não vem do corpo; quem registra a interação é quem faz o pedido (o livro, Interaction API, não tem campo de autor).
   const { connectionId, dispatchId, deliveryStatus, authorUserId, ...corpo } = req.body || {};
   const payload = { ...corpo, authorUserId: req.auth.userId, groupId: req.auth.groupId, companyId: req.auth.companyId };
-  const message = await req.withTenantTransaction((transaction) =>
-    messagesService.createMessage(payload, req.auth.userId, transaction)
-  );
+  // DI-M9R-16: o texto do registro tem limite por parâmetro da empresa (integration.messaging.record_body_max_chars).
+  const message = await req.withTenantTransaction(async (transaction) => {
+    await assertRecordBodyLimit(req.auth, payload.body, transaction);
+    return messagesService.createMessage(payload, req.auth.userId, transaction);
+  });
   return success(res, { statusCode: 201, data: message });
 });
 

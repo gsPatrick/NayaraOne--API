@@ -44,6 +44,10 @@ const WHATSAPP_SETTINGS_SCHEMA = Object.freeze({
   },
   // O transacional também exige consentimento explícito (OPT_IN)? Padrão não: o transacional sai a quem não revogou, como no CRM antes do Marco 9. Marketing sempre exige.
   'integration.whatsapp.transactional_requires_opt_in': { type: 'boolean' },
+  // DI-M9R-16: tamanho máximo do texto livre do envio, em caracteres; o teto é o do canal (o administrador só pode apertar).
+  'integration.whatsapp.max_text_chars': { type: 'integer', min: 1, max: 4096 },
+  'integration.whatsapp.max_caption_chars': { type: 'integer', min: 1, max: 1024 },
+  'integration.whatsapp.max_template_var_chars': { type: 'integer', min: 1, max: 32768 },
 });
 
 module.exports = { WHATSAPP_SETTINGS_SCHEMA };
