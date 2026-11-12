@@ -248,7 +248,8 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
   const routeLines = fs.readFileSync(path.join(legalDir, 'shared', 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));
-  assert.equal(routeLines.length, 6);
+  // Fechamento M5 (§11): + POST /legal/nay/inspections/compare (a NAY compara entrada x saída; a lógica fica em features/ai).
+  assert.equal(routeLines.length, 7);
   for (const l of routeLines) assert.match(l, nayRouteRe);
 
   // Toda criação/decisão jurídica crítica (processo, dossiê, mudança de status de contrato,

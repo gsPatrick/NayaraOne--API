@@ -220,7 +220,8 @@ async function listEvidencePackagesAudited(legalCaseId, actorUserId, transaction
       action: 'legal.evidence_package.list',
       entityType: 'LegalCase',
       entityId: legalCase.id,
-      afterJson: { pacotes: packages.map((p) => ({ id: p.id, packageHash: p.packageHash })) },
+      beforeJson: { pacotes: packages.map((p) => ({ id: p.id, packageHash: p.packageHash })), acessoRegistrado: false },
+      afterJson: { pacotes: packages.map((p) => ({ id: p.id, packageHash: p.packageHash })), acessoRegistrado: true },
       reason: `Lista de dossiês do processo ${legalCase.caseNumber || legalCase.id} consultada (${packages.length} pacote(s)).`,
     },
     transaction

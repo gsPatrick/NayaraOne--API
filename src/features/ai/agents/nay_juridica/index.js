@@ -33,4 +33,7 @@ function registerNayJuridica() {
   });
 }
 
-module.exports = { ...policy, JURIDICA_SETTING_DEFAULTS, JURIDICA_SETTINGS_SCHEMA, TOOL_DEFINITIONS, legalNay, registerNayJuridica, compareInstruction };
+// Fechamento M5 (§11): comparação de vistorias pela NAY (rota do jurídico /legal/nay/inspections/compare). Carga tardia: a função usa o orquestrador.
+const compareInspectionsWithNay = (...args) => require('./juridica.compareInspections').compareInspectionsWithNay(...args);
+
+module.exports = { ...policy, JURIDICA_SETTING_DEFAULTS, JURIDICA_SETTINGS_SCHEMA, TOOL_DEFINITIONS, legalNay, registerNayJuridica, compareInstruction, compareInspectionsWithNay };

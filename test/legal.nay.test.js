@@ -72,7 +72,7 @@ async function scenario(t) {
   await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, startsAt: new Date(Date.now() - DAY), endsAt: new Date(Date.now() + 365 * DAY) }, tenant.userId, t);
   const legalCase = await legalCasesService.createLegalCase({ ...ctx(), contractId: contract.id, caseType: 'LITIGATION', caseNumber: `NAY-JUR-${uniqueSuffix()}`, summary: 'Despejo por falta de pagamento' }, tenant.userId, t);
   const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt: new Date(Date.now() + 10 * DAY), sourceDocument: 'Mandado de citação', sourceFileId: origem(tenant), responsibleUserId: tenant.userId }, tenant.userId, t);
-  const pkg = await evidencePackagesService.createEvidencePackage(legalCase.id, [{ type: 'FILE', description: 'Contrato assinado', referenceId: v2.id, hash: v2.contentHash }], tenant.userId, t);
+  const pkg = await evidencePackagesService.createEvidencePackage(legalCase.id, [{ type: 'FILE', description: 'Contrato assinado', fileId: v2.contentFileId }] /* Fechamento M5 (M5-A0207): o hash vem do arquivo pelo servidor, não do chamador */, tenant.userId, t);
   return { contract, locatario, fiador, requirements, v1, v2, legalCase, deadline, pkg };
 }
 

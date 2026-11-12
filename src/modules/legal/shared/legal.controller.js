@@ -764,7 +764,11 @@ const nayDeadlineSuggestions = catchAsync(async (req, res) => {
   return success(res, { data });
 });
 
+// Fechamento M5 (§11): comparação entrada x saída pela NAY Jurídica (lógica em features/ai/agents/nay_juridica).
+const { compareInspectionsNay: nayInspectionCompare } = require('../inspections/inspectionNay.controller');
+
 module.exports = {
+  nayInspectionCompare,
   createInspectionRevision, recordManualSignature, switchSignatureProvider,
   nayContractSummary, nayContractCompare, nayCaseSummary, nayCaseDossier, nayClauseSuggestions, nayDeadlineSuggestions,
   createContract, listContracts, getContract, transitionContract,

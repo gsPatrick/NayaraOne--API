@@ -19,13 +19,17 @@ const { upsertSetting } = require('../src/features/settings/settings.service');
 const recommendations = require('../src/features/ai/recommendations');
 const propertiesService = require('../src/features/properties/properties.service');
 const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
-const { compareInspectionsWithNay } = require('../src/modules/legal/inspections/inspectionNay.service');
+const { compareInspectionsWithNay } = require('../src/features/ai/agents/nay_juridica');
 const { InspectionItem, CollectionCase, FinancialEntry, AiRecommendation } = require('../src/models');
 
 let tenantA;
 before(async () => { ({ tenantA } = await prepararTenants()); });
 after(async () => {
-  await sequelize.query("UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code LIKE 'ai-%' AND status = 'ACTIVE'", { replacements: { c: tenantA.companyId } }).catch(() => {});
+  // A connection de IA ativa foi commitada (conexaoAtiva): desligada no contexto da empresa (RLS), para não vazar para os testes seguintes.
+  await sequelize.transaction(async (t) => {
+    await sequelize.query("SELECT set_config('app.group_id', :g, true), set_config('app.company_id', :c, true)", { replacements: { g: tenantA.groupId, c: tenantA.companyId }, transaction: t });
+    await sequelize.query("UPDATE integration.connections SET status = 'DISABLED' WHERE company_id = :c AND provider_code LIKE 'ai-%' AND status IN ('ACTIVE', 'PAUSED')", { replacements: { c: tenantA.companyId }, transaction: t });
+  });
   await sequelize.close();
 });
 

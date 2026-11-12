@@ -1,13 +1,16 @@
 'use strict';
 
-const { AiOrchestrator, isAiEnabled, isAgentEnabled } = require('../../../features/ai');
-const { runAiFunction, runDeterministic } = require('../../../features/ai/deterministic');
-const { compareInstruction } = require('../../../features/ai/agents/nay_juridica');
-const { assertUuid } = require('../../../utils/inputGuards');
-const { AiRecommendation } = require('../../../models');
-const { compareInspections } = require('./inspection.service');
+const { AiOrchestrator } = require('../../orchestrator');
+const { isAiEnabled, isAgentEnabled } = require('../../aiGate.middleware');
+const { runAiFunction, runDeterministic } = require('../../deterministic');
+const { compareInstruction } = require('./juridica.hooks');
+const { assertUuid } = require('../../../../utils/inputGuards');
+const { AiRecommendation } = require('../../../../models');
+const { compareInspections } = require('../../../../modules/legal/inspections/inspection.service');
 
 /**
+ * Fica na NAY Jurídica (features/ai), não no módulo jurídico: o jurídico não tem caminho de execução de IA (JUR-008/JUR-012); a
+ * rota /legal/nay/inspections/compare chama esta função pelo barril do agente.
  * Livro §11 "NAY pode comparar entrada x saída e sugerir diferenças; humano valida responsabilidade/cobrança" (M5-A0092), pela
  * infraestrutura de IA do Marco 9:
  *  - IA ligada e NAY Jurídica habilitada: um run do orquestrador; o servidor chama a tool legal.compareInspections (gancho do agente),

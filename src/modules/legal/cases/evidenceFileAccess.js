@@ -29,7 +29,10 @@ async function recordEvidenceFileAccess({ file, ownership, auth, kind, ip }, tra
       action: 'legal.evidence.file_access',
       entityType: 'File',
       entityId: file.id,
+      // O acesso não muda o arquivo: antes = o arquivo como estava (hash e classe); depois = o mesmo arquivo com o acesso registrado.
+      beforeJson: { arquivo: file.id, sha256: file.checksumSha256 || null, classificacao: classOf(file.classification) || null, acessoRegistrado: false },
       afterJson: {
+        acessoRegistrado: true,
         acesso: kind,
         classificacao: classOf(file.classification) || null,
         sha256: file.checksumSha256 || null,

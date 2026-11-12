@@ -2,7 +2,7 @@
 
 const catchAsync = require('../../../utils/catchAsync');
 const { success } = require('../../../utils/httpResponse');
-const { compareInspectionsWithNay } = require('./inspectionNay.service');
+const { compareInspectionsWithNay } = require('../../../features/ai/agents/nay_juridica');
 
 // POST /legal/nay/inspections/compare — a NAY compara a vistoria de entrada com a de saída e sugere as diferenças (livro §11).
 const compareInspectionsNay = catchAsync(async (req, res) => {
