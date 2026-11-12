@@ -6,7 +6,6 @@
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
-const crypto = require('node:crypto');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { randomCpf } = require('./helpers/pessoasVinculo');
@@ -91,22 +90,20 @@ test('M3-04 merge remapeia feedback_cases, proposals, conversas, garantias e o r
 });
 
 test('M3-04 fiador adicional (lista JSON da garantia) segue a canônica sem repetir', async () => {
+  const { Contract, Guarantee } = require('../src/models');
   await withRollbackTenantTransaction(tenant, async (t) => {
     const canonica = await pessoa(t, 'Canônica Fiador');
     const absorvida = await pessoa(t, 'Absorvida Fiador');
-    const outro = crypto.randomUUID();
-    const rows = await q(t, `SELECT id FROM legal.guarantees WHERE company_id = :c LIMIT 1`, { c: tenant.companyId });
-    if (!rows.length) {
-      // Sem garantia no banco: o remapeamento JSON é provado direto na expressão usada pelo merge.
-      const [r] = await q(t, `SELECT (SELECT jsonb_agg(DISTINCT CASE WHEN e = to_jsonb(CAST(:a AS text)) THEN to_jsonb(CAST(:c2 AS text)) ELSE e END)
-        FROM jsonb_array_elements(CAST(:lista AS jsonb)) e) AS v`, { a: absorvida.id, c2: canonica.id, lista: JSON.stringify([absorvida.id, outro, canonica.id]) });
-      assert.deepEqual([...r.v].sort(), [canonica.id, outro].sort());
-      return;
-    }
-    await q(t, 'UPDATE legal.guarantees SET additional_guarantor_person_ids = CAST(:l AS jsonb) WHERE id = :id', { id: rows[0].id, l: JSON.stringify([absorvida.id, outro]) });
-    await mergePersons(canonica.id, absorvida.id, tenant.userId, t);
-    const [g] = await q(t, 'SELECT additional_guarantor_person_ids AS l FROM legal.guarantees WHERE id = :id', { id: rows[0].id });
-    assert.deepEqual([...g.l].sort(), [canonica.id, outro].sort());
+    const outro = await pessoa(t, 'Outro Fiador');
+    const base = { groupId: tenant.groupId, companyId: tenant.companyId, createdBy: tenant.userId, updatedBy: tenant.userId };
+    // Contrato em rascunho (o merge recusa contrato ATIVO em comum, não é o caso aqui) com garantia de fiador.
+    const contrato = await Contract.create({ ...base, contractType: 'LEASE', contractNumber: `M3PE-${uniqueSuffix()}`, status: 'DRAFT' }, { transaction: t });
+    const g = await Guarantee.create({ groupId: tenant.groupId, companyId: tenant.companyId, contractId: contrato.id, guaranteeType: 'GUARANTOR', status: 'PENDING', value: 1 }, { transaction: t });
+    await q(t, 'UPDATE legal.guarantees SET additional_guarantor_person_ids = CAST(:l AS jsonb) WHERE id = :id', { id: g.id, l: JSON.stringify([absorvida.id, outro.id, canonica.id]) });
+    const r = await mergePersons(canonica.id, absorvida.id, tenant.userId, t);
+    assert.equal(r.remappedReferences['legal.guarantees.additional_guarantor_person_ids'], 1, JSON.stringify(r.remappedReferences));
+    const [linha] = await q(t, 'SELECT additional_guarantor_person_ids AS l FROM legal.guarantees WHERE id = :id', { id: g.id });
+    assert.deepEqual([...linha.l].sort(), [canonica.id, outro.id].sort());
   });
 });
 
