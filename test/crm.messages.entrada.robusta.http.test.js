@@ -152,15 +152,17 @@ test('3. caractere nulo ou metade solta de par sub-rogado: 400 INVALID_TEXT_CHAR
     ['/messages', { channel: 'WHATSAPP', direction: 'INBOUND', authorType: 'CLIENT', body: SUR }, 'body'],
     ['/messages', { channel: 'WHATSAPP', direction: 'INBOUND', authorType: 'CLIENT', body: 'ok', externalMessageId: NUL }, 'externalMessageId'],
   ];
+  const fora = [];
   for (const [caminho, corpo, campo] of casos) {
     const r = await pedir('POST', caminho, { corpo: JSON.stringify(corpo) });
-    assert.deepEqual([r.status, codigo(r), r.json.error.details.fields], [400, 'INVALID_TEXT_CHARACTER', [campo]], `${caminho} ${campo}`);
-    assert.match(r.json.error.message, new RegExp(`"${campo}"`));
+    const campos = r.json && r.json.error && r.json.error.details ? r.json.error.details.fields : null;
+    if (r.status !== 400 || codigo(r) !== 'INVALID_TEXT_CHARACTER' || JSON.stringify(campos) !== JSON.stringify([campo]) || !new RegExp(`"${campo}"`).test(r.json.error.message)) fora.push(`POST ${caminho} ${campo}: ${r.status} ${codigo(r)}`);
   }
   for (const q of ['/messages?personId=%00', `/people?search=a%00b`]) {
     const r = await pedir('GET', q);
-    assert.deepEqual([r.status, codigo(r)], [400, 'INVALID_TEXT_CHARACTER'], q);
+    if (r.status !== 400 || codigo(r) !== 'INVALID_TEXT_CHARACTER') fora.push(`GET ${q}: ${r.status} ${codigo(r)}`);
   }
+  assert.deepEqual(fora, [], 'esperado 400 INVALID_TEXT_CHARACTER com o campo');
   assert.equal(await contarFila(), filaAntes, 'nenhum envio entrou na fila');
   assert.equal(await contarMensagens(), msgAntes, 'nenhuma mensagem foi gravada');
   // controle: emoji (par completo) e acento passam e o texto chega inteiro ao envio
@@ -180,13 +182,15 @@ test('4. texto livre acima do limite do canal: 400 MESSAGE_VALIDATION com o camp
     [{ kind: 'media', mediaRef: foto.id, personId: pessoa.id, to: pessoa.phone, caption: 'c'.repeat(1025) }, 'caption', 1024],
     [{ kind: 'template', templateName: UMA_VAR, templateVars: ['v'.repeat(1025)], personId: pessoa.id, to: pessoa.phone }, 'templateVars', 1024],
   ];
-  for (const [corpo, campo, max] of longo) {
-    const r = await pedir('POST', '/messages/send', { corpo: JSON.stringify(corpo) });
-    assert.deepEqual([r.status, codigo(r), r.json.error.details], [400, 'MESSAGE_VALIDATION', { fields: [campo], maxChars: max }], campo);
-    assert.match(r.json.error.message, new RegExp(`"${campo}" aceita no máximo ${max} caracteres`));
-  }
-  const registro = await pedir('POST', '/messages', { corpo: JSON.stringify({ channel: 'EMAIL', direction: 'INBOUND', authorType: 'CLIENT', body: 'b'.repeat(65537) }) });
-  assert.deepEqual([registro.status, codigo(registro), registro.json.error.details.fields], [400, 'MESSAGE_VALIDATION', ['body']]);
+  const fora = [];
+  const confere = (rotulo, r, campo, max) => {
+    const det = r.json && r.json.error ? r.json.error.details : null;
+    if (r.status !== 400 || codigo(r) !== 'MESSAGE_VALIDATION' || JSON.stringify(det) !== JSON.stringify({ fields: [campo], maxChars: max })
+      || !new RegExp(`"${campo}" aceita no máximo ${max} caracteres`).test(r.json.error.message)) fora.push(`${rotulo}: ${r.status} ${codigo(r)}`);
+  };
+  for (const [corpo, campo, max] of longo) confere(`POST /messages/send ${campo} acima de ${max}`, await pedir('POST', '/messages/send', { corpo: JSON.stringify(corpo) }), campo, max);
+  confere('POST /messages body acima de 65536', await pedir('POST', '/messages', { corpo: JSON.stringify({ channel: 'EMAIL', direction: 'INBOUND', authorType: 'CLIENT', body: 'b'.repeat(65537) }) }), 'body', 65536);
+  assert.deepEqual(fora, [], 'esperado 400 MESSAGE_VALIDATION com o campo e o limite');
   // no limite exato passa: 4096 caracteres sem espaço (emoji conta 1) e 65536 no registro
   assert.equal((await pedir('POST', '/messages/send', { corpo: JSON.stringify({ ...base, text: 'x'.repeat(4096) }) })).status, 202);
   assert.equal((await pedir('POST', '/messages/send', { corpo: JSON.stringify({ ...base, text: '😀'.repeat(4096) }) })).status, 202);
@@ -231,10 +235,13 @@ test('5. consulta nas rotas sem filtro: 400 MESSAGE_VALIDATION com o nome do par
     ['POST', '/messages?direction=INBOUND', JSON.stringify({ channel: 'WHATSAPP', direction: 'INBOUND', authorType: 'CLIENT', body: 'q' }), 'direction'],
     ['POST', '/messages/send?kind=text', JSON.stringify({ kind: 'text', text: 'q', personId: pessoa.id, to: pessoa.phone }), 'kind'],
   ];
+  const fora = [];
   for (const [m, caminho, corpo, campo] of casos) {
     const r = await pedir(m, caminho, { corpo });
-    assert.deepEqual([r.status, codigo(r), r.json.error.details.fields], [400, 'MESSAGE_VALIDATION', [campo]], caminho);
+    const campos = r.json && r.json.error && r.json.error.details ? r.json.error.details.fields : null;
+    if (r.status !== 400 || codigo(r) !== 'MESSAGE_VALIDATION' || JSON.stringify(campos) !== JSON.stringify([campo])) fora.push(`${m} ${caminho}: ${r.status} ${codigo(r)}`);
   }
+  assert.deepEqual(fora, [], 'esperado 400 MESSAGE_VALIDATION com o nome do parâmetro');
   assert.equal((await pedir('GET', `/messages/${id}`)).status, 200, 'sem consulta continua 200');
   assert.equal((await pedir('GET', `/messages?personId=${pessoa.id}`)).status, 200, 'o filtro do GET /messages continua');
 });
