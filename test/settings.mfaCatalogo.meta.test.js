@@ -53,5 +53,5 @@ test('mfa_catalogo_meta: toda chave do catálogo com MFA que existe no dicionár
   const sobrando = Object.keys(SETTINGS_SCHEMA).filter((key) => SETTINGS_SCHEMA[key].requiresMfa === true && !esperadas.has(key));
   assert.deepEqual(sobrando, [], `requiresMfa sem pedido do catálogo: ${sobrando.join(', ')}`);
   for (const [catalogo, codigo] of Object.entries(EQUIVALENTES)) assert.ok(comMfa.has(catalogo) && SETTINGS_SCHEMA[codigo], `equivalência ${catalogo} -> ${codigo} vigente`);
-  assert.equal(esperadas.size, 20);
+  assert.equal(esperadas.size, 21); // 20 do catálogo até a DEC-007 + exportacao.crm.exige_mfa (DEC-049, M3CB)
 });
