@@ -1,7 +1,6 @@
 'use strict';
 
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
-const { BLOCK_REASONS } = require('../automations/policy.reasons');
 
 /** Motivos que só o disparo da campanha produz (fora do dicionário do canSend). */
 const CAMPAIGN_REASONS = Object.freeze({
@@ -11,7 +10,9 @@ const CAMPAIGN_REASONS = Object.freeze({
   NOT_ALLOWED: { code: 'MKT_SEND_NOT_ALLOWED', message: 'O envio não foi permitido.' },
 });
 
-const infoOf = (reason) => BLOCK_REASONS[reason] || CAMPAIGN_REASONS[reason] || CAMPAIGN_REASONS.NOT_ALLOWED;
+// Motivos do canSend pela interface pública da área de automações (require tardio: evita ciclo de carga entre as áreas, como em campaigns.time.js).
+const blockReasons = () => require('../automations').policy.BLOCK_REASONS;
+const infoOf = (reason) => blockReasons()[reason] || CAMPAIGN_REASONS[reason] || CAMPAIGN_REASONS.NOT_ALLOWED;
 
 /**
  * Destinatário da campanha barrado pelo canSend (opt-out, supressão, sem consentimento, sem endereço, limite, política do canal):
