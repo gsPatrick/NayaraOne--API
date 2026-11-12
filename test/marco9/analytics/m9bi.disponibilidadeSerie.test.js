@@ -2,7 +2,8 @@
 
 // DI-BI-1 — tec.availability: no dia em que a série de uma sonda começa, as esperadas contam a partir da primeira medição (antes dela a sonda não existia, então não há
 // "sonda ausente"). Caso real da homologação: as sondas começaram às 13:38 de 03/11 e o dia inteiro contava como ausente (818 de 1.440 por sonda), o que deixava a
-// disponibilidade "Dado incompleto" o mês todo (2.263 de 12.680 ausentes = 17,85%, acima dos 5%). Perto da borda da retenção o dia volta a contar inteiro.
+// disponibilidade "Dado incompleto" (7,29% de ausentes em 10/11, acima dos 5%) até 14/11 por volta das 11:09 de SP, se nenhuma sonda falhasse (evidência 70 do relato
+// m9-bi-tecnologia.md). Perto da borda da retenção o dia volta a contar inteiro.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const kit = require('../_helpers/m9d680Env');
