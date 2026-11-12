@@ -4,7 +4,7 @@ const { CrmConversation, FileQuarantine } = require('../../models');
 const AppError = require('../../utils/AppError');
 
 /**
- * ISO-R2 (verificação independente de 12/11/2026, rodada 3; DI-M9R-6): a conversa e a mídia em quarentena que a mensagem cita precisam ser da
+ * ISO-R2 (verificação independente de 12/11/2026, rodada 3; DI-M9R-7): a conversa e a mídia em quarentena que a mensagem cita precisam ser da
  * MESMA empresa da mensagem. Antes, o `conversationId` vinha do corpo e só a FK simples para crm.conversations(id) o conferia; a checagem de FK
  * não passa pelo RLS, então a empresa B gravava mensagem apontando para a conversa da empresa A do mesmo grupo (201) e, com id inexistente,
  * recebia 500 da FK. O `mediaQuarantineId` não tinha FK nenhuma. Fora do escopo (de outra empresa ou inexistente) é 404, antes de gravar:

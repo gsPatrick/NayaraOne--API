@@ -5,7 +5,7 @@
 // a empresa B chamando POST /messages com o conversationId da conversa da empresa A recebia 201 e a mensagem de B ficava gravada
 // apontando para a conversa de A (a FK simples conversation_id -> crm.conversations(id) não passa pelo RLS); com um conversationId
 // inexistente, 500 INTERNAL_ERROR (messages_conversation_id_fkey). O mediaQuarantineId não tinha conferência nenhuma.
-// Regra (DI-M9R-6): conversa ou mídia fora da empresa de quem chama (de outra empresa ou inexistente) dá 404 antes de gravar:
+// Regra (DI-M9R-7): conversa ou mídia fora da empresa de quem chama (de outra empresa ou inexistente) dá 404 antes de gravar:
 // CONVERSATION_NOT_FOUND e INTEGRATION_MESSAGING_MEDIA_NOT_FOUND. Vale para POST /messages e para POST /messages/send (inclusive com
 // a conexão de mensageria ativa em B, quando o envio chegaria a gravar). A própria empresa continua usando a sua conversa e a sua mídia.
 //

@@ -1,6 +1,6 @@
 'use strict';
 
-// ISO-R2 (verificação independente do Marco 9, rodada 3, 12/11/2026; DI-M9R-6) — migration 20260101009971: a mensagem do CRM só aponta para
+// ISO-R2 (verificação independente do Marco 9, rodada 3, 12/11/2026; DI-M9R-7) — migration 20260101009971: a mensagem do CRM só aponta para
 // conversa e mídia em quarentena da MESMA empresa (FKs compostas com company_id, como a 9966 nos filhos de Pessoas).
 // O que se prova aqui, no banco descartável, com o dono das tabelas (DDL):
 // - com todas as migrations aplicadas, as duas FKs compostas e os dois UNIQUE de apoio existem, validados;

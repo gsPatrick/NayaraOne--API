@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * ISO-R2 (verificação independente do Marco 9, rodada 3, 12/11/2026; DI-M9R-6): a mensagem do CRM só aponta para conversa e para mídia em
+ * ISO-R2 (verificação independente do Marco 9, rodada 3, 12/11/2026; DI-M9R-7): a mensagem do CRM só aponta para conversa e para mídia em
  * quarentena da MESMA empresa.
  *
  * Antes: crm.messages.conversation_id tinha FK simples para crm.conversations(id) (migration 679) e media_quarantine_id não tinha FK nenhuma.
