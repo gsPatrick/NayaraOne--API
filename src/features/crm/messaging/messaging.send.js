@@ -1,6 +1,6 @@
 'use strict';
 
-const { Person } = require('../../../models');
+const { Person, Opportunity } = require('../../../models');
 const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const dispatchService = require('../../integrations/dispatch/enqueue/dispatch.service');
@@ -18,6 +18,15 @@ const { ensureConversation, assertSessionWindow } = require('./whatsapp.conversa
 const OPERATIONS = Object.freeze({ text: 'sendText', template: 'sendTemplate', media: 'sendMedia' });
 
 const invalid = (message) => AppError.badRequest(message, 'MESSAGE_VALIDATION');
+
+/**
+ * Pessoa e oportunidade do pedido precisam existir no escopo de quem chama (RLS da empresa da sessão). Fora dele: 404 com o código das outras rotas (PERSON_NOT_FOUND,
+ * OPPORTUNITY_NOT_FOUND), antes de qualquer outra regra: a pessoa de outra empresa nunca é tratada como "sem consentimento" (403) nem ganha conversa.
+ */
+async function assertRefsInScope(input, transaction) {
+  if (input.personId && !(await Person.findByPk(input.personId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
+  if (input.opportunityId && !(await Opportunity.findByPk(input.opportunityId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
+}
 
 /** Corpo mínimo por tipo de envio (os campos que o port exige) e o texto que fica no histórico do CRM. */
 function checkInput(input) {
@@ -55,6 +64,7 @@ function buildPayload(input, operation, degraded, recipientName, conversationId,
 async function sendMessage(ctx, input, actorUserId, transaction, opts = {}) {
   const pedido = input || {};
   const operacaoPedida = checkInput(pedido);
+  await assertRefsInScope(pedido, transaction);
   const params = await readMessagingParams(ctx, transaction);
   const wa = await readWhatsappParams(ctx, transaction);
   const to = assertE164(pedido.to, params.countryCode);

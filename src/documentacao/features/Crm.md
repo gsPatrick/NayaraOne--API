@@ -155,4 +155,5 @@ mensagem já existente em vez de duplicar.
 - `422 VISIT_SCHEDULED_IN_THE_PAST` — visita prospectiva agendada para o passado.
 - `400 OPPORTUNITY_TASK_VALIDATION` / `422 OPPORTUNITY_TASK_ASSIGNEE_NOT_ACTIVE` — tarefas de oportunidade.
 - `404 OPPORTUNITY_NOT_FOUND` / `VISIT_NOT_FOUND` / `MESSAGE_NOT_FOUND`.
+  - Mensagem fora do escopo da empresa da sessão (outra empresa ou id inexistente) é sempre `404 MESSAGE_NOT_FOUND`, também em `POST /messages/:id/send-alternate`; o `409 INTEGRATION_MESSAGING_ALTERNATE_NOT_APPLICABLE` é só para a mensagem da própria empresa que não está na fila do WhatsApp. Em `POST /messages/send`, pessoa ou oportunidade fora do escopo dá `404 PERSON_NOT_FOUND` / `OPPORTUNITY_NOT_FOUND` antes de qualquer outra regra (nunca "sem consentimento").
 - `404 PERSON_NOT_FOUND` / `PROPERTY_NOT_FOUND` — ao referenciar IDs inexistentes.
