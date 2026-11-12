@@ -8,7 +8,8 @@
 //  4. texto maior que a coluna: 400 com o campo, nunca o valor (DI-M9R-20, DI-M9R-21);
 //  5. o mecanismo geral fora das rotas validadas: erro de dado do banco (classes 22 e 23) e erro de tipo com prova no pedido viram 400 (DI-M9R-20/21);
 //  6. o tamanho dos textos nos esquemas da porta é o tamanho da coluna no banco (o limite vem do modelo e o modelo não pode divergir do banco);
-//  7. a conexão keep-alive ociosa por mais de 5 s continua aceitando pedido (DI-M9R-19; na sonda r7, um pedido depois de 6,7 s saiu sem resposta).
+//  7. a conexão keep-alive ociosa por mais de 5 s continua aceitando pedido (DI-M9R-19; na sonda r7, um pedido depois de 6,7 s saiu sem resposta);
+//  8. o método CONNECT recebe 404 ROUTE_NOT_FOUND como os outros métodos sem rota (o Node só fechava a conexão).
 // Toda resposta é medida: nenhuma passa de 2 s. GRAVA de verdade: só em banco descartável (DISPOSABLE_DB=1) ou no CI, depois do seed de dois tenants.
 
 process.env.PORT = process.env.ENTRADA_GLOBAL_HTTP_TEST_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
@@ -224,6 +225,21 @@ rodar('7. conexão keep-alive ociosa por mais de 5 s continua aceitando pedido (
   const segundo = await pedirNoAgente();
   agente.destroy();
   assert.deepEqual([segundo.status, segundo.reused], [200, true], `depois de 6,5 s ociosa a mesma conexão responde (${JSON.stringify(segundo)})`);
+});
+
+rodar('8. método CONNECT recebe resposta 404 ROUTE_NOT_FOUND, como os outros métodos sem rota (antes: a conexão só era fechada, sem resposta)', async () => {
+  const net = require('node:net');
+  const resposta = await new Promise((resolve) => {
+    const s = net.connect(Number(process.env.PORT), '127.0.0.1');
+    let txt = '';
+    s.on('data', (c) => { txt += c.toString('latin1'); });
+    s.on('close', () => resolve(txt));
+    s.on('error', () => resolve(txt));
+    s.write('CONNECT 127.0.0.1:5432 HTTP/1.1\r\nHost: 127.0.0.1:5432\r\n\r\n');
+    setTimeout(() => s.destroy(), 3000);
+  });
+  assert.match(resposta, /^HTTP\/1\.1 404 /, `resposta: ${JSON.stringify(resposta.slice(0, 80))}`);
+  assert.match(resposta, /ROUTE_NOT_FOUND/);
 });
 
 rodar('nenhuma resposta passou de 2 s', async () => {

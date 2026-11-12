@@ -225,4 +225,11 @@ test('tempos do servidor: keep-alive de 65 s (o padrão de 5 s fazia o pedido qu
   assert.deepEqual([s.keepAliveTimeout, s.headersTimeout], [65000, 66000]);
   assert.equal(keepAliveDoAmbiente({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '120000' }), 120000);
   assert.equal(keepAliveDoAmbiente({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '10' }), PADRAO, 'fora da faixa: o padrão');
+  // CONNECT: 404 ROUTE_NOT_FOUND no formato único de erro, como os outros métodos sem rota (antes o Node só fechava a conexão, sem resposta)
+  const servidor = new EventEmitter();
+  aplicarTemposDoServidor(servidor, {});
+  let escrito = '';
+  servidor.emit('connect', {}, { end: (t) => { escrito = t; } });
+  assert.match(escrito, /^HTTP\/1\.1 404 Not Found\r\n/);
+  assert.match(escrito, /"code":"ROUTE_NOT_FOUND".*"traceId":"[0-9a-f-]{36}"/);
 });
