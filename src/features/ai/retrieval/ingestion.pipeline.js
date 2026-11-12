@@ -42,6 +42,16 @@ async function acquireContent(ctx, desc, params, transaction, hooks) {
   }
 }
 
+/** Passo 6 (PII): o texto passa pela redação da IA; texto acima do teto da redação (DI-M9R-22) é conteúdo recusado, não erro técnico. */
+function redigirParaIndice(texto) {
+  try {
+    return redactForStorage(texto);
+  } catch (err) {
+    if (err && err.code === 'AI_TEXT_TOO_LARGE') throw reject(STEPS.secrets, 'AI_INGEST_TOO_LARGE');
+    throw err;
+  }
+}
+
 /** Passo 4: a classificação vem do registro; sem ela a ingestão é recusada, e RESTRICTED só entra com o parâmetro ligado. */
 function checkClassification(desc, params) {
   if (!CLASSIFICATIONS.includes(desc.classification)) throw reject(STEPS.classify, 'AI_INGEST_UNCLASSIFIED');
@@ -80,7 +90,7 @@ async function runPipeline(ctx, input, desc, params, transaction, hooks = {}) {
     const scanned = scanSecrets(parsed.text);
     track.secretsRemoved = scanned.removed;
     if (scanned.percent > params.secretsRejectPercent) throw reject(STEPS.secrets, 'AI_INGEST_SECRETS');
-    const chunks = chunkText(redactForStorage(scanned.text), params);
+    const chunks = chunkText(redigirParaIndice(scanned.text), params);
     if (!chunks.length) throw reject(STEPS.chunk, 'AI_INGEST_EMPTY');
     let embedded;
     try {
@@ -95,4 +105,4 @@ async function runPipeline(ctx, input, desc, params, transaction, hooks = {}) {
   }
 }
 
-module.exports = { runPipeline, Stop };
+module.exports = { runPipeline, Stop, redigirParaIndice };

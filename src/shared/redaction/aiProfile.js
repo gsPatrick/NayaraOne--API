@@ -2,6 +2,7 @@
 
 const { rx, luhnValid, cpfValid, cnpjValid } = require('./patterns');
 const { isSensitiveKey } = require('./keys');
+const { assertTextoDaIa, assertEstruturaDaIa } = require('./aiSize');
 
 /**
  * Perfil `ai` da biblioteca única de redaction (M9-D027). A NAY troca cada dado pessoal ou segredo por `[REDIGIDO:tipo]`
@@ -72,6 +73,7 @@ function applyRule(texto, [nome, flags, validate, tipo, grupo], placeholderFor) 
 /** redactForAi(texto, { placeholderFor }) — troca dado pessoal e segredo por `[REDIGIDO:tipo]`; o resto do texto fica igual. */
 function redactForAi(texto, { placeholderFor = defaultPlaceholder } = {}) {
   if (typeof texto !== 'string' || texto.length === 0) return texto;
+  assertTextoDaIa(texto); // rodada 7 (DI-M9R-22): teto de tamanho antes de começar
   return RULES.reduce((acc, regra) => applyRule(acc, regra, placeholderFor), texto);
 }
 
@@ -80,6 +82,7 @@ const MAX_DEPTH = 12;
 /** redactDeepForAi(valor, opções) — cópia do valor sem dado pessoal/segredo: chave sensível vira `[REDIGIDO:segredo]`; número com cara de documento também. */
 function redactDeepForAi(valor, options = {}, depth = 0) {
   if (valor === null || valor === undefined) return valor;
+  if (depth === 0 && typeof valor === 'object') assertEstruturaDaIa(valor, MAX_DEPTH); // rodada 7 (DI-M9R-22): teto da soma dos textos
   if (typeof valor === 'string') return redactForAi(valor, options);
   if (typeof valor === 'number' || typeof valor === 'bigint') {
     const s = String(valor);

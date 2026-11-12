@@ -2,6 +2,9 @@
 
 const { getSetting } = require('../../settings/settings.service');
 const { redactForAi, redactDeepForAi, isSensitiveKey } = require('../../../shared/redaction');
+const { limiteDaRedacaoIa } = require('../../../shared/redaction/aiSize');
+
+const RESUMO_GRANDE_DEMAIS = '[REDIGIDO:texto grande demais para o resumo]';
 const { SUMMARY_MAX_KEY, AUDIT_SETTING_DEFAULTS } = require('./audit.settings');
 
 /**
@@ -35,7 +38,10 @@ async function summaryLimit(ctx, transaction) {
 function sanitizeSummary(text, limit) {
   if (text === null || text === undefined) return text;
   // Hifenização de fim de linha (texto de PDF) é desfeita antes de procurar dado pessoal (red-team, M9-D046).
-  return redactForAi(String(text).replace(/-[ \t]*\r?\n[ \t]*/g, '')).slice(0, limit);
+  // Rodada 7 (DI-M9R-22): texto acima do teto da redação não vira resumo (cortá-lo antes de redigir poderia deixar meio dado pessoal sem redigir).
+  const bruto = String(text);
+  if (bruto.length > limiteDaRedacaoIa()) return RESUMO_GRANDE_DEMAIS.slice(0, limit);
+  return redactForAi(bruto.replace(/-[ \t]*\r?\n[ \t]*/g, '')).slice(0, limit);
 }
 
 /** JSON de chamadas de ferramenta: sem conteúdo bruto e redigido pela biblioteca única. */

@@ -12,6 +12,8 @@ const unsupported = () => new AppError('Este tipo de documento não pode ser lid
 const unreadable = () => new AppError('Não foi possível ler o texto deste documento.', 422, 'AI_INGEST_UNREADABLE');
 const secrets = () => new AppError('O documento é majoritariamente composto de credenciais e não foi indexado.', 422, 'AI_INGEST_SECRETS');
 const empty = () => new AppError('O documento não tem texto para indexar.', 422, 'AI_INGEST_EMPTY');
+// Rodada 7 (DI-M9R-22): texto do documento acima do teto da redação da IA (REDACTION_AI_MAX_CHARS).
+const tooLarge = () => new AppError('O texto do documento passa do tamanho que a NAY indexa. Divida o documento em partes menores.', 422, 'AI_INGEST_TOO_LARGE');
 const sourceInvalid = () => new AppError('A origem a indexar não foi encontrada nesta empresa.', 404, 'AI_INGEST_SOURCE_NOT_FOUND');
 const failed = () => new AppError('A ingestão falhou por um erro técnico. Reenvie o documento.', 502, 'AI_INGEST_FAILED');
 const invalid = (message, details) => new AppError(message, 400, 'AI_INGEST_INVALID', details);
@@ -30,6 +32,7 @@ const REJECTIONS = Object.freeze({
   AI_INGEST_UNREADABLE: unreadable,
   AI_INGEST_SECRETS: secrets,
   AI_INGEST_EMPTY: empty,
+  AI_INGEST_TOO_LARGE: tooLarge,
   AI_INGEST_FAILED: failed,
 });
 
@@ -42,6 +45,6 @@ function rejectionError(code, ingestionId) {
 }
 
 module.exports = {
-  notAuthorized, malware, unclassified, urlBlocked, restricted, unsupported, unreadable, secrets, empty, sourceInvalid, failed, invalid, notFound,
+  notAuthorized, malware, unclassified, urlBlocked, restricted, unsupported, unreadable, secrets, empty, tooLarge, sourceInvalid, failed, invalid, notFound,
   crossCompany, searchInvalid, classifyInvalid, rejectionError, REJECTIONS,
 };
