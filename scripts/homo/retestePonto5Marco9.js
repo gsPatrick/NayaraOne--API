@@ -18,6 +18,8 @@
  *   Opcionais: HOMO_<PERFIL>_COMPANY_ID, HOMO_<PERFIL>_MFA_SECRET (segredo TOTP do usuário de TESTE; o código é gerado só quando a
  *   API pede MFA recente), HOMO_API_BASE, HOMO_SAIDA_JSON (conferências e ids, sem senha/token/segredo), HOMO_SUFIXO_CAMPANHA.
  * Senhas e segredos: em HOMO_SEGREDOS_ARQUIVO (arquivo fora do repositório, chmod 600) ou exportados antes; nunca em argumento.
+ * Horário de silêncio do Marketing (`marketing.quiet_hours`, valor EFETIVO: o gravado ou, sem ele, o padrão do catálogo): dentro
+ * dele, ou a menos de 6 minutos do início, o roteiro recusa rodar antes de gravar qualquer coisa (o e-mail da campanha seria adiado).
  * Saída: 0 = tudo conferido; 1 = alguma conferência falhou; 2 = parada de segurança ou configuração.
  */
 const fs = require('fs');
@@ -26,6 +28,7 @@ const { Relato } = require('./lib/relato');
 const { carregarSegredos, recusarSegredoNaLinhaDeComando } = require('./lib/segredosArquivo');
 const contatos = require('./ponto5/contatos');
 const bloqueio = require('./ponto5/bloqueio');
+const silencio = require('./ponto5/silencio');
 const automacoes = require('./ponto5/automacoes');
 const isolamentoFilhos = require('./ponto5/isolamentoFilhos');
 const trilha = require('./ponto5/trilha');
@@ -82,6 +85,9 @@ async function principal() {
   if (ctx.outra.companyId === ctx.admin.companyId) throw new PararScript('O usuário "outra empresa" entrou na MESMA empresa do administrador; o isolamento não valeria.');
   if (ctx.leitura.companyId !== ctx.admin.companyId) throw new PararScript('O perfil somente leitura precisa estar na empresa do administrador (empresa A).');
   rel.aviso(`Outra empresa: ${ctx.outra.companyId} (${ctx.outra.groupId === ctx.admin.groupId ? 'MESMO grupo da empresa A' : 'grupo diferente da empresa A'}).`);
+  // Antes de gravar qualquer coisa: no horário de silêncio do Marketing (valor efetivo, gravado ou padrão) o roteiro recusa rodar (código 2).
+  const quieto = await silencio.exigirForaDoSilencio(ctx);
+  rel.aviso(`Horário de silêncio do Marketing: ${quieto.valor} (${quieto.origem}); agora está fora dele.`);
   try {
     // a automação vem primeiro e é pausada logo depois: os contatos criados em seguida não a disparam
     await automacoes.executar(ctx);

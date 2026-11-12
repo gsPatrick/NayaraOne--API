@@ -10,25 +10,14 @@
  * Reaproveita do roteiro geral a configuração do descadastro e o modelo de e-mail. Campanha idempotente pelo código.
  */
 const { listar } = require('../lib/auditoria');
-const { dormir, PararScript } = require('../lib/cliente');
+const { dormir } = require('../lib/cliente');
 const optOutGeral = require('../cenarios/optOutCampanha');
+const { noSilencio, exigirForaDoSilencio } = require('./silencio');
 
 const CENARIO = '(2) bloqueio do envio';
 const COD_CAMPANHA = `ACEITE-M9-P5-CAMPANHA${process.env.HOMO_SUFIXO_CAMPANHA ? `-${String(process.env.HOMO_SUFIXO_CAMPANHA).replace(/[^A-Za-z0-9]/g, '').toUpperCase()}` : ''}`;
 const resumo = (r) => `HTTP ${r.status}${r.erro ? ` ${r.erro.code}` : ''}`;
 const lista = (r) => (Array.isArray(r.dados) ? r.dados : []);
-
-/** "21:00 a 08:00 America/Sao_Paulo" -> está no silêncio agora (ou começa nos próximos `folgaMin` minutos)? */
-function noSilencio(valor, agora = new Date(), folgaMin = 6) {
-  const m = String(valor || '').match(/(\d{1,2}):(\d{2})\s*a\s*(\d{1,2}):(\d{2})\s*(\S+)?/);
-  if (!m) return { silencio: false, texto: valor };
-  const fuso = m[5] || 'America/Sao_Paulo';
-  const ini = Number(m[1]) * 60 + Number(m[2]); const fim = Number(m[3]) * 60 + Number(m[4]);
-  const minuto = (d) => { const p = new Intl.DateTimeFormat('en-GB', { timeZone: fuso, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(d); return Number(p.find((x) => x.type === 'hour').value) * 60 + Number(p.find((x) => x.type === 'minute').value); };
-  const dentro = (x) => (ini < fim ? x >= ini && x < fim : x >= ini || x < fim);
-  const agoraMin = minuto(agora); const depois = minuto(new Date(agora.getTime() + folgaMin * 60000));
-  return { silencio: dentro(agoraMin) || dentro(depois), texto: `${m[1]}:${m[2]} a ${m[3]}:${m[4]} ${fuso}` };
-}
 
 async function acharCampanha(ctx) {
   const { itens } = await listar(ctx.admin, { action: 'marketing.campaign.create' });
@@ -39,9 +28,7 @@ async function acharCampanha(ctx) {
 async function garantirCampanha(ctx, modeloId, pessoaIds) {
   const existente = await acharCampanha(ctx);
   if (existente) return { id: existente, situacao: 'já existia (só conferida de novo)' };
-  const silencio = (await ctx.admin.chamar('GET', '/settings/marketing.quiet_hours')).dados;
-  const s = noSilencio(silencio && silencio.value);
-  if (s.silencio) throw new PararScript(`Agora é horário de silêncio do Marketing (${s.texto}): o e-mail seria adiado, não enviado. Rode o roteiro fora desse horário.`);
+  await exigirForaDoSilencio(ctx); // valor EFETIVO (gravado ou o padrão do catálogo): no silêncio para antes de criar a campanha
   const agora = Date.now();
   const r = await ctx.admin.chamar('POST', '/marketing/campaigns', {
     code: COD_CAMPANHA, name: 'ACEITE-M9 P5 Campanha do bloqueio por opt-out', objective: 'ACEITE-M9 provar que só o contato com consentimento recebe.',
@@ -107,4 +94,4 @@ async function executar(ctx) {
     `mensagens de e-mail de saída: ${recebidas.map((m) => m.deliveryStatus).join(', ') || 'nenhuma'}; linhas de bloqueio desta campanha: ${bloqOk.length}`);
 }
 
-module.exports = { executar, CENARIO, COD_CAMPANHA, noSilencio };
+module.exports = { executar, garantirCampanha, CENARIO, COD_CAMPANHA, noSilencio };
