@@ -91,9 +91,9 @@ Mensagem de atendimento omnichannel (WhatsApp etc.), vinculada a uma pessoa/opor
 | channel | STRING(32) | sim |  |
 | direction | STRING(16) | sim | INBOUND|OUTBOUND |
 | author_type | STRING(16) | sim | CLIENT|NAY|EMPLOYEE |
-| author_user_id | UUID | não | FK core.users |
+| author_user_id | UUID | não | FK core.users; em `POST /messages` é sempre quem faz o pedido (DI-M9R-9) |
 | body | TEXT | não |  |
 | status | STRING(32) | sim |  |
-| external_message_id | STRING(128) | não | ID do provedor — usado para deduplicação de webhook — unique |
+| external_message_id | STRING(128) | não | ID do provedor — usado para deduplicação de webhook — único por connection e, sem connection, por empresa (migration 9976, DI-M9R-10) |
 | created_by / updated_by | UUID | não | auditoria de autoria |
 | created_at / updated_at | TIMESTAMPTZ | sim | automático |

@@ -74,7 +74,7 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(128),
         allowNull: true,
         field: 'external_message_id',
-        comment: "ID do provedor — usado para deduplicação de webhook",
+        comment: "ID do provedor — usado para deduplicação de webhook; único por connection e, sem connection, por empresa (migration 9976)",
       },
       connectionId: {
         type: DataTypes.UUID,

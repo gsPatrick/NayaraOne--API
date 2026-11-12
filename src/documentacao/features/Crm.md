@@ -132,7 +132,11 @@ Canais aceitos (enum fechado): `WHATSAPP|EMAIL|SMS|PHONE|IN_PERSON|PORTAL|INSTAG
 
 O service expõe apenas `create`/`list`/`get` e um `PATCH /:id/status` restrito (ex.: `RECEIVED` ->
 `READ`). Envio duplicado do mesmo `externalMessageId` (webhook reentregue) retorna a
-mensagem já existente em vez de duplicar.
+mensagem já existente da MESMA empresa em vez de duplicar; o mesmo id em outra empresa é outra
+mensagem (único por empresa, DI-M9R-10). O autor (`authorUserId`) não vem do corpo: é sempre
+quem faz o pedido (DI-M9R-9). Campo de referência (`personId`, `opportunityId`,
+`conversationId`, `mediaQuarantineId`) que não seja um UUID em texto, e `externalMessageId`,
+`actionKey` ou `body` que não sejam texto, dão 400 `MESSAGE_VALIDATION` (DI-M9R-8).
 
 ```json
 {

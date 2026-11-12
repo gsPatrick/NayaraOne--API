@@ -8,6 +8,7 @@ const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
 const { businessDateKey } = require('../../utils/businessDate');
 const { describeMedia } = require('./messaging/whatsapp.mediaView');
 const { assertConversationRefsInScope } = require('./messages.refs');
+const { idOrNull, textOrNull } = require('./messages.input');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
@@ -26,11 +27,22 @@ const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'I
  * nunca delete nem edição de `body`.
  */
 async function createMessage(payload, actorUserId, transaction) {
-  const { groupId, companyId, personId, opportunityId, channel, direction, authorType, authorUserId, body, externalMessageId, purpose, actionKey, connectionId, dispatchId, deliveryStatus, conversationId, mediaQuarantineId } = payload;
+  const { groupId, companyId, channel, direction, authorType, purpose, deliveryStatus } = payload;
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
   }
+  // Rodada 4 (DI-M9R-8): forma de cada campo de referência ANTES de qualquer consulta; lista, objeto ou número é 400, nunca 500.
+  const personId = idOrNull(payload.personId, 'personId');
+  const opportunityId = idOrNull(payload.opportunityId, 'opportunityId');
+  const conversationId = idOrNull(payload.conversationId, 'conversationId');
+  const mediaQuarantineId = idOrNull(payload.mediaQuarantineId, 'mediaQuarantineId');
+  const authorUserId = idOrNull(payload.authorUserId, 'authorUserId');
+  const connectionId = idOrNull(payload.connectionId, 'connectionId');
+  const dispatchId = idOrNull(payload.dispatchId, 'dispatchId');
+  const externalMessageId = textOrNull(payload.externalMessageId, 'externalMessageId', 128);
+  const actionKey = textOrNull(payload.actionKey, 'actionKey', 64);
+  const body = textOrNull(payload.body, 'body');
 
   const normalizedDirection = String(direction).toUpperCase();
   if (!DIRECTIONS.includes(normalizedDirection)) {
@@ -76,7 +88,9 @@ async function createMessage(payload, actorUserId, transaction) {
   }
 
   if (externalMessageId) {
-    const existing = await Message.findOne({ where: { externalMessageId, connectionId: connectionId || null }, transaction }); // M9-D229: o identificador é único por connection
+    // M9-D229: o identificador é único por connection; sem connection, por empresa (DI-M9R-10, migration 20260101009976). A empresa vai explícita
+    // (além do RLS): a deduplicação só devolve mensagem da própria empresa, e o mesmo id em outra empresa é outra mensagem.
+    const existing = await Message.findOne({ where: { companyId, externalMessageId, connectionId: connectionId || null }, transaction });
     if (existing) {
       // Deduplicação de webhook — mesma mensagem externa reenviada não gera duplicata.
       return existing;
@@ -132,8 +146,10 @@ async function createMessage(payload, actorUserId, transaction) {
 
 async function listMessages(transaction, filters = {}) {
   const where = {};
-  if (filters.personId) where.personId = filters.personId;
-  if (filters.opportunityId) where.opportunityId = filters.opportunityId;
+  const personId = idOrNull(filters.personId, 'personId'); // DI-M9R-8: `?personId[a]=b` ou lista na query também é 400, nunca 500
+  const opportunityId = idOrNull(filters.opportunityId, 'opportunityId');
+  if (personId) where.personId = personId;
+  if (opportunityId) where.opportunityId = opportunityId;
   return describeMedia(await Message.findAll({ where, order: [['created_at', 'DESC']], transaction }), transaction);
 }
 

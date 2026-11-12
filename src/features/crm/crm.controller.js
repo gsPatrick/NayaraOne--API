@@ -150,8 +150,9 @@ const removeVisit = catchAsync(async (req, res) => {
 
 const createMessage = catchAsync(async (req, res) => {
   // M9-D229: ligação com o fornecedor e status de entrega só nascem pelo fluxo de mensageria, nunca pelo corpo da requisição.
-  const { connectionId, dispatchId, deliveryStatus, ...corpo } = req.body || {};
-  const payload = { ...corpo, groupId: req.auth.groupId, companyId: req.auth.companyId };
+  // DI-M9R-9: o autor também não vem do corpo; quem registra a interação é quem faz o pedido (o livro, Interaction API, não tem campo de autor).
+  const { connectionId, dispatchId, deliveryStatus, authorUserId, ...corpo } = req.body || {};
+  const payload = { ...corpo, authorUserId: req.auth.userId, groupId: req.auth.groupId, companyId: req.auth.companyId };
   const message = await req.withTenantTransaction((transaction) =>
     messagesService.createMessage(payload, req.auth.userId, transaction)
   );
