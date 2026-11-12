@@ -40,7 +40,7 @@ const isText = (v) => typeof v === 'string';
 const optionalText = (v) => v === undefined || v === null || isText(v);
 
 /**
- * Corpo mínimo por tipo de envio (os campos que o port exige). Rodada 5 (DI-M9R-11): `kind` só em texto e só uma chave PRÓPRIA de OPERATIONS. Antes,
+ * Corpo mínimo por tipo de envio (os campos que o port exige). Rodada 5 (DI-M9R-13): `kind` só em texto e só uma chave PRÓPRIA de OPERATIONS. Antes,
  * `OPERATIONS[kind]` aceitava `["template"]` (a lista vira a chave "template"), `"toString"` ou `"constructor"` (herdados do protótipo), e o resto do
  * fluxo comparava `kind === 'template'`: a lista passava sem a conferência do modelo aprovado (M9-D230 3.1, 202 com modelo não aprovado) e o nome
  * herdado chegava a `media.fileName` com a mídia nula (500). Daqui em diante o fluxo inteiro decide pela OPERAÇÃO, nunca por `kind`.

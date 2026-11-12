@@ -39,7 +39,7 @@ async function createMessage(payload, actorUserId, transaction) {
   const connectionId = idOrNull(payload.connectionId, 'connectionId');
   const dispatchId = idOrNull(payload.dispatchId, 'dispatchId');
   const externalMessageId = textOrNull(payload.externalMessageId, 'externalMessageId', COLUMN_LIMITS.externalMessageId);
-  // Rodada 5 (DI-M9R-11): a chave só no formato da CHECK da migration 755, e as listas fechadas só em texto (o String() de antes dava 500 com {"toString": 1}).
+  // Rodada 5 (DI-M9R-11 e 12): a chave só no formato da CHECK da migration 755, e as listas fechadas só em texto (o String() de antes dava 500 com {"toString": 1}).
   const actionKey = actionKeyOrNull(payload.actionKey);
   const body = textOrNull(payload.body, 'body');
   const normalizedDirection = oneOf(direction, 'direction', DIRECTIONS);
@@ -150,7 +150,7 @@ async function getMessage(id, transaction) {
 }
 
 async function updateMessageStatus(id, status, actorUserId, transaction, { fromProvider = false } = {}) {
-  // Rodada 5 (DI-M9R-11): só um status da lista fechada, em texto, antes de qualquer outra regra. Sem isso, texto acima de 32 caracteres ia ao
+  // Rodada 5 (DI-M9R-11 e 13): só um status da lista fechada, em texto, antes de qualquer outra regra. Sem isso, texto acima de 32 caracteres ia ao
   // varchar(32) e `{"toString": 1}` ao String() (500), e `{}`/`[]`/`true` eram gravados como "[OBJECT OBJECT]", "" e "TRUE".
   if (status === undefined || status === null || status === '') throw AppError.badRequest('O campo "status" é obrigatório.', 'MESSAGE_VALIDATION');
   const nextStatus = oneOf(status, 'status', MESSAGE_STATUSES);

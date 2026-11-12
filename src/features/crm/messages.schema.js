@@ -88,7 +88,7 @@ const ROTAS = Object.freeze({
 /** Nome que a mensagem dá a cada parte do pedido quando o problema é a parte inteira (corpo que não é objeto, por exemplo). */
 const PARTES = Object.freeze({ body: 'corpo do pedido', query: 'consulta', params: 'caminho' });
 
-/** Campo retirado do corpo de POST /messages: a chave de idempotência só nasce pelas automações (M9-D415), nunca pelo cliente. */
+/** Campo retirado do corpo de POST /messages (DI-M9R-12): a chave de idempotência só nasce pelas automações (M9-D415), nunca pelo cliente. */
 const FORA_DA_ROTA = Object.freeze({
   actionKey: 'A chave de idempotência da mensagem só é gerada pelas automações e campanhas (M9-D415); para não repetir um registro, use o "externalMessageId".',
 });
