@@ -7,6 +7,7 @@ const dispatchService = require('../../integrations/dispatch/enqueue/dispatch.se
 const { resolveConnection } = require('../../integrations/registry/connections.resolve');
 const adapterRegistry = require('../../integrations/registry/adapterRegistry');
 const { createMessage } = require('../messages.service');
+const { assertConversationRefsInScope } = require('../messages.refs');
 const { readMessagingParams } = require('./messaging.params');
 const { assertE164 } = require('./messaging.phone');
 const { readWhatsappParams } = require('./whatsapp.params');
@@ -20,12 +21,14 @@ const OPERATIONS = Object.freeze({ text: 'sendText', template: 'sendTemplate', m
 const invalid = (message) => AppError.badRequest(message, 'MESSAGE_VALIDATION');
 
 /**
- * Pessoa e oportunidade do pedido precisam existir no escopo de quem chama (RLS da empresa da sessão). Fora dele: 404 com o código das outras rotas (PERSON_NOT_FOUND,
- * OPPORTUNITY_NOT_FOUND), antes de qualquer outra regra: a pessoa de outra empresa nunca é tratada como "sem consentimento" (403) nem ganha conversa.
+ * Pessoa, oportunidade e conversa do pedido precisam existir no escopo de quem chama (RLS da empresa da sessão; a conversa também pela empresa explícita). Fora dele: 404 com o
+ * código das outras rotas (PERSON_NOT_FOUND, OPPORTUNITY_NOT_FOUND, CONVERSATION_NOT_FOUND), antes de qualquer outra regra: a pessoa de outra empresa nunca é tratada como "sem
+ * consentimento" (403) nem ganha conversa, e a conversa de outra empresa nunca chega à resolução da conexão (ISO-R2).
  */
-async function assertRefsInScope(input, transaction) {
+async function assertRefsInScope(ctx, input, transaction) {
   if (input.personId && !(await Person.findByPk(input.personId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
   if (input.opportunityId && !(await Opportunity.findByPk(input.opportunityId, { transaction, attributes: ['id'] }))) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
+  await assertConversationRefsInScope({ companyId: ctx.companyId, conversationId: input.conversationId || null }, transaction);
 }
 
 /** Corpo mínimo por tipo de envio (os campos que o port exige) e o texto que fica no histórico do CRM. */
@@ -64,7 +67,7 @@ function buildPayload(input, operation, degraded, recipientName, conversationId,
 async function sendMessage(ctx, input, actorUserId, transaction, opts = {}) {
   const pedido = input || {};
   const operacaoPedida = checkInput(pedido);
-  await assertRefsInScope(pedido, transaction);
+  await assertRefsInScope(ctx, pedido, transaction);
   const params = await readMessagingParams(ctx, transaction);
   const wa = await readWhatsappParams(ctx, transaction);
   const to = assertE164(pedido.to, params.countryCode);

@@ -34,25 +34,26 @@ Conferência depois de configurar e reiniciar:
 
 ## Deploy desta entrega sobre a homologação atual (API 14217771, migrations até a 9964 já aplicadas)
 
-É o caso da homologação em 12/11/2026. O banco já está com todo o esquema do Marco 9 até a `20260101009964`; esta entrega acrescenta só cinco migrations, todas toleradas pela API 14217771 que está no ar: `20260101000757`, `20260101000762`, `20260101009965`, `20260101009966` e `20260101009970` (descritas nas duas seções "Migration desta correção" e "Migrations depois da 9964").
+É o caso da homologação em 12/11/2026. O banco já está com todo o esquema do Marco 9 até a `20260101009964`; esta entrega acrescenta só seis migrations, todas toleradas pela API 14217771 que está no ar: `20260101000757`, `20260101000762`, `20260101009965`, `20260101009966`, `20260101009970` e `20260101009971` (descritas nas duas seções "Migration desta correção" e "Migrations depois da 9964").
 
 0. Cofre de segredos antes de tudo: passo 0 da seção "Ordem", abaixo (volume, variáveis, reiniciar a 14217771 e conferir o 404 do descadastro).
 1. Backup novo imediatamente antes (`pg_dump -Fc`, com SHA-256), em `backups/`.
-2. Conferir o que falta aplicar: `npx sequelize-cli db:migrate:status --env migration` precisa listar como `down` exatamente as cinco acima e nenhuma outra.
-3. Aplicar as cinco com um único `npx sequelize-cli db:migrate --env migration`. NÃO use `--to 20260101009963-...`: num banco que já tem a 9963 e a 9964 ele não aplica nada, e as duas de número baixo (757 e 762) ficariam de fora; a API nova sem elas falha já ao criar campanha (`column "next_attempt_at" does not exist`). A 9966 confere antes os dados e para sem alterar nada se achar contato, endereço, documento, papel ou consentimento apontando para pessoa de outra empresa (ver "Ponto 5 do aceite").
+2. Conferir o que falta aplicar: `npx sequelize-cli db:migrate:status --env migration` precisa listar como `down` exatamente as seis acima e nenhuma outra.
+3. Aplicar as seis com um único `npx sequelize-cli db:migrate --env migration`. NÃO use `--to 20260101009963-...`: num banco que já tem a 9963 e a 9964 ele não aplica nada, e as duas de número baixo (757 e 762) ficariam de fora; a API nova sem elas falha já ao criar campanha (`column "next_attempt_at" does not exist`). A 9966 confere antes os dados e para sem alterar nada se achar contato, endereço, documento, papel ou consentimento apontando para pessoa de outra empresa (ver "Ponto 5 do aceite"). A 9971 faz o mesmo com as mensagens do CRM: para sem alterar nada se achar mensagem com conversa de outra empresa ou com mídia em quarentena de outra empresa ou inexistente (ver "Mensagens só com conversa e mídia da mesma empresa").
 4. Conferir de novo o `db:migrate:status`: nenhuma `down`.
 5. Deploy da API (`entrega/marco9`) e do Front (`entrega/marco9`) juntos; conferir `/api/health` (inclusive `secretStore.status = "ok"`) e `/api/version`.
 6. Recuperar as entregas de campanha que ficaram FAILED por falha transitória antes desta versão (runbook `docs/runbooks/COFRE_DE_SEGREDOS.md`, seção 4) e rodar os roteiros de reteste (seção "Ponto 5 do aceite").
 
-Voltar para a 14217771, se for preciso: reimplantar a API e o Front anteriores e desfazer só as cinco, uma a uma e nesta ordem, pelo nome (o `undo:all --to` desfaria também migrations de que a 14217771 precisa):
+Voltar para a 14217771, se for preciso: reimplantar a API e o Front anteriores e desfazer só as seis, uma a uma e nesta ordem, pelo nome (o `undo:all --to` desfaria também migrations de que a 14217771 precisa):
 ```
+npx sequelize-cli db:migrate:undo --env migration --name 20260101009971-mensagens-so-com-conversa-e-midia-da-mesma-empresa.js
 npx sequelize-cli db:migrate:undo --env migration --name 20260101009970-create-analytics-metric-snapshot-confirmations.js
 npx sequelize-cli db:migrate:undo --env migration --name 20260101009966-pessoas-filhos-so-com-pessoa-da-mesma-empresa.js
 npx sequelize-cli db:migrate:undo --env migration --name 20260101009965-isola-pessoas-por-empresa-nas-politicas-rls.js
 npx sequelize-cli db:migrate:undo --env migration --name 20260101000762-marketing-automation-action-retry.js
 npx sequelize-cli db:migrate:undo --env migration --name 20260101000757-marketing-campaign-delivery-retry.js
 ```
-As `down` da 762 e da 757 recusam se já houver ação de automação ou entrega de campanha em RETRY/UNKNOWN/CANCELLED (não apagam dados): nesse caso, restaurar o backup do passo 1. A 14217771 tolera as cinco aplicadas, então voltar só a API, sem desfazer migration, também funciona.
+As `down` da 762 e da 757 recusam se já houver ação de automação ou entrega de campanha em RETRY/UNKNOWN/CANCELLED (não apagam dados): nesse caso, restaurar o backup do passo 1. A 14217771 tolera as seis aplicadas, então voltar só a API, sem desfazer migration, também funciona.
 
 ## Ordem (banco ainda na API dos Marcos 3 a 8, sem o esquema do Marco 9)
 
@@ -68,7 +69,7 @@ As `down` da 762 e da 757 recusam se já houver ação de automação ou entrega
 1. Backup novo imediatamente antes (`pg_dump -Fc`, com SHA-256), em `backups/` (ignorado pelo git).
 2. Aplicar as migrations `20260101000650` a `20260101009963` (`npx sequelize-cli db:migrate --env migration --to 20260101009963-relatorio-saneamento-chaves-protegidas.js`). A API antiga continua funcionando.
 3. Deploy da API e do Front do Marco 9 e conferir `/api/health` e `/api/version`.
-4. Aplicar a `20260101009964-fecha-o-legado-com-gatilhos-somente-leitura.js` e as três da correção de 10 e 11/11/2026 (`20260101009965`, `20260101009966` e `20260101009970`, seção "Migrations depois da 9964") com um único `npx sequelize-cli db:migrate --env migration`. Todas são idempotentes.
+4. Aplicar a `20260101009964-fecha-o-legado-com-gatilhos-somente-leitura.js` e as quatro da correção de 10 a 12/11/2026 (`20260101009965`, `20260101009966`, `20260101009970` e `20260101009971`, seção "Migrations depois da 9964") com um único `npx sequelize-cli db:migrate --env migration`. Todas são idempotentes.
 5. Fumaça: criar e listar uma connection do registro, receber um webhook de financiamento sandbox, abrir o painel do Correspondente.
 6. E-mail de campanha:
    - Conferir `secretStore.status = "ok"` em `/api/health`.
@@ -88,15 +89,16 @@ A `20260101000762-marketing-automation-action-retry.js` (DI-M9F-1) acrescenta o 
 
 ### Migrations depois da 9964
 
-Nenhuma delas toca os gatilhos de somente leitura nem as três tabelas do legado (o teste `m9d200.legado-somente-leitura` confere). A API antiga tolera as três.
+Nenhuma delas toca os gatilhos de somente leitura nem as três tabelas do legado (o teste `m9d200.legado-somente-leitura` confere). A API antiga tolera as quatro.
 - `20260101009965-isola-pessoas-por-empresa-nas-politicas-rls.js`: troca a política de gravação de `people.persons` (FOR ALL só por grupo) por políticas de INSERT, UPDATE e DELETE por empresa, como a de leitura. Corrige o vazamento de Pessoas entre empresas do mesmo grupo (ponto 5).
 - `20260101009966-pessoas-filhos-so-com-pessoa-da-mesma-empresa.js`: chaves compostas pessoa e empresa nos cadastros filhos (descrita abaixo, em "Ponto 5 do aceite").
 - `20260101009970-create-analytics-metric-snapshot-confirmations.js`: tabela `analytics.metric_snapshot_confirmations` (DI-BI-2), com RLS FORCE, a última confirmação de cada snapshot pela fonte; o snapshot continua imutável.
+- `20260101009971-mensagens-so-com-conversa-e-midia-da-mesma-empresa.js`: chaves compostas mensagem e empresa para a conversa e a mídia em quarentena (descrita abaixo, em "Mensagens só com conversa e mídia da mesma empresa").
 
 ## Plano de reversão
 
 - Antes do passo 4: `npx sequelize-cli db:migrate:undo:all --to 20260101000648-dimob-gatilho-congelamento-estrito.js --env migration` (as `down` das migrations aditivas derrubam apenas objetos novos). Se alguma `down` falhar, parar a API e restaurar o backup (`pg_restore --clean --if-exists --no-owner`).
-- Depois do passo 4, se for preciso voltar à API antiga: desfazer até a 9963 (`npx sequelize-cli db:migrate:undo:all --to 20260101009964-fecha-o-legado-com-gatilhos-somente-leitura.js --env migration`), o que desfaz, nesta ordem, a 9970, a 9966, a 9965 e a 9964 (esta remove os três gatilhos), e então reimplantar a API antiga.
+- Depois do passo 4, se for preciso voltar à API antiga: desfazer até a 9963 (`npx sequelize-cli db:migrate:undo:all --to 20260101009964-fecha-o-legado-com-gatilhos-somente-leitura.js --env migration`), o que desfaz, nesta ordem, a 9971, a 9970, a 9966, a 9965 e a 9964 (esta remove os três gatilhos), e então reimplantar a API antiga.
 - A `009962` apaga linhas condicionais (permissão `integration:platform` e chaves `integration.*` gravadas por quem não é operador); a `down` não as restaura, só o backup.
 
 ## Observações conhecidas (documentadas, não corrigidas)
@@ -110,3 +112,10 @@ Nenhuma delas toca os gatilhos de somente leitura nem as três tabelas do legado
 - Migration `20260101009966-pessoas-filhos-so-com-pessoa-da-mesma-empresa.js` (ISO-8, DI-M9R-1) entra no passo 4 com as demais (`npx sequelize-cli db:migrate --env migration`). Antes de criar as chaves compostas (contato, endereço, documento, papel e consentimento só com pessoa da MESMA empresa), ela imprime por tabela quantas linhas apontam para pessoa de outra empresa. Com zero (o esperado: a leitura de 10/11 achou zero nas 44 colunas `*person_id*`), cria as chaves. Com alguma, PARA sem alterar nada e lista as contagens: o destino desses dados é decisão de negócio; corrija e rode de novo. A API antiga já grava os filhos com a empresa da pessoa, então a ordem com o deploy da API não importa. Reversão: `npx sequelize-cli db:migrate:undo --env migration --name 20260101009966-pessoas-filhos-so-com-pessoa-da-mesma-empresa.js` (remove só as seis constraints).
 - O bloqueio de envio da campanha passa a gravar `marketing.message.blocked` por destinatário (DI-M9R-2); sem migration.
 - Depois do deploy, o reteste do ponto 5 é `scripts/homo/retestePonto5Marco9.js` (comando completo em `Maturacao/fechamento-m3-m6/m9-ponto5.md`). Rodar fora do horário de silêncio do Marketing (padrão 21:00 a 08:00) e com o cofre de segredos configurado, senão o e-mail do contato com opt-in (o controle positivo) não sai.
+
+## Mensagens só com conversa e mídia da mesma empresa (branch m9fix/mensagens-escopo)
+
+- Migration `20260101009971-mensagens-so-com-conversa-e-midia-da-mesma-empresa.js` (ISO-R2, DI-M9R-7). Na homologação atual entra no passo 3 da seção "Deploy desta entrega" (`db:migrate` sem `--to`); num banco sem o esquema do Marco 9, no passo 4 da seção "Ordem". Exige PostgreSQL 15 ou mais novo (homologação: 17).
+- Antes de criar as chaves, imprime quantas mensagens do CRM apontam para conversa de outra empresa e quantas apontam para mídia em quarentena de outra empresa ou inexistente (`media_quarantine_id` não tinha FK). Com zero, cria `UNIQUE (id, company_id)` em `crm.conversations` e `files.quarantine` e as FKs compostas `(conversation_id, company_id)` e `(media_quarantine_id, company_id)`, validadas; a FK simples da 679 continua. Com alguma, PARA sem alterar nada e informa as contagens: o destino dessas mensagens é decisão de negócio (corrigir a referência ou retirá-la); corrija e rode de novo.
+- A API passa a responder 404 `CONVERSATION_NOT_FOUND` ou `INTEGRATION_MESSAGING_MEDIA_NOT_FOUND` em `POST /messages` e `POST /messages/send` quando a conversa ou a mídia não é da empresa da sessão (antes: 201 com o vínculo cruzado, ou 500 da FK). A API 14217771 tolera a migration: ela só grava conversa e mídia da própria empresa pelo fluxo de mensageria; um pedido cruzado pelo corpo, que antes gravava, passa a falhar no banco.
+- Reversão: `npx sequelize-cli db:migrate:undo --env migration --name 20260101009971-mensagens-so-com-conversa-e-midia-da-mesma-empresa.js` (remove só as duas FKs compostas e os dois UNIQUE de apoio).

@@ -7,6 +7,7 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
 const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
 const { businessDateKey } = require('../../utils/businessDate');
 const { describeMedia } = require('./messaging/whatsapp.mediaView');
+const { assertConversationRefsInScope } = require('./messages.refs');
 
 const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
 const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
@@ -50,6 +51,8 @@ async function createMessage(payload, actorUserId, transaction) {
     person = await Person.findByPk(personId, { transaction });
     if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
   }
+  // ISO-R2: conversa e mídia em quarentena só da empresa da mensagem (404 fora do escopo, antes do consentimento e de gravar).
+  await assertConversationRefsInScope({ companyId, conversationId, mediaQuarantineId }, transaction);
 
   // Bloqueio ATIVO de opt-out (Guia do Marcelo §11/§18 "Não ignorar opt-out.";
   // CRM-TS-009 "Opt-out — Cadência tenta enviar — Bloqueado."). Só se aplica a envio SAÍDO
