@@ -12,8 +12,10 @@ const { runAnalyticsTechRefreshJob, resetAnalyticsTechRefreshState } = require('
 const { DEFINITIONS } = require('../../../src/features/analytics/metrics/kpis/tecnologia/definitions');
 const { publishMetric } = require('../../../src/features/analytics/metrics/registry.service');
 const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
+const { definicoesPorEmpresa, removerDefinicoesNovas } = require('../_helpers/analyticsResiduo');
 
 let env;
+let definicoesAntes; // o job recalcula TODAS as empresas e publica a definição vigente nas do seed também: o `after` apaga o que nasceu aqui fora de cX e cY
 const JOB_BASE = new Date('2026-09-15T15:00:00Z');
 const jobAt = (minutes) => new Date(JOB_BASE.getTime() + minutes * 60000);
 const pass = (t, options) => kit.inTx(t, { commit: true }, async (tx) => readModels.refreshCompanyScheduled(
@@ -27,9 +29,14 @@ const scheduledRuns = async (t, since) => // as passadas do job feitas exatament
 
 before(async () => {
   env = await kit.setup();
+  definicoesAntes = await definicoesPorEmpresa(env.admin);
   await kit.hourlyProbes(env);
 });
-after(() => { resetAnalyticsTechRefreshState(); return kit.teardown(env); });
+after(async () => {
+  resetAnalyticsTechRefreshState();
+  await removerDefinicoesNovas(env.admin, definicoesAntes, [env.cX.companyId, env.cY.companyId]);
+  await kit.teardown(env);
+});
 
 test('m9bi agenda: os nove read models de Tecnologia e IA têm agenda própria e a agenda geral não os disputa', async () => {
   assert.equal(TECNOLOGIA_IA_MODELS.length, 9);

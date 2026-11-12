@@ -12,6 +12,7 @@ const registry = require('../../../src/features/analytics/metrics');
 const kpisApi = require('../../../src/features/analytics/metrics/kpis');
 const clock = require('../../../src/features/analytics/metrics/clock');
 const readModels = require('../../../src/features/analytics/read-models');
+const { removerDefinicoes } = require('./analyticsResiduo');
 require('../../../src/features/analytics');
 
 const MODELS = ['rm_mkt_campaigns', 'rm_mkt_campaign_month', 'rm_mkt_delivery', 'rm_mkt_optout_month', 'rm_mkt_frequency', 'rm_mkt_automation'];
@@ -36,6 +37,10 @@ async function teardown(env) {
   clock.resetClock();
   const ids = [env.cX.companyId, env.cY.companyId, env.tenantA.companyId, env.tenantB.companyId];
   const own = [env.cX.companyId, env.cY.companyId];
+  // o cálculo publica nas empresas novas o catálogo inteiro, não só os oito de Marketing: sem isto, ao apagar a empresa ficavam as outras definições
+  // (com versões, snapshots e aceites PENDING) apontando para empresa que não existe mais
+  const [doTeste] = await env.admin.query('SELECT id FROM analytics.metric_definitions WHERE company_id IN (:own)', { replacements: { own } });
+  await removerDefinicoes(env.admin, doTeste.map((d) => d.id));
   await env.admin.transaction(async (transaction) => {
     await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
     for (const { table, id } of [...env.created].reverse()) await env.admin.query(`DELETE FROM ${table} WHERE id = :id`, { replacements: { id }, transaction });

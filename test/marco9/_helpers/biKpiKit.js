@@ -16,6 +16,9 @@ function createKit({ models, label, materialize }) {
   async function newCompany(env, name) {
     const id = bi.uuid();
     await env.admin.query('INSERT INTO core.companies (id, group_id, name) VALUES (:id, :g, :n)', { replacements: { id, g: env.tenantA.groupId, n: `M9 ${label} ${name} ${id.slice(0, 6)}` } });
+    // toda empresa nova entra na limpeza do `teardown`, inclusive a criada dentro de um teste (ex.: a "Z" do m9d640.carteira, que ficava no banco com o catálogo
+    // publicado e sem aceite e reprovava a etapa 14 da esteira no m9d708.scripts)
+    (env.novasEmpresas = env.novasEmpresas || []).push(id);
     return { groupId: env.tenantA.groupId, companyId: id, userId: env.tenantA.userId };
   }
 
@@ -29,7 +32,7 @@ function createKit({ models, label, materialize }) {
 
   async function teardown(env) {
     clock.resetClock();
-    const ids = [env.cX.companyId, env.cY.companyId];
+    const ids = [...new Set([env.cX.companyId, env.cY.companyId, ...(env.novasEmpresas || [])])];
     await env.admin.transaction(async (transaction) => {
       await env.admin.query("SET LOCAL session_replication_role = 'replica'", { transaction });
       for (const { table, id } of [...env.created].reverse()) await env.admin.query(`DELETE FROM ${table} WHERE id = :id`, { replacements: { id }, transaction });
