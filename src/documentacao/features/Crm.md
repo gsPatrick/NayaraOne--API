@@ -135,8 +135,32 @@ O service expõe apenas `create`/`list`/`get` e um `PATCH /:id/status` restrito 
 mensagem já existente da MESMA empresa em vez de duplicar; o mesmo id em outra empresa é outra
 mensagem (único por empresa, DI-M9R-10). O autor (`authorUserId`) não vem do corpo: é sempre
 quem faz o pedido (DI-M9R-9). Campo de referência (`personId`, `opportunityId`,
-`conversationId`, `mediaQuarantineId`) que não seja um UUID em texto, e `externalMessageId`,
-`actionKey` ou `body` que não sejam texto, dão 400 `MESSAGE_VALIDATION` (DI-M9R-8).
+`conversationId`, `mediaQuarantineId`) que não seja um UUID em texto, e `externalMessageId`
+ou `body` que não sejam texto, dão 400 `MESSAGE_VALIDATION` (DI-M9R-8).
+
+Esquema fechado por rota (DI-M9R-11, `src/features/crm/messages.schema.js`, validado com Ajv
+em `messages.validate.js` antes do controller): o id do caminho, a consulta e o corpo de
+`POST /messages`, `POST /messages/send`, `PATCH /messages/:id/status`,
+`POST /messages/:id/send-alternate`, `POST /messages/:id/refresh-status`, `GET /messages` e
+`GET /messages/:id` passam inteiros pelo esquema da rota. Campo que a rota não conhece, tipo
+errado (sem conversão), valor fora da lista fechada ou do formato do banco, ou texto acima do
+tamanho da coluna é 400 `MESSAGE_VALIDATION`, com o nome do campo na mensagem e todos os
+campos recusados em `details.fields`. Nenhuma forma de entrada chega ao banco ou a um
+`String()`. Pontos do contrato:
+- `actionKey` não é aceito em `POST /messages` (a chave de idempotência só nasce pelas
+  automações e campanhas, M9-D415); use `externalMessageId` para não repetir um registro.
+- `authorUserId`, `connectionId`, `dispatchId`, `deliveryStatus`, `groupId` e `companyId`
+  continuam aceitos e descartados (definidos pelo servidor).
+- `purpose` só no formato da CHECK (`^[A-Za-z0-9_]{2,40}$`); fora dele é 400 (antes ficava nulo).
+- `PATCH /messages/:id/status`: `status` só de `RECEIVED|QUEUED|SENT|DELIVERED|READ|FAILED|CANCELLED|UNKNOWN`
+  (maiúsculas ou minúsculas); o corpo só tem `status`.
+- `POST /messages/send`: `kind` só `text|template|media` (exato, em texto); `templateVars` só
+  lista de textos; `mediaRef` UUID; `to`, `templateName`, `language`, `text`, `caption` em texto.
+  Telefone fora do E.164 continua 422 `INTEGRATION_MESSAGING_PHONE_INVALID` (M9-D229) e modelo
+  ou idioma fora dos aprovados, 422 `INTEGRATION_MESSAGING_TEMPLATE_NOT_APPROVED` (M9-D230).
+- `send-alternate` e `refresh-status` não têm corpo (qualquer campo é 400); `GET /messages`
+  aceita só `personId` e `opportunityId`. Id de caminho que não é UUID: 400 `MESSAGE_VALIDATION`
+  (antes `INVALID_ID_FORMAT`, pelo erro do banco).
 
 ```json
 {
@@ -155,7 +179,7 @@ quem faz o pedido (DI-M9R-9). Campo de referência (`personId`, `opportunityId`,
 - `400 OPPORTUNITY_VALIDATION` — `personId` ausente ou `temperature` inválida.
 - `422 OPPORTUNITY_NEXT_ACTION_REQUIRED` — opportunity ativa sem `nextAction`/`nextActionDueAt`.
 - `400 VISIT_VALIDATION` — campos obrigatórios ausentes ou `status` inválido.
-- `400 MESSAGE_VALIDATION` — `direction`/`authorType`/`channel` ausentes ou fora do enum.
+- `400 MESSAGE_VALIDATION` — pedido fora do esquema da rota de mensagem (DI-M9R-11): campo desconhecido, tipo errado, fora da lista fechada ou do formato.
 - `422 VISIT_SCHEDULED_IN_THE_PAST` — visita prospectiva agendada para o passado.
 - `400 OPPORTUNITY_TASK_VALIDATION` / `422 OPPORTUNITY_TASK_ASSIGNEE_NOT_ACTIVE` — tarefas de oportunidade.
 - `404 OPPORTUNITY_NOT_FOUND` / `VISIT_NOT_FOUND` / `MESSAGE_NOT_FOUND`.

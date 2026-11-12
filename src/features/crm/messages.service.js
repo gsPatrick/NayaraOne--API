@@ -8,17 +8,15 @@ const { createOnceByActionKey } = require('../../utils/createOnceByActionKey');
 const { businessDateKey } = require('../../utils/businessDate');
 const { describeMedia } = require('./messaging/whatsapp.mediaView');
 const { assertConversationRefsInScope } = require('./messages.refs');
-const { idOrNull, textOrNull } = require('./messages.input');
+const { idOrNull, textOrNull, oneOf, actionKeyOrNull } = require('./messages.input');
+const { DIRECTIONS, AUTHOR_TYPES, CHANNELS, DELIVERY_STATUSES, MESSAGE_STATUSES, PURPOSE, COLUMN_LIMITS } = require('./messages.constants');
 
-const DIRECTIONS = ['INBOUND', 'OUTBOUND'];
-const AUTHOR_TYPES = ['CLIENT', 'NAY', 'EMPLOYEE'];
-/**
- * M3-24 (correção): `channel` era gravado sem NENHUMA validação (a coluna é só um
- * VARCHAR(32) sem CHECK), então um typo — "whatsap", "zap", "" — entrava no histórico e
- * quebrava silenciosamente qualquer filtro/relatório por canal. Enum fechado, mesmo padrão de
- * `direction`/`authorType`.
- */
-const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'INSTAGRAM', 'OTHER'];
+/** Finalidade (M9-D230): só texto (objeto ou lista é 400; o String() dava 500). Vazio é "sem finalidade". */
+function purposeText(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') throw AppError.badRequest('O campo "purpose" deve ser um texto.', 'MESSAGE_VALIDATION');
+  return value;
+}
 
 /**
  * "crm"."messages" não tem `deleted_at`/paranoid no model (ver src/models/Message.js) — é
@@ -27,7 +25,7 @@ const CHANNELS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'I
  * nunca delete nem edição de `body`.
  */
 async function createMessage(payload, actorUserId, transaction) {
-  const { groupId, companyId, channel, direction, authorType, purpose, deliveryStatus } = payload;
+  const { groupId, companyId, channel, direction, authorType } = payload;
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
@@ -40,23 +38,15 @@ async function createMessage(payload, actorUserId, transaction) {
   const authorUserId = idOrNull(payload.authorUserId, 'authorUserId');
   const connectionId = idOrNull(payload.connectionId, 'connectionId');
   const dispatchId = idOrNull(payload.dispatchId, 'dispatchId');
-  const externalMessageId = textOrNull(payload.externalMessageId, 'externalMessageId', 128);
-  const actionKey = textOrNull(payload.actionKey, 'actionKey', 64);
+  const externalMessageId = textOrNull(payload.externalMessageId, 'externalMessageId', COLUMN_LIMITS.externalMessageId);
+  // Rodada 5 (DI-M9R-11 e 12): a chave só no formato da CHECK da migration 755, e as listas fechadas só em texto (o String() de antes dava 500 com {"toString": 1}).
+  const actionKey = actionKeyOrNull(payload.actionKey);
   const body = textOrNull(payload.body, 'body');
-
-  const normalizedDirection = String(direction).toUpperCase();
-  if (!DIRECTIONS.includes(normalizedDirection)) {
-    throw AppError.badRequest(`O campo "direction" deve ser um de: ${DIRECTIONS.join(', ')}.`, 'MESSAGE_VALIDATION');
-  }
-  const normalizedAuthorType = String(authorType).toUpperCase();
-  if (!AUTHOR_TYPES.includes(normalizedAuthorType)) {
-    throw AppError.badRequest(`O campo "authorType" deve ser um de: ${AUTHOR_TYPES.join(', ')}.`, 'MESSAGE_VALIDATION');
-  }
-
-  const normalizedChannel = channel ? String(channel).toUpperCase() : 'WHATSAPP';
-  if (!CHANNELS.includes(normalizedChannel)) {
-    throw AppError.badRequest(`O campo "channel" deve ser um de: ${CHANNELS.join(', ')}.`, 'MESSAGE_VALIDATION');
-  }
+  const normalizedDirection = oneOf(direction, 'direction', DIRECTIONS);
+  const normalizedAuthorType = oneOf(authorType, 'authorType', AUTHOR_TYPES);
+  const normalizedChannel = oneOf(channel, 'channel', CHANNELS, 'WHATSAPP');
+  const purpose = purposeText(payload.purpose);
+  const deliveryStatus = oneOf(payload.deliveryStatus, 'deliveryStatus', DELIVERY_STATUSES);
 
   let person = null;
   if (personId) {
@@ -117,7 +107,7 @@ async function createMessage(payload, actorUserId, transaction) {
       deliveryStatus: deliveryStatus || null,
       conversationId: conversationId || null,
       mediaQuarantineId: mediaQuarantineId || null,
-      purpose: purpose && /^[A-Za-z0-9_]{2,40}$/.test(String(purpose)) ? String(purpose).toUpperCase() : null, // M9-D230: a finalidade fica na mensagem; o consentimento é conferido de novo no envio
+      purpose: purpose && PURPOSE.test(purpose) ? purpose.toUpperCase() : null, // M9-D230: a finalidade fica na mensagem; o consentimento é conferido de novo no envio
       actionKey: actionKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -160,16 +150,17 @@ async function getMessage(id, transaction) {
 }
 
 async function updateMessageStatus(id, status, actorUserId, transaction, { fromProvider = false } = {}) {
+  // Rodada 5 (DI-M9R-11 e 13): só um status da lista fechada, em texto, antes de qualquer outra regra. Sem isso, texto acima de 32 caracteres ia ao
+  // varchar(32) e `{"toString": 1}` ao String() (500), e `{}`/`[]`/`true` eram gravados como "[OBJECT OBJECT]", "" e "TRUE".
+  if (status === undefined || status === null || status === '') throw AppError.badRequest('O campo "status" é obrigatório.', 'MESSAGE_VALIDATION');
+  const nextStatus = oneOf(status, 'status', MESSAGE_STATUSES);
   const message = await getMessage(id, transaction);
   // M9-D229: o status de entrega de mensagem que passou por fornecedor só muda por evidência dele (webhook ou consulta de status), nunca por edição manual.
   if (message.deliveryStatus && !fromProvider) {
     throw AppError.conflict('O status de entrega desta mensagem é confirmado pelo fornecedor e não pode ser alterado manualmente.', 'MESSAGE_STATUS_BY_PROVIDER_ONLY');
   }
-  if (!status) {
-    throw AppError.badRequest('O campo "status" é obrigatório.', 'MESSAGE_VALIDATION');
-  }
   const previousStatus = message.status;
-  message.status = String(status).toUpperCase();
+  message.status = nextStatus;
   if (fromProvider) message.deliveryStatus = message.status;
   message.updatedBy = actorUserId || null;
   await message.save({ transaction });
@@ -191,4 +182,4 @@ async function updateMessageStatus(id, status, actorUserId, transaction, { fromP
   return message;
 }
 
-module.exports = { createMessage, listMessages, getMessage, updateMessageStatus, DIRECTIONS, AUTHOR_TYPES, CHANNELS };
+module.exports = { createMessage, listMessages, getMessage, updateMessageStatus, DIRECTIONS, AUTHOR_TYPES, CHANNELS, MESSAGE_STATUSES };

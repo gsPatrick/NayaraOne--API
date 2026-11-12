@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const crmController = require('./crm.controller');
+const { validarMensagem } = require('./messages.validate');
 
 const crmRouter = Router();
 
@@ -57,13 +58,14 @@ crmRouter.get('/visits/:id', requirePermission('crm:visits:read'), crmController
 crmRouter.patch('/visits/:id', requirePermission('crm:visits:update'), crmController.updateVisit);
 crmRouter.delete('/visits/:id', requirePermission('crm:visits:delete'), crmController.removeVisit);
 
-crmRouter.post('/messages', requirePermission('crm:messages:create'), crmController.createMessage);
-crmRouter.post('/messages/send', requirePermission('crm:messages:create'), crmController.sendMessage);
-crmRouter.post('/messages/:id/send-alternate', requirePermission('crm:messages:create'), crmController.sendMessageViaAlternate);
-crmRouter.post('/messages/:id/refresh-status', requirePermission('crm:messages:update'), crmController.refreshMessageStatus);
-crmRouter.get('/messages', requirePermission('crm:messages:read'), crmController.listMessages);
-crmRouter.get('/messages/:id', requirePermission('crm:messages:read'), crmController.getMessage);
-crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update'), crmController.updateMessageStatus);
+// Rodada 5 (DI-M9R-11): cada rota de mensagem passa o pedido inteiro (id do caminho, consulta e corpo) pelo esquema fechado da rota antes do controller.
+crmRouter.post('/messages', requirePermission('crm:messages:create'), validarMensagem('criar'), crmController.createMessage);
+crmRouter.post('/messages/send', requirePermission('crm:messages:create'), validarMensagem('enviar'), crmController.sendMessage);
+crmRouter.post('/messages/:id/send-alternate', requirePermission('crm:messages:create'), validarMensagem('porId'), crmController.sendMessageViaAlternate);
+crmRouter.post('/messages/:id/refresh-status', requirePermission('crm:messages:update'), validarMensagem('porId'), crmController.refreshMessageStatus);
+crmRouter.get('/messages', requirePermission('crm:messages:read'), validarMensagem('listar'), crmController.listMessages);
+crmRouter.get('/messages/:id', requirePermission('crm:messages:read'), validarMensagem('ler'), crmController.getMessage);
+crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update'), validarMensagem('status'), crmController.updateMessageStatus);
 
 // --- Carrinho de imóveis compartilhável (item 3) --- reaproveita permissões já seeded de
 // opportunities (sem permissão nova 'crm:carts:*' — migrations de DDL/seed bloqueadas nesta
