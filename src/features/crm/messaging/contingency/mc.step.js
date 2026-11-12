@@ -7,7 +7,7 @@ const { QUEUED_STATUSES } = require('../../../integrations/contingency/contingen
 const { sendViaAlternateChannel } = require('./mc.email');
 const { NOT_MARKETING_SQL } = require('./mc.essential');
 
-const RECUSAS_ESPERADAS = ['INTEGRATION_MESSAGING_NO_CONSENT_ALTERNATE', 'INTEGRATION_MESSAGING_NO_ALTERNATE_ADDRESS', 'INTEGRATION_ALTERNATE_NOT_ELIGIBLE', 'INTEGRATION_MESSAGING_ALTERNATE_NOT_APPLICABLE'];
+const RECUSAS_ESPERADAS = ['MESSAGE_NOT_FOUND', 'INTEGRATION_MESSAGING_NO_CONSENT_ALTERNATE', 'INTEGRATION_MESSAGING_NO_ALTERNATE_ADDRESS', 'INTEGRATION_ALTERNATE_NOT_ELIGIBLE', 'INTEGRATION_MESSAGING_ALTERNATE_NOT_APPLICABLE'];
 
 /** O alternativo da política é uma connection de e-mail (outra família: o canal alternativo do contato)? Alternativo da mesma família é a troca do framework (M9-D226). */
 async function emailAlternate(ctx, policy, transaction) {

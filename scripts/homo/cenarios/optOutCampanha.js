@@ -3,6 +3,7 @@
 const { garantirPessoa, garantirEmail, garantirConsentimento } = require('../lib/pessoas');
 const { listar } = require('../lib/auditoria');
 const { dormir } = require('../lib/cliente');
+const { exigirForaDoSilencio } = require('../ponto5/silencio');
 
 const CENARIO = '(a) opt-out bloqueia campanha';
 const NOME_OK = 'ACEITE-M9 Contato Com Consentimento';
@@ -73,6 +74,7 @@ async function acharCampanha(ctx) {
 async function garantirCampanha(ctx, modeloId, pessoaIds) {
   let id = await acharCampanha(ctx);
   if (id) return { id, situacao: 'já existia' };
+  await exigirForaDoSilencio(ctx); // mesma trava do ponto 5 (DI-M9R-5): no horário de silêncio efetivo, para antes de criar a campanha
   const agora = Date.now();
   const corpo = {
     code: COD_CAMPANHA, name: 'ACEITE-M9 Campanha de teste de opt-out', objective: 'ACEITE-M9 provar que o contato com opt-out não recebe a campanha.',

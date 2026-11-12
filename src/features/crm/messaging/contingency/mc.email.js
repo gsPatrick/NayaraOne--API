@@ -29,7 +29,8 @@ async function hasAlternateConsent(person, purpose, params, transaction) {
 
 async function loadQueued(ctx, messageId, transaction) {
   const message = await Message.findOne({ where: { id: messageId, companyId: ctx.companyId }, transaction, lock: transaction.LOCK.UPDATE });
-  if (!message || message.direction !== 'OUTBOUND' || message.channel !== 'WHATSAPP' || message.deliveryStatus !== 'QUEUED' || !message.dispatchId) throw E.notQueued();
+  if (!message) throw E.notFound(); // fora do escopo da empresa da sessão (ou inexistente): 404, como GET/PATCH/refresh-status; o 409 abaixo é só para a mensagem que existe e não se aplica
+  if (message.direction !== 'OUTBOUND' || message.channel !== 'WHATSAPP' || message.deliveryStatus !== 'QUEUED' || !message.dispatchId) throw E.notQueued();
   const dispatch = await IntegrationDispatch.findOne({ where: { id: message.dispatchId, companyId: ctx.companyId }, transaction });
   if (!dispatch || !QUEUED_STATUSES.includes(dispatch.status) || dispatch.operation !== 'sendText') throw E.notQueued();
   return { message, dispatch };
