@@ -127,21 +127,27 @@ app.use(
 const keepRawBody = (req, res, buf) => {
   req.rawBody = buf;
 };
-const jsonParser = express.json({
+// Rodada 6 da verificação do Marco 9 (DI-M9R-14): todo erro dos leitores do corpo sai marcado (guardBodyReader) e o errorHandler o devolve como
+// 400, 413 ou 415 (charset ou compressão não aceitos, corpo comprimido quebrado, corpo interrompido), nunca 500.
+const { guardBodyReader } = require('./src/middlewares/requestRead.errors');
+const jsonParser = guardBodyReader(express.json({
   // 28mb: cobre o limite de 20MB de src/features/files/files.service.js (upload de arquivo
-  // via base64 infla ~33% o tamanho) + folga pro resto do payload JSON da requisição.
+  // via base64 infla ~33% o tamanho) + folga pro resto do payload JSON da requisição. O texto livre das rotas de mensagem tem limite
+  // próprio, por parâmetro da empresa (DI-M9R-16), conferido antes de qualquer processamento do texto.
   limit: '28mb',
   verify: keepRawBody,
-});
+}));
 // Webhook público de financiamento: sem login, então o corpo aceito é pequeno (evento de status, não arquivo).
-const webhookJsonParser = express.json({ limit: '256kb', verify: keepRawBody });
+const webhookJsonParser = guardBodyReader(express.json({ limit: '256kb', verify: keepRawBody }));
 // M9-D211: as rotas públicas de webhook (a única e os aliases dos fornecedores) recebem o corpo BRUTO (webhooks.rawBody.js), sem parser de JSON nem de formulário.
 const { isFrameworkWebhookPath } = require('./src/features/integrations/webhooks/webhooks.paths');
 const apiPrefixForWebhooks = process.env.APP_API_PREFIX || '/api';
 const isWebhookRoute = (req) => req.method === 'POST' && isFrameworkWebhookPath(req.path, apiPrefixForWebhooks);
 app.use((req, res, next) => (isWebhookRoute(req) ? next() : (req.path.includes('/correspondent/webhooks/') ? webhookJsonParser(req, res, next) : jsonParser(req, res, next))));
-const urlencodedParser = express.urlencoded({ extended: true });
+const urlencodedParser = guardBodyReader(express.urlencoded({ extended: true }));
 app.use((req, res, next) => (isWebhookRoute(req) ? next() : urlencodedParser(req, res, next)));
+// Rodada 6 (DI-M9R-15): texto com caractere nulo ou metade solta de par sub-rogado (o banco não grava) é recusado na porta, no corpo e na consulta.
+app.use(require('./src/middlewares/storableText.middleware').rejectUnstorableText);
 
 const apiPrefix = process.env.APP_API_PREFIX || '/api';
 

@@ -3,6 +3,7 @@
 const Ajv = require('ajv');
 const AppError = require('../../utils/AppError');
 const { ROTAS, PARTES, FORA_DA_ROTA } = require('./messages.schema');
+const { isStorableText } = require('../../utils/storableText');
 
 /**
  * Validação do pedido de cada rota de mensagem pelo esquema da rota (messages.schema.js, DI-M9R-11), antes do controller e de qualquer regra.
@@ -17,6 +18,9 @@ ajv.addKeyword('enumSemCaixa', {
   errors: false,
 });
 ajv.addKeyword('descricao', { metaSchema: { type: 'string' } });
+// Rodada 6 (DI-M9R-15): caractere nulo ou metade solta de par sub-rogado não é gravável (o jsonb do envio recusava e a rota dava 500).
+ajv.addKeyword('textoGravavel', { type: 'string', metaSchema: { type: 'boolean' }, validate: (ativo, valor) => !ativo || isStorableText(valor), errors: false });
+const NAO_GRAVAVEL = 'tem um caractere que não pode ser gravado (caractere nulo ou metade solta de um caractere Unicode)';
 
 const validadores = Object.fromEntries(Object.entries(ROTAS).map(([rota, partes]) => [
   rota, Object.fromEntries(Object.entries(partes).map(([parte, schema]) => [parte, { schema, valida: ajv.compile(schema) }])),
@@ -41,6 +45,7 @@ function descrever(erro, schema, parte) {
   }
   const campo = campoDoCaminho(erro.dataPath);
   if (!campo) return { campo: PARTES[parte], mensagem: `O ${PARTES[parte]} deve ser um objeto JSON com os campos da rota.` };
+  if (erro.keyword === 'textoGravavel') return { campo, mensagem: `O campo "${campo}" ${NAO_GRAVAVEL}.` };
   const definicao = (Object.prototype.hasOwnProperty.call(schema.properties || {}, campo) && schema.properties[campo]) || {};
   return { campo, mensagem: `O campo "${campo}" deve ser ${definicao.descricao || 'do tipo indicado pela rota'}.` };
 }

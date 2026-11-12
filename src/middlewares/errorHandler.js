@@ -5,6 +5,7 @@ const { failure } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
 const { redactText, redactDeep } = require('../shared/redaction');
 const { debugBody } = require('../shared/destructive-actions/debug.policy');
+const { mapBodyReaderError, mapPathDecodeError, mapUnstorableTextDbError } = require('./requestRead.errors');
 
 /**
  * Middleware de erro global do Express — único ponto que traduz qualquer
@@ -170,31 +171,25 @@ async function errorHandler(err, req, res, next) { // eslint-disable-line no-unu
     });
   }
 
-  // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06): upload de arquivo
-  // acima do limite do body parser (`express.json({ limit: '28mb' })` em app.js) é interceptado
-  // ANTES de chegar no check limpo de MAX_BYTES em files.service.js, batendo como
-  // PayloadTooLargeError cru e vazando "request entity too large" com 500 INTERNAL_ERROR em vez
-  // de um 400 amigável — mesma classe de vazamento de erro de infraestrutura já corrigida acima.
-  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
-    return failure(res, {
-      statusCode: 400,
-      code: 'FILE_UPLOAD_TOO_LARGE',
-      message: 'O arquivo enviado é grande demais.',
-    });
+  // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06; auditoria adversarial pós-DoD do Marco 8, Frente 8): o corpo acima do
+  // limite do leitor (`express.json({ limit: '28mb' })` em app.js) e o JSON malformado eram rejeitados ANTES de qualquer controller e caíam no 500.
+  // Rodada 6 da verificação do Marco 9 (DI-M9R-14): TODOS os erros do leitor do corpo (charset e compressão não aceitos, corpo comprimido quebrado,
+  // corpo interrompido, tamanho que não confere, campos demais) e o escape `%` malformado no caminho viram 400, 413 ou 415 (requestRead.errors.js).
+  const leitura = mapBodyReaderError(err) || mapPathDecodeError(err);
+  if (leitura) {
+    const nivel = leitura.logServerSide ? 'error' : 'warn';
+    logger[nivel]({ ...context, code: leitura.code, statusCode: leitura.statusCode, type: err.type || null, cause: err.code || null }, `[RequestRead] ${leitura.code}`);
+    return failure(res, { statusCode: leitura.statusCode, code: leitura.code, message: leitura.message });
+  }
+  if (err && err.status === 413) {
+    return failure(res, { statusCode: 400, code: 'FILE_UPLOAD_TOO_LARGE', message: 'O arquivo enviado é grande demais.' });
   }
 
-  // BUG REAL CORRIGIDO (auditoria adversarial pós-DoD do Marco 8, Frente 8 — Validação/Casos
-  // extremos): um corpo JSON malformado (ex.: JSON.stringify quebrado, corpo truncado, cliente
-  // bugado) é rejeitado pelo `express.json()` ANTES de chegar em qualquer controller, como
-  // SyntaxError com `err.type === 'entity.parse.failed'` — caía no catch-all abaixo e virava 500
-  // INTERNAL_ERROR em vez de um 400 amigável. Mesma classe de vazamento de erro de
-  // infraestrutura já corrigida acima para UUID inválido / overflow numérico / payload grande.
-  if (err && (err.type === 'entity.parse.failed' || (err instanceof SyntaxError && 'body' in (err || {})))) {
-    return failure(res, {
-      statusCode: 400,
-      code: 'INVALID_JSON_BODY',
-      message: 'O corpo da requisição não é um JSON válido.',
-    });
+  // Rodada 6 (DI-M9R-15): caractere nulo ou metade solta de par sub-rogado que chegou ao banco por fora da porta (parâmetro do caminho, por exemplo).
+  const textoMapped = mapUnstorableTextDbError(err);
+  if (textoMapped) {
+    logger.warn({ ...context, code: textoMapped.code, statusCode: textoMapped.statusCode, sqlState: err.parent && err.parent.code }, '[RequestRead] texto que o banco não grava');
+    return failure(res, textoMapped);
   }
 
   if (err && err.name === 'SequelizeValidationError') {
