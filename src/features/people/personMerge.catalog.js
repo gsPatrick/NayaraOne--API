@@ -22,7 +22,7 @@ const REFERENCIAS_REVISADAS = Object.freeze({
   'people.person_contacts.person_id': R,
   'people.person_addresses.person_id': E, // um endereço atual por pessoa e empresa
   'people.person_documents.person_id': E, // versão única por pessoa, empresa e tipo
-  'people.person_roles.person_id': E, // chave pessoa + papel + empresa
+  'people.person_roles.person_id': E, // chave pessoa + papel + empresa: a linha repetida do absorvido é encerrada e fica com ele (histórico)
   'people.communication_consents.person_id': R,
   'people.person_company_links.person_id': fora('O vínculo da pessoa absorvida com cada empresa é histórico; a canônica tem os seus (UNIQUE pessoa+empresa).'),
   'people.persons.merged_into_id': fora('Cadeia de mesclagem: quem já foi mesclado na absorvida continua apontando para ela, que aponta para a canônica.'),

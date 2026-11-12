@@ -14,12 +14,18 @@ process.env.PORT = process.env.PEOPLE_ACESSO_HTTP_TEST_PORT || '21841';
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { randomCpf } = require('./helpers/pessoasVinculo');
-const { iniciar, stopHttp, adminQuery } = require('./helpers/pessoasHttpEvidencia');
+const { iniciar, permissao, stopHttp, adminQuery } = require('./helpers/pessoasHttpEvidencia');
 
 let http; let gravar; let pessoaId; let cpf;
 const SUF = `${Date.now()}`;
 
 before(async () => {
+  // Os perfis do par são postos no estado do seed ANTES do login (as permissões vão no token): outro arquivo da mesma bateria pode ter
+  // refeito as permissões de governança (ex.: a migration do schema governance de ida e volta) e tirado a dedicada do perfil "claro".
+  if (process.env.DISPOSABLE_DB === '1' && process.env.DATABASE_ADMIN_URL) {
+    await permissao('CI LEITURA EM CLARO', 'governance:dlp:view-restricted', true);
+    await permissao('CI LEITURA MASCARADA', 'governance:dlp:view-restricted', false);
+  }
   ({ http, gravar } = await iniciar({
     port: process.env.PORT, arquivo: 'people.acessoDadosPessoais.http',
     logins: { gestorA: ['A', 'gestor'], mascarado: ['A', 'mascarado'], claro: ['A', 'claro'], leituraA: ['A', 'leitura'], gestorB: ['B', 'gestor'] },

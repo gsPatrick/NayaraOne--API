@@ -99,7 +99,12 @@ async function remapAllPersonReferences(canonicalId, absorbedId, actorUserId, tr
       await assertNothingPointsTo(table, column, absorbedId, privilegios[table].select, transaction);
       continue;
     }
-    const n = await update(`UPDATE ${qualified(table)} SET ${ident(column)} = :canonicalId WHERE ${ident(column)} = :absorbedId`, { canonicalId, absorbedId }, transaction);
+    const sql = chave === 'people.person_roles.person_id'
+      // Papel que o canônico já tem (a linha do absorvido foi encerrada acima): a linha encerrada fica com o absorvido, como histórico.
+      ? `UPDATE people.person_roles o SET person_id = :canonicalId WHERE o.person_id = :absorbedId
+           AND NOT EXISTS (SELECT 1 FROM people.person_roles s WHERE s.person_id = :canonicalId AND s.role_code = o.role_code AND s.company_id = o.company_id)`
+      : `UPDATE ${qualified(table)} SET ${ident(column)} = :canonicalId WHERE ${ident(column)} = :absorbedId`;
+    const n = await update(sql, { canonicalId, absorbedId }, transaction);
     if (n) remapeadas[chave] = n;
   }
   const links = await update(

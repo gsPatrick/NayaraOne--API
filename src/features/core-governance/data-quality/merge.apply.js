@@ -34,7 +34,12 @@ async function applyMerge(entityType, survivor, other, input, ctx) {
   const done = entityType === 'PROPERTY'
     ? await mergeProperties(survivor.id, other.id, ctx.actorUserId, ctx.transaction)
     : await mergePersons(survivor.id, other.id, ctx.actorUserId, ctx.transaction);
-  const moved = await references.remapLeftovers(entityType, survivor.id, other.id, ctx.transaction);
+  const leftovers = await references.remapLeftovers(entityType, survivor.id, other.id, ctx.transaction);
+  // O mapa de referências da decisão é tudo o que mudou de dono: o que o serviço do módulo moveu e o que sobrou para o genérico (M3-04:
+  // o serviço de pessoas passou a mover toda FK do catálogo, então o genérico quase não acha mais nada).
+  const moved = { ...(done.remappedReferences || {}) };
+  for (const [key, count] of Object.entries(leftovers)) moved[key] = (moved[key] || 0) + count;
+  for (const key of Object.keys(moved)) if (!moved[key]) delete moved[key];
   // M9-D906: os códigos do sistema antigo do absorvido passam ao sobrevivente (fecha a vigência e abre outra; o histórico fica).
   const legacyRefs = await externalRefs.repoint(ctx.tenant, { userId: ctx.actorUserId }, { fromEntityId: other.id, toEntityId: survivor.id }, ctx.transaction);
   if (legacyRefs.length) moved['core.external_refs'] = legacyRefs.length;

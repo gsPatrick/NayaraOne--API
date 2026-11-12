@@ -142,3 +142,17 @@ test('M3-04 tabela que o papel da aplicação não pode alterar: sem linha da ab
     await adminQuery(`GRANT UPDATE ON crm.conversations TO "${papel}"`);
   }
 });
+
+test('M3-04 papel que as duas pessoas têm: o merge segue, o canônico fica com um papel ativo e a linha repetida do absorvido fica encerrada com ele', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const canonica = await pessoa(t, 'Canônica Papel', { roles: ['CLIENTE', 'FORNECEDOR'] });
+    const absorvida = await pessoa(t, 'Absorvida Papel', { roles: ['CLIENTE', 'VENDEDOR'] });
+    // Encerrada antes do merge (o que a decisão da fila de governança faz): o merge não pode tentar mover a linha para o canônico.
+    await q(t, "UPDATE people.person_roles SET deleted_at = now() WHERE person_id = :a AND role_code = 'CLIENTE' RETURNING person_id", { a: absorvida.id });
+    assert.equal((await mergePersons(canonica.id, absorvida.id, tenant.userId, t)).status, 'MERGED');
+    const ativos = await q(t, 'SELECT role_code FROM people.person_roles WHERE person_id = :c AND deleted_at IS NULL ORDER BY 1', { c: canonica.id });
+    assert.deepEqual(ativos.map((r) => r.role_code), ['CLIENTE', 'FORNECEDOR', 'VENDEDOR']);
+    const doAbsorvido = await q(t, 'SELECT role_code, deleted_at IS NOT NULL AS encerrado FROM people.person_roles WHERE person_id = :a', { a: absorvida.id });
+    assert.deepEqual(doAbsorvido.map((r) => [r.role_code, r.encerrado]), [['CLIENTE', true]]);
+  });
+});
