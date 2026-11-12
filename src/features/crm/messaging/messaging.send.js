@@ -36,13 +36,27 @@ async function assertRefsInScope(ctx, input, transaction) {
   await assertConversationRefsInScope({ companyId: ctx.companyId, conversationId }, transaction);
 }
 
-/** Corpo mínimo por tipo de envio (os campos que o port exige) e o texto que fica no histórico do CRM. */
+const isText = (v) => typeof v === 'string';
+const optionalText = (v) => v === undefined || v === null || isText(v);
+
+/**
+ * Corpo mínimo por tipo de envio (os campos que o port exige). Rodada 5 (DI-M9R-11): `kind` só em texto e só uma chave PRÓPRIA de OPERATIONS. Antes,
+ * `OPERATIONS[kind]` aceitava `["template"]` (a lista vira a chave "template"), `"toString"` ou `"constructor"` (herdados do protótipo), e o resto do
+ * fluxo comparava `kind === 'template'`: a lista passava sem a conferência do modelo aprovado (M9-D230 3.1, 202 com modelo não aprovado) e o nome
+ * herdado chegava a `media.fileName` com a mídia nula (500). Daqui em diante o fluxo inteiro decide pela OPERAÇÃO, nunca por `kind`.
+ * Na rota HTTP o esquema (messages.schema.js) recusa antes; aqui vale para qualquer chamador do serviço.
+ */
 function checkInput(input) {
-  const operation = OPERATIONS[input.kind];
-  if (!operation) throw invalid('O campo "kind" deve ser um de: text, template, media.');
-  if (input.kind === 'text' && !(typeof input.text === 'string' && input.text.trim())) throw invalid('O campo "text" é obrigatório para envio de texto.');
-  if (input.kind === 'template' && !(typeof input.templateName === 'string' && input.templateName.trim())) throw invalid('O campo "templateName" é obrigatório para envio de template.');
-  if (input.kind === 'media' && !(typeof input.mediaRef === 'string' && input.mediaRef.trim())) throw invalid('O campo "mediaRef" é obrigatório para envio de mídia.');
+  const { kind } = input;
+  if (!isText(kind) || !Object.prototype.hasOwnProperty.call(OPERATIONS, kind)) throw invalid('O campo "kind" deve ser um de: text, template, media.');
+  const operation = OPERATIONS[kind];
+  if (operation === 'sendText' && !(isText(input.text) && input.text.trim())) throw invalid('O campo "text" é obrigatório para envio de texto.');
+  if (operation === 'sendTemplate' && !(isText(input.templateName) && input.templateName.trim())) throw invalid('O campo "templateName" é obrigatório para envio de template.');
+  if (operation === 'sendMedia' && !(isText(input.mediaRef) && input.mediaRef.trim())) throw invalid('O campo "mediaRef" é obrigatório para envio de mídia.');
+  for (const campo of ['language', 'purpose', 'caption', 'text', 'templateName']) if (!optionalText(input[campo])) throw invalid(`O campo "${campo}" deve ser um texto.`);
+  if (input.templateVars !== undefined && input.templateVars !== null && !(Array.isArray(input.templateVars) && input.templateVars.every(isText))) {
+    throw invalid('O campo "templateVars" deve ser uma lista de textos.');
+  }
   return operation;
 }
 
@@ -77,15 +91,15 @@ async function sendMessage(ctx, input, actorUserId, transaction, opts = {}) {
   const wa = await readWhatsappParams(ctx, transaction);
   const to = assertE164(pedido.to, params.countryCode);
   const connection = await resolveConnection({ companyId: ctx.companyId, domain: 'MESSAGING' }, transaction);
-  if (pedido.kind === 'template') assertTemplate(connection, pedido);
+  if (operacaoPedida === 'sendTemplate') assertTemplate(connection, pedido);
   await assertConsent(pedido.personId || null, pedido.purpose, wa, transaction);
   const conversa = pedido.personId ? await ensureConversation(ctx, pedido.personId, { connection, externalConversationId: to }, transaction) : null; // a conversa é da pessoa, não do fornecedor: sobrevive à troca de provider (M9-D221)
-  if (pedido.kind !== 'template') assertSessionWindow(conversa, wa);
-  const media = pedido.kind === 'media' ? await prepareOutboundMedia({ auth: (opts && opts.auth) || { ...ctx, userId: actorUserId || ctx.userId, permissions: [] }, fileId: pedido.mediaRef, params: wa, transaction }) : null;
+  if (operacaoPedida !== 'sendTemplate') assertSessionWindow(conversa, wa);
+  const media = operacaoPedida === 'sendMedia' ? await prepareOutboundMedia({ auth: (opts && opts.auth) || { ...ctx, userId: actorUserId || ctx.userId, permissions: [] }, fileId: pedido.mediaRef, params: wa, transaction }) : null;
   const { operation, degraded } = chooseOperation(connection, operacaoPedida);
   const pessoa = pedido.personId ? await Person.findByPk(pedido.personId, { transaction }) : null;
   const conversationId = conversa ? conversa.id : (pedido.conversationId || null);
-  const historico = pedido.kind === 'text' ? pedido.text : (pedido.kind === 'template' ? `[template ${pedido.templateName}]` : (pedido.caption || `[mídia ${media.fileName}]`));
+  const historico = { sendText: () => pedido.text, sendTemplate: () => `[template ${pedido.templateName}]`, sendMedia: () => pedido.caption || `[mídia ${media.fileName}]` }[operacaoPedida]();
   const message = await createMessage({
     groupId: ctx.groupId, companyId: ctx.companyId, personId: pedido.personId || null, opportunityId: pedido.opportunityId || null, channel: 'WHATSAPP', direction: 'OUTBOUND',
     authorType: actorUserId ? 'EMPLOYEE' : 'NAY', authorUserId: actorUserId || null, body: historico, purpose: pedido.purpose || undefined, connectionId: connection.id, deliveryStatus: 'QUEUED', conversationId,
