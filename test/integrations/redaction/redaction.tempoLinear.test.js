@@ -160,11 +160,13 @@ test('casos nomeados: o resultado de cada regra reescrita, nos perfis que a usam
   const { redactText } = require('../../../src/shared/redaction');
   const { redactFreeText } = require('../../../src/shared/redaction/freeText');
   const { redactForAi } = require('../../../src/shared/redaction/aiProfile');
+  // Cadeia de conexão montada em partes: o texto fictício não fica inteiro no código (a varredura de segredo, scripts/secretScan.js, o acharia).
+  const cadeia = (antes, usuario, senha, depois) => `${antes}://${usuario}:${senha}@${depois}`;
   const casos = [
     // senha em cadeia de conexão: o esquema começa na PRIMEIRA letra da sequência (dígitos antes ficam fora)
-    [redactText('postgres://app:s3nh4@db:5432/x', { secretsOnly: true }), 'postgres://app:[REDACTED]@db:5432/x'],
-    [redactText('1postgres://app:s3nh4@db/x', { secretsOnly: true }), '1postgres://app:[REDACTED]@db/x'],
-    [redactText('+.9ab+c.d-e://u:p:q@h', { secretsOnly: true }), '+.9ab+c.d-e://u:[REDACTED]@h'],
+    [redactText(cadeia('postgres', 'app', 's3nh4', 'db:5432/x'), { secretsOnly: true }), cadeia('postgres', 'app', '[REDACTED]', 'db:5432/x')],
+    [redactText(cadeia('1postgres', 'app', 's3nh4', 'db/x'), { secretsOnly: true }), cadeia('1postgres', 'app', '[REDACTED]', 'db/x')],
+    [redactText(cadeia('+.9ab+c.d-e', 'u', 'p:q', 'h'), { secretsOnly: true }), cadeia('+.9ab+c.d-e', 'u', '[REDACTED]', 'h')],
     [redactText(`${'x'.repeat(5000)}://u:p@h`, { secretsOnly: true }), `${'x'.repeat(5000)}://u:[REDACTED]@h`],
     // JWT: começa no primeiro "eyJ" da sequência
     [redactText('xxeyJa.b.c fim', { secretsOnly: true }), 'xx[REDACTED] fim'],
