@@ -48,8 +48,20 @@ const CRIAR = V.objetoAberto({
 
 const ATUALIZAR = V.objetoAberto({ ...camposDaPessoa, changeEvidence: V.objeto() });
 
+/** `POST /people/:id/merge` (rodada 8, DI-M9R-25): o registro absorvido é um identificador em texto. */
+const MESCLAR = V.objetoAberto({ absorbedId: V.identificador() });
+
+/** Consulta de `GET /people` (rodada 8, DI-M9R-24): `personType` (ou `type`) e `status`, sempre texto. */
+const LISTAR = V.objetoAberto({
+  personType: V.textoDaConsulta({ max: 10 }),
+  type: V.textoDaConsulta({ max: 10 }),
+  status: V.textoDaConsulta({ max: 30 }),
+});
+
 module.exports = {
   validarCriacaoDePessoa: V.validarEntrada({ body: CRIAR }, 'PERSON_VALIDATION'),
   validarAtualizacaoDePessoa: V.validarEntrada({ body: ATUALIZAR }, 'PERSON_VALIDATION'),
-  ESQUEMAS: { CRIAR, ATUALIZAR },
+  validarListagemDePessoas: V.validarEntrada({ query: LISTAR }, 'PERSON_VALIDATION'),
+  validarMesclagem: V.validarEntrada({ body: MESCLAR }, 'PERSON_MERGE_VALIDATION'),
+  ESQUEMAS: { CRIAR, ATUALIZAR, LISTAR, MESCLAR },
 };

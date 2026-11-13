@@ -20,9 +20,17 @@ const campos = {
 
 const CRIAR = V.objetoAberto(campos);
 const ATUALIZAR = V.objetoAberto(campos);
+/** `POST /properties/:id/offers` (rodada 8, DI-M9R-25): preço é número (ou texto com o número), datas ISO 8601. */
+const OFERTA = V.objetoAberto({
+  offerType: V.texto(), status: V.texto(), askingPrice: V.numeroOuTexto(), confidentialMinPrice: V.numeroOuTexto(), startsAt: V.dataEmTexto(), endsAt: V.dataEmTexto(),
+});
+/** `POST /properties/:id/owners` (rodada 8, DI-M9R-25): a pessoa proprietária é um identificador em texto. */
+const PROPRIETARIO = V.objetoAberto({ personId: V.identificador(), roleCode: V.texto(), validFrom: V.dataEmTexto(), validUntil: V.dataEmTexto() });
 
 module.exports = {
   validarCriacaoDeImovel: V.validarEntrada({ body: CRIAR }, 'PROPERTY_VALIDATION'),
   validarAtualizacaoDeImovel: V.validarEntrada({ body: ATUALIZAR }, 'PROPERTY_VALIDATION'),
-  ESQUEMAS: { CRIAR, ATUALIZAR },
+  validarProprietario: V.validarEntrada({ body: PROPRIETARIO }, 'PROPERTY_OWNER_VALIDATION'),
+  validarOferta: V.validarEntrada({ body: OFERTA }, 'PROPERTY_OFFER_VALIDATION'),
+  ESQUEMAS: { CRIAR, ATUALIZAR, PROPRIETARIO, OFERTA },
 };

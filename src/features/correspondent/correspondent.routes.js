@@ -20,7 +20,7 @@ const reviewController = require('./correspondentReview.controller');
 const correspondentRouter = Router();
 correspondentRouter.use(authMiddleware, tenantMiddleware);
 
-correspondentRouter.post('/financing-cases', requirePermission('correspondent:create'), casesController.createFinancingCase);
+correspondentRouter.post('/financing-cases', requirePermission('correspondent:create'), require('./cases/financingCase.schema').validarCaso, casesController.createFinancingCase);
 correspondentRouter.get('/financing-cases', requirePermission('correspondent:read'), casesController.listFinancingCases);
 correspondentRouter.get('/financing-cases/:id', requirePermission('correspondent:read'), casesController.getFinancingCase);
 
@@ -63,6 +63,7 @@ correspondentRouter.get(
 correspondentRouter.post(
   '/financing-cases/:id/documents',
   requirePermission('correspondent:create'),
+  require('./cases/financingCase.schema').validarDocumento,
   documentsController.uploadDocument
 );
 

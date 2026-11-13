@@ -79,7 +79,7 @@ async function publishDashboardVersion(ctx, body, transaction) {
   await metricStore.enableAnalyticsWriter(transaction);
   // Meta p95 obrigatória (M9-D698 3.5): a coluna p95_target_ms é a única fonte; não há valor padrão.
   const p95 = input.p95TargetMs;
-  if (!Number.isInteger(p95) || p95 <= 0) throw AppError.unprocessable('Defina a meta de tempo (p95) do painel.', 'ANALYTICS_DASHBOARD_NO_P95');
+  if (!Number.isInteger(p95) || p95 <= 0 || p95 > 2147483647) throw AppError.unprocessable('Defina a meta de tempo (p95) do painel.', 'ANALYTICS_DASHBOARD_NO_P95');
   const draft = await store.createDashboardDefinition({
     scopeLevel: input.scopeLevel, groupId: ctx.groupId, companyId: input.scopeLevel === 'COMPANY' ? ctx.companyId : null,
     dashboardCode: input.dashboardCode, name: input.name, description: input.description, domain: input.domain,

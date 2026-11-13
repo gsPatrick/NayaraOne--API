@@ -8,7 +8,6 @@ const { debugBody } = require('../shared/destructive-actions/debug.policy');
 const { mapBodyReaderError, mapPathDecodeError, mapUnstorableTextDbError } = require('./requestRead.errors');
 const { limitarDetalhes, erroParaLog, respostaDeUltimoRecurso } = require('./errorHandler.safe');
 const { mapClientDataDbError } = require('./dbClientErrors');
-const { mapClientTypeError, mapInvalidValueError, mapOperatorTypeError, mapFindByPkError } = require('./clientTypeErrors');
 
 /**
  * Middleware de erro global do Express — único ponto que traduz qualquer
@@ -133,6 +132,8 @@ async function tratarErro(err, req, res) {
   }
 
   if (err && err.name === 'SequelizeUniqueConstraintError') {
+    // Rodada 8 (DI-M9R-25): o 409 da unicidade não ficava em registro nenhum; sai como aviso, com a restrição (sem o valor), para a equipe ver.
+    logger.warn({ ...context, code: 'UNIQUE_CONSTRAINT_VIOLATION', statusCode: 409, sqlState: err.parent && err.parent.code, constraint: err.parent && err.parent.constraint }, '[ClientData] unicidade recusada pelo banco');
     return failure(res, {
       statusCode: 409,
       code: 'UNIQUE_CONSTRAINT_VIOLATION',
@@ -150,31 +151,10 @@ async function tratarErro(err, req, res) {
     return failure(res, rlsMapped);
   }
 
-  // FIX (auditoria E2E de browser, 01/10/2026): um id de rota com formato inválido (ex.:
-  // /construction/projects/id-que-nao-existe-123, resultado comum de favoritos velhos ou link
-  // direto digitado errado) batia direto no Postgres como SequelizeDatabaseError ("invalid
-  // input syntax for type uuid: ..."), caía no catch-all abaixo e virava 500 com a mensagem
-  // crua do Postgres em INGLÊS exibida ao usuário — um 404/400 amigável é o esperado aqui, não
-  // um erro interno (não é uma falha do servidor, é um identificador que o usuário passou).
-  if (err && err.name === 'SequelizeDatabaseError' && /invalid input syntax for type uuid/i.test(err.message || '')) {
-    return failure(res, {
-      statusCode: 400,
-      code: 'INVALID_ID_FORMAT',
-      message: 'O identificador informado não é válido.',
-    });
-  }
-
-  // BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 2): quantidade/valor acima da precisão da
-  // coluna DECIMAL (ex.: "999999" num campo DECIMAL(9,6), que só comporta 3 dígitos inteiros)
-  // batia no Postgres como "numeric field overflow" e vazava cru pro usuário — mesma classe de
-  // vazamento de erro de infraestrutura já corrigida acima pra UUID inválido.
-  if (err && err.name === 'SequelizeDatabaseError' && /numeric field overflow/i.test(err.message || '')) {
-    return failure(res, {
-      statusCode: 400,
-      code: 'VALUE_TOO_LARGE',
-      message: 'O valor informado é grande demais para este campo.',
-    });
-  }
+  // FIX (auditoria E2E de browser, 01/10/2026) e BUG REAL CORRIGIDO (auditoria E2E Marco 7, ciclo 2): o id de rota com formato inválido ("invalid
+  // input syntax for type uuid") e o valor acima da precisão da coluna ("numeric field overflow") viravam 400 aqui, sem condição. Rodada 8
+  // (DI-M9R-25): os dois são da classe 22 e passam pela mesma regra das demais (dbClientErrors.js): 400 INVALID_ID_FORMAT / VALUE_TOO_LARGE só
+  // quando o valor recusado está no pedido; o mesmo erro com valor do servidor é 500 e aparece no registro como ERRO.
 
   // BUG REAL CORRIGIDO (auditoria E2E ao vivo, Marco 6, Ciclo 4, 2026-10-06; auditoria adversarial pós-DoD do Marco 8, Frente 8): o corpo acima do
   // limite do leitor (`express.json({ limit: '28mb' })` em app.js) e o JSON malformado eram rejeitados ANTES de qualquer controller e caíam no 500.
@@ -191,21 +171,18 @@ async function tratarErro(err, req, res) {
   }
 
   // Rodada 6 (DI-M9R-15): caractere nulo ou metade solta de par sub-rogado que chegou ao banco por fora da porta (parâmetro do caminho, por exemplo).
-  const textoMapped = mapUnstorableTextDbError(err);
+  const textoMapped = mapUnstorableTextDbError(err, req);
   if (textoMapped) {
     logger.warn({ ...context, code: textoMapped.code, statusCode: textoMapped.statusCode, sqlState: err.parent && err.parent.code }, '[RequestRead] texto que o banco não grava');
     return failure(res, textoMapped);
   }
 
-  // Rodada 7 (DI-M9R-20): os demais erros de DADO do banco (classe 22: texto maior que a coluna, data inválida, número fora da faixa ...) e o
-  // identificador com tipo errado (número ou objeto onde a rota espera UUID) são do valor enviado: 400, com o campo quando se sabe, nunca o valor.
-  const dadoMapped = mapClientDataDbError(err);
+  // Rodada 7 (DI-M9R-20), refeito na rodada 8 (DI-M9R-25): erro de DADO ou de INTEGRIDADE do banco (classes 22 e 23) é 4xx só com prova de que o
+  // valor recusado veio do pedido (o campo do pedido com aquele valor, e com o nome da coluna quando ela é conhecida). Sem a prova, segue para o 500.
+  const dadoMapped = mapClientDataDbError(err, req);
   if (dadoMapped) {
-    const { logLevel, ...resposta } = dadoMapped;
-    const sqlState = err.parent && err.parent.code;
-    if (logLevel === 'error') logger.error({ ...context, code: resposta.code, statusCode: resposta.statusCode, sqlState, err: erroParaLog(err) }, '[ClientData] valor recusado pelo banco sem validação na porta da rota');
-    else logger.warn({ ...context, code: resposta.code, statusCode: resposta.statusCode, sqlState }, '[ClientData] valor recusado pelo banco');
-    return failure(res, resposta);
+    logger.warn({ ...context, code: dadoMapped.code, statusCode: dadoMapped.statusCode, sqlState: err.parent && err.parent.code, fields: dadoMapped.details && dadoMapped.details.fields }, '[ClientData] valor do pedido recusado pelo banco');
+    return failure(res, dadoMapped);
   }
 
   if (err && err.name === 'SequelizeValidationError') {
@@ -217,13 +194,9 @@ async function tratarErro(err, req, res) {
     });
   }
 
-  // Rodada 7 (DI-M9R-21): TypeError com prova no pedido (o campo citado pela expressão tem o tipo errado) é 400; o registro sai como ERRO.
-  const tipoMapped = mapClientTypeError(err, req) || mapInvalidValueError(err, req) || mapOperatorTypeError(err, req) || mapFindByPkError(err, req);
-  if (tipoMapped) {
-    logger.error({ ...context, code: tipoMapped.code, statusCode: 400, fields: tipoMapped.details.fields, err: erroParaLog(err) }, '[ClientType] campo com tipo errado chegou ao código sem validação na porta da rota');
-    return failure(res, tipoMapped);
-  }
-
+  // Rodada 8 (DI-M9R-25): o guarda genérico de tipo da rodada 7 (clientTypeErrors.js, DI-M9R-21) foi retirado: a "prova" dele (o pedido tem um número,
+  // um booleano, uma lista ou um campo com o nome da variável) transformava em 400 defeitos do servidor. Tipo errado de campo do pedido é recusado na
+  // porta de cada rota (esquema), e o TypeError que chega aqui é do código: 500, registrado como ERRO com a pilha.
   logger.error({ ...context, err: erroParaLog(err) }, '[UnhandledError]');
 
   // M9-D852: a pessoa vê uma frase em português com o código de suporte (o mesmo correlationId dos logs e da auditoria); stack, SQL e caminhos

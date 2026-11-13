@@ -29,7 +29,7 @@ inventoryRouter.patch('/inventory/locations/:id', requirePermission('inventory:u
 // Movimento de estoque — único ponto de escrita de "inventory"."stock_balances" (EST-002).
 // ADJUSTMENT/LOSS/DISPOSAL exigem inventory:approve, validado dentro do service (movements.service.js).
 // ADJUSTMENT/DISPOSAL manuais aqui são recusados (INVENTORY_ADJUSTMENT_REQUIRES_PROPOSAL) — ver abaixo.
-inventoryRouter.post('/inventory/movements', requirePermission('inventory:create'), inventoryController.recordMovement);
+inventoryRouter.post('/inventory/movements', requirePermission('inventory:create'), require('./inventory.input.schema').validarMovimento, inventoryController.recordMovement);
 inventoryRouter.get('/inventory/movements', requirePermission('inventory:read'), inventoryController.listMovements);
 // Revisão Marco 7 (19/10/2026), A6/EST-008: ajuste/descarte manual é proposta (inventory:create)
 // decidida por OUTRA pessoa (inventory:approve; segregação conferida no service e no banco).
@@ -64,7 +64,7 @@ inventoryRouter.post('/assets/:id/dispose', requirePermission('inventory:approve
 inventoryRouter.get('/assets/:id/disposal', requirePermission('inventory:read'), inventoryController.getAssetDisposal);
 
 // Tool loans (Guia do Marcelo §6/§7) — OPEN -> RETURNED. EST-TS-05 bloqueia novo empréstimo de ferramenta já emprestada.
-inventoryRouter.post('/assets/:id/loan', requirePermission('inventory:create'), inventoryController.loanTool);
+inventoryRouter.post('/assets/:id/loan', requirePermission('inventory:create'), require('./inventory.input.schema').validarEmprestimo, inventoryController.loanTool);
 inventoryRouter.post('/tool-loans/:id/return', requirePermission('inventory:update'), inventoryController.returnTool);
 inventoryRouter.get('/tool-loans', requirePermission('inventory:read'), inventoryController.listToolLoans);
 

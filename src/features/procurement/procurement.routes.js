@@ -32,7 +32,7 @@ procurementRouter.get('/procurement/supplier-evaluations', requirePermission('pr
 
 procurementRouter.post('/procurement/purchase-orders/:id/cancel', requirePermission('procurement:approve'), confirmAction('procurement.order.cancel'), controller.cancelPurchaseOrder);
 
-procurementRouter.post('/procurement/supplier-qualifications', requirePermission('procurement:create'), controller.upsertSupplierQualification);
+procurementRouter.post('/procurement/supplier-qualifications', requirePermission('procurement:create'), require('./procurement.input.schema').validarQualificacao, controller.upsertSupplierQualification);
 procurementRouter.get('/procurement/supplier-qualifications', requirePermission('procurement:read'), controller.listSupplierQualifications);
 procurementRouter.post('/procurement/supplier-qualifications/:id/decide', requirePermission('procurement:approve'), controller.decideSupplierDueDiligence);
 
@@ -43,7 +43,7 @@ procurementRouter.post('/procurement/approval-threshold-rule', requirePermission
 
 // Insurance Hub (Marco 7 — "COMPRAS/PROCUREMENT + SEGUROS"). Emitir apólice e submeter sinistro
 // movimentam dinheiro/compromisso real — mesma permissão de aprovação do resto do Compras.
-procurementRouter.post('/procurement/insurance-policies', requirePermission('procurement:create'), insuranceController.createPolicy);
+procurementRouter.post('/procurement/insurance-policies', requirePermission('procurement:create'), require('./procurement.input.schema').validarApolice, insuranceController.createPolicy);
 procurementRouter.get('/procurement/insurance-policies', requirePermission('procurement:read'), insuranceController.listPolicies);
 procurementRouter.get('/procurement/insurance-policies/:id', requirePermission('procurement:read'), insuranceController.getPolicy);
 procurementRouter.post('/procurement/insurance-policies/:id/quote', requirePermission('procurement:create'), insuranceController.quotePolicy);

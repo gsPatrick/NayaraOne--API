@@ -35,6 +35,10 @@ async function loadDashboard(id, transaction, { lock = false } = {}) {
 
 async function resolveBase(input, transaction) {
   if (!input.baseDashboardId) return { input, base: null };
+  // Rodada 8 (DI-M9R-25): o painel de base é um identificador em texto (objeto ia ao SQL e dava 500).
+  if (typeof input.baseDashboardId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(input.baseDashboardId)) {
+    throw invalid(CODE, 'O painel de base deve ser um identificador (UUID) em texto.');
+  }
   const base = await loadDashboard(input.baseDashboardId, transaction);
   const scopeLevel = base.company_id ? 'COMPANY' : base.group_id ? 'GROUP' : 'GLOBAL';
   return {
@@ -54,8 +58,11 @@ function validateDefinition(input) {
   requireText(input.name, 'O nome do painel', CODE);
   requireOneOf(input.domain, DASHBOARD_DOMAINS, 'Domínio', CODE);
   requireText(input.requiredPermission, 'A permissão de leitura do painel', CODE);
+  // Rodada 8 (DI-M9R-25): a descrição ia ao SQL sem conferir o tipo (objeto virava "Invalid value" e 500, escondido pelo guarda genérico, retirado).
+  if (input.description != null && typeof input.description !== 'string') throw invalid(CODE, 'A descrição do painel deve ser um texto.');
   if (input.audienceRoles !== undefined && !Array.isArray(input.audienceRoles)) throw invalid(CODE, 'Os papéis do painel devem ser uma lista.');
-  if (input.p95TargetMs != null && (!Number.isInteger(input.p95TargetMs) || input.p95TargetMs <= 0)) throw invalid(CODE, 'A meta p95 deve ser um inteiro positivo (ms).');
+  // Rodada 8 (DI-M9R-25): a coluna é integer; 1e21 passa por Number.isInteger e o banco recusava (integer out of range, valor que o comando não mostra).
+  if (input.p95TargetMs != null && (!Number.isInteger(input.p95TargetMs) || input.p95TargetMs <= 0 || input.p95TargetMs > 2147483647)) throw invalid(CODE, 'A meta p95 deve ser um inteiro positivo (ms), até 2147483647.');
 }
 
 /** Cria o painel em DRAFT (version 1) ou, com baseDashboardId, a próxima versão copiando os widgets da base. */

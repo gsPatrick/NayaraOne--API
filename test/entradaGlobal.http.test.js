@@ -112,9 +112,9 @@ rodar('2. tipo errado no corpo das rotas citadas: 400 com o nome do campo (antes
     const rd = await pedir('POST', '/radar', { corpo: comCampo({ criteriaJson: { required: { city: 'X' }, preferences: [] } }, 'personId', cru) });
     assert.deepEqual([rd.status, codigo(rd), campos(rd)], [400, 'RADAR_VALIDATION', ['personId']], `radar personId=${cru}`);
   }
-  // data que não é data: o banco recusa (classe 22) e a resposta é 400, não 500
+  // data que não é data: recusada na porta pelo esquema (rodada 8, DI-M9R-25: o "Invalid date" que o Sequelize montava não é valor do pedido)
   const data = await pedir('POST', '/opportunities', { corpo: json({ personId: pessoa, nextAction: 'Ligar', nextActionDueAt: 'amanhã cedo' }) });
-  assert.deepEqual([data.status, codigo(data)], [400, 'INVALID_DATE_VALUE']);
+  assert.deepEqual([data.status, codigo(data), campos(data)], [400, 'OPPORTUNITY_VALIDATION', ['nextActionDueAt']]);
   // o caminho certo continua funcionando
   const ok = await pedir('POST', '/opportunities', { corpo: json({ personId: pessoa, nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 864e5).toISOString() }) });
   assert.equal(ok.status, 201, json(ok.json));
@@ -166,18 +166,18 @@ rodar('4. texto maior que a coluna: 400 com o campo e sem o valor (antes: 500 va
   assert.equal(emoji.status, 201, json(emoji.json));
 });
 
-rodar('5. mecanismo geral, em rotas sem esquema na porta: tipo errado, identificador inexistente e texto longo viram 400 com o campo', async () => {
-  // "Invalid value" do Sequelize (objeto como valor de uma consulta) e 42883 (número comparado com texto): 400 INVALID_FIELD_TYPE
+rodar('5. (contrato da rodada 8, DI-M9R-25) tipo errado é recusado pelo esquema da rota; identificador inexistente e texto longo do pedido viram 400 com prova', async () => {
+  // o guarda genérico de tipo foi retirado: as rotas que dependiam dele têm esquema na porta, com o código do módulo
   const mov = await pedir('POST', '/inventory/movements', { corpo: json({ inventoryItemId: { x: 1 }, movementType: 'OUT', quantity: 2, sourceType: 'MANUAL', reason: 'CI' }) });
-  assert.deepEqual([mov.status, codigo(mov), campos(mov)], [400, 'INVALID_FIELD_TYPE', ['inventoryItemId']], json(mov.json));
+  assert.deepEqual([mov.status, codigo(mov), campos(mov)], [400, 'INVENTORY_MOVEMENT_VALIDATION', ['inventoryItemId']], json(mov.json));
   const clausula = await pedir('POST', '/legal/clauses', { corpo: json({ code: 12345, title: 'CI', bodyText: 'Texto.', category: 'GENERAL' }) });
-  assert.deepEqual([clausula.status, codigo(clausula)], [400, 'INVALID_FIELD_TYPE'], json(clausula.json));
-  // identificador que não existe (chave estrangeira, classe 23): 400 REFERENCE_NOT_FOUND com o campo e sem o id
+  assert.deepEqual([clausula.status, codigo(clausula), campos(clausula)], [400, 'LEGAL_CONTRACT_CLAUSE_VALIDATION', ['code']], json(clausula.json));
+  // identificador que não existe (chave estrangeira, classe 23): o id do detalhe do banco é o do campo do pedido -> 400 REFERENCE_NOT_FOUND, sem o id
   const inexistente = '9d3b6a0e-0000-4000-8000-0000000000ff';
   const tx = await pedir('POST', '/finance/bank-transactions', { corpo: json({ bankAccountId: inexistente, amount: -10.5, transactionDate: new Date().toISOString() }) });
   assert.deepEqual([tx.status, codigo(tx), campos(tx)], [400, 'REFERENCE_NOT_FOUND', ['bankAccountId']], json(tx.json));
   assert.ok(!JSON.stringify(tx.json).includes(inexistente), 'o id do detalhe do banco não volta');
-  // texto maior que a coluna numa rota sem esquema (classe 22): 400 VALUE_TOO_LONG com o campo, pelo comando do Sequelize
+  // texto maior que a coluna numa rota sem esquema (classe 22): o texto do parâmetro do comando é o do campo do pedido -> 400 VALUE_TOO_LONG
   const centro = await pedir('POST', '/finance/cost-centers', { corpo: json({ name: 'N'.repeat(5000), code: `CI${SUFIXO}`.slice(0, 20) }) });
   assert.deepEqual([centro.status, codigo(centro), campos(centro)], [400, 'VALUE_TOO_LONG', ['name']], json(centro.json));
   assert.ok(!JSON.stringify(centro.json).includes('NNNNNNNNNN'), 'o texto não volta na resposta');
@@ -186,7 +186,13 @@ rodar('5. mecanismo geral, em rotas sem esquema na porta: tipo errado, identific
 rodar('6. o tamanho de texto dos esquemas da porta é o tamanho da coluna no banco', async () => {
   const { sequelize } = require('../src/models');
   const esquemas = [require('../src/features/people/people.schema').ESQUEMAS, require('../src/features/properties/properties.schema').ESQUEMAS,
-    require('../src/features/crm/opportunities.schema').ESQUEMAS, require('../src/features/radar/radar.schema').ESQUEMAS, require('../src/features/auth/auth.schema').ESQUEMAS];
+    require('../src/features/crm/opportunities.schema').ESQUEMAS, require('../src/features/radar/radar.schema').ESQUEMAS, require('../src/features/auth/auth.schema').ESQUEMAS,
+    // rodada 8 (DI-M9R-24 e DI-M9R-25): esquemas novos de consulta e de corpo
+    ...['features/crm/feedbackCases.schema', 'features/core-governance/feature-flags/flags.query.schema', 'features/ai/releaseGates/releaseGates.query.schema',
+      'features/ai/memory/memory.query.schema', 'features/ai/recommendations/recommendation.query.schema', 'features/marketing/publications/publications.query.schema',
+      'features/marketing/content/template.query.schema', 'features/finance/finance.input.schema', 'features/procurement/procurement.input.schema',
+      'features/inventory/inventory.input.schema', 'features/construction/construction.input.schema', 'features/legal/legal.input.schema',
+      'features/correspondent/cases/financingCase.schema'].map((m) => require(`../src/${m}`).ESQUEMAS)];
   const comColuna = [];
   const pilha = esquemas.flatMap((e) => Object.values(e));
   while (pilha.length) {

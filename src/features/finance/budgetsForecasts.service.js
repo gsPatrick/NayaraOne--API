@@ -42,6 +42,11 @@ async function createBudgetForecast(payload, actorUserId, transaction) {
   if (!Number.isFinite(amountNumeric) || amountNumeric <= 0) {
     throw AppError.badRequest('O valor projetado precisa ser um número positivo.', 'FINANCE_BUDGET_FORECAST_VALIDATION');
   }
+  // Rodada 8 (DI-M9R-25): a coluna é DECIMAL(18,2) (até 16 dígitos inteiros); acima disso o arredondamento do servidor mandava ao banco um valor que
+  // o pedido não tem, e o "numeric field overflow" virava 500.
+  if (amountNumeric >= 1e16) {
+    throw AppError.badRequest('O valor projetado é grande demais (até 16 dígitos antes da vírgula).', 'FINANCE_BUDGET_FORECAST_VALIDATION');
+  }
   if (normalizedNature === 'PAYABLE' && !costCenterId) {
     throw AppError.badRequest('Projeção de despesa exige o centro de custo.', 'FINANCE_BUDGET_FORECAST_COST_CENTER_REQUIRED');
   }

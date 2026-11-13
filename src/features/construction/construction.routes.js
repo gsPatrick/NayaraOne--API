@@ -21,7 +21,7 @@ constructionRouter.use(authMiddleware, tenantMiddleware);
 constructionRouter.get('/construction/dashboard', requirePermission('construction:read'), constructionController.getConstructionDashboard);
 
 // Projects (obras)
-constructionRouter.post('/construction/projects', requirePermission('construction:create'), constructionController.createProject);
+constructionRouter.post('/construction/projects', requirePermission('construction:create'), require('./construction.input.schema').validarObra, constructionController.createProject);
 constructionRouter.get('/construction/projects', requirePermission('construction:read'), constructionController.listProjects);
 constructionRouter.get('/construction/projects/:id', requirePermission('construction:read'), constructionController.getProject);
 constructionRouter.patch('/construction/projects/:id', requirePermission('construction:update'), constructionController.updateProject);
@@ -49,7 +49,7 @@ constructionRouter.post('/construction/stages/:id/dependencies', requirePermissi
 constructionRouter.get('/construction/stages/:id/dependencies', requirePermission('construction:read'), constructionController.listStageDependencies);
 
 // Stage measurements (aprovação exige permissão dedicada — mesmo padrão de finance:approve/legal:approve)
-constructionRouter.post('/construction/stages/:id/measurements', requirePermission('construction:create'), constructionController.createStageMeasurement);
+constructionRouter.post('/construction/stages/:id/measurements', requirePermission('construction:create'), require('./construction.input.schema').validarMedicao, constructionController.createStageMeasurement);
 constructionRouter.get('/construction/stages/:id/measurements', requirePermission('construction:read'), constructionController.listStageMeasurements);
 constructionRouter.get('/construction/measurements/:id/items', requirePermission('construction:read'), constructionController.listMeasurementItems);
 constructionRouter.post('/construction/measurements/:id/submit', requirePermission('construction:create'), constructionController.submitStageMeasurement);
@@ -62,6 +62,7 @@ constructionRouter.post('/construction/measurements/:id/decide', requirePermissi
 constructionRouter.post(
   '/construction/projects/:id/measurements',
   requirePermission('construction:create'),
+  require('./construction.input.schema').validarMedicao,
   constructionController.createStageMeasurementByProject
 );
 // M6-36: path canônico exigido pela fonte ("POST /measurements/:id/approve") — SÓ aprova (não
@@ -128,10 +129,10 @@ constructionRouter.get('/construction/margin-rules/versions', requirePermission(
 constructionRouter.get('/construction/margin-rules/active', requirePermission('construction:read'), constructionController.getActiveMarginRule);
 
 // Maintenance cases (pós-obra/garantia)
-constructionRouter.post('/construction/maintenance-cases', requirePermission('construction:create'), constructionController.createMaintenanceCase);
+constructionRouter.post('/construction/maintenance-cases', requirePermission('construction:create'), require('./construction.input.schema').validarChamado, constructionController.createMaintenanceCase);
 // M6-40: path canônico exigido pela fonte ("POST /warranty-cases"), mesmo controller/entidade
 // (`MaintenanceCase` já é o WarrantyCase estruturado, M6-15/M6-26).
-constructionRouter.post('/construction/warranty-cases', requirePermission('construction:create'), constructionController.createMaintenanceCase);
+constructionRouter.post('/construction/warranty-cases', requirePermission('construction:create'), require('./construction.input.schema').validarChamado, constructionController.createMaintenanceCase);
 constructionRouter.get('/construction/maintenance-cases', requirePermission('construction:read'), constructionController.listMaintenanceCases);
 constructionRouter.get('/construction/maintenance-cases/:id', requirePermission('construction:read'), constructionController.getMaintenanceCase);
 constructionRouter.patch('/construction/maintenance-cases/:id', requirePermission('construction:update'), constructionController.updateMaintenanceCase);

@@ -70,11 +70,14 @@ function mapPathDecodeError(err) {
  * Texto que o banco não grava e que chegou ao banco por um caminho que a porta (storableText.middleware.js) não vê, como o parâmetro do caminho:
  * 22021 (caractere nulo num texto), 22P05 (`\u0000` num jsonb) e 22P02 do tipo json (metade solta de par sub-rogado). É o pedido, não o servidor.
  */
-function mapUnstorableTextDbError(err) {
+function mapUnstorableTextDbError(err, req) {
   const pg = err && err.name === 'SequelizeDatabaseError' ? err.parent || err.original : null;
   if (!pg) return null;
   const json = pg.code === '22P02' && /type json/i.test(String(pg.message || ''));
   if (pg.code !== '22021' && pg.code !== '22P05' && !json) return null;
+  // Rodada 8 (DI-M9R-25): só com prova de que o caractere veio do pedido (está no caminho, na consulta ou no corpo); senão é do servidor (500).
+  const { findUnstorableText } = require('../utils/storableText');
+  if (!req || ['params', 'query', 'body'].every((parte) => findUnstorableText(req[parte]) === null)) return null;
   return {
     statusCode: 400,
     code: 'INVALID_TEXT_CHARACTER',

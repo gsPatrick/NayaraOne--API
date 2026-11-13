@@ -6,6 +6,8 @@ const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const financeController = require('./finance.controller');
 const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto (linha 2 do inventário)
 
+// Rodada 8 (DI-M9R-25): tipo dos campos de identificador e de texto conferido na porta das rotas que dependiam do guarda genérico de tipo.
+const entrada = require('./finance.input.schema');
 const financeRouter = Router();
 
 financeRouter.use(authMiddleware, tenantMiddleware);
@@ -32,7 +34,7 @@ financeRouter.post('/finance/bank-accounts/:id/block', requirePermission('financ
 financeRouter.delete('/finance/bank-accounts/:id', requirePermission('finance:bankAccounts'), financeController.removeBankAccount);
 
 // Financial entries (ledger / contas a pagar e receber)
-financeRouter.post('/finance/entries', requirePermission('finance:create'), financeController.createFinancialEntry);
+financeRouter.post('/finance/entries', requirePermission('finance:create'), entrada.validarLancamento, financeController.createFinancialEntry);
 financeRouter.get('/finance/entries', requirePermission('finance:read'), financeController.listFinancialEntries);
 // Rotas estáticas ANTES de /:id — senão Express casa "classification-pendings" como :id.
 financeRouter.get('/finance/entries/classification-pendings', requirePermission('finance:read'), financeController.listFinancialEntryClassificationPendings);
@@ -50,24 +52,24 @@ financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission
 financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, financeController.settleFinancialEntryPartial);
 
 // Bank transactions (extrato)
-financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), financeController.createBankTransaction);
+financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), entrada.validarTransacaoBancaria, financeController.createBankTransaction);
 financeRouter.get('/finance/bank-transactions', requirePermission('finance:read'), financeController.listBankTransactions);
-financeRouter.post('/finance/bank-transactions/import', requirePermission('finance:create'), financeController.importBankStatement);
+financeRouter.post('/finance/bank-transactions/import', requirePermission('finance:create'), entrada.validarImportacaoDeExtrato, financeController.importBankStatement);
 
 // Reconciliation
 financeRouter.post('/finance/reconciliations', requirePermission('finance:reconcile'), financeController.matchReconciliation);
-financeRouter.post('/finance/reconciliations/group', requirePermission('finance:reconcile'), financeController.matchReconciliationGroup);
+financeRouter.post('/finance/reconciliations/group', requirePermission('finance:reconcile'), entrada.validarConciliacaoEmGrupo, financeController.matchReconciliationGroup);
 financeRouter.get('/finance/reconciliations', requirePermission('finance:read'), financeController.listReconciliations);
 financeRouter.get('/finance/bank-transactions/:id/reconciliation-suggestions', requirePermission('finance:read'), financeController.suggestReconciliationMatches);
 financeRouter.post('/finance/bank-transactions/:id/auto-reconcile', requirePermission('finance:update'), financeController.autoReconcileSuggestion);
 
 // Approvals (maker-checker)
-financeRouter.post('/finance/approval-requests', requirePermission('finance:create'), financeController.createApprovalRequest);
+financeRouter.post('/finance/approval-requests', requirePermission('finance:create'), entrada.validarPedidoDeAprovacao, financeController.createApprovalRequest);
 financeRouter.get('/finance/approval-requests', requirePermission('finance:read'), financeController.listApprovalRequests);
 financeRouter.post('/finance/approval-requests/:id/decide', requirePermission('finance:approve'), financeController.decideApprovalStep);
 
 // Commissions
-financeRouter.post('/finance/commissions', requirePermission('finance:create'), financeController.createCommission);
+financeRouter.post('/finance/commissions', requirePermission('finance:create'), entrada.validarComissao, financeController.createCommission);
 financeRouter.get('/finance/commissions', requirePermission('finance:read'), financeController.listCommissions);
 financeRouter.get('/finance/commissions/:id/installments', requirePermission('finance:read'), financeController.listCommissionInstallments);
 financeRouter.post('/finance/commissions/:id/cancel', requirePermission('finance:update'), financeController.cancelCommission);
@@ -140,7 +142,7 @@ financeRouter.get('/finance/reports/weekly-health', requirePermission('finance:r
 financeRouter.get('/finance/nay/insights', requirePermission('finance:read'), financeController.getFinanceInsights);
 
 // Budgets/forecasts (M4 — gap fechado na varredura completa, Caderno §5)
-financeRouter.post('/finance/budget-forecasts', requirePermission('finance:create'), financeController.createBudgetForecast);
+financeRouter.post('/finance/budget-forecasts', requirePermission('finance:create'), entrada.validarPrevisao, financeController.createBudgetForecast);
 financeRouter.get('/finance/budget-forecasts', requirePermission('finance:read'), financeController.listBudgetForecasts);
 financeRouter.get('/finance/budget-forecasts/compare', requirePermission('finance:read'), financeController.compareBudgetForecastToRealized);
 

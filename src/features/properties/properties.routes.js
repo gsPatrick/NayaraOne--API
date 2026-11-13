@@ -19,12 +19,12 @@ propertiesRouter.get('/properties/:id', requirePermission('properties:read'), pr
 propertiesRouter.patch('/properties/:id', requirePermission('properties:update'), validarAtualizacaoDeImovel, propertiesController.update);
 propertiesRouter.delete('/properties/:id', requirePermission('properties:delete'), confirmAction('property.delete'), propertiesController.remove);
 
-propertiesRouter.post('/properties/:id/owners', requirePermission('properties:update'), propertiesController.createOwner);
+propertiesRouter.post('/properties/:id/owners', requirePermission('properties:update'), require('./properties.schema').validarProprietario, propertiesController.createOwner);
 propertiesRouter.get('/properties/:id/owners', requirePermission('properties:read'), propertiesController.listOwners);
 propertiesRouter.patch('/properties/:id/owners/:ownerId', requirePermission('properties:update'), propertiesController.updateOwner);
 propertiesRouter.delete('/properties/:id/owners/:ownerId', requirePermission('properties:update'), propertiesController.removeOwner);
 
-propertiesRouter.post('/properties/:id/offers', requirePermission('properties:update'), propertiesController.createOffer);
+propertiesRouter.post('/properties/:id/offers', requirePermission('properties:update'), require('./properties.schema').validarOferta, propertiesController.createOffer);
 propertiesRouter.get('/properties/:id/offers', requirePermission('properties:read'), propertiesController.listOffers);
 propertiesRouter.patch('/properties/:id/offers/:offerId', requirePermission('properties:update'), propertiesController.updateOffer);
 

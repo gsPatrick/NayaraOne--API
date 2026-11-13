@@ -1,8 +1,8 @@
 'use strict';
 
 // Verificação independente do Marco 9, rodada 7 (12/11/2026): entrada robusta na API inteira, por mecanismos gerais. Testes de unidade de cada peça:
-// forma do pedido (DI-M9R-18), JSON canônico iterativo (DI-M9R-18), resposta de erro segura e proteção do processo (DI-M9R-19), erros de dado do
-// banco (DI-M9R-20) e erro de tipo com prova no pedido (DI-M9R-21). Sem banco.
+// forma do pedido (DI-M9R-18), JSON canônico iterativo (DI-M9R-18), resposta de erro segura e proteção do processo (DI-M9R-19; contrato novo na
+// DI-M9R-23). Sem banco.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
@@ -14,8 +14,6 @@ const { inspecionarForma, limitesDaForma, PADRAO } = require('../src/middlewares
 const { canonicalJson } = require('../src/utils/canonicalJson');
 const { bodyHash } = require('../src/features/core-governance/api-governance/standards/idempotency.hash');
 const { limitarDetalhes, CORTADO } = require('../src/middlewares/errorHandler.safe');
-const { mapClientDataDbError } = require('../src/middlewares/dbClientErrors');
-const { mapClientTypeError, mapInvalidValueError, mapOperatorTypeError, mapFindByPkError } = require('../src/middlewares/clientTypeErrors');
 const { installProcessGuards } = require('../src/utils/processGuards');
 
 const aninhadoObj = (n) => JSON.parse(`${'{"a":'.repeat(n)}1${'}'.repeat(n)}`);
@@ -103,79 +101,8 @@ test('errorHandler: se montar a resposta falhar, sai o 500 mínimo (último recu
   assert.equal(seguiu.message, 'x');
 });
 
-const pg = (code, message, extra = {}) => Object.assign(new Error(message), { name: 'SequelizeDatabaseError', parent: { code, message, ...extra }, ...extra.err });
-
-test('erros de dado do banco (classe 22): 400 com o campo quando se sabe, nunca o valor; 2200H continua 500', () => {
-  const longo = pg('22001', 'value too long for type character varying(200)');
-  longo.sql = 'INSERT INTO "people"."persons" ("id","group_id","legal_name","person_type") VALUES ($1,$2,$3,$4) RETURNING *;';
-  longo.parameters = ['id', 'g', 'x'.repeat(256), 'PF'];
-  const a = mapClientDataDbError(longo);
-  assert.deepEqual([a.statusCode, a.code, a.details.fields, a.details.maxLength, a.logLevel], [400, 'VALUE_TOO_LONG', ['legalName'], 200, 'warn']);
-  assert.ok(!JSON.stringify(a).includes('xxxx'), 'o valor não vai na resposta');
-  const upd = pg('22001', 'value too long for type character varying(150)');
-  upd.sql = 'UPDATE "people"."persons" SET "preferred_name"=$1,"updated_at"=$2 WHERE "id" = $3';
-  upd.parameters = ['🙂'.repeat(151), 'agora', 'id'];
-  assert.deepEqual(mapClientDataDbError(upd).details.fields, ['preferredName']);
-  const emoji = pg('22001', 'value too long for type character varying(150)');
-  emoji.sql = upd.sql; emoji.parameters = ['🙂'.repeat(150), 'agora', 'id'];
-  assert.deepEqual(mapClientDataDbError(emoji).details.fields, [], '150 emojis cabem em 150 caracteres: o campo não é apontado');
-  assert.deepEqual(Object.values(mapClientDataDbError(pg('22007', 'invalid input syntax for type timestamp with time zone: "Invalid date"'))).slice(0, 2), [400, 'INVALID_DATE_VALUE']);
-  assert.equal(mapClientDataDbError(pg('22003', 'numeric field overflow')).code, 'VALUE_TOO_LARGE');
-  assert.equal(mapClientDataDbError(pg('22P02', 'invalid input syntax for type integer: "abc"')).code, 'INVALID_FIELD_VALUE');
-  const divisao = mapClientDataDbError(pg('22012', 'division by zero'));
-  assert.deepEqual([divisao.statusCode, divisao.logLevel], [400, 'error'], 'fora da lista do cliente: 400, mas registrado como erro');
-  assert.equal(mapClientDataDbError(pg('2200H', 'reached maximum value of sequence')), null);
-  assert.equal(mapClientDataDbError(pg('42883', 'operator does not exist: uuid = integer')), null, '42883 precisa de prova no pedido (clientTypeErrors)');
-  assert.equal(mapClientDataDbError(new Error('Argument passed to findByPk is invalid: [object Object]')), null, 'findByPk precisa de prova no pedido (clientTypeErrors)');
-  assert.equal(mapFindByPkError(new Error('Argument passed to findByPk is invalid: [object Object]'), { body: { personId: { x: 1 } } }).code, 'INVALID_ID_FORMAT');
-  assert.equal(mapFindByPkError(new Error('Argument passed to findByPk is invalid: [object Object]'), { body: { personId: 'x' } }), null, 'sem prova: falha do código');
-  assert.equal(mapClientDataDbError(new Error('qualquer outra coisa')), null);
-});
-
-test('integridade (classe 23): identificador inexistente, obrigatório ausente, CHECK e uso em outro cadastro viram 4xx com a coluna, sem o valor', () => {
-  const fk = pg('23503', 'insert or update on table "x" violates foreign key constraint', { detail: 'Key (person_id)=(9d3b6a0e-0000-4000-8000-000000000001) is not present in table "persons".' });
-  fk.sql = 'INSERT INTO "people"."person_contacts" ("id","person_id") VALUES ($1,$2)';
-  const a = mapClientDataDbError(fk);
-  assert.deepEqual([a.statusCode, a.code, a.details.fields, a.logLevel], [400, 'REFERENCE_NOT_FOUND', ['personId'], 'error']);
-  assert.ok(!JSON.stringify(a).includes('9d3b6a0e'), 'o id do detalhe do banco não vai na resposta');
-  const usado = mapClientDataDbError(pg('23503', 'update or delete on table "persons" violates foreign key constraint', { detail: 'Key (id)=(abc) is still referenced from table "x".' }));
-  assert.deepEqual([usado.statusCode, usado.code], [409, 'RECORD_IN_USE']);
-  const nulo = pg('23502', 'null value in column "legal_name" violates not-null constraint', { column: 'legal_name' });
-  nulo.sql = 'INSERT INTO "people"."persons" ("id") VALUES ($1)';
-  assert.deepEqual([mapClientDataDbError(nulo).code, mapClientDataDbError(nulo).details.fields], ['REQUIRED_FIELD_MISSING', ['legalName']]);
-  assert.equal(mapClientDataDbError(pg('23514', 'new row violates check constraint "x_ck"')).code, 'INVALID_FIELD_VALUE');
-  assert.equal(mapClientDataDbError(pg('23P01', 'conflicting key value violates exclusion constraint')).statusCode, 409);
-});
-
-test('42883 (número comparado com texto, identificador ou data): 400 só com número ou booleano no pedido', () => {
-  const op = (m) => pg('42883', m);
-  assert.equal(mapOperatorTypeError(op('operator does not exist: uuid = integer'), { body: { personId: 12345 } }).code, 'INVALID_ID_FORMAT');
-  assert.equal(mapOperatorTypeError(op('operator does not exist: character varying = numeric'), { body: { code: 1.5 } }).code, 'INVALID_FIELD_TYPE');
-  assert.equal(mapOperatorTypeError(op('operator does not exist: uuid = integer'), { body: { personId: 'x' } }), null, 'sem número no pedido: falha do código');
-  assert.equal(mapOperatorTypeError(op('operator does not exist: integer = bigint'), { body: { a: 1 } }), null, 'dois lados numéricos: falha do código');
-  assert.equal(mapOperatorTypeError(op('operator does not exist: jsonb ~~ text'), { body: { a: 1 } }), null);
-});
-
-test('"Invalid value" do Sequelize: 400 só com valor estruturado no pedido; o campo é apontado pela impressão do valor', () => {
-  const a = mapInvalidValueError(new Error('Invalid value { x: 1 }'), { body: { nome: 'a', destinationLocationId: { x: 1 } } });
-  assert.deepEqual([a.statusCode, a.code, a.details.fields], [400, 'INVALID_FIELD_TYPE', ['destinationLocationId']]);
-  assert.ok(!a.message.includes('x: 1'));
-  assert.equal(mapInvalidValueError(new Error('Invalid value { x: 1 }'), { body: { nome: 'a' } }), null, 'sem valor estruturado no pedido: falha do código');
-  assert.deepEqual(mapInvalidValueError(new Error('Invalid value [ 1 ]'), { query: { a: { b: '1' } } }).details.fields, [], 'estruturado sem a mesma impressão: 400 sem campo');
-});
-
-test('erro de tipo: 400 só com prova no pedido (o campo citado tem o tipo errado); sem prova, continua 500', () => {
-  const erro = (m) => new TypeError(m);
-  const a = mapClientTypeError(erro('email.toLowerCase is not a function'), { body: { email: { x: 1 } } });
-  assert.deepEqual([a.statusCode, a.code, a.details.fields], [400, 'INVALID_FIELD_TYPE', ['email']]);
-  assert.deepEqual(mapClientTypeError(erro('(personType || "PF").toUpperCase is not a function'), { body: { personType: 12345 } }).details.fields, ['personType']);
-  assert.deepEqual(mapClientTypeError(erro('contact.value.trim is not a function'), { body: { contacts: [{ value: [1] }] } }).details.fields, ['value']);
-  assert.deepEqual(mapClientTypeError(erro('items is not iterable'), { body: { items: 7 } }).details.fields, ['items']);
-  assert.equal(mapClientTypeError(erro('email.toLowerCase is not a function'), { body: { email: 'texto@x' } }), null, 'o campo é texto: o erro é do código');
-  assert.equal(mapClientTypeError(erro('x.toLowerCase is not a function'), { body: { email: {} } }), null, 'nome que o pedido não tem');
-  assert.equal(mapClientTypeError(erro('Cannot read properties of undefined (reading \'a\')'), { body: { a: {} } }), null);
-  assert.equal(mapClientTypeError(new Error('email.toLowerCase is not a function'), { body: { email: {} } }), null, 'só TypeError');
-});
+// Os testes de unidade dos erros de dado e de integridade do banco (DI-M9R-20) e do guarda de tipo (DI-M9R-21) mudaram de contrato na rodada 8
+// (DI-M9R-25: 4xx só com prova de que o valor é do pedido; guarda de tipo retirado): estão em test/entradaGlobal.prova.test.js.
 
 test('proteção do processo (contrato da rodada 8, DI-M9R-23): promessa rejeitada e exceção sem tratamento são registradas e ENCERRAM o processo', async () => {
   // Na rodada 7 a API seguia atendendo; a rodada 8 mostrou o estado corrompido que isso deixa (transação aberta, trava presa, pool esgotado).

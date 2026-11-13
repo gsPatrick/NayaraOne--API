@@ -10,9 +10,9 @@ const peopleRouter = Router();
 peopleRouter.use(authMiddleware, tenantMiddleware);
 
 // Rodada 7 (DI-M9R-21): tipo e tamanho dos campos de texto e de identificador conferidos na porta.
-const { validarCriacaoDePessoa, validarAtualizacaoDePessoa } = require('./people.schema');
+const { validarCriacaoDePessoa, validarAtualizacaoDePessoa, validarListagemDePessoas } = require('./people.schema');
 peopleRouter.post('/people', requirePermission('people:create'), validarCriacaoDePessoa, peopleController.create);
-peopleRouter.get('/people', requirePermission('people:read'), peopleController.list);
+peopleRouter.get('/people', requirePermission('people:read'), validarListagemDePessoas, peopleController.list);
 // Precisa vir ANTES de '/people/:id', senão "duplicates" seria capturado como um :id.
 peopleRouter.get('/people/duplicates', requirePermission('people:read'), peopleController.listDuplicates);
 peopleRouter.get('/people/:id', requirePermission('people:read'), peopleController.getOne);
@@ -41,6 +41,6 @@ peopleRouter.get('/people/:id/addresses', requirePermission('people:read'), peop
 peopleRouter.post('/people/:id/consents', requirePermission('people:update'), peopleController.createConsent);
 peopleRouter.get('/people/:id/consents', requirePermission('people:read'), peopleController.listConsents);
 
-peopleRouter.post('/people/:id/merge', requirePermission('people:update'), peopleController.merge);
+peopleRouter.post('/people/:id/merge', requirePermission('people:update'), require('./people.schema').validarMesclagem, peopleController.merge);
 
 module.exports = peopleRouter;

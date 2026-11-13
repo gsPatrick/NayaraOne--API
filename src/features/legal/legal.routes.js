@@ -22,7 +22,7 @@ const legalRouter = Router();
 legalRouter.use(authMiddleware, tenantMiddleware);
 
 // Contracts
-legalRouter.post('/legal/contracts', requirePermission('legal:create'), legalController.createContract);
+legalRouter.post('/legal/contracts', requirePermission('legal:create'), require('./legal.input.schema').validarContrato, legalController.createContract);
 legalRouter.get('/legal/contracts', requirePermission('legal:read'), legalController.listContracts);
 legalRouter.get('/legal/contracts/:id', requirePermission('legal:read'), legalController.getContract);
 legalRouter.post('/legal/contracts/:id/transition', requirePermission('legal:approve'), confirmAction('legal.contract.terminate', { reasonField: 'reason' }), legalController.transitionContract);
@@ -51,7 +51,7 @@ legalRouter.post('/legal/requirements/:requirementId/waive', requirePermission('
 
 // Notices (notificações formais — Caderno Anexo I "13. Aditivos e notificações"). Migration
 // 20260101000292 já aplicada — módulo funcional ponta a ponta.
-legalRouter.post('/legal/notices', requirePermission('legal:create'), legalController.createNotice);
+legalRouter.post('/legal/notices', requirePermission('legal:create'), require('./legal.input.schema').validarNotificacao, legalController.createNotice);
 legalRouter.get('/legal/notices', requirePermission('legal:read'), legalController.listNotices);
 legalRouter.get('/legal/notices/:id', requirePermission('legal:read'), legalController.getNotice);
 legalRouter.post('/legal/notices/:id/submit-for-review', requirePermission('legal:update'), legalController.submitNoticeForReview);
@@ -62,7 +62,7 @@ legalRouter.post('/legal/notices/:id/send', requirePermission('legal:update'), r
 legalRouter.post('/legal/notices/:id/delivery-evidence', requirePermission('legal:update'), legalController.registerNoticeDeliveryEvidence);
 
 // Contract versions
-legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), legalController.createContractVersion);
+legalRouter.post('/legal/contracts/:id/versions', requirePermission('legal:create'), require('./legal.input.schema').validarVersaoDoContrato, legalController.createContractVersion);
 legalRouter.get('/legal/contracts/:id/versions', requirePermission('legal:read'), legalController.listContractVersions);
 // GET, não POST: sem efeito colateral (nada é persistido) — ver comentário em
 // legal.controller.js#generateContractVersionPdf. "legal:read" basta porque é só uma
@@ -77,7 +77,7 @@ legalRouter.post('/legal/contract-templates/:id/clauses', requirePermission('leg
 legalRouter.post('/legal/contract-templates/:id/clauses/:clauseId/upgrade', requirePermission('legal:create'), legalController.upgradeContractTemplateClause);
 // Biblioteca de cláusulas (JUR-002) — ordem importa: /legal/clauses/:code/versions antes de
 // qualquer coisa que capture :id, mesmo padrão já usado para classification-pendings no Marco 4.
-legalRouter.post('/legal/clauses', requirePermission('legal:create'), legalController.createClause);
+legalRouter.post('/legal/clauses', requirePermission('legal:create'), require('./legal.input.schema').validarClausula, legalController.createClause);
 legalRouter.get('/legal/clauses', requirePermission('legal:read'), legalController.listClauses);
 legalRouter.get('/legal/clauses/:code/versions', requirePermission('legal:read'), legalController.listClauseVersions);
 legalRouter.get('/legal/clauses/:code/template-usage', requirePermission('legal:read'), legalController.listClauseTemplateUsage);
@@ -86,7 +86,7 @@ legalRouter.post('/legal/clauses/:id/deactivate', requirePermission('legal:updat
 // F01: aprovação da regra declarativa de uma versão de cláusula (mesma alçada das transições de contrato).
 legalRouter.post('/legal/clauses/:id/approve-condition', requirePermission('legal:approve'), legalController.approveClauseCondition);
 // Preview de renderização (só leitura — não persiste nada, ver renderContractTemplate).
-legalRouter.post('/legal/contract-templates/:id/render', requirePermission('legal:read'), legalController.renderContractTemplate);
+legalRouter.post('/legal/contract-templates/:id/render', requirePermission('legal:read'), require('./legal.input.schema').validarRenderizacao, legalController.renderContractTemplate);
 
 legalRouter.post('/legal/contracts/:id/amendments', requirePermission('legal:create'), legalController.createContractAmendment);
 legalRouter.get('/legal/contracts/:id/amendments', requirePermission('legal:read'), legalController.listContractAmendments);
