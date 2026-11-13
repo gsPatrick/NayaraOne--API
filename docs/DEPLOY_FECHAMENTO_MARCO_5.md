@@ -29,3 +29,13 @@ A API anterior (Marco 9 sem o Marco 5) NÃO funciona depois dessas migrations (n
 ## Depois da M4-D140 (migrations do Financeiro na pasta do módulo)
 
 Os comandos acima não mudam. Desde a M4-D140, as migrations que mexem no schema `finance` (entre elas `20260101009984`, `20260101009985` e `20260101009992`, que fazem parte deste intervalo) ficam em `src/modules/finance/infrastructure/db/migrations/`, com o mesmo nome; o `.sequelizerc` faz o `sequelize-cli` ler as duas pastas na ordem global do nome, então `db:migrate` e `db:migrate:undo:all --to ...` aplicam e desfazem as mesmas migrations, na mesma ordem. Detalhes em `docs/DEPLOY_ESTRUTURA_FINANCEIRO_M4D140.md`.
+
+## Esteira do jurídico e portão de produção (M5ES, 11/11/2026)
+
+Sem migration nova. A esteira (`.github/workflows/juridico-esteira.yml`, `scripts/ci-estagios-juridico.sh`) roda as 18 etapas do Guia §17 na ordem do livro, num único processo, em todo push e pull request: `deploy_DEV` e `deploy_LAB` publicam o artefato do commit (git archive + `VERSION`, como o Dockerfile) no próprio job e fazem o smoke do jurídico (`scripts/ci-juridico/deployLocal.js`); `failure_drills` inclui o drill de restore completo (`scripts/restoreDrill/legalFullDrill.js`); `production_approval` é o portão (`scripts/ci-juridico/gateProducao.js`), que bloqueia sem restore verde, sem pentest verde, com falha aberta (teste falho, pulado ou `todo`) ou com etapa anterior não verde no mesmo commit.
+
+O que só roda no ambiente do Patrick (configuração do GitHub, uma vez):
+
+1. Environment `lab` com os secrets `DEV_API_DEPLOY_HOOK_URL`, `DEV_API_URL`, `LAB_API_DEPLOY_HOOK_URL` e `LAB_API_URL` (hook de deploy e URL pública de cada ambiente). Sem eles, a esteira de release fica vermelha em `deploy_DEV` (nunca finge que publicou).
+2. Environment `juridico-aprovacao` com revisor obrigatório (o Patrick).
+3. Release: criar a tag `jur-release-<data>` no commit. O job `esteira-juridico-release` roda as 18 etapas com `--release` (o hook publica no DEV e no LAB e confere o commit em `/api/version`); o job `aprovacao-producao` confere de novo o portão sobre as evidências arquivadas e espera a aprovação. O CI não publica em produção: depois da aprovação, o deploy de produção segue a seção "Ordem" acima.
