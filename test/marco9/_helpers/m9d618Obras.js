@@ -58,8 +58,11 @@ async function medicoes(env, t, s1) {
     { status: 'SUBMITTED', total_amount: '40000.00', submitted_at: at('10-05') }, { status: 'REVIEWED', total_amount: '20000.00', submitted_at: at('10-10') },
     { status: 'DRAFT', total_amount: '7000.00' }, { status: 'REJECTED', total_amount: '5000.00', submitted_at: at('10-03') }, { status: 'SUPERSEDED', total_amount: '3000.00', submitted_at: at('10-04') },
   ];
+  // Medição PAYABLE sempre aponta para a conta a pagar (CHECK stage_measurements_payable_has_entry, verificação do Marco 6):
+  // a conta nasce sem obra e em aberto, para não mexer no custo realizado nem no ledger da obra que os testes conferem.
+  const conta = await bi.seed(env, t, 'finance.financial_entries', { entry_type: 'DEBIT', nature: 'PAYABLE', amount: '80000.00', status: 'PENDING' });
   const ids = [];
-  for (const r of rows) ids.push(await bi.seed(env, t, 'construction.stage_measurements', { ...base, ...r }));
+  for (const r of rows) ids.push(await bi.seed(env, t, 'construction.stage_measurements', { ...base, ...r, ...(r.status === 'PAYABLE' ? { payable_financial_entry_id: conta } : {}) }));
   return ids;
 }
 

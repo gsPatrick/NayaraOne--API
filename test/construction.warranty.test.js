@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { setThresholds, createMember } = require('./constructionM6vFixture');
 const { evidenceIds } = require('./constructionEvidenceFixture');
 const { Property, Notification, OutboxEvent } = require('../src/models');
 const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
@@ -537,6 +538,7 @@ test('warranty: fechar um chamado OVERDUE zera escalation_level pra NONE (não f
 
 test('warranty: proposeWarrantyResolution dentro da alçada (<= threshold padrão de 1000) aprova automaticamente e cria lançamento financeiro', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { WARRANTY_RESOLUTION: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const property = await createTestProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Infiltração — desconto combinado.' },
@@ -561,6 +563,8 @@ test('warranty: proposeWarrantyResolution dentro da alçada (<= threshold padrã
 
 test('warranty: proposeWarrantyResolution acima da alçada fica PENDING_APPROVAL sem lançamento financeiro até aprovação explícita', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { WARRANTY_RESOLUTION: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
+    const aprovador = await createMember(tenant, transaction); // quem propõe não aprova (M6-107)
     const property = await createTestProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Ressarcimento de alto valor.' },
@@ -577,7 +581,7 @@ test('warranty: proposeWarrantyResolution acima da alçada fica PENDING_APPROVAL
     assert.equal(proposed.resolutionStatus, 'PENDING_APPROVAL');
     assert.equal(proposed.resolutionFinancialEntryId, null);
 
-    const approved = await maintenanceCasesService.approveWarrantyResolution(warrantyCase.id, tenant.userId, transaction);
+    const approved = await maintenanceCasesService.approveWarrantyResolution(warrantyCase.id, aprovador.id, transaction);
     assert.equal(approved.resolutionStatus, 'APPROVED');
     assert.ok(approved.resolutionFinancialEntryId, 'aprovação explícita deveria criar o lançamento financeiro');
   });

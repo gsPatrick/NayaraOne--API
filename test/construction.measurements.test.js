@@ -297,7 +297,7 @@ test('M6-55/M6-68 medição aprovada gera obrigação financeira real e aprovar 
     // Limpeza — banco de dev compartilhado entre agentes/suítes (mesmo padrão de ADV-F21 em
     // test/adversarial.finance.test.js).
     await withCommitted(async (t) => {
-      await sequelize.query(`UPDATE construction.stage_measurements SET payable_financial_entry_id = NULL WHERE id = :id`, {
+      await sequelize.query(`UPDATE construction.stage_measurements SET status = 'REJECTED', payable_financial_entry_id = NULL WHERE id = :id`, {
         replacements: { id: measurementId },
         transaction: t,
       });
@@ -574,7 +574,7 @@ test('M6-TAB0701: iniciar etapa (PENDING -> IN_PROGRESS) exige stageCode/planned
 
     const started = await projectStagesService.updateProjectStage(
       stage.id,
-      { status: 'IN_PROGRESS', stageCode: `ET-${suffix}`, plannedCost: 1000, startsAt: '2026-10-01', endsAt: '2026-11-01' },
+      { status: 'IN_PROGRESS', stageCode: `ET-${suffix}`, plannedCost: 1000, startsAt: '2026-10-01', endsAt: '2026-11-01', responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );
@@ -604,7 +604,7 @@ test('M6: updateProjectStage recusa transição de status fora da sequência vá
 
     const started = await projectStagesService.updateProjectStage(
       stage.id,
-      { status: 'IN_PROGRESS', stageCode: `ET2-${suffix}`, plannedCost: 500, startsAt: '2026-10-01', endsAt: '2026-11-01' },
+      { status: 'IN_PROGRESS', stageCode: `ET2-${suffix}`, plannedCost: 500, startsAt: '2026-10-01', endsAt: '2026-11-01', responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );

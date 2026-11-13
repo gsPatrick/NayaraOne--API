@@ -48,6 +48,8 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'responsible_user_id',
       },
+      // Tipo de obra (Caderno Obras §9, migration 20260101006600): o checklist de qualidade é montado por tipo e etapa.
+      projectTypeId: { type: DataTypes.UUID, allowNull: true, field: 'project_type_id' },
       budgetAmount: {
         type: DataTypes.DECIMAL(18, 2),
         allowNull: true,

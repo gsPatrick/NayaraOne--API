@@ -103,7 +103,9 @@ function publishMeasurementSubmitted(measurement, transaction) {
   );
 }
 
-function publishMeasurementApproved(measurement, transaction) {
+// `extra` (M6-21): obra, etapa, centro de custo resolvido e quem aprovou — o consumidor do Financeiro cria a conta a pagar
+// só com o que está no evento (source_event_id = id deste evento).
+function publishMeasurementApproved(measurement, transaction, extra = {}) {
   return publishDomainEvent(
     {
       groupId: measurement.groupId,
@@ -118,6 +120,9 @@ function publishMeasurementApproved(measurement, transaction) {
         measuredPct: measurement.measuredPct,
         totalAmount: measurement.totalAmount,
         payableFinancialEntryId: measurement.payableFinancialEntryId,
+        evidenceFileIds: measurement.evidenceFileIds || [],
+        approvedByUserId: measurement.approvedByUserId || null,
+        ...extra,
       },
       // Idempotency key fixa por medição (não por revisão): uma medição só pode ser aprovada
       // UMA vez de verdade — reprocessar o mesmo evento de aprovação não pode gerar um segundo

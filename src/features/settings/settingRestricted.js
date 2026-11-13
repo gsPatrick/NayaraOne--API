@@ -21,6 +21,8 @@ const RULES = Object.freeze([
   { permission: 'marketing:content:approve', matches: (key) => key.startsWith('marketing.factual.') },
   // Marco 6: a base do custo realizado das obras muda a margem projetada e os bloqueios de margem — mesma alçada de quem aprova em Obras.
   { permission: 'construction:approve', matches: (key) => key.startsWith('construction.custo_realizado.') },
+  // Verificação do Marco 6: evidências mínimas da medição e regra de diário ausente — mesma alçada de quem aprova em Obras.
+  { permission: 'construction:approve', matches: (key) => key.startsWith('construction.medicao.') || key.startsWith('construction.diario_ausente.') },
 ]);
 
 /** Permissão extra que a chave exige (ou null quando ela é comum). */

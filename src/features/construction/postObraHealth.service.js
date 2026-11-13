@@ -51,7 +51,7 @@ async function getPostObraHealth(projectId, transaction) {
     .map((c) => new Date(c.updated_at).getTime() - new Date(c.created_at).getTime())
     .filter((ms) => Number.isFinite(ms) && ms >= 0);
   const avgResolutionHours = resolutionTimesMs.length
-    ? round2(resolutionTimesMs.reduce((acc, ms) => acc + ms, 0) / resolutionTimesMs.length / (1000 * 60 * 60))
+    ? round2(resolutionTimesMs.reduce((acc, ms) => acc + ms, 0) / resolutionTimesMs.length / (1000 * 60 * 60)) // scanner:allow — conversão de unidade de tempo (milissegundos), não regra de negócio
     : null;
 
   const totalLaborCost = cases.reduce((acc, c) => acc + toNumber(c.laborCost), 0) + actions.reduce((acc, a) => acc + toNumber(a.cost), 0);

@@ -10,6 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, settleFinancialEntryWithApproval } = require('./testHelpers');
+const { setThresholds, createMember } = require('./constructionM6vFixture');
 const { AuditLog } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
@@ -86,6 +87,8 @@ test('M6-42/M6-22: CAIXA (padrão) não conta medição aprovada a pagar; COMPET
 
 test('M6-42/M6-107: COMPETENCIA também conta o desconto/ressarcimento de garantia aprovado e ainda a pagar (captura: 56.200 de medições + 5.400 de garantia = 61.600)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
+    await setThresholds(tenant, t, { WARRANTY_RESOLUTION: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
+    const aprovador = await createMember(tenant, t); // quem propõe não aprova (M6-107)
     // Medição da Alvenaria de R$ 15.000,00, como na captura: 41.200 + 15.000 = 56.200 de medições.
     const { project } = await obraComMedicoesAPagar(t, { alvenaria: 15000 });
     const property = await require('../src/features/properties/properties.service').createProperty(W({ title: `Imóvel QA ${uniqueSuffix()}`, internalCode: `QA-CB-${uniqueSuffix()}`, propertyType: 'RESIDENTIAL' }), tenant.userId, t);
@@ -94,7 +97,7 @@ test('M6-42/M6-107: COMPETENCIA também conta o desconto/ressarcimento de garant
     await mc.proposeWarrantyResolution(wc.id, { resolutionType: 'DISCOUNT', resolutionAmount: 400 }, tenant.userId, t);
     const wc2 = await mc.createMaintenanceCase(W({ propertyId: property.id, projectId: project.id, description: 'Trinca', severity: 'CRITICAL', beforeMediaFileIds: await evidenceIds(tenant, t) }), tenant.userId, t);
     await mc.proposeWarrantyResolution(wc2.id, { resolutionType: 'REIMBURSEMENT', resolutionAmount: 5000 }, tenant.userId, t);
-    await mc.approveWarrantyResolution(wc2.id, tenant.userId, t);
+    await mc.approveWarrantyResolution(wc2.id, aprovador.id, t);
     const caixa = await projectHealthService.getProjectHealth(project.id, t);
     assert.equal(caixa.kpis.payablePendingTotal, 61600, 'mesmo total a pagar da captura');
     assert.equal(caixa.costBasis.openPayablesCost, 61600);

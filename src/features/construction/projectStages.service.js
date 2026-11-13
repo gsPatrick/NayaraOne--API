@@ -7,6 +7,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishStageCompleted } = require('./constructionEvents.service');
 const { publishProjectStageUpdated } = require('./constructionCalendarEvents.service');
 const { assertPredecessorsDone } = require('./stageDependencies.service');
+const { assertActiveMember } = require('./companyRefs');
+const { applyProjectChecklist } = require('./checklistTemplates.service');
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE'];
 const STATUS_LABELS_PT = { PENDING: 'Pendente', IN_PROGRESS: 'Em andamento', DONE: 'Concluída' };
@@ -62,7 +64,7 @@ function assertValidPlannedCost(plannedCost) {
 }
 
 async function createProjectStage(projectId, payload, actorUserId, transaction) {
-  const { groupId, companyId, name, sequence, plannedPct, startsAt, endsAt, stageCode, plannedCost } = payload;
+  const { groupId, companyId, name, sequence, plannedPct, startsAt, endsAt, stageCode, plannedCost, responsibleUserId } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_STAGE_VALIDATION');
   }
@@ -80,6 +82,8 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
   if (project.companyId !== companyId || project.groupId !== groupId) {
     throw AppError.badRequest('Esta obra não pertence à empresa/grupo informado.', 'PROJECT_STAGE_PROJECT_COMPANY_MISMATCH');
   }
+  // Caderno Obras §2 "Etapas possuem ... responsável" (M6-19/M6-81): membro ATIVO da mesma empresa.
+  await assertActiveMember(responsibleUserId, companyId, transaction);
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 10, Frente B, 09/10/2026): sequence ia direto
   // pro create sem checar outras etapas da mesma obra — duas etapas podiam ficar com o MESMO
@@ -112,6 +116,7 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
       plannedCost: numericPlannedCost != null ? numericPlannedCost : null,
       sequence: resolvedSequence,
       plannedPct: numericPlannedPct != null ? numericPlannedPct : null,
+      responsibleUserId: responsibleUserId || null,
       measuredPct: null,
       status: 'PENDING',
       startsAt: startsAt || null,
@@ -123,6 +128,8 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
   );
   // M9-D803: a etapa nasce no Calendário (quando tem prazo).
   await publishProjectStageUpdated(stage, transaction);
+  // Checklist por etapa/tipo de obra (Caderno §9): a etapa nova recebe os itens configurados para o seu código.
+  if (stage.stageCode) await applyProjectChecklist(projectId, actorUserId, transaction);
 
   await registrarAuditoria(
     {
@@ -157,7 +164,12 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   const stage = await ProjectStage.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
   if (!stage) throw AppError.notFound('Etapa de obra não encontrada.', 'PROJECT_STAGE_NOT_FOUND');
   const beforeJson = stage.toJSON();
-  const { name, sequence, plannedPct, status, startsAt, endsAt, stageCode, plannedCost, publicVisible } = payload;
+  const { name, sequence, plannedPct, status, startsAt, endsAt, stageCode, plannedCost, publicVisible, responsibleUserId } = payload;
+  const previousStageCode = stage.stageCode;
+  if (responsibleUserId !== undefined) {
+    await assertActiveMember(responsibleUserId, stage.companyId, transaction);
+    stage.responsibleUserId = responsibleUserId || null;
+  }
   const previousStatus = stage.status;
   const previousEndsAt = stage.endsAt ? new Date(stage.endsAt).getTime() : null;
   if (name !== undefined) stage.name = name;
@@ -223,6 +235,7 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
     if (stage.plannedCost == null) missing.push('custo previsto (plannedCost)');
     if (!stage.startsAt) missing.push('data de início (startsAt)');
     if (!stage.endsAt) missing.push('data de término prevista (endsAt)');
+    if (!stage.responsibleUserId) missing.push('responsável (responsibleUserId)');
     if (missing.length > 0) {
       throw AppError.badRequest(
         `Não é possível iniciar a etapa sem: ${missing.join(', ')}.`,
@@ -239,6 +252,7 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   if (previousStatus !== 'DONE' && stage.status === 'DONE') {
     await publishStageCompleted(stage, transaction);
   }
+  if (stage.stageCode && stage.stageCode !== previousStageCode) await applyProjectChecklist(stage.projectId, actorUserId, transaction);
   // M9-D803: prazo ou situação da etapa mudou -> o item do Calendário acompanha (uma vez por mudança, chave pela versão).
   const currentEndsAt = stage.endsAt ? new Date(stage.endsAt).getTime() : null;
   if (currentEndsAt !== previousEndsAt || stage.status !== previousStatus) {

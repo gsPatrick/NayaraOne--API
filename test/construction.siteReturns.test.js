@@ -11,6 +11,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { setThresholds } = require('./constructionM6vFixture');
 const { InventoryItem, InventoryLocation, LossRecord } = require('../src/models');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
@@ -85,6 +86,7 @@ test('M6-60: devolução DAMAGED volta ao saldo sem valor (a obra continua com o
 
 test('M6-29/M6-99: perda aprovada entra no desperdício; o estorno (devolução da perda) é append-only e zera o desperdício', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
+    await setThresholds(tenant, t, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const c = await canteiro(t);
     const kpis = async () => (await projectHealthService.getProjectHealth(c.project.id, t)).kpis;
     const loss = await lossRecordsService.createLossRecord(c.project.id, W({ materialDescription: 'Bloco quebrado', quantity: 20, estimatedValue: 200, reason: 'Quebra no descarregamento', idempotencyKey: `l-${uniqueSuffix()}` }), tenant.userId, t);

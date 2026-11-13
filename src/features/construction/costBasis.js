@@ -48,7 +48,8 @@ async function paidFinancialCostByProject(projectIds, transaction) {
   const result = new Map(ids.map((id) => [id, 0]));
   if (!ids.length) return result;
   const entries = await FinancialEntry.findAll({
-    where: { constructionProjectId: { [Op.in]: ids }, nature: 'PAYABLE', status: { [Op.in]: ['SETTLED', 'PARTIALLY_SETTLED'] } },
+    // Só a obrigação (parentEntryId nulo): a baixa parcial filha também carrega a obra (M6-97) e entra pelo pai abaixo.
+    where: { constructionProjectId: { [Op.in]: ids }, nature: 'PAYABLE', parentEntryId: null, status: { [Op.in]: ['SETTLED', 'PARTIALLY_SETTLED'] } },
     attributes: ['id', 'constructionProjectId', 'amount', 'status'],
     transaction,
   });
@@ -67,7 +68,7 @@ async function openPayablesByProject(projectIds, transaction) {
   const result = new Map(ids.map((id) => [id, { total: 0, fromMeasurements: 0 }]));
   if (!ids.length) return result;
   const entries = await FinancialEntry.findAll({
-    where: { constructionProjectId: { [Op.in]: ids }, nature: 'PAYABLE', status: { [Op.in]: ['PENDING', 'PARTIALLY_SETTLED'] } },
+    where: { constructionProjectId: { [Op.in]: ids }, nature: 'PAYABLE', parentEntryId: null, status: { [Op.in]: ['PENDING', 'PARTIALLY_SETTLED'] } },
     attributes: ['id', 'constructionProjectId', 'amount', 'status'],
     transaction,
   });

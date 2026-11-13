@@ -28,6 +28,9 @@ module.exports = (sequelize) => {
         field: 'category',
         comment: 'PINTURA|HIDRAULICA|ELETRICA|ESTRUTURA|ACABAMENTO|ALVENARIA|OUTROS',
       },
+      // Item gerado do checklist configurado por tipo de obra/etapa (migration 20260101006600) e severidade da NC na reprovação.
+      checklistTemplateId: { type: DataTypes.UUID, allowNull: true, field: 'checklist_template_id' },
+      failureSeverity: { type: DataTypes.STRING(16), allowNull: true, field: 'failure_severity' },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,

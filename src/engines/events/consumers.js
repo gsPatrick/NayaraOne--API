@@ -25,6 +25,19 @@ async function runEventConsumers(event, transaction) {
 }
 
 /**
+ * Entrega imediata a UM consumidor registrado, na transação de quem publicou (verificação independente do Marco 6, M6-21):
+ * a medição aprovada só vira PAYABLE com a conta a pagar criada pelo consumidor do Financeiro, no mesmo commit — nenhuma
+ * medição aprovada fica sem conta. O evento continua PENDING no outbox: o despachante o entrega depois a todos os
+ * consumidores, e o do Financeiro, idempotente por source_event_id, devolve a conta já criada. Devolve o retorno do
+ * consumidor; consumidor não registrado é erro (falha fechada).
+ */
+async function runNamedConsumer(event, name, transaction) {
+  const consumer = (consumers.get(event.eventType) || []).find((c) => c.name === name);
+  if (!consumer) throw new Error(`Consumidor "${name}" não registrado para ${event.eventType}.`);
+  return consumer.fn(event, transaction); // sem savepoint: a falha desfaz a operação inteira de quem publicou
+}
+
+/**
  * Fim de lote (M9-D607): quem precisa fechar algo POR LOTE (e não por evento) registra aqui. O dispatcher chama runBatchEnd ao terminar
  * os eventos de uma empresa, ainda na transação do lote; cada handler roda num savepoint e a falha dele é só registrada (nunca desfaz
  * o despacho dos eventos).
@@ -46,4 +59,4 @@ async function runBatchEnd(transaction) {
   }
 }
 
-module.exports = { registerEventConsumer, runEventConsumers, registerBatchEndHandler, runBatchEnd };
+module.exports = { registerEventConsumer, runEventConsumers, runNamedConsumer, registerBatchEndHandler, runBatchEnd };

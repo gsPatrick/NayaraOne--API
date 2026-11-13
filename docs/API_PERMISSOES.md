@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 890. Rotas só com login ou públicas: 44.
+Rotas com permissão exigida: 902. Rotas só com login ou públicas: 44.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -183,12 +183,16 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/companies/:id` | `companies:update` | não |
 | `GET` | `/api/v1/companies` | `companies:read` | não |
 | `POST` | `/api/v1/companies` | `companies:create` | não |
-| `POST` | `/api/v1/construction/approval-thresholds` | `construction:update` | não |
+| `GET` | `/api/v1/construction/approval-thresholds` | `construction:read` | não |
+| `POST` | `/api/v1/construction/approval-thresholds` | `construction:approval_threshold:manage` | sim |
 | `DELETE` | `/api/v1/construction/budget-lines/:id` | `construction:update` | não |
 | `PATCH` | `/api/v1/construction/budget-lines/:id` | `construction:update` | não |
 | `POST` | `/api/v1/construction/budgets/:id/approve` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/budgets/:id` | `construction:read` | não |
 | `POST` | `/api/v1/construction/change-orders/:id/decide` | `construction:approve` | não |
+| `PATCH` | `/api/v1/construction/checklist-templates/:id` | `construction:approve` | não |
+| `GET` | `/api/v1/construction/checklist-templates` | `construction:read` | não |
+| `POST` | `/api/v1/construction/checklist-templates` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/daily-reports/:id/history` | `construction:read` | não |
 | `GET` | `/api/v1/construction/daily-reports/:id/materials` | `construction:read` | não |
 | `GET` | `/api/v1/construction/daily-reports/:id/workers` | `construction:read` | não |
@@ -218,14 +222,20 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/construction/measurements/:id/review` | `construction:update` | não |
 | `POST` | `/api/v1/construction/measurements/:id/revise` | `construction:create` | não |
 | `POST` | `/api/v1/construction/measurements/:id/submit` | `construction:create` | não |
+| `GET` | `/api/v1/construction/members` | `construction:read` | não |
 | `POST` | `/api/v1/construction/nonconformities/:id/close` | `construction:update` | não |
 | `GET` | `/api/v1/construction/nonconformities/:id` | `construction:read` | não |
+| `PATCH` | `/api/v1/construction/project-types/:id` | `construction:approve` | não |
+| `GET` | `/api/v1/construction/project-types` | `construction:read` | não |
+| `POST` | `/api/v1/construction/project-types` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/projects/:id/budget-lines` | `construction:read` | não |
 | `POST` | `/api/v1/construction/projects/:id/budget-lines` | `construction:create` | não |
+| `GET` | `/api/v1/construction/projects/:id/budget-revisions` | `construction:read` | não |
 | `GET` | `/api/v1/construction/projects/:id/budgets` | `construction:read` | não |
 | `POST` | `/api/v1/construction/projects/:id/budgets` | `construction:create` | não |
 | `GET` | `/api/v1/construction/projects/:id/change-orders` | `construction:read` | não |
 | `POST` | `/api/v1/construction/projects/:id/change-orders` | `construction:create` | não |
+| `POST` | `/api/v1/construction/projects/:id/checklist/apply` | `construction:update` | não |
 | `POST` | `/api/v1/construction/projects/:id/close-warranty` | `construction:approve` | não |
 | `POST` | `/api/v1/construction/projects/:id/daily-logs` | `construction:create` | não |
 | `GET` | `/api/v1/construction/projects/:id/daily-reports` | `construction:read` | não |
@@ -257,6 +267,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `DELETE` | `/api/v1/construction/quality-items/:id` | `construction:update` | não |
 | `GET` | `/api/v1/construction/settings/cost-basis` | `construction:read` | não |
 | `PUT` | `/api/v1/construction/settings/cost-basis` | `construction:approve` | não |
+| `GET` | `/api/v1/construction/settings/parameters` | `construction:read` | não |
+| `PUT` | `/api/v1/construction/settings/parameters` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/settings/sla-rule` | `construction:read` | não |
 | `POST` | `/api/v1/construction/settings/sla-rule` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/stages/:id/dependencies` | `construction:read` | não |

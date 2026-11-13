@@ -11,15 +11,11 @@ const {
 } = require('./constructionEvents.service');
 const { getProjectStage } = require('./projectStages.service');
 const { getNotDonePredecessors } = require('./stageDependencies.service');
-const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
-const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
+const { CONSUMER_NAME: FINANCE_PAYABLE_CONSUMER } = require('../../modules/finance/application/services/measurement-payable.consumer');
+const { runNamedConsumer } = require('../../engines/events/consumers');
 const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
-// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
-// BLINDADO v1, §4): a validação transversal "centro de custo obrigatório para despesa" virou
-// fail-closed em createFinancialEntry — o fallback previsto no comentário abaixo (medição sem
-// centro de custo configurado nem na medição nem na obra) agora precisa de um valor, não mais
-// opcional. Ver getOrCreateDefaultCostCenter em cost-centers.service.js.
-const MEASUREMENT_COST_CENTER_CODE = 'OBRAS-MEDICOES';
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
+const { KEYS: SETTING_KEYS, getConstructionSetting } = require('./construction.settings');
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): quando a medição é
 // criada/revisada SEM `items` (totalAmount vem direto do payload do usuário), o valor era
@@ -113,7 +109,7 @@ async function createMeasurementItems(measurement, items, actorUserId, transacti
  * (não é possível aprovar uma medição sem valor — ver guarda em `decideStageMeasurement`).
  */
 async function createStageMeasurement(projectStageId, payload, actorUserId, transaction) {
-  const { groupId, companyId, measuredPct, measuredAt, notes, items, totalAmount, costCenterId, idempotencyKey } = payload;
+  const { groupId, companyId, measuredPct, measuredAt, notes, items, totalAmount, costCenterId, idempotencyKey, evidenceFileIds } = payload;
   if (!groupId || !companyId || measuredPct === undefined || measuredPct === null || !measuredAt) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "measuredPct" e "measuredAt" são obrigatórios.',
@@ -153,6 +149,8 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
     throw AppError.badRequest('Esta etapa não pertence à empresa/grupo informado.', 'STAGE_MEASUREMENT_STAGE_COMPANY_MISMATCH');
   }
   await assertCostCenterBelongsToCompany(costCenterId, companyId, transaction);
+  // M6-21 (Guia §6, Caderno §7): evidências da medição = arquivos reais da empresa, examinados pelo antivírus.
+  await assertEvidenceFilesExist(evidenceFileIds, companyId, transaction, 'evidenceFileIds', { requireClean: true });
 
   const measurement = await StageMeasurement.create(
     {
@@ -167,6 +165,7 @@ async function createStageMeasurement(projectStageId, payload, actorUserId, tran
       revisionNumber: 1,
       totalAmount: assertValidManualTotalAmount(totalAmount),
       costCenterId: costCenterId || null,
+      evidenceFileIds: Array.isArray(evidenceFileIds) ? [...new Set(evidenceFileIds)] : [],
       idempotencyKey: idempotencyKey || null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -331,7 +330,10 @@ async function reviseStageMeasurement(id, payload, actorUserId, transaction) {
   const original = await getStageMeasurement(id, transaction, { lock: true });
   assertTransition(original, ['SUBMITTED', 'REVIEWED'], 'revisar/corrigir (nova revisão de)');
 
-  const { measuredPct, measuredAt, notes, items, totalAmount } = payload || {};
+  const { measuredPct, measuredAt, notes, items, totalAmount, evidenceFileIds } = payload || {};
+  // Caderno §7 "não sobrescrever evidência/quantidade silenciosamente": a revisão nova traz as evidências informadas (ou
+  // repete as da original); a original continua com as dela (SUPERSEDED, nunca editada).
+  await assertEvidenceFilesExist(evidenceFileIds, original.companyId, transaction, 'evidenceFileIds', { requireClean: true });
   const numericPct = measuredPct !== undefined && measuredPct !== null ? Number(measuredPct) : Number(original.measuredPct);
   if (!Number.isFinite(numericPct) || numericPct < 0 || numericPct > 100) {
     throw AppError.badRequest('"measuredPct" deve ser um número entre 0 e 100.', 'STAGE_MEASUREMENT_VALIDATION');
@@ -361,6 +363,8 @@ async function reviseStageMeasurement(id, payload, actorUserId, transaction) {
       parentMeasurementId: original.id,
       revisionNumber: original.revisionNumber + 1,
       totalAmount: assertValidManualTotalAmount(totalAmount),
+      costCenterId: original.costCenterId || null,
+      evidenceFileIds: Array.isArray(evidenceFileIds) ? [...new Set(evidenceFileIds)] : original.evidenceFileIds || [],
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -392,67 +396,42 @@ async function reviseStageMeasurement(id, payload, actorUserId, transaction) {
 }
 
 /**
- * createPayableForMeasurement (M6-55/M6-68/M6-85 — O NÚCLEO DA INTEGRAÇÃO) — cria a obrigação
- * financeira (conta a pagar) correspondente a uma medição aprovada, chamando o service REAL do
- * Financeiro (financialEntriesService.createFinancialEntry — nenhum financeiro paralelo/fake).
- *
- * IDEMPOTÊNCIA (M6-55/M6-68): usa o MESMO mecanismo de idempotência já usado em todo o módulo
- * Financeiro — `idempotency_key` UNIQUE em finance.financial_entries — derivada
- * deterministicamente do id da medição (`measurement.payable:<measurementId>`). Aprovar a MESMA
- * medição duas vezes (reprocessamento de evento, duplo clique, corrida) NUNCA cria duas contas
- * a pagar:
- *   1º caminho de defesa: lock pessimista em `getStageMeasurement(..., { lock: true })` —
- *      decideStageMeasurement já trava a linha da medição antes de checar o status, então a
- *      segunda chamada concorrente só enxerga a medição já fora de [SUBMITTED, REVIEWED] e
- *      falha com STAGE_MEASUREMENT_INVALID_STATUS antes de sequer tentar criar o lançamento.
- *   2º caminho de defesa (cinto e suspensório): mesmo que os dois caminhos cheguem aqui (ex.:
- *      dados corrompidos/bug futuro que rompa o lock), a UNIQUE constraint do banco em
- *      `idempotency_key` faz o segundo INSERT falhar — `assertNoDuplicatePayment` dentro de
- *      `createFinancialEntry` intercepta isso e devolve um erro de negócio claro
- *      (FINANCE_DUPLICATE_PAYMENT) em vez de estourar como erro de constraint cru.
- *
- * M6-97 — carrega `constructionProjectId` como dimensão no lançamento, permitindo relatório de
- * margem por obra sem heurística.
+ * createPayableForMeasurement (M6-21/M6-55/M6-68/M6-85) — Caderno §7 "APPROVED gera measurement.approved; consumidor
+ * Financeiro cria payable com source_event_id UNIQUE". A medição APROVADA publica measurement.approved no outbox (na
+ * transação da aprovação), com obra, etapa, valor e centro de custo resolvido (o da medição; senão o da obra; senão o
+ * Financeiro usa o padrão de medições). O consumidor do Financeiro (measurement-payable.consumer.js) cria a conta a
+ * pagar com source_event_id = id do evento; ele é acionado já aqui, na mesma transação, para a medição só virar PAYABLE
+ * com a conta existente (nenhuma medição aprovada sem conta). O despachante entrega o evento depois a todos os
+ * consumidores; o do Financeiro devolve a conta já criada (índice único em source_event_id: nenhuma conta em dobro).
  */
 async function createPayableForMeasurement(measurement, actorUserId, transaction) {
   const stage = await getProjectStage(measurement.projectStageId, transaction);
   const project = await Project.findByPk(stage.projectId, { transaction });
+  const event = await publishMeasurementApproved(measurement, transaction, {
+    projectId: stage.projectId,
+    stageName: stage.name,
+    costCenterId: measurement.costCenterId || (project ? project.costCenterId : null) || null,
+  });
+  const entry = await runNamedConsumer(event, FINANCE_PAYABLE_CONSUMER, transaction);
+  return { entry, event };
+}
 
-  // M6-97 (reforço — achado em nova rodada de verificação de integrações, 30/09/2026, fail-
-  // closed desde 2026-10-07): a obrigação gerada aqui é uma despesa (DEBIT/PAYABLE) — resolve
-  // o centro de custo da medição (override pontual) ou, na ausência, o centro de custo padrão
-  // da obra; se nenhum dos dois estiver configurado, usa (criando se necessário) um centro de
-  // custo padrão para medições de obra — createFinancialEntry agora é fail-closed e nunca mais
-  // aceita PAYABLE sem costCenterId.
-  let resolvedCostCenterId = measurement.costCenterId || (project ? project.costCenterId : null) || null;
-  if (!resolvedCostCenterId) {
-    const defaultCostCenter = await getOrCreateDefaultCostCenter(
-      measurement.groupId,
-      measurement.companyId,
-      MEASUREMENT_COST_CENTER_CODE,
-      'Obras — medições',
-      transaction
+/**
+ * assertMeasurementEvidence — Guia §6 "approveMeasurement(): lockForUpdate → REVIEWED → evidências → permissão →
+ * APPROVED". Toda evidência anexada é conferida de novo na aprovação (arquivo existe, é da empresa, passou no antivírus);
+ * o mínimo de arquivos é o parâmetro construction.medicao.evidencias_minimas da empresa (DI-M6V-5).
+ */
+async function assertMeasurementEvidence(measurement, transaction) {
+  const evidence = Array.isArray(measurement.evidenceFileIds) ? measurement.evidenceFileIds : [];
+  const minimum = Number(await getConstructionSetting(SETTING_KEYS.measurementMinEvidence, measurement, transaction));
+  if (evidence.length < minimum) {
+    throw AppError.unprocessable(
+      `A aprovação exige ao menos ${minimum} evidência(s) anexada(s) à medição (parâmetro da empresa) — esta tem ${evidence.length}. Crie uma revisão com as evidências.`,
+      'STAGE_MEASUREMENT_EVIDENCE_REQUIRED',
+      { required: minimum, attached: evidence.length }
     );
-    resolvedCostCenterId = defaultCostCenter.id;
   }
-
-  const entry = await financialEntriesService.createFinancialEntry(
-    {
-      groupId: measurement.groupId,
-      companyId: measurement.companyId,
-      entryType: 'DEBIT',
-      nature: 'PAYABLE',
-      amount: measurement.totalAmount,
-      description: `Medição aprovada — etapa "${stage.name}" (medição ${measurement.id})`,
-      idempotencyKey: `measurement.payable:${measurement.id}`,
-      constructionProjectId: project ? project.id : stage.projectId,
-      costCenterId: resolvedCostCenterId,
-    },
-    actorUserId,
-    transaction
-  );
-
-  return entry;
+  await assertEvidenceFilesExist(evidence, measurement.companyId, transaction, 'evidenceFileIds', { requireClean: true });
 }
 
 /**
@@ -528,6 +507,8 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
     );
   }
 
+  await assertMeasurementEvidence(measurement, transaction);
+
   measurement.status = 'APPROVED';
   measurement.approvedByUserId = actorUserId || null;
   measurement.approvedAt = new Date();
@@ -598,14 +579,13 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
     );
   }
 
-  const financialEntry = await createPayableForMeasurement(measurement, actorUserId, transaction);
+  const { entry: financialEntry, event } = await createPayableForMeasurement(measurement, actorUserId, transaction);
 
   measurement.status = 'PAYABLE';
   measurement.payableFinancialEntryId = financialEntry.id;
   measurement.updatedBy = actorUserId || null;
   await measurement.save({ transaction });
 
-  await publishMeasurementApproved(measurement, transaction);
   await publishStageMeasurementDecided(measurement, transaction);
 
   await registrarAuditoria(
@@ -618,7 +598,7 @@ async function decideStageMeasurement(id, { decision, rejectionReason }, actorUs
       entityId: measurement.id,
       beforeJson,
       afterJson: measurement.toJSON(),
-      reason: `Medição ${measurement.id} aprovada — obrigação financeira ${financialEntry.id} criada (${measurement.totalAmount}).`,
+      reason: `Medição ${measurement.id} aprovada — evento measurement.approved ${event.id}; conta a pagar ${financialEntry.id} criada pelo consumidor do Financeiro (${measurement.totalAmount}).`,
     },
     transaction
   );

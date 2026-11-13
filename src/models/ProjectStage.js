@@ -70,6 +70,8 @@ module.exports = (sequelize) => {
         defaultValue: 'PENDING',
         field: 'status',
       },
+      // Responsável da etapa (Caderno Obras §2, migration 20260101006601): membro ativo da empresa.
+      responsibleUserId: { type: DataTypes.UUID, allowNull: true, field: 'responsible_user_id' },
       startsAt: {
         type: DataTypes.DATE,
         allowNull: true,

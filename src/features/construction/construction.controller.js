@@ -468,13 +468,6 @@ const listMarginRuleVersions = catchAsync(async (req, res) => {
   return success(res, { data: versions });
 });
 
-const upsertApprovalThreshold = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) =>
-    lossRecordsService.upsertApprovalThreshold(withTenant(req), req.auth.userId, t)
-  );
-  return success(res, { data: item });
-});
-
 // --- Warranty actions (histórico de atendimento dentro do chamado de garantia) ---
 const createWarrantyAction = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
@@ -581,7 +574,6 @@ module.exports = {
   getActiveMarginRule,
   deactivateMarginRule,
   listMarginRuleVersions,
-  upsertApprovalThreshold,
   createWarrantyAction,
   listWarrantyActions,
   proposeWarrantyResolution,

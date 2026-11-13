@@ -24,6 +24,8 @@ const {
 } = require('./constructionEvents.service');
 const { publishProjectScheduleChanged, computeProjectWarrantyEndsAt } = require('./constructionCalendarEvents.service');
 const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
+const { assertProjectReferences } = require('./projectReferences');
+const { applyProjectChecklist } = require('./checklistTemplates.service');
 
 // M6-18 (fechado 30/09/2026, rodada final) — máquina de estados EXATA da fonte (Anexo I, seção
 // "4. Estados da obra"): "PLANNED → BUDGETED → READY → ACTIVE → FINAL_INSPECTION → DELIVERED →
@@ -164,13 +166,14 @@ async function generateProjectCode(companyId, transaction) {
 }
 
 async function createProject(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, unitId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, code, costCenterId } = payload;
+  const { groupId, companyId, propertyId, unitId, name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, code, costCenterId, projectTypeId } = payload;
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_VALIDATION');
   }
   assertValidDateRange(startsAt, endsAtPlanned);
   assertValidBudgetAmount(budgetAmount);
   await assertCostCenterBelongsToCompany(costCenterId, companyId, transaction);
+  await assertProjectReferences(payload, companyId, transaction);
 
   const resolvedCode = code || (await generateProjectCode(companyId, transaction));
 
@@ -185,6 +188,7 @@ async function createProject(payload, actorUserId, transaction) {
       responsibleUserId: responsibleUserId || null,
       budgetAmount: budgetAmount != null ? budgetAmount : null,
       costCenterId: costCenterId || null,
+      projectTypeId: projectTypeId || null,
       startsAt: startsAt || null,
       endsAtPlanned: endsAtPlanned || null,
       status: 'PLANNED',
@@ -195,6 +199,7 @@ async function createProject(payload, actorUserId, transaction) {
   );
 
   await publishProjectCreated(project, transaction);
+  if (project.projectTypeId) await applyProjectChecklist(project.id, actorUserId, transaction);
 
   await registrarAuditoria(
     {
@@ -251,7 +256,10 @@ async function updateProject(id, payload, actorUserId, transaction) {
   const project = await getProject(id, transaction);
   const beforeJson = project.toJSON();
   const scheduleBefore = { endsAtPlanned: project.endsAtPlanned, responsibleUserId: project.responsibleUserId };
-  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate, costCenterId } = payload;
+  const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate, costCenterId, projectTypeId } = payload;
+  await assertProjectReferences(payload, project.companyId, transaction);
+  const typeChanged = projectTypeId !== undefined && (projectTypeId || null) !== project.projectTypeId;
+  if (projectTypeId !== undefined) project.projectTypeId = projectTypeId || null;
   if (name !== undefined) project.name = name;
   if (responsibleUserId !== undefined) project.responsibleUserId = responsibleUserId;
   if (budgetAmount !== undefined) {
@@ -310,6 +318,7 @@ async function updateProject(id, payload, actorUserId, transaction) {
   await project.save({ transaction });
   // M9-D803: prazo final ou responsável mudou -> o item do Calendário acompanha.
   await publishProjectScheduleChanged(project, scheduleBefore, transaction);
+  if (typeChanged && project.projectTypeId) await applyProjectChecklist(project.id, actorUserId, transaction);
 
   await registrarAuditoria(
     {

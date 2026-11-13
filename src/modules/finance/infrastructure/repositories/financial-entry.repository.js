@@ -7,7 +7,8 @@
  * e travas são as mesmas que estavam nos serviços.
  */
 const { Op } = require('sequelize');
-const { FinancialEntry, File, Person, Contract, ContractParty, sequelize } = require('../../../../models');
+const AppError = require('../../../../utils/AppError');
+const { FinancialEntry, File, Person, Contract, ContractParty, Project, sequelize } = require('../../../../models');
 
 const forUpdate = (transaction) => (transaction ? transaction.LOCK.UPDATE : undefined);
 
@@ -126,6 +127,23 @@ async function findIdsByBankAccount(bankAccountId, statuses, transaction) {
   return rows.map((r) => r.id);
 }
 
+/** Lançamento já criado a partir de um evento do outbox (source_event_id único — Caderno Obras §7). */
+function findBySourceEventId(sourceEventId, transaction) {
+  return FinancialEntry.findOne({ where: { sourceEventId }, transaction });
+}
+
+/** Lançamento da empresa com a chave de idempotência (contas criadas antes do consumidor de eventos). Nome próprio: findByIdempotencyKey(chave, t)
+ * é o do replay do complemento (M4LR); as duas assinaturas com o mesmo nome se sobrescreviam. */
+function findByIdempotencyKeyInCompany(idempotencyKey, companyId, transaction) {
+  return FinancialEntry.findOne({ where: { idempotencyKey, companyId }, transaction });
+}
+
+/** A obra (dimensão construction_project_id) precisa ser da mesma empresa (verificação do Marco 6: FK ignora RLS). */
+async function assertConstructionProjectInCompany(projectId, companyId, transaction) {
+  if (await Project.findOne({ where: { id: projectId, companyId }, attributes: ['id'], transaction })) return;
+  throw AppError.unprocessable('A obra informada não pertence a esta empresa.', 'CONSTRUCTION_REFERENCE_NOT_IN_COMPANY', { field: 'constructionProjectId' });
+}
+
 module.exports = {
   findIdsByBankAccount,
   /** O modelo, para a checagem genérica de chave duplicada do antifraude (assertNoDuplicatePayment recebe o modelo). */
@@ -136,6 +154,9 @@ module.exports = {
   findByIdForUpdate,
   findInCompanyForUpdate,
   findByIdempotencyKey,
+  findByIdempotencyKeyInCompany,
+  findBySourceEventId,
+  assertConstructionProjectInCompany,
   create,
   save,
   list,

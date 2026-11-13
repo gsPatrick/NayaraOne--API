@@ -133,6 +133,8 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'resolution_approved_by_user_id',
       },
+      // Quem propôs o desconto/ressarcimento (migration 20260101006605): acima da alçada, quem propõe não aprova.
+      resolutionProposedByUserId: { type: DataTypes.UUID, allowNull: true, field: 'resolution_proposed_by_user_id' },
       resolutionFinancialEntryId: {
         type: DataTypes.UUID,
         allowNull: true,

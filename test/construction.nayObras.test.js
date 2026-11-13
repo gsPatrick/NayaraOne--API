@@ -4,6 +4,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { createTestCostCenter } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const dailyReportsService = require('../src/features/construction/dailyReports.service');
@@ -65,7 +67,7 @@ test('GAP 1 — workersWithoutDocuments conta DailyWorker sem documentFileIds', 
       tenant.userId,
       transaction
     );
-    const fakeDocId = 'd0a1b2c3-d4e5-46f7-8899-aabbccddeeff';
+    const [fakeDocId] = await evidenceIds(tenant, transaction, 1, 'documento'); // arquivo real (M6-08)
 
     await dailyReportsService.createDailyReport(
       project.id,
@@ -160,6 +162,13 @@ test('GAP 3 — risco de medição PAYABLE sem pagamento processado há muito te
     );
 
     const staleApprovedAt = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000);
+    // Medição PAYABLE sempre aponta para a conta a pagar (CHECK stage_measurements_payable_has_entry, verificação do Marco 6).
+    const costCenter = await createTestCostCenter(tenant, transaction);
+    const conta = await require('../src/modules/finance/application/services/financial-entry.service').createFinancialEntry(
+      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 100, costCenterId: costCenter.id, constructionProjectId: project.id }),
+      tenant.userId,
+      transaction
+    );
     await StageMeasurement.create(
       {
         groupId: tenant.groupId,
@@ -169,7 +178,7 @@ test('GAP 3 — risco de medição PAYABLE sem pagamento processado há muito te
         measuredAt: '2026-09-01',
         status: 'PAYABLE',
         approvedAt: staleApprovedAt,
-        payableFinancialEntryId: null,
+        payableFinancialEntryId: conta.id,
         createdAt: staleApprovedAt,
       },
       { transaction }
