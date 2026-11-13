@@ -83,7 +83,7 @@ test('JR processo: movimentação relevante (fase, legal hold, parte, documento,
     await legalDeadlinesService.updateLegalDeadline(d.id, { dueAt: FUTURE(30), changeReason: 'Prorrogação deferida pelo juízo' }, tenant.userId, t);
     await legalDeadlinesService.updateLegalDeadline(d.id, { status: 'DONE', conclusionNote: 'Manifestação protocolada.' }, tenant.userId, t);
     await evidencePackagesService.createEvidencePackage(legalCase.id, [{ type: 'NOTE', description: 'Nota fictícia' }], tenant.userId, t);
-    await noticesService.createNotice({ legalCaseId: legalCase.id, channel: 'EMAIL', content: 'Notificação fictícia do processo' }, tenant.userId, t);
+    await noticesService.createNotice({ legalCaseId: legalCase.id, recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'Notificação fictícia do processo' }, tenant.userId, t);
     await legalCasesService.setLegalHold(legalCase.id, { legalHold: true, reason: 'Preservação fictícia' }, tenant.userId, t);
 
     const { items } = await timelineService.getLegalCaseTimeline(legalCase.id, t);
@@ -122,7 +122,7 @@ test('JR processo: o resumo da linha do tempo é português para gente — rótu
     const outbox = await OutboxEvent.findOne({ where: { aggregateId: legalCase.id, eventType: 'legal.case.created' }, transaction: t });
     await newDeadline(legalCase.id, tenant, t, { description: 'Réplica', sourceDocument: undefined, sourceFileId: undefined, sourceEventId: outbox.id });
     await legalDeadlinesService.updateLegalDeadline(byFile.id, { dueAt: '2030-01-20T17:00:00-03:00', changeReason: 'Prorrogação deferida' }, tenant.userId, t);
-    await noticesService.createNotice({ legalCaseId: legalCase.id, channel: 'POSTAL_MAIL', content: 'Aviso' }, tenant.userId, t);
+    await noticesService.createNotice({ legalCaseId: legalCase.id, recipientDescription: 'Destinatário de teste', channel: 'POSTAL_MAIL', content: 'Aviso' }, tenant.userId, t);
     await legalCasesService.setLegalHold(legalCase.id, { legalHold: true, reason: 'Preservação' }, tenant.userId, t);
 
     const { items } = await timelineService.getLegalCaseTimeline(legalCase.id, t);

@@ -10,6 +10,7 @@ const { contentAccess } = require('../core-governance/dlp/downloads/download.sin
 const { checkExplicitClass } = require('../core-governance/dlp/downloads/attachment.class');
 const { CaseDocument } = require('../../models');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { recordEvidenceFileAccess } = require('../../modules/legal/cases/evidenceFileAccess');
 
 // Quem leu documento restrito (renda, extrato, identidade) fica registrado.
 async function auditRestrictedRead(file, auth, action, transaction) {
@@ -55,9 +56,11 @@ const uploadFile = catchAsync(async (req, res) => {
 const getFileMetadata = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction(async (t) => {
     // A checagem de documento RESTRICTED vem na mesma consulta de vínculos (fileAccess.service).
-    const { file, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
+    const { file, restricted, ownership } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
     rejectRestrictedUnlessAllowed(restricted, req.auth.permissions, file);
     if (restricted) await auditRestrictedRead(file, req.auth, 'files.read_restricted_metadata', t);
+    // Fechamento M5 (JUR-010): leitura de prova do Jurídico entra na cadeia de custódia em qualquer classe de arquivo.
+    await recordEvidenceFileAccess({ file, ownership, auth: req.auth, kind: 'METADATA', ip: req.ip }, t);
     return file;
   });
   return success(res, { data: item });
@@ -71,7 +74,7 @@ const getFileMetadata = catchAsync(async (req, res) => {
  */
 const downloadFile = catchAsync(async (req, res) => {
   const file = await req.withTenantTransaction(async (t) => {
-    const { file: metadata, restricted } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
+    const { file: metadata, restricted, ownership } = await fileAccessService.assertCanReadFile(req.params.id, req.auth, t);
     rejectRestrictedUnlessAllowed(restricted, req.auth.permissions, metadata);
     const withContent = await filesService.getFileContent(req.params.id, t, req.auth.userId, metadata);
     if (restricted) await auditRestrictedRead(metadata, req.auth, 'files.read_restricted', t);
@@ -79,6 +82,7 @@ const downloadFile = catchAsync(async (req, res) => {
     const delivered = await contentAccess({
       tenant: { groupId: req.auth.groupId, companyId: req.auth.companyId }, auth: req.auth, ip: req.ip, userAgent: req.get('user-agent'), file: withContent, restricted, query: req.query, transaction: t,
     });
+    await recordEvidenceFileAccess({ file: metadata, ownership, auth: req.auth, kind: 'CONTENT', ip: req.ip }, t); // Fechamento M5 (JUR-010)
     if (delivered) {
       withContent.setDataValue('content', delivered.buffer);
       withContent.setDataValue('mimeType', delivered.mimeType);

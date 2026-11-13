@@ -59,6 +59,7 @@ async function createNoticeVersion(noticeId, payload, actorUserId, transaction) 
     recipientPersonId: body.recipientPersonId !== undefined ? await assertPersonInCompany(body.recipientPersonId, notice.companyId, 'recipientPersonId', 'LEGAL_NOTICE_VALIDATION', transaction) : notice.recipientPersonId,
   };
   if (!next.content && !next.contentFileId) throw AppError.badRequest('Informe "content" (texto) e/ou "contentFileId" (arquivo).', 'LEGAL_NOTICE_VALIDATION');
+  require('./noticeRecipient').assertNoticeRecipient(next.recipientPersonId, next.recipientDescription);
   if (contentSha256(next.content, next.contentFileId) === contentSha256(notice.content, notice.contentFileId)
     && next.recipientDescription === notice.recipientDescription && next.recipientPersonId === notice.recipientPersonId) {
     throw AppError.conflict('A nova versão é idêntica à atual.', 'LEGAL_NOTICE_VERSION_UNCHANGED');

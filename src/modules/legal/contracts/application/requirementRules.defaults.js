@@ -40,6 +40,9 @@ const TEMPLATES = {
     { requirementCode: 'LEASE_INSPECTION', requirementType: 'INSPECTION', description: 'Vistoria de entrada do imóvel.' },
     { requirementCode: 'LEASE_OWNERSHIP', requirementType: 'OWNERSHIP_PROOF', description: 'Comprovação de titularidade do imóvel.' },
     { requirementCode: 'LEASE_OBLIGATIONS', requirementType: 'OBLIGATIONS', description: 'Definição de responsáveis pelas obrigações locatícias (IPTU/condomínio/água/luz/gás).' },
+    // Fechamento M5 (livro §10 "Checklist calculado por Motor de Regras" + "Registrar quantidade/identificação de
+    // chaves/controles"): exigência da etapa KEY_DELIVERY — só bloqueia a entrega das chaves, não as etapas anteriores.
+    { requirementCode: 'LEASE_KEYS_LIST', requirementType: 'KEYS', stage: 'KEY_DELIVERY', description: 'Relação das chaves e controles a entregar, conferida com o locador.' },
   ],
   SALE_FINANCED: [
     { requirementCode: 'SALE_FIN_BUYER_DOCS', requirementType: 'BUYER_DOCUMENT', description: 'Documentos do comprador.' },
@@ -98,8 +101,15 @@ const TYPE_TO_TEMPLATE = {
 
 const DEFAULT_ACTION = Object.freeze({ templates: TEMPLATES, typeToTemplate: TYPE_TO_TEMPLATE });
 
-// sha256 do JSON das sementes anteriores (a versão sem as características do imóvel, commits 52740c89 a 41addaa2). Empresa
-// cuja versão vigente é exatamente uma delas nunca mexeu na política e recebe a semente atual (requirementRules.service.js).
-const PREVIOUS_SEED_HASHES = Object.freeze(['a222325e003107eeaa8a5e1f04a6319fbdcdcad34614e71645daa5f7ab90e683']);
+// Hash (sha256 do JSON da ação) das políticas PADRÃO anteriores. Empresa cuja versão vigente ainda é exatamente um padrão antigo (nunca
+// personalizou) recebe o padrão atual numa versão nova, auditada (requirementRules.service#resolveRequirementPolicy); política personalizada
+// nunca é trocada. Integração dos Marcos 3 a 6 (13/11/2026): os padrões intermediários das duas correções do Marco 5 também contam como antigos.
+const PREVIOUS_DEFAULT_HASHES = Object.freeze([
+  'a222325e003107eeaa8a5e1f04a6319fbdcdcad34614e71645daa5f7ab90e683', // commits 52740c89 a 41addaa2 (sem as características do imóvel e sem o item da etapa KEY_DELIVERY)
+  '54369817342bf5dbc8da7cd497465284752345eb0d09714a982a1cd4ce8bc0a0', // m5fix/contratos-verificacao (com as características do imóvel, sem o item da etapa KEY_DELIVERY)
+  '5fd611496c45a6dd3ce63e3ef9d4da63fe3386c01363a5f2253fa60158942cb5', // m5fix/vistorias-prazos (com o item da etapa KEY_DELIVERY, sem as características do imóvel)
+]);
+// Mesmo conjunto com o nome da DI-M5CT-3 (semente anterior sem alteração da empresa).
+const PREVIOUS_SEED_HASHES = PREVIOUS_DEFAULT_HASHES;
 
-module.exports = { DEFAULT_ACTION, TEMPLATES, TYPE_TO_TEMPLATE, PREVIOUS_SEED_HASHES };
+module.exports = { DEFAULT_ACTION, TEMPLATES, TYPE_TO_TEMPLATE, PREVIOUS_SEED_HASHES, PREVIOUS_DEFAULT_HASHES };

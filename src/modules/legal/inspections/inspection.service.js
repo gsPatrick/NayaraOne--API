@@ -575,10 +575,8 @@ async function listInspectionSignatures(inspectionId, transaction) {
  * que o relatório entregue é byte-a-byte o mesmo que foi gerado (imutabilidade), sem depender
  * de storage externo (ver ressalva sobre S3 em contractVersions.service.js).
  *
- * REGRA: só gera relatório de vistoria COMPLETED, e o relatório em si é imutável — gerar de
- * novo SUBSTITUI o anterior (não existe "correção" de PDF já emitido; se precisar corrigir um
- * dado, corrige o item e gera um novo relatório, que fica com hash diferente e data diferente
- * — o relatório velho não desaparece do histórico de auditoria, só deixa de ser o vigente).
+ * REGRA: só gera relatório de vistoria COMPLETED. Antes da assinatura de locador e locatário, gerar de novo substitui
+ * o anterior; depois dela o laudo é emitido uma vez e fica imutável (inspectionReportFreeze.js; correção = revisão).
  */
 async function generateInspectionReport(inspectionId, actorUserId, transaction) {
   const inspection = await getInspection(inspectionId, transaction);
@@ -588,6 +586,7 @@ async function generateInspectionReport(inspectionId, actorUserId, transaction) 
 
   const items = await listInspectionItems(inspectionId, transaction);
   const signatures = await listInspectionSignatures(inspectionId, transaction);
+  require('./inspectionReportFreeze').assertReportNotFrozen(inspection, signatures); // Fechamento M5 (§11): laudo assinado é imutável
 
   const pdfBytes = await new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50 });

@@ -34,7 +34,7 @@ const contratoComLinhaDoTempo = (t) => withTenantTransaction(t, async (transacti
   const contract = await contractsService.createContract({ groupId: t.groupId, companyId: t.companyId, contractType: 'LEASE_RESIDENTIAL', totalValue: 1500 }, t.userId, transaction);
   await contractVersionsService.createContractVersion(contract.id, { content: `Contrato base ${sfx()}`, requireDocument: false }, t.userId, transaction); // Matriz M5: o aditivo referencia a versão base
   const amendment = await contractAmendmentsService.createAmendment(contract.id, { reason: `Reajuste combinado ${sfx()}`, changes: [{ field: 'totalValue', oldValue: 1500, newValue: 1600 }] }, t.userId, transaction);
-  const notice = await noticesService.createNotice({ groupId: t.groupId, companyId: t.companyId, contractId: contract.id, channel: 'EMAIL', content: 'Aviso de vencimento próximo' }, t.userId, transaction);
+  const notice = await noticesService.createNotice({ groupId: t.groupId, companyId: t.companyId, contractId: contract.id, recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'Aviso de vencimento próximo' }, t.userId, transaction);
   const schedule = await BillingSchedule.create({
     groupId: t.groupId, companyId: t.companyId, contractId: contract.id, period: '2031-09', dueDate: new Date('2031-09-10'), totalAmount: 1600, paidAmount: 0, balance: 1600, status: 'OPEN',
     generatedAt: new Date(), createdBy: t.userId, updatedBy: t.userId,

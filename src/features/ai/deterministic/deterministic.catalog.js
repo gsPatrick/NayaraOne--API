@@ -36,6 +36,7 @@ const TOOLS = Object.freeze({
   'finance.proposePayment': por('HUMAN_FORM', 'Intenção de pagamento criada pela pessoa na tela do Financeiro, com aprovação.'),
   'inventory.getStockRisks': por('RULE_ENGINE', 'Riscos de estoque pelas regras de nível mínimo e validade.'),
   'knowledge.search': por('KEYWORD_SEARCH', 'Busca por palavras-chave na base de conhecimento, no lugar da busca semântica.'),
+  'legal.compareInspections': por('RULE_ENGINE', 'Comparação entrada x saída pelos itens pareados (ambiente + código), sem texto por modelo.'),
   'legal.compareVersions': por('READ_SERVICE', 'Comparação das versões do contrato linha a linha, sem resumo por modelo.'),
   'legal.draftContract': por('PREDEFINED_TEMPLATE', 'Modelos de contrato pré-definidos do tipo pedido, no lugar de redação por modelo.'),
   'legal.getContractSummary': por('READ_SERVICE', 'Dados do contrato lidos do cadastro do Jurídico.'),

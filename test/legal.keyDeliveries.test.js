@@ -92,7 +92,7 @@ test('releaseKeyDelivery bloqueia garantia com endsAt vencido mesmo com status a
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID');
@@ -118,7 +118,7 @@ test('releaseKeyDelivery bloqueia quando existe garantia cadastrada mas nenhuma 
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID');
@@ -187,7 +187,7 @@ test('releaseKeyDelivery exige keysCount e termSignedByPersonId (JUR-TS-004 "Cha
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 2 }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste' }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_VALIDATION');
         return true;
@@ -209,7 +209,7 @@ test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóv
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id, photosRequired: false }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id, photosRequired: false }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_SERVER_POLICY');
         return true;
@@ -220,7 +220,7 @@ test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóv
       () =>
         keyDeliveriesService.releaseKeyDelivery(
           keyDelivery.id,
-          { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id },
+          { termEvidenceFileId, keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id },
           tenant.userId,
           transaction
         ),
@@ -240,7 +240,7 @@ test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóv
     );
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id, photosFileIds: [photo.id] },
+      { termEvidenceFileId, keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id, photosFileIds: [photo.id] },
       tenant.userId,
       transaction
     );
@@ -284,7 +284,7 @@ test('F6: releaseKeyDelivery recusa signatário que não é parte do contrato (4
       transaction
     );
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, termSignedByPersonId: outsider.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: outsider.id }, tenant.userId, transaction),
       (err) => err.statusCode === 400 && err.code === 'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID'
     );
   });
@@ -305,7 +305,7 @@ test('F7: prévia do termo KD-TERM-v2 antes de liberar e termo gravado com hash 
     assert.match(prev.termText, /TERMO DE ENTREGA DE CHAVES/);
     assert.match(prev.termText, /Quantidade entregue: 3 chaves\/controles/);
     assert.match(prev.termText, /PRÉVIA/);
-    await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 3, termSignedByPersonId: landlord.id }, tenant.userId, transaction);
+    await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 3, keysIdentification: 'Chaves de teste', termSignedByPersonId: landlord.id }, tenant.userId, transaction);
     const after = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, {}, transaction);
     assert.equal(after.preview, false);
     assert.match(after.termHash, /^[0-9a-f]{64}$/);
@@ -354,8 +354,8 @@ test('KD-TERM-v2: termo humano (rótulo do tipo, imóvel por nome, política em 
   });
 });
 
-test('KD-TERM-v2: rótulo de venda com permuta e formatação de CNPJ', () => {
-  const policy = keyDeliveriesService.resolveKeyDeliveryPhotoPolicy({ contractType: 'SALE_TRADE' }, { termType: null });
+test('KD-TERM-v2: rótulo de venda com permuta e formatação de CNPJ', async () => {
+  const policy = await keyDeliveriesService.resolveKeyDeliveryPhotoPolicy({ contractType: 'SALE_TRADE' }, { termType: null });
   const text = keyDeliveriesService.buildKeyDeliveryTermV2({
     contract: { contractNumber: 'VEN-2026-0007', contractType: 'SALE_TRADE', startsAt: '2026-03-05T12:00:00Z' },
     keyDelivery: { termType: null },
@@ -367,7 +367,7 @@ test('KD-TERM-v2: rótulo de venda com permuta e formatação de CNPJ', () => {
     ctx: { propertyText: 'Casa Azul, Rua A, 10 — Centro — Goiânia/GO', recipientText: 'Fulano (CNPJ 11.222.333/0001-81)', signerText: null, checkInDate: null },
   });
   assert.match(text, /Contrato: VEN-2026-0007 — Venda com permuta \(início em 05\/03\/2026\)/);
-  assert.match(text, /Fotos obrigatórias: por se tratar de entrega de imóvel vendido/);
+  assert.match(text, /Fotos obrigatórias \(no mínimo 1 foto\): por se tratar de entrega de imóvel vendido/);
   assert.equal(keyDeliveriesService.formatTaxId('11222333000181'), 'CNPJ 11.222.333/0001-81');
 });
 
@@ -379,7 +379,7 @@ test('KD-TERM-v1 continua válido: termo já gravado em v1 é devolvido intacto 
       tenant.userId,
       transaction
     );
-    await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, termSignedByPersonId: landlord.id }, tenant.userId, transaction);
+    await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: landlord.id }, tenant.userId, transaction);
     // simula um termo legado gravado em v1
     const legacyText = 'TERMO DE ENTREGA DE CHAVES (KD-TERM-v1)\nContrato: X (LEASE)';
     const legacyHash = require('crypto').createHash('sha256').update(legacyText, 'utf8').digest('hex');
@@ -411,7 +411,7 @@ test('M45: cancelamento de entrega de chaves exige motivo, é auditado e bloquei
       { replacements: { id: kd.id }, transaction }
     );
     assert.equal(rows.length, 1);
-    await assert.rejects(() => keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: landlord.id }, tenant.userId, transaction),
+    await assert.rejects(() => keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: landlord.id }, tenant.userId, transaction),
       (err) => err.statusCode === 409 && err.code === 'LEGAL_KEY_DELIVERY_CANCELLED');
     await assert.rejects(() => keyDeliveriesService.cancelKeyDelivery(kd.id, { reason: 'de novo, outra vez' }, tenant.userId, transaction),
       (err) => err.statusCode === 409);

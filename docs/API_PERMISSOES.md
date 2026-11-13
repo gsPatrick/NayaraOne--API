@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 886. Rotas só com login ou públicas: 44.
+Rotas com permissão exigida: 890. Rotas só com login ou públicas: 44.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -162,6 +162,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/billing/schedules` | `billing:read` | não |
 | `POST` | `/api/v1/billing/schedules` | `billing:create` | não |
 | `POST` | `/api/v1/billing/utility-accounts` | `billing:create` | não |
+| `POST` | `/api/v1/billing/utility-cycles/:id/waive` | `billing:approve` | não |
+| `GET` | `/api/v1/billing/utility-obligations/:id/cycles` | `billing:read` | não |
 | `POST` | `/api/v1/billing/utility-obligations/:id/ownership-transfer` | `billing:update` | não |
 | `POST` | `/api/v1/billing/utility-obligations/:id/payments` | `billing:update` | não |
 | `GET` | `/api/v1/billing/utility-obligations/:id` | `billing:read` | não |
@@ -663,6 +665,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/nay/deadline-suggestions` | `legal:read` | não |
 | `POST` | `/api/v1/legal/nay/draft-suggestions/:id/accept` | `legal:create` | não |
 | `POST` | `/api/v1/legal/nay/draft-suggestions/:id/discard` | `legal:create` | não |
+| `POST` | `/api/v1/legal/nay/inspections/compare` | `legal:read` | não |
 | `POST` | `/api/v1/legal/notices/:id/approve` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/notices/:id/delivery-evidence` | `legal:update` | não |
 | `POST` | `/api/v1/legal/notices/:id/reject` | `legal:approve` | não |
@@ -673,6 +676,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/notices/:id` | `legal:read` | não |
 | `GET` | `/api/v1/legal/notices` | `legal:read` | não |
 | `POST` | `/api/v1/legal/notices` | `legal:create` | não |
+| `GET` | `/api/v1/legal/receivable-bases` | `legal:read` | não |
 | `GET` | `/api/v1/legal/requirement-rules/versions` | `legal:read` | não |
 | `GET` | `/api/v1/legal/requirement-rules` | `legal:read` | não |
 | `POST` | `/api/v1/legal/requirement-rules` | `legal:approve` | não |

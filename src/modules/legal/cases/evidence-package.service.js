@@ -31,51 +31,9 @@ function computePackageHash(manifest) {
  * createEvidencePackage já montava os itens — ou seja, os hashes de pacotes já gravados
  * continuam válidos; o que muda é que a releitura do banco passa a produzir o mesmo hash.
  */
-// §16 "Manifesto do dossiê lista arquivos, hashes, origem, datas, relações e versão": itens de
-// arquivo trazem também fileId, nome original, data do arquivo, origem e versão do documento.
-// Esses campos entram no hash na ordem fixa abaixo e SÓ quando existem no item, de modo que os
-// pacotes antigos (4 campos) continuam com o mesmo hash.
-const OPTIONAL_KEYS = ['fileId', 'originalName', 'createdAt', 'source', 'version'];
-
-function normalizeManifest(manifest) {
-  return (manifest || []).map((item) => {
-    const out = {
-      type: item.type,
-      description: item.description,
-      referenceId: item.referenceId !== undefined ? item.referenceId : null,
-      hash: item.hash !== undefined ? item.hash : null,
-    };
-    for (const key of OPTIONAL_KEYS) if (item[key] !== undefined && item[key] !== null) out[key] = item[key];
-    return out;
-  });
-}
-
-const isoOf = (value) => (value ? new Date(value).toISOString() : null);
-
-/** Metadados imutáveis do arquivo (Guia §13 getImmutableMetadata): sempre do servidor, nunca do chamador. */
-function fileMetadata(file, source, extra = {}) {
-  return { fileId: file.id, originalName: file.fileName, createdAt: isoOf(file.get('created_at') || file.get('createdAt')), source, ...extra };
-}
-
-/**
- * Pentest M5: objeto no lugar de texto/uuid ({"$gt":""}) virava 500. Tipos conferidos antes de qualquer consulta:
- * type/description texto não vazio; referenceId/hash/source texto ou nulo; fileId UUID em texto; version inteiro.
- */
-function assertManifestItemTypes(item) {
-  const bad = (field) => AppError.badRequest(`Item do manifesto: "${field}" com tipo inválido.`, 'LEGAL_EVIDENCE_PACKAGE_VALIDATION');
-  for (const field of ['type', 'description']) if (typeof item[field] !== 'string' || !item[field].trim() || item[field].length > 500) throw bad(field);
-  for (const field of ['referenceId', 'hash', 'source']) if (item[field] !== undefined && item[field] !== null && (typeof item[field] !== 'string' || item[field].length > 500)) throw bad(field);
-  if (item.fileId !== undefined && item.fileId !== null && (typeof item.fileId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.fileId))) throw bad('fileId');
-  if (item.version !== undefined && item.version !== null && !Number.isInteger(item.version)) throw bad('version');
-}
-
-/** Item que cita um arquivo (fileId): hash, nome e data vêm do people.files da empresa (RLS); arquivo inexistente é 400. */
-async function resolveFileItem(item, companyId, transaction) {
-  if (!item.fileId) return item;
-  const file = await File.findOne({ where: { id: item.fileId, companyId }, transaction });
-  if (!file) throw AppError.badRequest(`Arquivo ${item.fileId} citado no manifesto não existe nesta empresa.`, 'LEGAL_EVIDENCE_PACKAGE_FILE_NOT_FOUND');
-  return { ...item, hash: file.checksumSha256 || null, ...fileMetadata(file, item.source || 'people.files', item.version !== undefined ? { version: item.version } : {}) };
-}
+const {
+  normalizeManifest, fileMetadata, assertManifestItemTypes, resolveFileItem, manualItem, SERVER_ITEM, MANUAL_SOURCE,
+} = require('./evidenceManifest');
 
 /**
  * createEvidencePackage — monta manifest_json a partir de manifestItems (cada item deve ter
@@ -98,10 +56,8 @@ async function createEvidencePackage(legalCaseId, manifestItems, actorUserId, tr
 
   const manifest = [];
   for (const item of manifestItems) {
-    // Item sem fileId (nota, referência externa) segue com os 4 campos de sempre, como veio.
-    const resolved = item.fileId
-      ? await resolveFileItem(item, legalCase.companyId, transaction)
-      : { type: item.type, description: item.description, referenceId: item.referenceId, hash: item.hash };
+    // Item sem fileId (nota, referência externa): hash calculado pelo servidor sobre o que foi declarado.
+    const resolved = item.fileId ? await resolveFileItem(item, legalCase.companyId, transaction) : manualItem(item);
     manifest.push(normalizeManifest([{ ...resolved, referenceId: resolved.referenceId || null, hash: resolved.hash || null }])[0]);
   }
   const packageHash = computePackageHash(manifest);
@@ -163,7 +119,7 @@ async function assembleManifestFromContractAttachments(contractId, transaction, 
   function pushFile(file, type, description, relatedId, source, extra) {
     if (!file || seenFileIds.has(file.id)) return;
     seenFileIds.add(file.id);
-    manifest.push({ type, description, referenceId: relatedId || file.id, hash: file.checksumSha256 || null, ...fileMetadata(file, source, extra) });
+    manifest.push({ type, description, referenceId: relatedId || file.id, hash: file.checksumSha256 || null, ...fileMetadata(file, source, extra), [SERVER_ITEM]: true });
   }
 
   // Documentos e provas ligados ao PRÓPRIO processo (people.file_links, LegalCase).
@@ -240,6 +196,37 @@ async function createEvidencePackageFromContractAttachments(legalCaseId, actorUs
 
 async function listEvidencePackages(legalCaseId, transaction) {
   return EvidencePackage.findAll({ where: { legalCaseId }, order: [['created_at', 'DESC']], transaction });
+}
+
+/**
+ * Fechamento M5 (M5-A0117, §16 "Acesso/exportação são auditados"): a LISTA de dossiês do processo entrega o manifesto de cada
+ * pacote (arquivos, hashes, origem) a quem pediu — é acesso ao conteúdo. Cada pacote listado ganha a sua linha VIEWED na cadeia
+ * de custódia (com a auditoria de logEvidenceAccess) e a listagem em si fica auditada.
+ */
+async function logCaseEvidenceAccess(legalCaseId, actorUserId, transaction) {
+  const packages = await listEvidencePackages(legalCaseId, transaction);
+  for (const evidencePackage of packages) await logEvidenceAccess(evidencePackage.id, actorUserId, 'VIEWED', transaction);
+  return packages;
+}
+
+async function listEvidencePackagesAudited(legalCaseId, actorUserId, transaction) {
+  const legalCase = await getLegalCase(legalCaseId, transaction);
+  const packages = await logCaseEvidenceAccess(legalCase.id, actorUserId, transaction);
+  await registrarAuditoria(
+    {
+      groupId: legalCase.groupId,
+      companyId: legalCase.companyId,
+      actorUserId,
+      action: 'legal.evidence_package.list',
+      entityType: 'LegalCase',
+      entityId: legalCase.id,
+      beforeJson: { pacotes: packages.map((p) => ({ id: p.id, packageHash: p.packageHash })), acessoRegistrado: false },
+      afterJson: { pacotes: packages.map((p) => ({ id: p.id, packageHash: p.packageHash })), acessoRegistrado: true },
+      reason: `Lista de dossiês do processo ${legalCase.caseNumber || legalCase.id} consultada (${packages.length} pacote(s)).`,
+    },
+    transaction
+  );
+  return packages;
 }
 
 async function getEvidencePackage(id, transaction) {
@@ -377,6 +364,9 @@ function verifyEvidencePackageIntegrity(exportedJson, expectedHash = null) {
 }
 
 module.exports = {
+  listEvidencePackagesAudited,
+  logCaseEvidenceAccess,
+  MANUAL_SOURCE,
   createEvidencePackage,
   assembleManifestFromContractAttachments,
   createEvidencePackageFromContractAttachments,

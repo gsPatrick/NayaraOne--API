@@ -4621,6 +4621,23 @@
    "term_version",
    "updated_by"
   ],
+  "legal.lease_obligation_cycles": [
+   "amount",
+   "collection_task_id",
+   "contract_id",
+   "created_by",
+   "due_on",
+   "lock_version",
+   "obligation_id",
+   "overdue_since",
+   "paid_at",
+   "paid_by_party",
+   "proof_file_id",
+   "reimbursement_id",
+   "status",
+   "updated_by",
+   "waived_reason"
+  ],
   "legal.lease_obligations": [
    "account_number",
    "contract_id",

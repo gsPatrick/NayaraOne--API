@@ -295,7 +295,7 @@ test('R3-3: garantia ACTIVE com startsAt no FUTURO bloqueia a entrega de chaves'
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, termSignedByPersonId: tenantPerson.id, termEvidenceFileId }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id, termEvidenceFileId }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID');
@@ -324,7 +324,7 @@ test('R3-3 (controle): garantia ACTIVE com vigência corrente (startsAt ontem, e
     );
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 1, termSignedByPersonId: tenantPerson.id, termEvidenceFileId },
+      { keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id, termEvidenceFileId },
       tenant.userId,
       transaction
     );

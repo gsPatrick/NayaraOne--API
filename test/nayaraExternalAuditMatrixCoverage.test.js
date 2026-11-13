@@ -14,6 +14,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { paymentProof } = require('./m5fech.locacao.helpers'); // Fechamento M5 (§12): pagamento é de um vencimento, com comprovante
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
@@ -243,7 +244,7 @@ test('recordUtilityPayment (banco real, tipo GAS): parte errada paga gera reembo
 
     const { reimbursement, financialEntry } = await utilitiesService.recordUtilityPayment(
       obligation.id,
-      { amount: 180, paidByParty: 'LANDLORD' },
+      { amount: 180, paidByParty: 'LANDLORD', ...(await paymentProof(tenant, transaction)) },
       tenant.userId,
       transaction
     );
@@ -272,7 +273,7 @@ test('recordUtilityPayment (banco real): parte responsável paga a própria cont
 
     const { reimbursement, financialEntry } = await utilitiesService.recordUtilityPayment(
       obligation.id,
-      { amount: 400, paidByParty: 'LANDLORD' },
+      { amount: 400, paidByParty: 'LANDLORD', ...(await paymentProof(tenant, transaction)) },
       tenant.userId,
       transaction
     );

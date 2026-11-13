@@ -14,14 +14,15 @@ const { optionalUuid } = require('../shared/legalInput');
  * juridicamente cabível" e "Não confundir estimativa processual com recebível confirmado").
  *  - A ESTIMATIVA (estimated_amount) nunca vira lançamento: não há caminho que a leve ao Financeiro.
  *  - Só o valor CONFIRMADO (confirmed_amount) vira recebível, e só com a base jurídica que o torna exigível.
- * DECISÃO (o livro não lista o que é "juridicamente cabível"): o mais conservador — acordo homologado (SETTLEMENT) ou
- * sentença transitada em julgado (FINAL_JUDGMENT), com a referência (nº do acordo/decisão) obrigatória; um recebível
- * por processo; quem vincula precisa de legal:approve E finance:create (rota). O lançamento RECEIVABLE nasce pelo
+ * O livro não lista o que é "juridicamente cabível": as bases aceitas são configuração da empresa
+ * (`legal.processo.recebivel.base.<BASE>`, legalRules.settings.js; padrão = acordo homologado e sentença transitada em
+ * julgado, o que valia antes), com a referência (nº do acordo/decisão) obrigatória; um recebível por processo; quem vincula precisa de legal:approve E finance:create (rota). O lançamento RECEIVABLE nasce pelo
  * serviço normal do Financeiro (centro de resultado, período aberto, auditoria do Financeiro) na mesma transação, e o
  * vínculo fica em legal.case_receivables (append-only, migration 9998).
  */
-const BASES = ['SETTLEMENT', 'FINAL_JUDGMENT'];
-const BASIS_LABEL = { SETTLEMENT: 'acordo homologado', FINAL_JUDGMENT: 'sentença transitada em julgado' };
+const { RECEIVABLE_BASES: BASIS_LABEL } = require('../shared/legalRules.settings');
+const { enabledReceivableBases } = require('../shared/legalRules.params');
+const BASES = Object.keys(BASIS_LABEL); // bases conhecidas; as aceitas são as ligadas na configuração da empresa
 
 const listQuery = `SELECT id, legal_case_id AS "legalCaseId", financial_entry_id AS "financialEntryId", basis, basis_reference AS "basisReference",
   amount, created_by AS "createdBy", created_at AS "createdAt" FROM legal.case_receivables WHERE legal_case_id = :id ORDER BY created_at`;
@@ -34,13 +35,20 @@ async function linkCaseReceivable(legalCaseId, payload, actorUserId, transaction
     throw AppError.conflict('O processo não tem valor CONFIRMADO: estimativa processual não vira recebível.', 'LEGAL_CASE_RECEIVABLE_NOT_CONFIRMED');
   }
   const basis = typeof body.basis === 'string' ? body.basis.trim().toUpperCase() : '';
-  if (!BASES.includes(basis)) {
-    throw AppError.badRequest(`"basis" deve ser um de: ${BASES.join(', ')} (base jurídica que torna o valor exigível).`, 'LEGAL_CASE_RECEIVABLE_BASIS_INVALID');
+  const accepted = await enabledReceivableBases(legalCase, transaction);
+  if (!accepted.includes(basis)) {
+    throw AppError.badRequest(
+      accepted.length
+        ? `"basis" deve ser uma das bases aceitas pela empresa: ${accepted.map((b) => `${b} (${BASIS_LABEL[b]})`).join(', ')}.`
+        : 'Nenhuma base jurídica está habilitada para recebível de processo nesta empresa (Configurações > Locação e Jurídico).',
+      'LEGAL_CASE_RECEIVABLE_BASIS_INVALID',
+      { acceptedBases: accepted }
+    );
   }
   const basisReference = normalizeOptionalText(body.basisReference, 'basisReference');
   if (!basisReference) throw AppError.badRequest('Informe a referência do acordo ou da decisão ("basisReference").', 'LEGAL_CASE_RECEIVABLE_BASIS_INVALID');
   if (body.dueAt === undefined || body.dueAt === null || body.dueAt === '') throw AppError.badRequest('Informe o vencimento do recebível ("dueAt").', 'LEGAL_CASE_RECEIVABLE_VALIDATION');
-  const dueAt = parseDueAt(body.dueAt, 'dueAt');
+  const dueAt = parseDueAt(body.dueAt, 'dueAt', await require('../shared/legalRules.params').legalDeadlineZone(legalCase, transaction));
   const resultCenterId = optionalUuid(body.resultCenterId, 'resultCenterId', 'LEGAL_CASE_RECEIVABLE_VALIDATION');
   const existing = await sequelize.query(listQuery, { type: QueryTypes.SELECT, transaction, replacements: { id: legalCase.id } });
   if (existing.length) throw AppError.conflict('Este processo já tem recebível vinculado ao Financeiro.', 'LEGAL_CASE_RECEIVABLE_DUPLICATE');

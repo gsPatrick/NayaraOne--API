@@ -5,6 +5,7 @@ const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
 const { publishDomainEvent } = require('../../../../engines/events/outbox');
 const { recordInitialVersion } = require('./noticeVersions.service');
+const { assertNoticeRecipient } = require('./noticeRecipient');
 const { optionalUuid, optionalString, assertFileInCompany, assertPersonInCompany } = require('../../shared/legalInput');
 
 /**
@@ -77,6 +78,7 @@ async function createNotice(payload, actorUserId, transaction) {
   const text = optionalString(content, 'content', 'LEGAL_NOTICE_VALIDATION', 50000);
   const recipientText = optionalString(recipientDescription, 'recipientDescription', 'LEGAL_NOTICE_VALIDATION', 2000);
   if (!text && !fileId) throw AppError.badRequest('Informe "content" (texto) e/ou "contentFileId" (arquivo).', 'LEGAL_NOTICE_VALIDATION');
+  assertNoticeRecipient(recipientId, recipientText);
 
   const notice = await Notice.create(
     {
@@ -231,6 +233,7 @@ async function sendNotice(id, actorUserId, transaction) {
     );
   }
 
+  assertNoticeRecipient(notice.recipientPersonId, notice.recipientDescription); // notificação antiga sem destinatário não sai
   // Só sai a versão que foi aprovada (uma nova versão volta a notificação a DRAFT e exige nova revisão).
   if (notice.approvedVersion !== notice.currentVersion) {
     throw AppError.conflict(`A versão ${notice.currentVersion} da notificação não é a aprovada; aprove-a antes do envio.`, 'LEGAL_NOTICE_SEND_BLOCKED');

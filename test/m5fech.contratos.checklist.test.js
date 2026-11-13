@@ -24,7 +24,8 @@ async function gerar(contractType, corpo = {}, partes = []) {
 test('§7 Locação: documentos PF/PJ, garantia, procuração só se aplicável, vistoria, titularidade e obrigações', async (t) => {
   if (pular) return t.skip(pular);
   const sem = await gerar('LEASE_COMMERCIAL');
-  assert.deepEqual(sem.itens.map((i) => i[1]), ['PF_DOCUMENT', 'GUARANTEE', 'INSPECTION', 'OWNERSHIP_PROOF', 'OBLIGATIONS']);
+  // Fechamento M5 (M5-A0079, DI-M5VP-2): + KEYS, a exigência da etapa KEY_DELIVERY (relação das chaves e controles).
+  assert.deepEqual(sem.itens.map((i) => i[1]), ['PF_DOCUMENT', 'GUARANTEE', 'INSPECTION', 'OWNERSHIP_PROOF', 'OBLIGATIONS', 'KEYS']);
   assert.ok(sem.itens.every((i) => i[2] === 'PENDING'));
   const locador = await h.pessoa('A:gestor', 'Locador Representado');
   const procurador = await h.pessoa('A:gestor', 'Procurador');

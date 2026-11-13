@@ -73,6 +73,7 @@ module.exports = async function locacaoObrigacoes(R) {
   // ---------- pendência vencida gera alerta (lease.obligation.overdue) ----------
   const util = require('../../../src/features/billing/utilities.service');
   const daqui31 = new Date(Date.now() + 31 * 86400000);
+  // Fechamento M5 (DI-M5VP-8): o evento das trocas de titularidade sai com a chave da DEC-074 (obrigação:TRANSFER:tarefa).
   await R.servico({ id: 'LC-OB-27', req: [RQ.pendencia, RQ.overdueP1, RQ.overdueP2], titulo: 'Job de cobrança, 31 dias depois: troca de titularidade da luz e do gás pendentes viram obrigação vencida', chamada: 'utilities.service.flagOverdueLeaseObligations(tx, { now: hoje+31d })', fn: noTenant(R, (tx) => util.flagOverdueLeaseObligations(tx, { now: daqui31 })), esperado: {} });
   await R.servico({ id: 'LC-OB-28', req: ['M5-A0346-86010e', 'M5-A0096-30165c', RQ.overdueP1, RQ.overdueP2], titulo: 'Rodar o job de novo não repete o alerta (idempotente)', chamada: 'utilities.service.flagOverdueLeaseObligations(tx, { now: hoje+31d }) — 2ª vez', fn: noTenant(R, (tx) => util.flagOverdueLeaseObligations(tx, { now: daqui31 })), esperado: {} });
   await R.sqlTenant({ id: 'LC-OB-29', req: ['M5-A0171-80da7b', RQ.pendencia, RQ.overdueP1, RQ.overdueP2], quem: 'A:gestor', descricao: 'Outbox: um lease.obligation.overdue por tarefa pendente (luz e gás), e as tarefas continuam PENDING', sql: "SELECT e.aggregate_id, count(*)::int AS eventos, max(t.status) AS tarefa FROM integration.outbox_events e JOIN finance.ownership_transfer_tasks t ON t.id = e.aggregate_id WHERE e.event_type = 'lease.obligation.overdue' AND e.aggregate_id IN (:ids) GROUP BY e.aggregate_id", replacements: () => ({ ids: [o.task_ELECTRICITY, o.task_GAS] }), avaliar: (rows) => rows.length === 2 && rows.every((r) => r.eventos === 1 && r.tarefa === 'PENDING') });
@@ -83,9 +84,12 @@ module.exports = async function locacaoObrigacoes(R) {
 
   // ---------- reembolso: pago pela imobiliária vira lançamento vinculado ----------
   const pag = (id, tipo, corpo, esperado, titulo, req, guardar) => H({ id, req, titulo, quem: 'A:gestor', metodo: 'POST', rota: () => `/billing/utility-obligations/${o[tipo]}/payments`, corpo, esperado, guardar });
-  await pag('LC-OB-30', 'CONDO', { amount: 640.5, paidByParty: 'TENANT' }, { status: 201 }, 'Condomínio pago pelo próprio responsável (locatário): sem reembolso', ['M5-A0339-b9d073', RQ.reembolso, RQ.testes]);
-  await pag('LC-OB-31', 'IPTU', { amount: 1234.56, paidByParty: 'COMPANY' }, { status: 201 }, 'IPTU do locador pago pela imobiliária: reembolso a receber + lançamento financeiro', ['M5-A0325-ad4afe', 'M5-A0270-5f73bd', 'M5-A0327-22b135', RQ.reembolso, RQ.reembolsoRec, RQ.apis, RQ.eventos, RQ.testes], (b) => { o.reemb = b.data.reimbursement.id; o.lanc = b.data.financialEntry.id; });
-  await pag('LC-OB-32', 'IPTU', { amount: 0, paidByParty: 'COMPANY' }, { status: 400, codigo: 'UTILITY_PAYMENT_VALIDATION' }, 'Pagamento com valor zero é recusado', [RQ.reembolso]);
+  // Fechamento M5 (DI-M5VP-7): o pagamento é de um vencimento (referenceDueOn ou cycleId) e exige o comprovante.
+  const compCondo = await arquivo(R, 'LC-OB-P3', 'Preparação: comprovante do condomínio de 10/2030 (arquivo fictício)', 'comprovante-condominio.pdf', `Comprovante condomínio ${lc.sfx}`, 'application/pdf', [RQ.reembolso]);
+  const compIptu = await arquivo(R, 'LC-OB-P4', 'Preparação: comprovante do IPTU de 2030 (arquivo fictício)', 'comprovante-iptu.pdf', `Comprovante IPTU ${lc.sfx}`, 'application/pdf', [RQ.reembolso]);
+  await pag('LC-OB-30', 'CONDO', { amount: 640.5, paidByParty: 'TENANT', referenceDueOn: '2030-10-10', proofFileId: compCondo }, { status: 201 }, 'Condomínio pago pelo próprio responsável (locatário): sem reembolso', ['M5-A0339-b9d073', RQ.reembolso, RQ.testes]);
+  await pag('LC-OB-31', 'IPTU', { amount: 1234.56, paidByParty: 'COMPANY', referenceDueOn: '2030-02-20', proofFileId: compIptu }, { status: 201 }, 'IPTU do locador pago pela imobiliária: reembolso a receber + lançamento financeiro', ['M5-A0325-ad4afe', 'M5-A0270-5f73bd', 'M5-A0327-22b135', RQ.reembolso, RQ.reembolsoRec, RQ.apis, RQ.eventos, RQ.testes], (b) => { o.reemb = b.data.reimbursement.id; o.lanc = b.data.financialEntry.id; });
+  await pag('LC-OB-32', 'IPTU', { amount: 0, paidByParty: 'COMPANY', referenceDueOn: '2031-02-20', proofFileId: compIptu }, { status: 400, codigo: 'UTILITY_PAYMENT_VALIDATION' }, 'Pagamento com valor zero é recusado', [RQ.reembolso]);
   await R.sqlTenant({
     id: 'LC-OB-33', req: [RQ.reembolso, RQ.reembolsoRec], quem: 'A:gestor', descricao: 'Reembolso PENDING ligado a um lançamento RECEIVABLE do mesmo contrato e valor',
     sql: 'SELECT r.status, r.paid_by_party, r.owed_by_party, r.amount, f.nature, f.entry_type, f.amount AS valor_lancamento, f.contract_id FROM finance.utility_reimbursements r JOIN finance.financial_entries f ON f.id = r.financial_entry_id WHERE r.id = :id',
@@ -98,8 +102,9 @@ module.exports = async function locacaoObrigacoes(R) {
     id: 'LC-OB-38', req: [RQ.reembolso, RQ.reembolsoRec, 'M5-A0346-86010e'], titulo: 'SPU paga pela imobiliária enviada 2 vezes com a mesma Idempotency-Key (HTTP real, perfil A:gestor): a 2ª devolve a resposta original sem novo reembolso',
     chamada: 'POST /billing/utility-obligations/:id/payments x2 com o cabeçalho Idempotency-Key',
     fn: async () => {
+      const comp = await arquivo(R, 'LC-OB-P5', 'Preparação: comprovante da SPU (arquivo fictício)', 'comprovante-spu.pdf', `Comprovante SPU ${lc.sfx}`, 'application/pdf', [RQ.reembolso]);
       const chamar = async () => {
-        const res = await fetch(`${R.baseUrl}/billing/utility-obligations/${o.SPU}/payments`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${R.tokens['A:gestor']}`, 'Idempotency-Key': `spu-${lc.sfx}-pagamento-1` }, body: JSON.stringify({ amount: 77.7, paidByParty: 'COMPANY' }) });
+        const res = await fetch(`${R.baseUrl}/billing/utility-obligations/${o.SPU}/payments`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${R.tokens['A:gestor']}`, 'Idempotency-Key': `spu-${lc.sfx}-pagamento-1` }, body: JSON.stringify({ amount: 77.7, paidByParty: 'COMPANY', referenceDueOn: '2030-03-15', proofFileId: comp }) });
         const body = await res.json();
         return { status: res.status, replay: res.headers.get('Idempotent-Replay'), reembolso: body.data && body.data.reimbursement ? body.data.reimbursement.id : null };
       };

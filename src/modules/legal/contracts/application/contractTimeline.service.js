@@ -2,7 +2,8 @@
 
 const L = require('../../shared/legalLabels');
 
-const { Contract, ContractAmendment, Notice, CollectionCase, Inspection, InspectionItem, AuditLog } = require('../../../../models');
+const { Op } = require('sequelize');
+const { Contract, ContractAmendment, Notice, CollectionCase, Inspection, InspectionItem, AuditLog, MaintenanceCase } = require('../../../../models');
 const AppError = require('../../../../utils/AppError');
 
 /**
@@ -98,6 +99,26 @@ async function getContractTimeline(contractId, transaction) {
         referenceId: item.id,
         details: { inspectionType: inspection.inspectionType },
         summary: `Dano em "${item.itemName}" (vistoria de ${L.inspectionTypeLabel(inspection.inspectionType)}): ${item.damageDescription || 'sem descrição'}${item.estimatedBudget ? `, orçamento estimado ${item.estimatedBudget}` : ''}`,
+      });
+    }
+  }
+
+  // Fechamento M5 (JUR-012 "reparos"): além do dano apontado em vistoria, o REGISTRO de reparo do imóvel do contrato aberto
+  // durante a vigência (chamado de manutenção/assistência técnica, construction.maintenance_cases), com a situação dele.
+  if (contract.propertyId) {
+    const since = contract.startsAt || createdAtOf(contract);
+    const until = ['TERMINATED', 'CLOSED'].includes(contract.status) && contract.endsAt ? contract.endsAt : null;
+    const repairs = await MaintenanceCase.findAll({
+      where: { propertyId: contract.propertyId, ...(since || until ? { created_at: { ...(since ? { [Op.gte]: since } : {}), ...(until ? { [Op.lte]: until } : {}) } } : {}) },
+      transaction,
+    });
+    for (const repair of repairs) {
+      items.push({
+        type: TYPES.REPAIR,
+        occurredAt: createdAtOf(repair),
+        referenceId: repair.id,
+        details: { source: 'construction.maintenance_cases', status: repair.status, category: repair.category || null },
+        summary: `Reparo registrado no imóvel (${repair.category || 'manutenção'}, situação ${repair.status}): ${repair.description || 'sem descrição'}`,
       });
     }
   }

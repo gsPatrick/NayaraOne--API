@@ -8,6 +8,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { paymentProof } = require('./m5fech.locacao.helpers'); // Fechamento M5 (§12): pagamento é de um vencimento, com comprovante
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
@@ -58,7 +59,7 @@ test('fechamento M5 cobrança: billing.generated, rent.adjusted, charge.overdue,
     await rentAdvanceService.recoverRentAdvance(adv.id, 5200, tenant.userId, t);
     const renter = await Person.create({ ...base(), personType: 'PF', legalName: `M5F locatário ${uniqueSuffix()}`, createdBy: tenant.userId }, { transaction: t });
     const { obligation, transferTask } = await utilitiesService.createUtilityObligation({ ...base(), contractId: ct.id, utilityType: 'ELECTRICITY', responsibleParty: 'TENANT', transferRequired: true, transferToPersonId: renter.id }, tenant.userId, t);
-    const { reimbursement } = await utilitiesService.recordUtilityPayment(obligation.id, { amount: 180.4, paidByParty: 'COMPANY' }, tenant.userId, t);
+    const { reimbursement } = await utilitiesService.recordUtilityPayment(obligation.id, { amount: 180.4, paidByParty: 'COMPANY', ...(await paymentProof(tenant, t)) }, tenant.userId, t);
     await assert.rejects(closeoutService.closeoutContract(ct.id, tenant.userId, t), (err) => err.code === 'CLOSEOUT_BLOCKED');
     await utilitiesService.completeOwnershipTransfer(transferTask.id, { evidenceFileId: (await evidence(t)).id }, tenant.userId, t);
 
@@ -104,7 +105,7 @@ test('fechamento M5 §12: pendência não some quando o contrato tenta encerrar 
   await withRollbackTenantTransaction(tenant, async (t) => {
     const ct = await activeLease(t);
     const { obligation, transferTask } = await utilitiesService.createUtilityObligation({ ...base(), contractId: ct.id, utilityType: 'WATER', responsibleParty: 'TENANT', transferRequired: true }, tenant.userId, t);
-    const { reimbursement, financialEntry } = await utilitiesService.recordUtilityPayment(obligation.id, { amount: 95.5, paidByParty: 'COMPANY' }, tenant.userId, t);
+    const { reimbursement, financialEntry } = await utilitiesService.recordUtilityPayment(obligation.id, { amount: 95.5, paidByParty: 'COMPANY', ...(await paymentProof(tenant, t)) }, tenant.userId, t);
     await assert.rejects(closeoutService.closeoutContract(ct.id, tenant.userId, t), (err) => {
       assert.equal(err.code, 'CLOSEOUT_BLOCKED');
       assert.ok(err.details.reasons.some((r) => r.type === 'PENDING_UTILITY_TRANSFER' && r.ownershipTransferTaskIds.includes(transferTask.id)));

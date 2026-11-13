@@ -6,7 +6,7 @@ const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../../../engines/rules/rulesEngine');
 const { evaluateNode, RuleEvaluationError } = require('../../../../engines/rules/ruleEvaluator');
-const { DEFAULT_ACTION, PREVIOUS_SEED_HASHES } = require('./requirementRules.defaults');
+const { DEFAULT_ACTION, PREVIOUS_SEED_HASHES, PREVIOUS_DEFAULT_HASHES } = require('./requirementRules.defaults');
 const { KNOWN_FACTS, factsOf, buildFacts } = require('./requirementRules.facts');
 
 /**
@@ -100,6 +100,12 @@ async function resolveRequirementPolicy(tenant, actorUserId, transaction) {
   }
   if (outcome.decision !== 'APPLY') {
     throw AppError.conflict(`Não foi possível resolver a política do checklist documental (${outcome.reason}).`, 'LEGAL_REQUIREMENT_RULE_UNAVAILABLE');
+  }
+  // Fechamento M5: empresa ainda no padrão ANTIGO (sem personalização) passa ao padrão atual numa versão nova, auditada.
+  const vigente = outcome.ruleVersionId ? await RuleVersion.findByPk(outcome.ruleVersionId, { attributes: ['id', 'contentHash'], transaction }) : null;
+  if (vigente && PREVIOUS_DEFAULT_HASHES.includes(vigente.contentHash)) {
+    await publishRequirementRules(tenant, DEFAULT_ACTION, actorUserId, transaction);
+    outcome = await evaluateRule(RULE_CODE, ctx, tenant, { transaction });
   }
   return { action: outcome.action, ruleVersionId: outcome.ruleVersionId };
 }

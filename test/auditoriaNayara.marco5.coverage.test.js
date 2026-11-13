@@ -25,7 +25,6 @@ const evidencePackagesService = require('../src/modules/legal/cases/evidence-pac
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
-const { getSetting } = require('../src/features/settings/settings.service');
 const { evaluateRule } = require('../src/engines/rules/rulesEngine');
 
 let tenant;
@@ -135,7 +134,9 @@ test('dossiê: pacote de evidências a partir de anexos reais do contrato grava 
       extraManifestItems: [{ type: 'AUDIT_NOTE', description: 'Nota de auditoria externa', referenceId: null, hash: 'abc123' }],
     });
     assert.equal(pkg.manifestJson.length, 1);
-    assert.equal(pkg.manifestJson[0].hash, 'abc123');
+    // Fechamento M5 (M5-A0207): o hash do item sem arquivo é calculado pelo servidor; o 'abc123' do chamador não é aceito.
+    assert.notEqual(pkg.manifestJson[0].hash, 'abc123');
+    assert.equal(pkg.manifestJson[0].source, 'declaracao_manual');
     assert.ok(pkg.packageHash);
 
     // Nenhum acesso ainda.
@@ -251,7 +252,9 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
   const routeLines = fs.readFileSync(path.join(legalDir, 'shared', 'legal.routes.js'), 'utf8').split('\n').filter((l) => /^legalRouter.*\/legal\/nay\//.test(l));
-  assert.equal(routeLines.length, 10);
+  // Fechamento M5 (§11): + POST /legal/nay/inspections/compare (a NAY compara entrada x saída; a lógica fica em features/ai).
+  // Contratos M5: + 4 rotas da minuta da NAY. Total 11.
+  assert.equal(routeLines.length, 11);
   for (const l of routeLines) assert.ok(nayRouteRe.test(l) || nayDraftRouteRe.test(l), l);
   // Minuta: escrever só exige legal:create (nunca legal:approve/sign); o aceite exige pessoa e a sugestão não cria versão do contrato.
   const draftRoutes = routeLines.filter((l) => nayDraftRouteRe.test(l));
@@ -332,19 +335,17 @@ test('multa/juros: cálculo do caso de cobrança bate exatamente com a regra pub
 
     const daysPastDue = 15;
 
-    // Lê a MESMA fonte de verdade que o serviço usa (regra publicada + settings do tenant),
-    // sem adivinhar o percentual — se a regra ou o setting mudar, o teste continua correto.
+    // Fechamento M5 (M5-A0330): a fonte é SÓ a ação da versão vigente das regras (REG-LOC-002 carência, REG-LOC-001 multa/juros);
+    // a configuração da aba Cobrança publica versão nova da regra (penaltyRules.service), não entra no cálculo por fora.
+    // O caso alinha antes a regra a algum número já gravado na configuração; o teste faz o mesmo antes de ler a regra.
+    await require('../src/features/billing/penaltyRules.service').syncPenaltyRulesFromSettings(tenant, tenant.userId, transaction);
     const graceEvaluation = await evaluateRule('REG-LOC-002', { gracePeriodRuleActive: true }, tenant, { transaction });
-    const configuredGraceDays = await getSetting('billing.grace_period_days', tenant, transaction, 3);
-    const graceDays = graceEvaluation.decision === 'APPLY' ? graceEvaluation.action.graceDays ?? configuredGraceDays : 0;
+    const graceDays = graceEvaluation.decision === 'APPLY' ? Number(graceEvaluation.action.graceDays || 0) : 0;
     assert.ok(daysPastDue > graceDays, 'pré-condição do teste: dias em atraso deve exceder a carência real para abrir o caso');
 
     const penaltyEvaluation = await evaluateRule('REG-LOC-001', { isOverdue: true }, tenant, { transaction });
-    const configuredPenaltyPercentage = await getSetting('billing.penalty_percentage', tenant, transaction, 2);
-    const configuredInterestPercentage = await getSetting('billing.interest_percentage', tenant, transaction, 1);
-    const penaltyPercentage = penaltyEvaluation.decision === 'APPLY' ? penaltyEvaluation.action.penaltyPercentage ?? configuredPenaltyPercentage : 0;
-    const monthlyInterestPercentage =
-      penaltyEvaluation.decision === 'APPLY' ? penaltyEvaluation.action.monthlyInterestPercentage ?? configuredInterestPercentage : 0;
+    const penaltyPercentage = penaltyEvaluation.decision === 'APPLY' ? Number(penaltyEvaluation.action.penaltyPercentage || 0) : 0;
+    const monthlyInterestPercentage = penaltyEvaluation.decision === 'APPLY' ? Number(penaltyEvaluation.action.monthlyInterestPercentage || 0) : 0;
 
     const balance = 2000;
     const overdueDays = daysPastDue - graceDays;

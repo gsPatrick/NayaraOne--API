@@ -29,7 +29,7 @@ const CLOSURE_TARGET_STATUSES = ['TERMINATED', 'CLOSED'];
 async function collectContractClosurePendencies(contractId, transaction) {
   // require lazy: models/index carrega tudo; evita ciclo com contracts.service.js.
   const {
-    BillingSchedule, CollectionCase, UtilityObligation, OwnershipTransferTask,
+    BillingSchedule, CollectionCase, UtilityObligation,
     Guarantee, LegalCase, LegalDeadline, Notice, FinancialEntry,
   } = require('../../../../models');
   const pendencies = [];
@@ -58,19 +58,11 @@ async function collectContractClosurePendencies(contractId, transaction) {
     });
   }
 
+  // Fechamento M5: as pendências das obrigações da locação que contam como "obrigação crítica" são configuração da empresa.
   const obligations = await UtilityObligation.findAll({ where: { contractId }, transaction });
   if (obligations.length > 0) {
-    const pendingTransfers = await OwnershipTransferTask.findAll({
-      where: { utilityObligationId: { [Op.in]: obligations.map((o) => o.id) }, status: 'PENDING' },
-      transaction,
-    });
-    if (pendingTransfers.length > 0) {
-      pendencies.push({
-        type: 'PENDING_UTILITY_TRANSFER',
-        detail: `${pendingTransfers.length} transferência(s) de titularidade de utilidade não concluída(s).`,
-        ownershipTransferTaskIds: pendingTransfers.map((t) => t.id),
-      });
-    }
+    const { collectObligationPendencies } = require('../../../../features/billing/obligations/obligationClosure');
+    pendencies.push(...(await collectObligationPendencies(obligations[0], obligations, transaction)));
   }
 
   const activeGuarantees = await Guarantee.findAll({ where: { contractId, status: 'ACTIVE' }, transaction });
@@ -160,6 +152,8 @@ const PENDENCY_LABELS = {
   OPEN_BILLING: 'cobrança em aberto',
   OPEN_COLLECTION_CASE: 'caso de cobrança aberto',
   PENDING_UTILITY_TRANSFER: 'transferência de consumo (água/luz/gás) pendente',
+  OVERDUE_OBLIGATION_CYCLE: 'obrigação da locação vencida sem comprovante',
+  PENDING_REIMBURSEMENT: 'reembolso de utilidade a receber',
   ACTIVE_GUARANTEE: 'garantia ainda ativa',
   DEPOSIT_BALANCE: 'saldo de caução a devolver',
   OPEN_LEGAL_CASE: 'processo jurídico aberto',

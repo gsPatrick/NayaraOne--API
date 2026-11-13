@@ -225,5 +225,9 @@ legalRouter.get('/legal/nay/contracts/:id/draft-suggestions', requirePermission(
 legalRouter.post('/legal/nay/draft-suggestions/:id/accept', requirePermission('legal:create'), nayDraftController.acceptDraftSuggestion);
 legalRouter.post('/legal/nay/draft-suggestions/:id/discard', requirePermission('legal:create'), nayDraftController.discardDraftSuggestion);
 legalRouter.post('/legal/nay/deadline-suggestions', requirePermission('legal:read'), legalController.nayDeadlineSuggestions);
+// Fechamento M5 (§11): a NAY compara a vistoria de entrada com a de saída e sugere as diferenças; uma pessoa valida cada sugestão.
+legalRouter.post('/legal/nay/inspections/compare', requirePermission('legal:read'), legalController.nayInspectionCompare);
+// Fechamento M5 (§14): bases jurídicas que a empresa aceita para o recebível do processo (configuração), para a tela oferecer só elas.
+legalRouter.get('/legal/receivable-bases', requirePermission('legal:read'), require('../cases/legalCaseReceivableBases.controller').listReceivableBases);
 
 module.exports = legalRouter;

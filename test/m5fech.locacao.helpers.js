@@ -48,4 +48,10 @@ async function completeGuarantor(tenant, transaction, guarantorPersonId, overrid
   return { guaranteeType: 'GUARANTOR', guarantorPersonId, endsAt: '2030-12-31', documentFileIds: [doc.id], acceptanceFileId: accept.id, acceptedAt: '2026-01-02', ...overrides };
 }
 
-module.exports = { keyDeliveryReady, uploadTestFile, completeInsurance, completeGuarantor };
+/** Fechamento M5 (§12): o pagamento de utilidade é de um vencimento, com comprovante — `{ referenceDueOn, proofFileId }`. */
+async function paymentProof(tenant, transaction, referenceDueOn = '2026-10-10') {
+  const file = await uploadTestFile(tenant, transaction, `comprovante-${referenceDueOn}.pdf`);
+  return { referenceDueOn, proofFileId: file.id };
+}
+
+module.exports = { keyDeliveryReady, uploadTestFile, completeInsurance, completeGuarantor, paymentProof };

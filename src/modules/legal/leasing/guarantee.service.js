@@ -8,6 +8,7 @@ const { publishGuaranteeCreated, publishGuaranteeReplaced } = require('../shared
 const { publishGuaranteeUpdated, publishGuaranteeEnded } = require('../cases/legalCalendarEvents.service');
 const { getContract } = require('../contracts/application/contract.service');
 const { GUARANTEE_TYPES, normalizeGuaranteeType, resolveTypeData, missingMessage } = require('./guaranteeTypeData');
+const { assertNotReplaced, assertFinalGuaranteeState } = require('./guaranteeStateGuards');
 
 // FIX AUD-014 (auditoria externa Nayara, 11/10/2026, JUR-006 "Garantia rastreável com
 // vigência/status próprios"): o Caderno (seção 9, "Garantias locatícias") lista 5 tipos —
@@ -146,6 +147,7 @@ async function publishGuaranteeCalendarChange(guarantee, { previousStatus, previ
 
 async function updateGuarantee(id, payload, actorUserId, transaction) {
   const guarantee = await getGuarantee(id, transaction);
+  assertNotReplaced(guarantee);
   const beforeJson = guarantee.toJSON();
   const previousStatus = guarantee.status;
   const previousEndsAt = guarantee.endsAt;
@@ -153,10 +155,6 @@ async function updateGuarantee(id, payload, actorUserId, transaction) {
   const contract = await getContract(guarantee.contractId, transaction);
   const typeData = await resolveTypeData(guarantee.guaranteeType, payload, contract, transaction, guarantee);
   Object.assign(guarantee, typeData.fields);
-  const targetStatus = status !== undefined ? status : guarantee.status;
-  if (targetStatus === 'ACTIVE' && typeData.missing.length && (status === 'ACTIVE' || Object.keys(typeData.fields).length)) {
-    throw AppError.badRequest(missingMessage(guarantee.guaranteeType, typeData.missing), 'LEGAL_GUARANTEE_VALIDATION', { missing: typeData.missing });
-  }
   if (status !== undefined) {
     if (!GUARANTEE_STATUSES.includes(status)) {
       throw AppError.badRequest(`"status" deve ser um de: ${GUARANTEE_STATUSES.join(', ')}.`, 'LEGAL_GUARANTEE_VALIDATION');
@@ -173,6 +171,12 @@ async function updateGuarantee(id, payload, actorUserId, transaction) {
     assertValidValue(value);
     guarantee.value = value;
   }
+  // Fechamento M5 (JUR-006): o estado FINAL é conferido inteiro — vigência obrigatória por tipo e dados de garantia ativa.
+  assertFinalGuaranteeState(guarantee.guaranteeType, beforeJson, guarantee.toJSON(), {
+    askedStatus: status,
+    typeFieldsTouched: Object.keys(typeData.fields).length > 0,
+    endsAtTouched: endsAt !== undefined,
+  });
   guarantee.updatedBy = actorUserId || null;
   await guarantee.save({ transaction });
   await publishGuaranteeCalendarChange(guarantee, { previousStatus, previousEndsAt }, transaction);
@@ -197,6 +201,7 @@ async function updateGuarantee(id, payload, actorUserId, transaction) {
 
 async function deleteGuarantee(id, actorUserId, transaction) {
   const guarantee = await getGuarantee(id, transaction);
+  assertNotReplaced(guarantee); // Fechamento M5 (§9): a substituída é histórico do contrato
   await legalHold.assertNotOnHold('CONTRACT', guarantee.contractId, transaction); // M9-D912: garantia de contrato sob retenção legal não se apaga
   const beforeJson = guarantee.toJSON();
   guarantee.deletedBy = actorUserId || null;

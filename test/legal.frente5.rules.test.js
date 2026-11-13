@@ -293,7 +293,7 @@ test('entrega de chaves: cliente não pode mandar política/termo (400)', async 
     const { kd, renter, termEvidenceFileId } = await releasableKeyDelivery(t);
     for (const field of ['photosRequired', 'termText', 'photoPolicy']) {
       await assert.rejects(
-        keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, termSignedByPersonId: renter.id, [field]: field === 'photosRequired' ? false : 'x' }, tenant.userId, t),
+        keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: renter.id, [field]: field === 'photosRequired' ? false : 'x' }, tenant.userId, t),
         (err) => err.code === 'LEGAL_KEY_DELIVERY_SERVER_POLICY'
       );
     }
@@ -304,7 +304,7 @@ test('entrega de chaves: imóvel usado exige fotos pela política do servidor (c
   await withRollbackTenantTransaction(tenant, async (t) => {
     const { kd, renter, termEvidenceFileId } = await releasableKeyDelivery(t, { termType: 'USED_PROPERTY_DELIVERY' });
     await assert.rejects(
-      keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, termSignedByPersonId: renter.id }, tenant.userId, t),
+      keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: renter.id }, tenant.userId, t),
       (err) => err.code === 'LEGAL_KEY_DELIVERY_PHOTOS_REQUIRED'
     );
   });
@@ -315,7 +315,7 @@ test('entrega de chaves: termo gerado pelo servidor com versão e hash; signatá
     const { kd, renter, termEvidenceFileId } = await releasableKeyDelivery(t);
     const outsider = await makePerson(t, 'F5 Estranho');
     await assert.rejects(
-      keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, termSignedByPersonId: outsider.id }, tenant.userId, t),
+      keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: outsider.id }, tenant.userId, t),
       (err) => err.code === 'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID'
     );
     const released = await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: '2 chaves portão', termSignedByPersonId: renter.id }, tenant.userId, t);
@@ -330,11 +330,12 @@ test('entrega de chaves: termo gerado pelo servidor com versão e hash; signatá
   });
 });
 
-test('entrega de chaves: política do servidor por tipo', () => {
-  const p = keyDeliveriesService.resolveKeyDeliveryPhotoPolicy;
-  assert.equal(p({ contractType: 'LEASE' }, { termType: null }).photosRequired, false);
-  assert.equal(p({ contractType: 'LEASE' }, { termType: 'USED_PROPERTY_DELIVERY' }).photosRequired, true);
-  assert.equal(p({ contractType: 'SALE_CASH' }, { termType: 'KEY_DELIVERY' }).photosRequired, true);
+test('entrega de chaves: política do servidor por tipo', async () => {
+  // Fechamento M5 (M5-A0084): a política é configuração da empresa; sem configuração vale o padrão (o que valia antes).
+  const p = (contractType, termType) => keyDeliveriesService.resolveKeyDeliveryPhotoPolicy({ contractType, ...base() }, { termType });
+  assert.equal((await p('LEASE', null)).photosRequired, false);
+  assert.equal((await p('LEASE', 'USED_PROPERTY_DELIVERY')).photosRequired, true);
+  assert.equal((await p('SALE_CASH', 'KEY_DELIVERY')).photosRequired, true);
 });
 
 // ---------- 5) Vistoria: atomicidade e versão ----------
