@@ -4,6 +4,8 @@ const { sequelize } = require('../../../../models');
 const { recordRuleRun } = require('../../../../features/ai/orchestrator/runs');
 const { startOfBusinessDay, businessDateKey } = require('../../../../utils/businessDate');
 const readModel = require('../../infrastructure/repositories/finance-health-read-model.repository');
+// O BI é lido pela camada de leitura dele, com a permissão do domínio Financeiro (M9-D700; integração dos Marcos 3 a 6 com o Marco 9).
+const biRead = require('../../../../features/analytics/read-models/finance-assistant.read');
 const { buildExplanations, buildSectorGrowth } = require('./finance-nay-sections');
 const { toCents } = require('../../domain/money');
 const { REALIZED_BY_CHILDREN } = require('../../infrastructure/repositories/ledger-sql'); // saldo em aberto = valor - realizado pelas baixas (M4LR)
@@ -14,8 +16,9 @@ const { REALIZED_BY_CHILDREN } = require('../../infrastructure/repositories/ledg
  * breathingNeed, sourceSnapshotAt } — "A NAY recebe esse read model; não precisa varrer ledger bruto a cada pergunta") e DoD "NAY sem permissão de
  * execução financeira" / FIN-014 ("NAY recomenda, não paga").
  *
- * Os números vêm do READ MODEL que o BI já mantém (analytics.rm_finance_health e analytics.rm_finance_sector_margin, recalculados pelo worker a cada
- * evento financeiro e pela agenda): nenhuma soma sobre o ledger por pergunta. As sugestões que apontam um lançamento a cobrar ou a pagar leem só a
+ * Os números vêm do READ MODEL que o BI já mantém (saúde financeira e margem por setor, recalculados pelo worker a cada
+ * evento financeiro e pela agenda), lido pela camada de leitura do BI com a permissão do domínio Financeiro (features/analytics/read-models/
+ * finance-assistant.read.js): nenhuma soma sobre o ledger por pergunta. As sugestões que apontam um lançamento a cobrar ou a pagar leem só a
  * fila de itens EM ABERTO (até 200, status PENDING, ordenada por vencimento) — a lista de trabalho, não o ledger (DI-M4CC-4). Se o read model ainda
  * não existe para a empresa ou está mais velho que o limite de atualização do domínio Financeiro (analytics.freshness.max_minutos.FINANCE), a
  * conclusão é PARCIAL e diz a data do retrato.
@@ -25,8 +28,8 @@ const { REALIZED_BY_CHILDREN } = require('../../infrastructure/repositories/ledg
  */
 
 const AGENT_NAME = 'NAY_FINANCEIRA';
-const READ_MODEL = 'analytics.rm_finance_health';
-const SECTOR_READ_MODEL = 'analytics.rm_finance_sector_margin';
+const READ_MODEL = biRead.FINANCE_ASSISTANT_READ_MODELS.health;
+const SECTOR_READ_MODEL = biRead.FINANCE_ASSISTANT_READ_MODELS.sectorMargin;
 const LIMITES =
   'A NAY Financeira só explica e sugere. Ela não cria ledger, não paga, não altera favorecido, não fecha período nem executa nenhuma ação: toda ação continua nas rotas humanas, com permissão, aprovação e MFA.';
 
@@ -82,8 +85,10 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
   const startToday = startOfBusinessDay(now);
   const { current, previous } = monthBounds(now);
 
-  const health = await readModel.findLatestHealth(tenant.companyId, businessDateKey(now), transaction);
-  const margins = await readModel.findSectorMargins(tenant.companyId, [current, previous], transaction);
+  // `options.permissions`: as da sessão (rota); sem elas, as do vínculo do usuário com a empresa (camada do BI).
+  const biCtx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: actorUserId, permissions: options.permissions };
+  const health = await biRead.readFinanceHealthForAssistant(biCtx, businessDateKey(now), transaction);
+  const margins = await biRead.readSectorMarginsForAssistant(biCtx, [current, previous], transaction);
   const accounts = await readModel.countActiveBankAccounts(transaction);
   const limitMinutes = await freshnessLimitMinutes(tenant, transaction);
   const growth = await buildSectorGrowth(margins, current, previous, (ids) => readModel.findResultCenterNames(ids, transaction));

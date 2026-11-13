@@ -1,8 +1,8 @@
 'use strict';
 
 /**
- * Montagem das explicações da assistente financeira (Caderno §18) a partir do READ MODEL (Guia M4 §13). Puro: recebe a linha de analytics.rm_finance_health e as linhas
- * de analytics.rm_finance_sector_margin já lidas e devolve as seções com número, natureza (REALIZADO/PREVISTO/ESTIMADO) e fonte. Dinheiro em centavos
+ * Montagem das explicações da assistente financeira (Caderno §18) a partir do READ MODEL (Guia M4 §13). Puro: recebe a linha da saúde financeira e as linhas
+ * da margem por setor do BI já lidas (camada de leitura do BI, features/analytics/read-models/finance-assistant.read.js) e devolve as seções com número, natureza (REALIZADO/PREVISTO/ESTIMADO) e fonte. Dinheiro em centavos
  * inteiros (domain/money.js): o read model guarda numeric e chega como texto decimal exato.
  */
 const { toCents } = require('../../domain/money');

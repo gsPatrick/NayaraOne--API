@@ -176,7 +176,7 @@ const getWeeklyHealthReport = catchAsync(async (req, res) => {
 // Caderno M4 §18 — explicações e sugestões somente leitura (finance-nay.service.js).
 const getFinanceInsights = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) =>
-    financeInsightsService.getFinanceInsights({ groupId: req.auth.groupId, companyId: req.auth.companyId }, req.auth.userId, t)
+    financeInsightsService.getFinanceInsights({ groupId: req.auth.groupId, companyId: req.auth.companyId }, req.auth.userId, t, { permissions: req.auth.permissions })
   );
   return success(res, { data });
 });
