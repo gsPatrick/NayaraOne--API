@@ -34,7 +34,8 @@ async function syncKeyDeliveryStageItems(contract, transaction) {
   const { generateRequirementsForContract } = require('../contracts/application/requirement.service');
   const existing = await ContractRequirement.findAll({ where: { contractId: contract.id }, attributes: ['requirementCode'], transaction });
   if (!existing.length) return; // sem checklist ainda: assertRequirementsSatisfied gera o checklist inteiro
-  const { items } = await resolveRequirementItems(contract, {}, null, transaction);
+  // Assinatura da verificação M5 linha 65 (contratos): (contrato, ator, transação) — quem chama não escolhe o modelo do checklist.
+  const { items } = await resolveRequirementItems(contract, null, transaction);
   const have = new Set(existing.map((r) => r.requirementCode));
   if ((items || []).some((i) => i.stage === 'KEY_DELIVERY' && !have.has(i.requirementCode))) {
     await generateRequirementsForContract(contract.id, {}, null, transaction);
