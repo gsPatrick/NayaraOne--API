@@ -53,7 +53,13 @@ async function readDefaultLeadOwner(tenant, transaction) {
   return typeof value === 'string' && value ? value : null;
 }
 
+/** M3-18: a empresa exige a finalidade em toda mensagem saída para pessoa identificada? (padrão false: comportamento do Marco 9). */
+async function readPurposeRequired(tenant, transaction) {
+  return (await readSetting(KEYS.purposeRequired, tenant, transaction)) === true;
+}
+
 module.exports = {
+  readPurposeRequired,
   readOutcomeReasonCatalog,
   readSlaHoursBySeverity,
   readTaskManagerAfterHours,

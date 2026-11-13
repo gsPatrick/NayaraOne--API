@@ -21,13 +21,24 @@ function cpf() {
 }
 const saida = (personId, extra = {}) => ({ personId, direction: 'OUTBOUND', authorType: 'EMPLOYEE', channel: 'WHATSAPP', body: 'Olá! Temos novidades.', ...extra });
 
+// M3-18 vale com o parâmetro crm.mensagens.finalidade_obrigatoria LIGADO; o padrão (desligado) é o comportamento do Marco 9 entregue
+// (integração dos Marcos 3 a 6 com o Marco 9, 13/11/2026). Os testes abaixo ligam o parâmetro na empresa A; o último confere o padrão.
+const PURPOSE_KEY = 'crm.mensagens.finalidade_obrigatoria';
+const EMPRESA_A = 'CI — Empresa Fictícia A';
+const ligarFinalidade = () => H.admin(`INSERT INTO core.tenant_settings (id, group_id, company_id, key, value)
+  SELECT gen_random_uuid(), c.group_id, c.id, $1, 'true'::jsonb FROM core.companies c WHERE c.name = $2
+  ON CONFLICT (company_id, key) DO UPDATE SET value = EXCLUDED.value`, [PURPOSE_KEY, EMPRESA_A]);
+const desligarFinalidade = () => H.admin('DELETE FROM core.tenant_settings WHERE key = $1 AND company_id = (SELECT id FROM core.companies WHERE name = $2)', [PURPOSE_KEY, EMPRESA_A]);
+
 before(async () => {
   if (!H.DISPOSABLE) return;
   env = await H.subir(Number(process.env.M3CB_DADOS_HTTP_PORT) || 34233, { gestor: ['people:update', 'marketing:suppression:manage'], maker: ['people:read'] });
+  await ligarFinalidade();
 });
 after(async () => {
   if (!H.DISPOSABLE || !env) return;
   await H.admin('DELETE FROM core.tenant_settings WHERE key = $1 AND company_id = (SELECT id FROM core.companies WHERE name = $2)', [OPT_IN_KEY, 'CI — Empresa Fictícia A']);
+  await desligarFinalidade();
   await H.encerrar();
 });
 
@@ -98,4 +109,21 @@ test('M3-18 acesso a dados pessoais pelo CRM: as rotas do CRM não devolvem CPF 
   assert.ok(!JSON.stringify(ficha.body).includes(doc), 'na ficha, o CPF sai mascarado para quem não tem a permissão de ver dado restrito');
   const vistos = (await H.admin("SELECT action FROM audit.audit_log WHERE user_id = $1 AND action LIKE 'governance.dlp.view%' AND entity_type = 'people.person' AND occurred_at > now() - interval '5 minutes'", [env.ids.maker])).rows;
   assert.ok(vistos.length >= 1, 'o acesso ao dado pessoal fica auditado');
+});
+
+test('M3-18 com o parâmetro no padrão (desligado) vale o Marco 9: saída sem finalidade segue e o consentimento é o TRANSACTIONAL', { skip: H.SKIP }, async () => {
+  await desligarFinalidade();
+  try {
+    const { personId } = await H.oportunidadeDe(env, env.ids.maker, 'Padrao Marco 9');
+    const r = await env.call('POST', '/messages', as('gestor'), saida(personId, { body: 'Aviso sem finalidade' }));
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    assert.deepEqual((await mensagensDe(personId)).map((m) => m.purpose), [null], 'gravada sem finalidade, como no Marco 9');
+    const optOut = await env.call('POST', `/people/${personId}/consents`, as('gestor'), { channel: 'WHATSAPP', purpose: 'TRANSACTIONAL', status: 'OPT_OUT' });
+    assert.ok([200, 201].includes(optOut.status), JSON.stringify(optOut.body));
+    const bloqueada = await env.call('POST', '/messages', as('gestor'), saida(personId, { body: 'Depois do opt-out' }));
+    assert.equal(bloqueada.status, 422, 'sem finalidade o consentimento conferido é o TRANSACTIONAL: o opt-out dele bloqueia');
+    assert.equal(bloqueada.body.error.code, 'MESSAGE_BLOCKED_BY_CONSENT');
+  } finally {
+    await ligarFinalidade();
+  }
 });

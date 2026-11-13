@@ -77,12 +77,12 @@ async function createMessage(payload, actorUserId, transaction) {
   // TRANSACTIONAL por omissão (crm/messagePurpose.js).
   const finalPurpose = await resolveOutboundPurpose({ direction: normalizedDirection, personId: person ? person.id : null, purpose }, { groupId, companyId }, transaction);
   if (person && normalizedDirection === 'OUTBOUND') {
-    const allowed = await canContact(person, normalizedChannel, finalPurpose, transaction);
+    const allowed = await canContact(person, normalizedChannel, finalPurpose || 'TRANSACTIONAL', transaction);
     if (!allowed) {
       throw AppError.unprocessable(
         'Envio bloqueado: a pessoa optou por não receber contato (opt-out) neste canal/finalidade, ou a finalidade exige opt-in explícito ausente.',
         'MESSAGE_BLOCKED_BY_CONSENT',
-        { personId, channel: normalizedChannel, purpose: finalPurpose }
+        { personId, channel: normalizedChannel, purpose: finalPurpose || 'TRANSACTIONAL' }
       );
     }
   }
