@@ -22,7 +22,8 @@ let http;
 const CRM = ['people:create', 'people:read', 'properties:create', 'properties:read', 'properties:update', 'radar:create', 'radar:read', 'crm:opportunities:create',
   'crm:opportunities:read', 'crm:opportunities:read:all', 'crm:opportunities:update', 'crm:visits:create', 'crm:visits:read', 'crm:visits:update', 'crm:proposals:create',
   'crm:proposals:read', 'crm:proposals:update', 'crm:messages:create'];
-const LEGAL = ['legal:read', 'legal:create', 'legal:update', 'legal:approve', 'legal:sign', 'legal:waive'];
+// DEC-073 (m5fix/contratos): aprovar a versão do contrato exige a permissão do livro contracts.version.approve (os perfis com legal:approve a recebem na migration 15101).
+const LEGAL = ['legal:read', 'legal:create', 'legal:update', 'legal:approve', 'contracts.version.approve', 'legal:sign', 'legal:waive'];
 const FINANCE = ['finance:read', 'finance:create', 'finance:update', 'finance:settle', 'finance:approve'];
 const token = (userId, permissions) => signAccessToken({ sub: userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['admin'], permissions });
 
