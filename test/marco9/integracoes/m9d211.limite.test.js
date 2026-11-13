@@ -43,12 +43,15 @@ test('webhook_rate_limit_compartilhado_d843_antes_da_connection', async () => {
       const [a, b] = await Promise.all([filho(scopeKeyOf(ip, provider), metade), filho(scopeKeyOf(ip, provider), metade)]);
       assert.ok(metade <= teto && Math.max(a.last, b.last) <= metade * 2, 'cada processo sozinho fica abaixo do teto; só a soma passa dele');
     }
-    const antes = await env.desconhecidos('(desconhecido)');
     const corpo = Buffer.from('{"id":"x","type":"t.e"}');
     // A janela do contador é de 60 s pelo relógio do banco: se virar no meio da semeadura, semeia de novo (no máximo 3 vezes).
+    // A contagem de "canal desconhecido" é lida antes de CADA tentativa: a tentativa que caiu na janela nova passa do limite e consulta a
+    // connection (conta um desconhecido, como deve); a prova vale para a tentativa que recebeu 429.
     let r;
+    let antes;
     for (let i = 0; i < 3 && !(r && r.status === 429); i += 1) {
       if (i > 0) for (const ip of IPS) await Promise.all([filho(scopeKeyOf(ip, provider), metade), filho(scopeKeyOf(ip, provider), metade)]);
+      antes = await env.desconhecidos('(desconhecido)');
       r = await env.postar(`/v1/webhooks/${provider}/${'q'.repeat(32)}`, corpo, {});
     }
     assert.equal(r.status, 429, 'acima do teto responde 429 antes de olhar a connection');
