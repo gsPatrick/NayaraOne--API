@@ -63,7 +63,8 @@ const account = (env, t, { opening = '0.00', owner = null } = {}) => ledger.inse
 const statementImport = (env, t, { account: acc, closing, start = '2026-09-01', end = '2026-09-30' }) => ledger.insert(env, 'bank_statement_imports', t, {
   bank_account_id: acc, period_start: start, period_end: end, closing_balance: closing, created_at: dayAt(-1),
 });
-const bankTx = (env, t, { account: acc, amount, date }) => ledger.insert(env, 'bank_transactions', t, { bank_account_id: acc, amount, transaction_date: date });
+// Id do provedor próprio por linha: o extrato é UNIQUE(conta, fingerprint) sem condição desde a conciliação do Marco 4 (Guia M4 §10).
+const bankTx = (env, t, { account: acc, amount, date }) => ledger.insert(env, 'bank_transactions', t, { bank_account_id: acc, amount, transaction_date: date, external_transaction_id: `m9d620-${ledger.uuid()}` });
 const reconcile = (env, t, txId) => ledger.insert(env, 'reconciliations', t, { financial_entry_id: ledger.uuid(), bank_transaction_id: txId, matched_at: dayAt(0) });
 
 const event = (t, eventType = 'finance.entry.settled') => ({
