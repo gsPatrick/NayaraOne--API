@@ -17,6 +17,7 @@ const receiptService = require('../../application/services/receipt.service');
 const classificationPendings = require('../../application/services/classification-pending.service');
 const bankTransactionsService = require('../../application/services/bank-transactions.service');
 const reconciliationService = require('../../application/services/reconciliation.service');
+const reconciliationPolicy = require('../../application/services/reconciliation-policy');
 const { clearManualReview } = require('../../application/services/finance-antifraud.service');
 const { readClientKey, validateClientKey } = require('../../application/services/settlement-idempotency');
 const { withTenant, manualSettlementFromBody } = require('./finance-request');
@@ -169,7 +170,8 @@ const clearFinancialEntryManualReview = catchAsync(async (req, res) => {
 
 // --- Bank transactions (extrato) ---
 const createBankTransaction = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => bankTransactionsService.createBankTransaction(withTenant(req), req.auth.userId, t));
+  // Linha digitada à mão: origem MANUAL, nunca confirmada sozinha pela conciliação (Caderno §11 "auto confirmado se fonte confiável").
+  const item = await req.withTenantTransaction((t) => bankTransactionsService.createBankTransaction(withTenant(req), req.auth.userId, t, { source: 'MANUAL' }));
   return success(res, { statusCode: 201, data: item });
 });
 const listBankTransactions = catchAsync(async (req, res) => {
@@ -177,7 +179,9 @@ const listBankTransactions = catchAsync(async (req, res) => {
   return success(res, { data: items });
 });
 const importBankStatement = catchAsync(async (req, res) => {
-  const result = await req.withTenantTransaction((t) => bankTransactionsService.importBankStatement(withTenant(req), req.auth.userId, t));
+  // Arquivo importado por quem tem finance:reconcile é fonte confiável para a conciliação automática (DI-M4CC-2); a permissão vem do token.
+  const canReconcile = (req.auth.permissions || []).includes('finance:reconcile');
+  const result = await req.withTenantTransaction((t) => bankTransactionsService.importBankStatement(withTenant(req), req.auth.userId, t, { canReconcile }));
   return success(res, { statusCode: 201, data: result });
 });
 
@@ -208,6 +212,11 @@ const suggestReconciliationMatches = catchAsync(async (req, res) => {
   );
   return success(res, { data: result });
 });
+// Regra AUTO_STRONG vigente da empresa (Guia §9): limiares, janela, folga e política, para a tela de conciliação mostrar.
+const getReconciliationPolicy = catchAsync(async (req, res) => {
+  const policy = await req.withTenantTransaction((t) => reconciliationPolicy.readPolicy({ groupId: req.auth.groupId, companyId: req.auth.companyId }, t));
+  return success(res, { data: policy });
+});
 // GAP REAL CORRIGIDO: autoReconcileSuggestion existia no service (confirma EXATO/FORTE e já
 // concilia sozinho, igual o Caderno §11 pede — "Exato: auto confirmado"), mas nunca era chamada
 // de lugar nenhum, nem pela rota de sugestão nem internamente — morta. Classe AMBÍGUO/PROVÁVEL
@@ -224,7 +233,7 @@ const autoReconcileSuggestion = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createCostCenter, listCostCenters, updateCostCenter, removeCostCenter, createResultCenter, listResultCenters, updateResultCenter, removeResultCenter, createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount, createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, detachSettlementEvidence, attachSettlementEvidence, settleFinancialEntry, settleFinancialEntryPartial, listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending, clearFinancialEntryManualReview, createBankTransaction, listBankTransactions, importBankStatement, matchReconciliation, matchReconciliationGroup, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion,
+  createCostCenter, listCostCenters, updateCostCenter, removeCostCenter, createResultCenter, listResultCenters, updateResultCenter, removeResultCenter, createBankAccount, listBankAccounts, getBankAccount, updateBankAccount, blockBankAccount, removeBankAccount, createFinancialEntry, listFinancialEntries, getFinancialEntry, updateFinancialEntry, detachSettlementEvidence, attachSettlementEvidence, settleFinancialEntry, settleFinancialEntryPartial, listFinancialEntryClassificationPendings, resolveFinancialEntryClassificationPending, clearFinancialEntryManualReview, createBankTransaction, listBankTransactions, importBankStatement, matchReconciliation, matchReconciliationGroup, listReconciliations, suggestReconciliationMatches, autoReconcileSuggestion, getReconciliationPolicy,
   ...paymentsController,
   ...operationsController,
 };

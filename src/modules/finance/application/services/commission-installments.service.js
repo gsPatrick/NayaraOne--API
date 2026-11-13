@@ -2,7 +2,7 @@
 
 // Parcelas da comissão: geração, liberação proporcional ao recebimento do fato gerador, baixa
 // contra lançamento liquidado e cancelamento com ajuste auditável. A criação da comissão e a
-// regra REG-FIN-002 ficam em commission.service.js, que reexporta estas funções.
+// regra REG-FIN-001 ficam em commission.service.js, que reexporta estas funções.
 
 const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
@@ -82,7 +82,9 @@ async function generateInstallments(commission, count, firstDueAt, actorUserId, 
   return installments;
 }
 
+// Pentest M4 (PT4-0819/0821): id de comissão de outra empresa (ou inexistente) responde 404, não lista vazia.
 async function listCommissionInstallments(commissionId, transaction) {
+  await getCommission(commissionId, transaction);
   return repo.listInstallmentsOrdered(commissionId, transaction);
 }
 
@@ -264,6 +266,7 @@ async function cancelCommission(commissionId, reasonText, actorUserId, transacti
  * rastro de auditoria append-only (ver nota de modelagem acima).
  */
 async function getCommissionAdjustments(commissionId, transaction) {
+  await getCommission(commissionId, transaction);
   const logs = await repo.listCancellationAdjustmentLogs(commissionId, transaction);
   return logs.map((log) => (log.afterJson || {}).adjustment).filter(Boolean);
 }

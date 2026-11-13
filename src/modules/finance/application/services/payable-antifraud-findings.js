@@ -102,7 +102,10 @@ async function safely(control, caseType, transaction, fn) {
   }
 }
 
-/** Todos os achados do pagamento (vazio = nada a reter). `t`: resolveAntifraudThresholds. */
+/**
+ * Todos os achados do pagamento (vazio = nada a reter). `t`: resolveAntifraudThresholds.
+ * @returns {Promise<any[]>} só os achados não nulos
+ */
 async function collectPayableFindings(entry, t, transaction) {
   const amount = Number(entry.amount);
   const findings = [

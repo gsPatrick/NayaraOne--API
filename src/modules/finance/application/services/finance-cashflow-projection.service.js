@@ -27,6 +27,7 @@ const item = (indicator, label, nature, value) => ({ indicator, label, nature, v
 async function getCashflowProjection(transaction) {
   const report = await getWeeklyHealthReport(transaction);
   const settled = await settledThisMonth(transaction);
+  /** @type {Array<[string, string, any]>} */
   const windows = [['7d', 'na próxima semana', report.dueNextSevenDays], ['30d', 'em até um mês', report.dueNext30Days], ['60d', 'em até dois meses', report.dueNext60Days]];
   const items = [
     item('caixa_livre', 'Caixa livre (extrato menos dinheiro de terceiros)', 'REALIZADO', report.freeCash.value),

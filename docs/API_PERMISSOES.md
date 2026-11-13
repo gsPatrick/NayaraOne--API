@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 876. Rotas só com login ou públicas: 44.
+Rotas com permissão exigida: 877. Rotas só com login ou públicas: 44.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -422,6 +422,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/periods/:month/close` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/reconciliation/:id/confirm` | `finance:reconcile` | não |
 | `GET` | `/api/v1/finance/reconciliation/pending` | `finance:read` | não |
+| `GET` | `/api/v1/finance/reconciliation/policy` | `finance:read` | não |
 | `POST` | `/api/v1/finance/reconciliations/group` | `finance:reconcile` | não |
 | `GET` | `/api/v1/finance/reconciliations` | `finance:read` | não |
 | `POST` | `/api/v1/finance/reconciliations` | `finance:reconcile` | não |

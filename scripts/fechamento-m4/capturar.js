@@ -16,6 +16,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execSync } = require('node:child_process');
+const { redigirFundo, acharSegredos } = require('./redacao');
 
 process.env.PORT = process.env.CAPTURA_PORT || '5528';
 process.env.NODE_ENV = process.env.NODE_ENV || 'test';
@@ -32,6 +33,8 @@ const ETAPAS = [
   ['fechamento', './cenarios-fechamento'],
   ['relatorio', './cenarios-relatorio'],
   ['guia', './cenarios-guia'],
+  // Correções DI-M4CC (m4fix/conciliacao-comissao): por último, porque publica uma versão nova da regra de comissão.
+  ['m4cc', './cenarios-m4cc'],
 ];
 
 function git(cmd) {
@@ -99,18 +102,25 @@ async function main() {
       ambiente: 'Postgres 16 descartável (cluster local apagado ao final), migrations do zero, seeds do CI e seed de dois tenants; API Express real em processo',
       sanitizacao: [
         'Tokens de acesso/renovação, credenciais, segredos do autenticador, códigos de recuperação e o segredo do webhook não são gravados ([REDACTED]).',
-        'A assinatura HMAC do webhook aparece truncada; o segredo nunca sai da memória.',
+        'A assinatura HMAC do webhook e o token assinado da confirmação de nível 3 (impactToken) saem redigidos ([REDACTED]); o segredo nunca sai da memória.',
+        'Varredura final (scripts/fechamento-m4/redacao.js#acharSegredos), inclusive no conteúdo base64 decodificado: a saída só é gravada sem nenhum achado.',
         'Corpos de resposta gravados como vieram (campos null preservados), só os valores secretos redigidos.',
         'Usuários fictícios ci-<tenant>-<perfil>@ci.nayaraone.test; a credencial existe só no banco descartável.',
         'MFA: habilitado e verificado pela camada de serviço com código real do aplicativo autenticador; nenhum endpoint de MFA chamado por HTTP, nenhum token forjado.',
       ],
       comoReproduzir: 'cd NayaraOne--API && bash scripts/fechamento-m4/rodar.sh <saida.json> (sobe o Postgres descartável, roda a captura e confere a cobertura das 273 linhas)',
     },
-    usuarios,
-    preparacao: R.preparacao,
-    passos: R.passos,
-    consultas: R.consultas,
+    usuarios: redigirFundo(usuarios),
+    preparacao: redigirFundo(R.preparacao),
+    passos: redigirFundo(R.passos),
+    consultas: redigirFundo(R.consultas),
   };
+  const vazados = acharSegredos(doc);
+  if (vazados.length) {
+    console.error(`[captura] SEGREDO NA SAÍDA (nada gravado): ${JSON.stringify(vazados.slice(0, 20))}`);
+    await sequelize.close();
+    process.exit(1);
+  }
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, JSON.stringify(doc, null, 1));
   const http = R.passos.filter((p) => p.tipo === 'http');

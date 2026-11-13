@@ -59,7 +59,7 @@ async function migrateBankSecrets(ctx, transaction) {
       // eslint-disable-next-line no-await-in-loop
       const feito = await migrateOne({ ctx, item, providerKey }, transaction);
       if (feito) migrated.push(feito);
-    } catch (err) {
+    } catch (/** @type {any} */ err) {
       logger.warn({ setting: item.setting, err: err.message, code: err.code }, 'Segredo bancário: a migração para o cofre falhou; o valor antigo segue valendo.');
     }
   }
@@ -72,7 +72,7 @@ async function readBankWebhookSecretFromVault(connection, tenant, transaction) {
   try {
     const entrega = await readConnectionSecret(connection, tenant, { purpose: 'webhook', kind: 'webhook', transaction });
     return entrega.value.reveal();
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     if (['INTEGRATION_SECRET_NOT_FOUND', 'INTEGRATION_SECRET_STORE_NOT_CONFIGURED', 'INTEGRATION_SECRET_STORE_CONFIG'].includes(err.code)) return null;
     throw err;
   }

@@ -141,3 +141,37 @@ test('M4-G§17 esteira financeira: production_approval fica atrás do environmen
   assert.match(r.stdout, /portão conferido/);
   assert.match(r.stdout, /nenhuma aprovação foi dada nem registrada, nenhum deploy feito/);
 });
+
+// M4-G§17.2 (verificação independente, parte 2): o estágio "typecheck" rodava só `node --check` (sintaxe) e `require`. Agora roda `tsc --checkJs` strict
+// em todo src/modules/finance; um erro de TIPO (sintaxe válida) reprova o estágio.
+const TYPECHECK = path.join(RAIZ, 'scripts', 'financeiro', 'ci', 'typecheck.js');
+const TSCONFIG = path.join(RAIZ, 'scripts', 'financeiro', 'ci', 'typecheck', 'tsconfig.json');
+
+test('M4-G§17.2 typecheck: um erro de tipo de verdade (sintaxe válida) reprova o estágio 2', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm4ci-tipos-'));
+  try {
+    const erro = path.join(dir, 'valor-errado.js');
+    fs.writeFileSync(erro, "'use strict';\n/** @param {number} centavos */\nfunction emReais(centavos) { return centavos / 100; }\nmodule.exports = emReais('R$ 10,00');\n");
+    assert.equal(spawnSync(process.execPath, ['--check', erro], { encoding: 'utf8' }).status, 0, 'o arquivo é JavaScript válido: só a checagem de tipos o recusa');
+    const derivado = path.join(dir, 'tsconfig.json');
+    fs.writeFileSync(derivado, JSON.stringify({ extends: TSCONFIG, include: [path.join(RAIZ, 'scripts', 'financeiro', 'ci', 'typecheck', 'globals.d.ts'), erro] }));
+    const r = spawnSync(process.execPath, [TYPECHECK, '--tsconfig', derivado], { cwd: RAIZ, encoding: 'utf8', env: { ...process.env, PORT: '0' } });
+    assert.equal(r.status, 1, `${r.stdout}${r.stderr}`);
+    assert.match(`${r.stdout}${r.stderr}`, /valor-errado\.js\(4,\d+\): error TS2345/);
+    assert.match(`${r.stdout}${r.stderr}`, /REPROVADO tsc --checkJs/);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('M4-G§17.2 typecheck: tsc --checkJs strict cobre todo src/modules/finance, sem @ts-ignore/@ts-nocheck, e o código atual passa sem erro', () => {
+  const cfg = JSON.parse(fs.readFileSync(TSCONFIG, 'utf8'));
+  assert.equal(cfg.compilerOptions.checkJs, true);
+  assert.equal(cfg.compilerOptions.strict, true);
+  assert.ok(cfg.include.includes('../../../../src/modules/finance/**/*.js'), 'todo .js do módulo financeiro entra no tsc');
+  assert.equal(cfg.exclude, undefined, 'nenhum arquivo do módulo é excluído');
+  const fontes = (function listar(d) { return fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? listar(path.join(d, e.name)) : e.name.endsWith('.js') ? [path.join(d, e.name)] : [])); })(path.join(RAIZ, 'src', 'modules', 'finance'));
+  const silenciados = fontes.filter((f) => /@ts-(ignore|nocheck|expect-error)/.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(RAIZ, f));
+  assert.deepEqual(silenciados, [], 'nenhum erro de tipo silenciado no módulo');
+  const r = spawnSync(process.execPath, [TYPECHECK], { cwd: RAIZ, encoding: 'utf8', env: { ...process.env, PORT: '0' } });
+  assert.equal(r.status, 0, `${r.stdout}${r.stderr}`);
+  assert.match(r.stdout, /tsc --checkJs strict \(scripts\/financeiro\/ci\/typecheck\/tsconfig\.json\): sem erro de tipo/);
+});

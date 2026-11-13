@@ -111,9 +111,15 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   // além da GET de leitura.
   const nay = fs.readFileSync(path.join(financeDir, 'application', 'services', 'finance-nay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const requires = [...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort();
-  // DEC-007 (DI-DEC007-2): a fonte dos limiares do antifraude é a tela de Configurações; a NAY Financeira não lê mais o resolvedor (o Motor saiu).
-  assert.deepEqual(requires, ['../../../../models', '../../../../features/ai/orchestrator/runs', '../../../../utils/businessDate', './finance-health.service'].sort());
-  assert.match(nay, /const \{ sequelize, CostCenter \} = require\('\.\.\/\.\.\/\.\.\/\.\.\/models'\)/);
+  // Guia §13 (DI-M4CC-4): os números vêm do read model (repositório de leitura do analytics) e a montagem das seções é pura; nada de serviço que escreve.
+  // DEC-007 (DI-DEC007-2): a fonte dos limiares do antifraude é a tela de Configurações; a NAY Financeira não lê o resolvedor.
+  assert.deepEqual(requires, ['../../../../models', '../../../../features/ai/orchestrator/runs', '../../../../utils/businessDate', 
+    '../../infrastructure/repositories/finance-health-read-model.repository', './finance-nay-sections', '../../domain/money', '../../../../features/analytics/metrics/freshness.settings'].sort());
+  assert.match(nay, /const \{ sequelize \} = require\('\.\.\/\.\.\/\.\.\/\.\.\/models'\)/);
+  for (const file of ['infrastructure/repositories/finance-health-read-model.repository.js', 'application/services/finance-nay-sections.js']) {
+    const src = fs.readFileSync(path.join(financeDir, file), 'utf8');
+    assert.doesNotMatch(src, /\b(INSERT|UPDATE|DELETE)\b|\.(create|update|destroy|save|bulkCreate)\(/, `${file} só lê`);
+  }
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
   assert.ok(!/\b(INSERT|UPDATE|DELETE|TRUNCATE)\b/.test(nay.replace(/'[^']*'/g, '')), 'SQL da NAY é só SELECT');

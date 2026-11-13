@@ -23,6 +23,7 @@ function sourceFor({ ctx, connectionId, pageSize }) {
       return tenantTx(ctx, async (transaction) => {
         const connection = await IntegrationConnection.findOne({ where: { id: connectionId, companyId: ctx.companyId }, transaction });
         const adapter = await adapterRegistry.resolve(connection, ctx, transaction);
+        /** @type {any} */
         let bruta = null;
         await invoke(adapter, 'getStatement', { ...(cursorValue ? { cursor: cursorValue } : {}), pageSize }, { tenant: ctx, transaction, onResponse: (r) => { bruta = r; } });
         const lista = (bruta && (bruta.transactions || (bruta.raw && bruta.raw.transactions))) || [];
@@ -56,7 +57,7 @@ async function sweepStatements({ group, company, onlyConnectionId }) {
       // eslint-disable-next-line no-await-in-loop
       const r = await runSyncCycle({ connectionId: conexao.id, stream: STREAM, cursorKind: 'TOKEN', workerId: `bank-statement-${crypto.randomUUID()}` }, ctx, sourceFor({ ctx, connectionId: conexao.id, pageSize: statementPageSize }));
       total.imported += r.itemsWritten || 0;
-    } catch (err) {
+    } catch (/** @type {any} */ err) {
       logger.warn({ providerCode: conexao.providerCode, err: err.message, code: err.code }, 'Extrato bancário: a leitura não pôde rodar.');
     }
   }

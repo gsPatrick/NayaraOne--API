@@ -23,8 +23,10 @@ const {
   normalizeComponent,
   isInvalidCommissionSource,
   componentPercentage,
+  ruleRoundingMode,
   computeCommissionTotal,
 } = require('../../domain/commission');
+const { ROUNDING_MODES, DEFAULT_ROUNDING_MODE } = require('../../domain/money');
 // Parcelas, liberação, baixa e cancelamento ficam no arquivo irmão (reexportados abaixo).
 const {
   getCommission,
@@ -70,16 +72,27 @@ function validateComponentPercentages(componentPercentages) {
   return normalized;
 }
 
+// DI-M4CC-1: o modo de arredondamento do centavo é escolhido por quem publica a regra (padrão HALF_UP).
+function validateRounding(rounding) {
+  if (rounding === undefined || rounding === null || rounding === '') return DEFAULT_ROUNDING_MODE;
+  const mode = String(rounding).toUpperCase();
+  if (!ROUNDING_MODES.includes(mode)) {
+    throw AppError.badRequest(`Arredondamento desconhecido "${rounding}". Use: ${ROUNDING_MODES.join(', ')}.`, 'FINANCE_COMMISSION_RULE_VALIDATION');
+  }
+  return mode;
+}
+
 /**
- * publishCommissionRuleVersion — publica nova versão de REG-FIN-002 (a anterior tem a vigência
+ * publishCommissionRuleVersion — publica nova versão de REG-FIN-001 (a anterior tem a vigência
  * encerrada; comissões já calculadas continuam apontando para a versão que usaram).
  */
 async function publishCommissionRuleVersion(payload, actorUserId, transaction) {
-  const { groupId, companyId, componentPercentages, description } = payload;
+  const { groupId, companyId, componentPercentages, description, rounding } = payload;
   if (!groupId || !companyId) {
     throw AppError.badRequest('Os campos "groupId" e "companyId" são obrigatórios.', 'FINANCE_COMMISSION_RULE_VALIDATION');
   }
   const normalized = validateComponentPercentages(componentPercentages);
+  const roundingMode = validateRounding(rounding);
 
   const lockKey = commissionRuleLockKey(groupId, companyId);
   await repo.lockCommissionRule(lockKey, transaction);
@@ -106,7 +119,7 @@ async function publishCommissionRuleVersion(payload, actorUserId, transaction) {
   const beforeJson = describePreviousRuleVersion(previous);
   await repo.closeCurrentRuleVersions(rule.id, { effectiveUntil: now, updatedBy: actorUserId || null }, transaction);
   const last = await repo.findLastRuleVersion(rule.id, transaction);
-  const actionJson = buildRuleActionJson(normalized, description);
+  const actionJson = buildRuleActionJson(normalized, description, roundingMode);
   const version = await repo.createRuleVersion(
     {
       groupId,
@@ -147,11 +160,13 @@ async function publishCommissionRuleVersion(payload, actorUserId, transaction) {
     },
     transaction
   );
-  return { id: version.id, ruleCode: RULE_CODE, versionNumber: version.versionNumber, components: normalized, base: BASE_TYPE };
+  return { id: version.id, ruleCode: RULE_CODE, versionNumber: version.versionNumber, components: normalized, base: BASE_TYPE, rounding: roundingMode };
 }
 
-async function resolveCommissionRule(groupId, companyId, transaction) {
-  const evaluation = await evaluateRule(RULE_CODE, { commissionRuleActive: true, groupId, companyId }, { groupId, companyId }, { transaction });
+// Guia §11: rules.evaluate('REG-FIN-001', ctx, { finance: { receivedAmount }, contract: { id, type } }). Os fatos do recebimento e do contrato vão
+// junto (ficam no log de avaliação do Motor de Regras); a condição publicada é `commissionRuleActive`.
+async function resolveCommissionRule(groupId, companyId, transaction, facts = {}) {
+  const evaluation = await evaluateRule(RULE_CODE, { commissionRuleActive: true, groupId, companyId, ...facts }, { groupId, companyId }, { transaction });
   if (evaluation.decision !== 'APPLY') {
     throw AppError.unprocessable(
       `Não há regra de comissão publicada para esta empresa (${RULE_CODE}) — publique o percentual de cada componente antes de registrar comissões.`,
@@ -186,8 +201,8 @@ async function listCommissionRuleVersions(groupId, companyId, transaction) {
 
 /**
  * createCommission — registra o DIREITO à comissão a partir do fato gerador (lançamento a
- * receber `sourceEntryId`) e do componente. Percentual e base vêm da regra REG-FIN-002 vigente;
- * a comissão grava a `ruleVersionId` usada.
+ * receber `sourceEntryId`) e do componente. Percentual, base e arredondamento vêm da regra REG-FIN-001
+ * vigente (Guia §11); a comissão grava a `ruleVersionId` usada. O cálculo é em decimal exato (domain/money.js).
  */
 async function createCommission(payload, actorUserId, transaction) {
   const { groupId, companyId, opportunityId, contractId, beneficiaryUserId, sourceEntryId, component, installmentsCount, firstDueAt, idempotencyKey } = payload;
@@ -245,7 +260,13 @@ async function createCommission(payload, actorUserId, transaction) {
     );
   }
 
-  const { ruleVersionId, action } = await resolveCommissionRule(groupId, companyId, transaction);
+  const factContractId = contractId || sourceEntry.contractId || null;
+  const contract = factContractId ? await repo.findContractSummary(factContractId, transaction) : null;
+  const facts = {
+    finance: { receivedAmount: String(sourceEntry.amount) },
+    contract: { id: factContractId, type: contract ? contract.contractType : null },
+  };
+  const { ruleVersionId, action } = await resolveCommissionRule(groupId, companyId, transaction, facts);
   const percentageNumeric = componentPercentage(action, normalizedComponent);
   if (!Number.isFinite(percentageNumeric) || percentageNumeric <= 0) {
     throw AppError.unprocessable(
@@ -253,8 +274,9 @@ async function createCommission(payload, actorUserId, transaction) {
       'FINANCE_COMMISSION_RULE_COMPONENT_NOT_CONFIGURED'
     );
   }
-  const baseNumeric = Number(sourceEntry.amount);
-  const totalAmount = computeCommissionTotal(baseNumeric, percentageNumeric);
+  const baseAmount = String(sourceEntry.amount);
+  const rounding = ruleRoundingMode(action);
+  const totalAmount = computeCommissionTotal(baseAmount, percentageNumeric, rounding);
 
   const commission = await repo.createCommission(
     {
@@ -263,7 +285,7 @@ async function createCommission(payload, actorUserId, transaction) {
       opportunityId: opportunityId || null,
       contractId: contractId || sourceEntry.contractId || null,
       beneficiaryUserId,
-      baseAmount: baseNumeric,
+      baseAmount,
       percentage: percentageNumeric,
       totalAmount,
       ruleVersionId,
@@ -289,8 +311,8 @@ async function createCommission(payload, actorUserId, transaction) {
       action: 'finance.commission.create',
       entityType: 'Commission',
       entityId: commission.id,
-      afterJson: { commission: commission.toJSON(), installments: installments.map((i) => i.toJSON()), ruleVersionId, ruleCode: RULE_CODE },
-      reason: `Comissão ${normalizedComponent} de ${totalAmount} (${percentageNumeric}% sobre ${baseNumeric}, regra ${RULE_CODE} versão ${ruleVersionId}) registrada a partir do lançamento ${sourceEntryId}.`,
+      afterJson: { commission: commission.toJSON(), installments: installments.map((i) => i.toJSON()), ruleVersionId, ruleCode: RULE_CODE, rounding },
+      reason: `Comissão ${normalizedComponent} de ${totalAmount} (${percentageNumeric}% sobre ${baseAmount}, arredondamento ${rounding}, regra ${RULE_CODE} versão ${ruleVersionId}) registrada a partir do lançamento ${sourceEntryId}.`,
     },
     transaction
   );

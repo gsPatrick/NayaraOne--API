@@ -24,9 +24,17 @@ const RULES = [
     message: 'Já existe um repasse com esta mesma chave de idempotência — repasse duplicado bloqueado.',
   },
   {
+    // Guia §10 UNIQUE(bank_account_id, fingerprint), completo desde a migration 20260101010411: vale também para linha sem id externo.
     table: 'bank_transactions',
-    columns: ['external_transaction_id', 'fingerprint'],
-    constraints: ['bank_transactions_account_external_id_uk', 'bank_transactions_account_fingerprint_uk', 'bank_transactions_external_transaction_id_key'],
+    columns: ['fingerprint'],
+    constraints: ['bank_transactions_account_fingerprint_uk'],
+    code: 'FINANCE_BANK_TRANSACTION_DUPLICATE',
+    message: 'Esta mesma linha de extrato (conta, data, valor, sentido e descrição) já foi registrada — duplicidade bloqueada.',
+  },
+  {
+    table: 'bank_transactions',
+    columns: ['external_transaction_id'],
+    constraints: ['bank_transactions_account_external_id_uk', 'bank_transactions_external_transaction_id_key'],
     code: 'FINANCE_BANK_TRANSACTION_DUPLICATE',
     message: 'Já existe uma transação importada com este mesmo identificador externo nesta conta — import duplicado bloqueado.',
   },

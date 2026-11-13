@@ -21,6 +21,10 @@ async function findBankTransactionById(bankTransactionId, transaction) {
   return BankTransaction.findByPk(bankTransactionId, { transaction });
 }
 
+async function findFinancialEntryById(financialEntryId, transaction) {
+  return FinancialEntry.findByPk(financialEntryId, { transaction });
+}
+
 async function findReconciliationByFinancialEntry(financialEntryId, transaction) {
   return Reconciliation.findOne({ where: { financialEntryId }, transaction });
 }
@@ -53,6 +57,7 @@ module.exports = {
   findFinancialEntryForUpdate,
   findBankTransactionForUpdate,
   findBankTransactionById,
+  findFinancialEntryById,
   findReconciliationByFinancialEntry,
   findReconciliationByBankTransaction,
   createReconciliation,

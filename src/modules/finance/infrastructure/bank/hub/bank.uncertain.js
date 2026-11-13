@@ -39,6 +39,7 @@ async function queryPaymentStatus(intent, transaction) {
     ? await IntegrationConnection.findOne({ where: { id: dispatch.connectionId, companyId: ctx.companyId }, transaction })
     : await ensureBankConnection(ctx, await configuredProviderKey(ctx, transaction), transaction);
   const adapter = await adapterRegistry.resolve(connection, ctx, transaction);
+  /** @type {any} */
   let bruta = null;
   const r = await sequelize.transaction({ transaction }, () => invoke(adapter, 'getPaymentStatus', { externalResourceId: intent.externalSubmissionId }, {
     tenant: ctx, transaction, meta: { reconcile: true }, onResponse: (x) => { bruta = x; },

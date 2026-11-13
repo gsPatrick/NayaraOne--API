@@ -21,6 +21,7 @@ const { publishFinancialEntryCreated } = require('./finance-events.service');
 const { resolveAccountVersionForEntry } = require('./chart-of-accounts.service');
 const { markApprovalRequestsStale } = require('./approvals.service');
 const { getBankAccount } = require('./bank-accounts.service');
+const { assertCentersOfCompany } = require('./entry-reference-guards'); // FIN-002: centros só da própria empresa (pentest M4 PT4-0839)
 const { evaluatePayableAnomaly } = require('./payment-anomaly-gate'); // §17 valor fora do padrão / fornecedor novo de alto valor
 const { assertCompetenceOpen, assertPeriodOpenForEntry, resolveCompetenceMonth } = require('./competence-guard');
 const { resolveThirdPartyLinks } = require('./third-party-funds.service');
@@ -109,6 +110,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
   const chartVersion = await resolveAccountVersionForEntry(chartOfAccountId, companyId, payload.factDate || dueAt || new Date(), transaction);
 
   if (bankAccountId) await assertBankAccountOfCompany(bankAccountId, companyId, transaction);
+  await assertCentersOfCompany({ costCenterId, resultCenterId }, companyId, transaction);
 
   // M4-19 — período fechado bloqueia lançamento novo naquele mês (competência do vencimento e
   // da própria criação). C1 (revisão independente): a COMPETÊNCIA informada também é conferida.
@@ -261,6 +263,7 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   // PENDING não passava por nenhuma checagem extra. Troca de conta é o padrão de fraude que o módulo defende:
   // precisa de revisão humana antes de poder ser liquidado (e nunca para conta de outra empresa, FIN-TS-004).
   if (bankAccountId) await assertBankAccountOfCompany(bankAccountId, entry.companyId, transaction);
+  await assertCentersOfCompany({ costCenterId, resultCenterId }, entry.companyId, transaction);
 
   if (bankAccountId !== undefined && bankAccountId !== entry.bankAccountId) {
     const inFlight = await intents.countForEntry(entry.id, IN_FLIGHT_STATUSES, transaction);

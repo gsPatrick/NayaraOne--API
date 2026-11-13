@@ -11,7 +11,7 @@ const reconciliationQueue = require('../../application/services/reconciliation-q
 
 const listPendingReconciliation = catchAsync(async (req, res) => {
   const data = await req.withTenantTransaction((t) =>
-    reconciliationQueue.listPendingQueue(t, { includeSuggestions: req.query.include === 'suggestions' })
+    reconciliationQueue.listPendingQueue(t, { includeSuggestions: req.query.include === 'suggestions', tenant: { groupId: req.auth.groupId, companyId: req.auth.companyId } })
   );
   return success(res, { data });
 });

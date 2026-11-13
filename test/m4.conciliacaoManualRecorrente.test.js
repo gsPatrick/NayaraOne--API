@@ -68,7 +68,7 @@ after(async () => {
 async function pair(amount, extra = {}) {
   return inTenant(async (t) => {
     const entry = await financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: account.id, description: `§17.7 ${T.uniqueSuffix()}`, ...(extra.entry || {}) }, tenant.userId, t);
-    const tx = await bankTransactionsService.createBankTransaction({ ...base(), bankAccountId: account.id, amount, transactionDate: new Date(), ...(extra.tx || {}) }, tenant.userId, t);
+    const tx = await bankTransactionsService.createBankTransaction({ ...base(), bankAccountId: account.id, amount, transactionDate: new Date(), ...(extra.tx || {}) }, tenant.userId, t, extra.origin);
     return { entry, tx };
   });
 }
@@ -76,7 +76,8 @@ const methodOf = async (bankTransactionId) => (await inTenant((t) => Reconciliat
 
 test('M4-§17.7 conciliação automática e sugestão confirmada sem escolha não contam como manual; par informado pela pessoa conta (match_method gravado)', async () => {
   const key = `auto-${T.uniqueSuffix()}`;
-  const auto = await pair(41, { entry: { idempotencyKey: key }, tx: { externalTransactionId: key } });
+  // Caderno §11: só a linha de fonte confiável (arquivo importado por quem tem finance:reconcile, DI-M4CC-2) confirma sozinha.
+  const auto = await pair(41, { entry: { idempotencyKey: key }, tx: { externalTransactionId: key }, origin: { source: 'FILE_IMPORT', canReconcile: true } });
   const autoRes = await http('POST', `/finance/bank-transactions/${auto.tx.id}/auto-reconcile`, token, {});
   assert.equal(autoRes.status, 200, JSON.stringify(autoRes.body));
   assert.equal(autoRes.body.data.autoReconciled, true);

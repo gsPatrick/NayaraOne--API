@@ -6,6 +6,7 @@
 // pelo serviço (application/services/commission.service.js), com os mesmos textos e códigos.
 
 const crypto = require('node:crypto');
+const money = require('./money');
 
 const STATUSES = ['PENDING', 'APPROVED', 'PAID', 'CANCELLED'];
 
@@ -19,8 +20,9 @@ const INSTALLMENT_TRANSITIONS = {
 
 const ADJUSTMENT_TYPE_CANCELLATION = 'CANCELLATION_REVERSAL';
 
+// Dinheiro em centavos inteiros (domain/money.js): nada de multiplicar/somar float.
 function round2(value) {
-  return Math.round(Number(value) * 100) / 100;
+  return Number(money.centsToDecimal(money.toCents(value)));
 }
 
 // --- Caderno §14 / FIN-011 — regra de comissão no Motor de Regras ---------------------------
@@ -32,15 +34,18 @@ function round2(value) {
 // Pagamento da comissão exige disponibilidade/condição prevista na regra."
 //
 // Agora:
-//  - REG-FIN-002 (Motor de Regras genérico, versionado) define o percentual de cada componente
-//    (BROKER/MANAGER/CORRESPONDENT) e a base (o valor do lançamento a receber de origem).
+//  - REG-FIN-001 (Motor de Regras genérico, versionado; Guia §11 `rules.evaluate('REG-FIN-001', ...)`,
+//    DEC-005) define o percentual de cada componente (BROKER/MANAGER/CORRESPONDENT), a base (o valor
+//    do lançamento a receber de origem) e o modo de arredondamento do centavo (DI-M4CC-1).
 //  - O fato gerador é um lançamento a RECEBER real (`sourceEntryId`); a base é o valor dele.
 //  - Percentual e base NUNCA vêm do payload; a comissão grava a versão da regra usada.
 //  - Sem regra publicada: fail closed (não existe percentual padrão inventado para dinheiro).
 //  - O pagamento é liberado na proporção do que o fato gerador já recebeu (ver
 //    getCommissionRelease / markInstallmentPaid).
 
-const RULE_CODE = 'REG-FIN-002';
+const RULE_CODE = 'REG-FIN-001';
+// Código antigo da comissão (até a DEC-005): a migration 20260101009996 move as versões para REG-FIN-001.
+const LEGACY_RULE_CODE = 'REG-FIN-002';
 const RULE_NAME = 'Percentual de comissão por componente (fato gerador: recebimento)';
 const RULE_DESCRIPTION = 'Percentual de comissão de corretor/gerente/correspondente sobre o valor do recebimento que gera o direito (Caderno §14).';
 const CONDITION_AST = { fact: 'commissionRuleActive', op: '==', value: true };
@@ -52,8 +57,15 @@ function commissionRuleLockKey(groupId, companyId) {
   return `commission_rule:${groupId}:${companyId}:${RULE_CODE}`;
 }
 
-function buildRuleActionJson(normalized, description) {
-  return { components: normalized, base: BASE_TYPE, description: description || null };
+// DI-M4CC-1: o modo de arredondamento faz parte da versão da regra (reproduz o cálculo pela rule_version_id gravada na comissão). Versão antiga sem o
+// campo vale como HALF_UP, o padrão.
+function ruleRoundingMode(action) {
+  const mode = action && action.rounding;
+  return money.ROUNDING_MODES.includes(mode) ? mode : money.DEFAULT_ROUNDING_MODE;
+}
+
+function buildRuleActionJson(normalized, description, rounding = money.DEFAULT_ROUNDING_MODE) {
+  return { components: normalized, base: BASE_TYPE, rounding, description: description || null };
 }
 
 function ruleVersionContentHash(actionJson) {
@@ -75,6 +87,7 @@ function buildActiveRuleView(ruleVersionId, version, action) {
     ruleCode: RULE_CODE,
     components: action.components || {},
     base: action.base || BASE_TYPE,
+    rounding: ruleRoundingMode(action),
   };
 }
 
@@ -90,6 +103,7 @@ function toRuleVersionView(v, nameById) {
     status: v.status,
     components: (v.actionJson && v.actionJson.components) || {},
     base: (v.actionJson && v.actionJson.base) || BASE_TYPE,
+    rounding: ruleRoundingMode(v.actionJson),
     effectiveFrom: v.effectiveFrom,
     effectiveUntil: v.effectiveUntil,
     current: v.status === 'PUBLISHED' && !v.effectiveUntil,
@@ -114,26 +128,33 @@ function componentPercentage(action, normalizedComponent) {
   return Number((action.components || {})[normalizedComponent]);
 }
 
-function computeCommissionTotal(baseNumeric, percentageNumeric) {
-  return round2(baseNumeric * (percentageNumeric / 100));
+/**
+ * computeCommissionTotal — base x percentual, em decimal exato, com UM arredondamento ao centavo pelo modo da regra (DI-M4CC-1, padrão HALF_UP):
+ * 50% de 0,29 = 0,145 -> 0,15 e 50% de 0,01 = 0,005 -> 0,01 (meio centavo sempre para cima); em HALF_EVEN, 0,14 e 0,00.
+ * Devolve o texto decimal com 2 casas (o numeric do banco recebe sem passar por float).
+ * @param {string|number} baseAmount
+ * @param {string|number} percentage
+ * @param {string} [rounding]
+ * @returns {string}
+ */
+function computeCommissionTotal(baseAmount, percentage, rounding = money.DEFAULT_ROUNDING_MODE) {
+  return money.centsToDecimal(money.percentOfCents(money.toCents(baseAmount), percentage, rounding));
 }
 
 /**
- * planInstallments — divide totalAmount em N parcelas iguais (a última absorve a diferença
- * de arredondamento, pra soma das parcelas nunca ficar diferente do totalAmount por causa de
- * centavos — problema clássico de divisão de moeda).
+ * planInstallments — divide totalAmount em N parcelas iguais em centavos inteiros (a divisão nunca cria nem perde centavo: as N-1 primeiras recebem
+ * o quociente inteiro e a última absorve o resto, então a soma das parcelas é exatamente o totalAmount).
  */
 function planInstallments(totalAmount, count, firstDueAt) {
   const n = Math.max(1, Number(count) || 1);
-  const baseInstallment = Math.floor((totalAmount / n) * 100) / 100;
+  const totalCents = money.toCents(totalAmount);
+  const baseCents = Math.trunc(totalCents / n);
   const plan = [];
-  let allocated = 0;
   const startDate = firstDueAt ? new Date(firstDueAt) : new Date();
 
   for (let i = 1; i <= n; i += 1) {
     const isLast = i === n;
-    const amount = isLast ? round2(totalAmount - allocated) : baseInstallment;
-    allocated = round2(allocated + amount);
+    const amount = money.centsToDecimal(isLast ? totalCents - baseCents * (n - 1) : baseCents);
 
     const dueAt = new Date(startDate);
     dueAt.setMonth(dueAt.getMonth() + (i - 1));
@@ -146,12 +167,10 @@ function planInstallments(totalAmount, count, firstDueAt) {
 
 // --- Liberação proporcional ao recebimento (centavos inteiros) --------------------------------
 
-function toCents(value) {
-  return Math.round(Number(value) * 100);
-}
+const { toCents } = money;
 
 function sumPaidCents(installments) {
-  return installments.filter((i) => i.status === 'PAID').reduce((acc, i) => acc + Math.round(Number(i.amount) * 100), 0);
+  return money.sumCents(installments.filter((i) => i.status === 'PAID').map((i) => i.amount));
 }
 
 // Comissão anterior à regra (sem fato gerador registrado): mantém o comportamento antigo.
@@ -163,7 +182,7 @@ function buildLegacyRelease(totalCents, paidCents) {
 function buildSourceRelease(source, { totalCents, paidCents, baseCents, remainingAmount }) {
   let receivedCents = 0;
   if (source.status === 'SETTLED') receivedCents = baseCents;
-  else if (source.status === 'PARTIALLY_SETTLED') receivedCents = baseCents - Math.round(Number(remainingAmount) * 100);
+  else if (source.status === 'PARTIALLY_SETTLED') receivedCents = baseCents - toCents(remainingAmount);
   receivedCents = Math.max(0, Math.min(receivedCents, baseCents));
   const releasedCents = baseCents > 0 ? Math.floor((totalCents * receivedCents) / baseCents) : 0;
   return {
@@ -180,11 +199,11 @@ function buildSourceRelease(source, { totalCents, paidCents, baseCents, remainin
 }
 
 function exceedsAvailable(installmentAmount, availableAmount) {
-  return Math.round(Number(installmentAmount) * 100) > Math.round(availableAmount * 100);
+  return toCents(installmentAmount) > toCents(availableAmount);
 }
 
 function amountsMatch(entryAmount, installmentAmount) {
-  return round2(entryAmount) === round2(installmentAmount);
+  return toCents(entryAmount) === toCents(installmentAmount);
 }
 
 // --- Estados e transições ---------------------------------------------------------------------
@@ -200,10 +219,13 @@ function isCommissionCancelled(commission) {
 // Ajuste = o que ainda estava em aberto (não pago) quando o cancelamento aconteceu — é esse
 // valor que deixa de ser devido a partir daqui. Negativo por convenção (reduz o direito).
 function computeCancellationAdjustment(installments, totalAmount) {
-  const paidAmountBefore = round2(installments.filter((i) => i.status === 'PAID').reduce((acc, i) => acc + Number(i.amount), 0));
-  const totalAmountBefore = round2(totalAmount);
-  const adjustmentAmount = round2(-(totalAmountBefore - paidAmountBefore));
-  return { paidAmountBefore, totalAmountBefore, adjustmentAmount };
+  const paidCents = sumPaidCents(installments);
+  const totalCents = toCents(totalAmount);
+  return {
+    paidAmountBefore: paidCents / 100,
+    totalAmountBefore: totalCents / 100,
+    adjustmentAmount: -(totalCents - paidCents) / 100,
+  };
 }
 
 module.exports = {
@@ -211,6 +233,7 @@ module.exports = {
   INSTALLMENT_TRANSITIONS,
   ADJUSTMENT_TYPE_CANCELLATION,
   RULE_CODE,
+  LEGACY_RULE_CODE,
   RULE_NAME,
   RULE_DESCRIPTION,
   CONDITION_AST,
@@ -227,6 +250,7 @@ module.exports = {
   normalizeComponent,
   isInvalidCommissionSource,
   componentPercentage,
+  ruleRoundingMode,
   computeCommissionTotal,
   planInstallments,
   toCents,

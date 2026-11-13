@@ -4,6 +4,10 @@ const { BankTransaction, BankStatementImport } = require('../../../../models');
 const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
 const { businessDateKey } = require('../../../../utils/businessDate');
+const { bankTransactionFingerprint } = require('../../infrastructure/db/bank-transaction-fingerprint');
+const { sourceOf, SOURCES } = require('./reconciliation-policy');
+const money = require('../../domain/money');
+const { getBankAccount } = require('./bank-accounts.service');
 
 const DATE_ONLY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -21,7 +25,9 @@ function dateKeyOf(value, fieldLabel) {
 // duplica a linha (FIN-004), então createBankTransaction checa antes de inserir e explica o
 // motivo do 409 em vez de deixar estourar a constraint de banco crua.
 
-async function createBankTransaction(payload, actorUserId, transaction) {
+// `origin` (nunca o corpo do pedido): { source: MANUAL | FILE_IMPORT | WEBHOOK | PROVIDER_FETCH, canReconcile } — define se a linha é fonte confiável
+// para a conciliação automática (reconciliation-policy.js#sourceOf). Sem origem informada, a linha é MANUAL (digitada), não confiável.
+async function createBankTransaction(payload, actorUserId, transaction, origin = {}) {
   const { groupId, companyId, bankAccountId, externalTransactionId, amount, transactionDate, description } = payload;
   if (!groupId || !companyId || !bankAccountId || amount === undefined || amount === null || !transactionDate) {
     throw AppError.badRequest(
@@ -33,6 +39,13 @@ async function createBankTransaction(payload, actorUserId, transaction) {
   const amountNumber = Number(amount);
   if (!Number.isFinite(amountNumber) || Math.abs(amountNumber) >= 1e16) {
     throw AppError.badRequest('O valor da transação do extrato precisa ser um número válido.', 'FINANCE_BANK_TRANSACTION_VALIDATION');
+  }
+  // FIN-002 (pentest do Marco 4, achado crítico): a linha de extrato só entra numa conta bancária da PRÓPRIA empresa. A RLS esconde a conta de
+  // outra empresa (getBankAccount -> 404 FINANCE_BANK_ACCOUNT_NOT_FOUND), mas o INSERT não passava por ela; a checagem vem antes de qualquer
+  // consulta de duplicidade, então a resposta nunca revela linha de outra empresa.
+  const bankAccount = await getBankAccount(bankAccountId, transaction);
+  if (bankAccount.companyId !== companyId) {
+    throw AppError.notFound('Conta bancária não encontrada.', 'FINANCE_BANK_ACCOUNT_NOT_FOUND');
   }
   // F-09: data de dia (AAAA-MM-DD) é gravada ao meio-dia de São Paulo — à meia-noite UTC o
   // dia aparecia como o anterior (20/10 virava 19/10) para quem lê no fuso de São Paulo.
@@ -49,6 +62,19 @@ async function createBankTransaction(payload, actorUserId, transaction) {
       );
     }
   }
+  // Guia §10 "UNIQUE(bank_account_id, fingerprint)" (sem condição, migration 20260101010411): a mesma linha (conta, id externo, dia, valor, sentido,
+  // descrição) não entra duas vezes, com ou sem id externo. A checagem antes do INSERT explica o 409; o índice único segura a corrida.
+  const amountDecimal = money.centsToDecimal(money.toCents(amount));
+  const fingerprint = bankTransactionFingerprint({ bankAccountId, externalTransactionId, transactionDate: storedDate, amount: amountDecimal, description });
+  const sameLine = await BankTransaction.findOne({ where: { bankAccountId, fingerprint }, transaction });
+  if (sameLine) {
+    throw AppError.conflict(
+      'Esta mesma linha de extrato (conta, data, valor, sentido e descrição) já foi registrada — duplicidade bloqueada.',
+      'FINANCE_BANK_TRANSACTION_DUPLICATE',
+      { existingId: sameLine.id }
+    );
+  }
+  const { source, sourceTrusted } = sourceOf(origin.source, { canReconcile: origin.canReconcile });
 
   const bankTransaction = await BankTransaction.create(
     {
@@ -56,9 +82,12 @@ async function createBankTransaction(payload, actorUserId, transaction) {
       companyId,
       bankAccountId,
       externalTransactionId: externalTransactionId || null,
-      amount: amountNumber,
+      fingerprint,
+      amount: amountDecimal,
       transactionDate: storedDate,
       description: description || null,
+      source,
+      sourceTrusted,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -216,7 +245,8 @@ function parseStatementCsv(csvText) {
  * createBankTransaction isolado, que lança 409 — aqui isso seria o comportamento normal e
  * esperado de reimportar um arquivo que já foi processado em parte).
  */
-async function importBankStatement(payload, actorUserId, transaction) {
+// `options.canReconcile`: quem importa tem finance:reconcile (o controlador lê do token, nunca do corpo) — arquivo assim é fonte confiável (DI-M4CC-2).
+async function importBankStatement(payload, actorUserId, transaction, options = {}) {
   const { groupId, companyId, bankAccountId, csvText } = payload;
   if (!groupId || !companyId || !bankAccountId || !csvText) {
     throw AppError.badRequest(
@@ -265,6 +295,7 @@ async function importBankStatement(payload, actorUserId, transaction) {
     }
   }
 
+  /** @type {{ imported: any[], duplicates: any[], total: number, statementImport?: any }} */
   const result = { imported: [], duplicates: [], total: rows.length };
   for (const row of rows) {
     // eslint-disable-next-line no-await-in-loop
@@ -277,7 +308,8 @@ async function importBankStatement(payload, actorUserId, transaction) {
     const created = await createBankTransaction(
       { groupId, companyId, bankAccountId, ...row },
       actorUserId,
-      transaction
+      transaction,
+      { source: SOURCES.FILE_IMPORT, canReconcile: options.canReconcile === true }
     );
     result.imported.push(created);
   }

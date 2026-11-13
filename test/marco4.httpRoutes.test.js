@@ -73,10 +73,10 @@ after(async () => {
   process.exit(0);
 });
 
-async function http(method, path, body) {
+async function http(method, path, body, bearer = token) {
   const res = await fetch(`${baseUrl}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${bearer}` },
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json().catch(() => null);
@@ -165,7 +165,7 @@ test('FIN-TS-017 via HTTP: cancelar comissão exige motivo e gera ajuste auditá
   const suffix = uniqueSuffix();
   const commission = await http('POST', '/finance/commissions', {
     beneficiaryUserId: tenant.userId,
-    // Frente 3 (§14): percentual/base vêm da regra REG-FIN-002 e do fato gerador, não do pedido.
+    // Frente 3 (§14): percentual/base vêm da regra REG-FIN-001 (Guia §11, DEC-005) e do fato gerador, não do pedido.
     ...(await withCommitted((t) => createCommissionSource(tenant, t, { baseAmount: 5000, percentage: 5 }))),
     idempotencyKey: `commission-http-${suffix}`,
   });
@@ -284,8 +284,13 @@ test('GAP fechado via HTTP: fila de pendências de classificação é listável 
   assert.equal(resolve.body.data.status, 'SETTLED');
 });
 
-test('GAP fechado via HTTP: autoReconcileSuggestion concilia sozinho um match EXATO, pela rota', async () => {
+test('GAP fechado via HTTP: autoReconcileSuggestion concilia sozinho um match EXATO de fonte confiável (arquivo importado por quem tem finance:reconcile), pela rota', async () => {
   const suffix = uniqueSuffix();
+  // Caderno §11 "Exato: auto confirmado se FONTE CONFIÁVEL" (DI-M4CC-2): o arquivo vale como fonte confiável quando quem importa tem finance:reconcile.
+  const reconcilerToken = signAccessToken({
+    sub: tenant.userId, group_id: tenant.groupId, company_id: tenant.companyId, roles: ['admin'],
+    permissions: ['finance:create', 'finance:read', 'finance:update', 'finance:reconcile'],
+  });
   const bankAccount = await withCommitted((t) =>
     bankAccountsService.createBankAccount(
       { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '237', accountNumber: `m4auto-${suffix.slice(-8)}` },
@@ -311,9 +316,11 @@ test('GAP fechado via HTTP: autoReconcileSuggestion concilia sozinho um match EX
   createdEntryIds.push(entry.body.data.id);
 
   const csvText = `externaltransactionid,transactiondate,description,amount\n${externalId},${new Date().toISOString().slice(0, 10)},Recebimento conciliação HTTP ${suffix},777.00\n`;
-  const imported = await http('POST', '/finance/bank-transactions/import', { bankAccountId: bankAccount.id, csvText });
+  const imported = await http('POST', '/finance/bank-transactions/import', { bankAccountId: bankAccount.id, csvText }, reconcilerToken);
   assert.equal(imported.status, 201, JSON.stringify(imported.body));
   const bankTransactionId = imported.body.data.imported[0].id;
+  assert.equal(imported.body.data.imported[0].source, 'FILE_IMPORT');
+  assert.equal(imported.body.data.imported[0].sourceTrusted, true);
 
   const auto = await http('POST', `/finance/bank-transactions/${bankTransactionId}/auto-reconcile`, {});
   assert.equal(auto.status, 200, JSON.stringify(auto.body));

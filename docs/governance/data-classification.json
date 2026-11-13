@@ -2524,6 +2524,8 @@
    "description",
    "external_transaction_id",
    "fingerprint",
+   "source",
+   "source_trusted",
    "transaction_date",
    "updated_by"
   ],

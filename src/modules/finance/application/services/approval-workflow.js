@@ -141,7 +141,7 @@ async function recordDecision(request, { decision, approverUserId, requireMfa = 
       },
       { transaction }
     );
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     // approval_steps_request_approver_uk fecha a corrida de dois cliques do mesmo aprovador.
     if (err.name === 'SequelizeUniqueConstraintError') {
       throw AppError.conflict('Você já registrou uma decisão para esta solicitação.', 'FINANCE_APPROVAL_DUPLICATE_DECISION');

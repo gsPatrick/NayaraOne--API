@@ -23,6 +23,7 @@ const { TenantSetting, User } = require('../src/models');
 const EXPECTED = [
   'billing.grace_period_days', 'billing.interest_percentage', 'billing.late_fee_percentage',
   'exportacao.crm.exige_mfa',
+  'conciliacao.score_auto_minimo',
   'finance.antifraud_new_account_threshold', 'finance.bank_account_cooldown_hours', 'finance.reconciliation.auto_strong',
   'governanca.flags.kill_teste_dias', 'ia.fallback.max_saltos',
   'integration.admin.mfa_on_prod_connection_change', 'integration.admin.mfa_on_prod_test_connection', 'integration.admin.mfa_on_secret_rotation',
@@ -31,7 +32,7 @@ const EXPECTED = [
   'integration.secret.rotation_max_age_days.BANK',
   'mfa.required_for_sensitive_roles', 'mfa.step_up_ttl_minutes',
 ];
-const SAMPLE_OVERRIDES = { 'integration.secret.expiry_alert_days': '30,14,7' };
+const SAMPLE_OVERRIDES = { 'integration.secret.expiry_alert_days': '30,14,7', 'conciliacao.score_auto_minimo': 0.95 };
 function sample(key) {
   if (SAMPLE_OVERRIDES[key] !== undefined) return SAMPLE_OVERRIDES[key];
   const spec = settingsService.SETTINGS_SCHEMA[key];

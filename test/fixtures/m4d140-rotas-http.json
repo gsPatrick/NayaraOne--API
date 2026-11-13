@@ -4,9 +4,10 @@
   "atualizacoes": [
     "DEC-007 rodada 2 (DI-DEC007-2): + GET /finance/antifraud/parameters",
     "Pagamentos (m4fix/pagamentos-verificacao f1e4b50f): + rotas de reabertura de período por pedido; estorno exige finance:reverse e MFA recente; reabertura exige finance:periodReopen",
-    "Integração dos Marcos 3 a 6 sobre o Marco 9 (13/11/2026): cadeias com o contrato da consulta (contratoDaConsulta) e o esquema de entrada (middleware) do Marco 9"
+    "Integração dos Marcos 3 a 6 sobre o Marco 9 (13/11/2026): cadeias com o contrato da consulta (contratoDaConsulta) e o esquema de entrada (middleware) do Marco 9",
+    "Conciliação e comissão (m4fix/conciliacao-comissao): + GET /finance/reconciliation/policy"
   ],
-  "total": 107,
+  "total": 108,
   "rotas": [
     {
       "method": "GET",
@@ -1285,6 +1286,19 @@
       "middlewares": [
         "authMiddleware",
         "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reconciliation/policy",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
         "requirePermissionMiddleware",
         "contratoDaConsulta",
         "wrapped"

@@ -57,6 +57,20 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'description',
       },
+      // Origem da linha e se ela é fonte confiável para a conciliação automática (Caderno §11 "Exato: auto confirmado se fonte confiável";
+      // migration 20260101010412; reconciliation-policy.js#sourceOf). Definidas só pelo servidor.
+      source: {
+        type: DataTypes.STRING(32),
+        allowNull: false,
+        defaultValue: 'MANUAL',
+        field: 'source',
+      },
+      sourceTrusted: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'source_trusted',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,
