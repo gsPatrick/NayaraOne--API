@@ -187,11 +187,11 @@ rodar('6. o tamanho de texto dos esquemas da porta é o tamanho da coluna no ban
   const { sequelize } = require('../src/models');
   const esquemas = [require('../src/features/people/people.schema').ESQUEMAS, require('../src/features/properties/properties.schema').ESQUEMAS,
     require('../src/features/crm/opportunities.schema').ESQUEMAS, require('../src/features/radar/radar.schema').ESQUEMAS, require('../src/features/auth/auth.schema').ESQUEMAS,
-    // rodada 8 (DI-M9R-24 e DI-M9R-25): esquemas novos de consulta e de corpo
+    // rodada 8 (DI-M9R-24 e DI-M9R-25): esquemas novos de consulta e de corpo (Financeiro e Jurídico na árvore src/modules do M4-D140)
     ...['features/crm/feedbackCases.schema', 'features/core-governance/feature-flags/flags.query.schema', 'features/ai/releaseGates/releaseGates.query.schema',
       'features/ai/memory/memory.query.schema', 'features/ai/recommendations/recommendation.query.schema', 'features/marketing/publications/publications.query.schema',
-      'features/marketing/content/template.query.schema', 'features/finance/finance.input.schema', 'features/procurement/procurement.input.schema',
-      'features/inventory/inventory.input.schema', 'features/construction/construction.input.schema', 'features/legal/legal.input.schema',
+      'features/marketing/content/template.query.schema', 'modules/finance/presentation/http/finance.input.schema', 'features/procurement/procurement.input.schema',
+      'features/inventory/inventory.input.schema', 'features/construction/construction.input.schema', 'modules/legal/shared/legal.input.schema',
       'features/correspondent/cases/financingCase.schema'].map((m) => require(`../src/${m}`).ESQUEMAS)];
   const comColuna = [];
   const pilha = esquemas.flatMap((e) => Object.values(e));
