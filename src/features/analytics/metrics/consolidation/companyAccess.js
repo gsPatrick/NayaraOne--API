@@ -66,4 +66,4 @@ async function permittedCompanies(ctx, domain, transaction) {
   return { allowed, total: companies.length };
 }
 
-module.exports = { assertGroupScope, permittedCompanies, inCompany, listGroupCompanies, membershipPermissions };
+module.exports = { assertGroupScope, permittedCompanies, inCompany, listGroupCompanies };

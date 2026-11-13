@@ -6,26 +6,20 @@
  * scripts/lib/analyticsReadScan.js): a permissão do domínio Financeiro vem do mapa domínio -> permissão do administrador (assertDomainAccess,
  * padrão finance:read) e a leitura roda sob o RLS da empresa da transação. Só leitura.
  *
- * `ctx`: { groupId, companyId, userId, permissions? }. Sem `permissions` (chamada de serviço), valem as do vínculo ativo do usuário com a empresa;
- * sem usuário, nenhuma (403): o BI nunca é lido sem alguém com permissão.
+ * `ctx`: { groupId, companyId, userId, permissions? }. Caminho de USUÁRIO (a rota GET /finance/nay/insights passa req.auth.permissions): sem a
+ * permissão do domínio, 403 PERMISSION_DENIED. Chamada interna de serviço, sem sessão (`permissions` ausente), segue o desenho do BI do Marco 9 para
+ * leituras internas: só o RLS da empresa da transação (os leitores de usuário são os que conferem a permissão: rota, ferramentas da NAY, exportação).
  */
 const { sequelize } = require('../../../models');
 const { assertDomainAccess } = require('../security');
-const { membershipPermissions } = require('../metrics/consolidation/companyAccess');
 
 const HEALTH = 'analytics.rm_finance_health';
 const SECTOR_MARGIN = 'analytics.rm_finance_sector_margin';
 const select = async (sql, replacements, transaction) => sequelize.query(sql, { replacements, transaction, type: sequelize.QueryTypes.SELECT });
 
-async function withPermissions(ctx, transaction) {
-  if (ctx && (Array.isArray(ctx.permissions) || ctx.permissions instanceof Set)) return ctx;
-  const permissions = ctx && ctx.userId && ctx.companyId ? await membershipPermissions(ctx.userId, ctx.companyId, transaction) : [];
-  return { ...ctx, permissions };
-}
-
 async function assertFinanceRead(ctx, transaction) {
-  const full = await withPermissions(ctx, transaction);
-  await assertDomainAccess(full, 'FINANCE', transaction);
+  const temSessao = ctx && (Array.isArray(ctx.permissions) || ctx.permissions instanceof Set);
+  if (temSessao) await assertDomainAccess(ctx, 'FINANCE', transaction);
 }
 
 /** Linha mais recente do read model de saúde financeira com data-base até `asOfDate` (AAAA-MM-DD), ou null. */

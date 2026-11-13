@@ -124,7 +124,7 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   }  { // a leitura do BI para a NAY Financeira (camada read-models) também só lê e confere a permissão do domínio
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'features', 'analytics', 'read-models', 'finance-assistant.read.js'), 'utf8');
     assert.doesNotMatch(src, /\b(INSERT|UPDATE|DELETE)\b|\.(create|update|destroy|save|bulkCreate)\(/, 'finance-assistant.read.js só lê');
-    assert.match(src, /assertDomainAccess\(full, 'FINANCE', transaction\)/);
+    assert.match(src, /assertDomainAccess\(ctx, 'FINANCE', transaction\)/);
   }
 
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
