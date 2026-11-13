@@ -12,15 +12,22 @@ const { readPurposeLists } = require('../marketing/suppression/suppression.setti
  *     (422 MESSAGE_PURPOSE_REQUIRED). DESLIGADO (o padrão, comportamento do Marco 9 entregue): sem finalidade, a mensagem segue e o
  *     consentimento é conferido como TRANSACTIONAL;
  *   - a finalidade precisa estar na lista única da empresa (`marketing.consent.exige_opt_in_para` / `marketing.consent.sem_opt_in_para`,
- *     M9-D418, aba Marketing de Configurações); fora dela, 422 MESSAGE_PURPOSE_UNKNOWN e nada é gravado nem enviado;
+ *     M9-D418, aba Marketing de Configurações); fora dela, com o parâmetro ligado, 422 MESSAGE_PURPOSE_UNKNOWN e nada é gravado nem
+ *     enviado; com o parâmetro desligado vale a regra do Marco 9 (só MARKETING, CADENCE e CAMPAIGN exigem OPT_IN);
  *   - a mesma lista diz se a finalidade exige OPT_IN no `canContact` (porta registrada abaixo), sem lista fixa no código.
  */
 const PURPOSE_RE = /^[A-Z0-9_]{2,40}$/;
+
+// Marco 9 entregue (personConsents.canContact): fora das listas da empresa, só estas exigem OPT_IN; as demais seguem sem OPT_IN.
+const MARCO9_OPT_IN = new Set(['MARKETING', 'CADENCE', 'CAMPAIGN']);
+const purposeRequired = (tenant, transaction) => require('./crm.params').readPurposeRequired(tenant, transaction);
 
 async function classify(purpose, tenant, transaction) {
   const { requireOptIn, noOptIn } = await readPurposeLists(tenant, transaction);
   if (requireOptIn.includes(purpose)) return { known: true, requiresOptIn: true };
   if (noOptIn.includes(purpose)) return { known: true, requiresOptIn: false };
+  // Parâmetro crm.mensagens.finalidade_obrigatoria desligado (padrão): finalidade fora das listas segue a regra do Marco 9.
+  if (!(await purposeRequired(tenant, transaction))) return { known: true, requiresOptIn: MARCO9_OPT_IN.has(purpose) };
   return { known: false, requiresOptIn: true, known_purposes: [...requireOptIn, ...noOptIn] };
 }
 
@@ -34,7 +41,7 @@ async function resolveOutboundPurpose({ direction, personId, purpose, required =
   const normalized = purpose === undefined || purpose === null ? '' : String(purpose).trim().toUpperCase();
   if (!required && (direction !== 'OUTBOUND' || !personId)) return normalized && PURPOSE_RE.test(normalized) ? normalized : null;
   if (!normalized) {
-    if (!(await require('./crm.params').readPurposeRequired(tenant, transaction))) return null;
+    if (!(await purposeRequired(tenant, transaction))) return null;
     throw AppError.unprocessable('Informe a finalidade da mensagem (por exemplo, TRANSACTIONAL ou MARKETING): sem finalidade o envio não é feito.', 'MESSAGE_PURPOSE_REQUIRED', { field: 'purpose' });
   }
   const policy = PURPOSE_RE.test(normalized) ? await classify(normalized, tenant, transaction) : { known: false, known_purposes: [] };
