@@ -105,13 +105,14 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   }
 
   // 4. NAY Financeira (finance-nay.service.js) é SOMENTE LEITURA por construção: só importa o read
-  // model, o resolvedor de limiares (leitura do Motor de Regras), CostCenter, o sequelize para
+  // model, CostCenter, o sequelize para
   // SELECT e o registrador de run por regra (M9-D005); a única escrita é a auditoria da execução
   // em ai.ai_runs, feita só por recordRuleRun. Nenhuma rota de NAY
   // além da GET de leitura.
   const nay = fs.readFileSync(path.join(financeDir, 'application', 'services', 'finance-nay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const requires = [...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort();
-  assert.deepEqual(requires, ['../../../../models', '../../../../features/ai/orchestrator/runs', '../../../../utils/businessDate', './finance-antifraud.service', './finance-health.service'].sort());
+  // DEC-007 (DI-DEC007-2): a fonte dos limiares do antifraude é a tela de Configurações; a NAY Financeira não lê mais o resolvedor (o Motor saiu).
+  assert.deepEqual(requires, ['../../../../models', '../../../../features/ai/orchestrator/runs', '../../../../utils/businessDate', './finance-health.service'].sort());
   assert.match(nay, /const \{ sequelize, CostCenter \} = require\('\.\.\/\.\.\/\.\.\/\.\.\/models'\)/);
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');

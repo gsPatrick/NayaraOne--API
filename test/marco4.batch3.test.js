@@ -353,14 +353,15 @@ test('M4-13 N:M — soma que não bate (nem por um centavo) é rejeitada e nada 
 
 // --- M4-21: antifraude — anomalia + revisão manual ------------------------------------------
 
-test('M4-21 pagamento 3x acima da média histórica da conta é flagado, notifica o financeiro e trava a liquidação', async () => {
+test('M4-21 pagamento 3x acima da mediana histórica da conta é flagado, notifica o financeiro e trava a liquidação', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
 
-    // Histórico: dois pagamentos de 100 já liquidados nessa conta (média = 100).
-    for (let i = 0; i < 2; i += 1) {
-      const historico = await createEntry(transaction, { amount: 100, bankAccountId: account.id });
+    // Histórico: cinco pagamentos já liquidados nessa conta, mediana 100 (DEC-007: mínimo de 5 amostras, DI-DEC007-3). Valores diferentes: o mesmo
+    // favorecido, valor e competência seria duplicidade suspeita (DI-DEC007-4).
+    for (const amount of [99, 99.5, 100, 100.5, 101]) {
+      const historico = await createEntry(transaction, { amount, bankAccountId: account.id });
       await settleFinancialEntryWithApproval(tenant, historico.id, tenant.userId, transaction);
     }
 
@@ -373,7 +374,7 @@ test('M4-21 pagamento 3x acima da média histórica da conta é flagado, notific
     // nasce retido e chamar a regra de novo não duplica a retenção nem o caso.
     const flag = { flagged: suspeito.requiresManualReview, reason: suspeito.manualReviewReason };
     assert.equal(flag.flagged, true);
-    assert.match(flag.reason, /média histórica/);
+    assert.match(flag.reason, /9\.0x a mediana \(100\.00\)/);
 
     const reloaded = await FinancialEntry.findByPk(suspeito.id, { transaction });
     assert.equal(reloaded.requiresManualReview, true);

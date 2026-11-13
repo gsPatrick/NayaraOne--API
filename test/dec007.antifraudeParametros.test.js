@@ -2,9 +2,9 @@
 
 // DEC-007 (Maturacao/demandas/decisoes.csv) — números do antifraude do Marco 4 §17, que o livro lista sem valores: duplicidade 90 dias; conta nova 48 h e
 // R$ 5.000,00; múltiplo 3,0 revisa e 10,0 bloqueia; fornecedor novo 30 dias e R$ 20.000,00; conciliação manual 5 em 7 dias ou 30% no mês; estorno frequente
-// 3 por usuário e 5 por empresa em 30 dias (empresa fica em 3, a regra que já existia: falha segura, DI-DEC007-1). Cada número é parâmetro da tela de
-// Configurações; o teste prova o padrão, a fronteira, que mudar o parâmetro muda o resultado e a falha segura. Serviço real, empresa isolada do banco
-// descartável, cada teste numa transação desfeita no fim.
+// 3 por usuário e 5 por empresa em 30 dias (DI-DEC007-2). Cada número é parâmetro da tela de Configurações, que vale sempre dentro da faixa do catálogo;
+// o teste prova o padrão, a fronteira, que mudar o parâmetro muda o resultado e a falha segura. Níveis de risco da M4-D022/M4-D006 (DI-DEC007-6).
+// Serviço real, empresa isolada do banco descartável, cada teste numa transação desfeita no fim.
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
@@ -24,7 +24,6 @@ const paymentIntentsService = require('../src/modules/finance/application/servic
 const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const { KEYS, FINANCE_SETTINGS_DEFAULTS, FINANCE_SETTINGS_SCHEMA } = require('../src/modules/finance/application/services/finance-settings');
 const { AnomalyCase, FinancialEntry, TenantSetting, Reconciliation, User } = require('../src/models');
-const { seedFinanceAntifraudRules } = require('../scripts/seedFinanceAntifraudRules');
 
 let tenant;
 let costCenterId;
@@ -72,14 +71,14 @@ test('dec007_padroes_do_catalogo_e_faixas: padrões da DEC-007 no dicionário e 
   assert.deepEqual(
     [KEYS.newAccountThreshold, KEYS.bankAccountCooldownHours, KEYS.historyMultiplier, KEYS.outlierBlockMultiplier, KEYS.duplicateWindowDays, KEYS.newSupplierDays,
       KEYS.newSupplierMinAmount, KEYS.manualReconciliationUser7d, KEYS.manualReconciliationMonthPct, KEYS.frequentReversalUser30d, KEYS.frequentReversalCompany30d,
-      KEYS.manualReconciliationMinCount, KEYS.manualReconciliationWindowDays].map((k) => FINANCE_SETTINGS_DEFAULTS[k]),
-    [5000, 48, 3, 10, 90, 30, 20000, 5, 30, 3, 3, 3, 30]
+      KEYS.manualReconciliationMinCount, KEYS.manualReconciliationWindowDays, KEYS.outlierMinSample, KEYS.outlierHistoryMonths].map((k) => FINANCE_SETTINGS_DEFAULTS[k]),
+    [5000, 48, 3, 10, 90, 30, 20000, 5, 30, 3, 5, 3, 30, 5, 12]
   );
   await rollback(async (t) => {
     const th = await antifraud.resolveAntifraudThresholds(tenant, t);
     assert.deepEqual(
-      [th.newAccountThreshold, th.cooldownHours, th.historyMultiplier, th.outlierBlockMultiplier, th.duplicateWindowDays, th.newSupplierDays, th.newSupplierMinAmount, th.ruleVersionId],
-      [5000, 48, 3, 10, 90, 30, 20000, null]
+      [th.newAccountThreshold, th.cooldownHours, th.historyMultiplier, th.outlierBlockMultiplier, th.duplicateWindowDays, th.newSupplierDays, th.newSupplierMinAmount, th.outlierMinSample, th.outlierHistoryMonths],
+      [5000, 48, 3, 10, 90, 30, 20000, 5, 12]
     );
   });
   const bad = [[KEYS.outlierBlockMultiplier, 0.5], [KEYS.outlierBlockMultiplier, 1001], [KEYS.duplicateWindowDays, 0], [KEYS.duplicateWindowDays, 366], [KEYS.duplicateWindowDays, 1.5],
@@ -105,36 +104,35 @@ test('dec007_conta_nova_5000: primeiro pagamento a conta sem histórico retém a
     assert.equal(below.requiresManualReview, false);
     const at = await payable(t, '5000.00', { bankAccountId: (await account(t)).id });
     assert.equal(at.requiresManualReview, true);
-    assert.match(at.manualReviewReason, /Primeiro pagamento desta conta bancária já no valor de 5000\.00 \(limite FIN-005 para conta sem histórico: 5000\.00\)/);
-    assert.deepEqual(await casesOf(t, at.id), ['AMOUNT_OUTLIER:HIGH']);
-    // Com a regra FIN-005 publicada o administrador decide o valor (sem ela, só vale o valor mais restritivo: dec007_falha_segura).
-    await seedFinanceAntifraudRules(tenant, t);
+    assert.match(at.manualReviewReason, /Primeiro pagamento desta conta bancária já no valor de 5000\.00 \(limite do antifraude para conta sem histórico: 5000\.00\)/);
+    assert.deepEqual(await casesOf(t, at.id), ['NEW_ACCOUNT_IMMEDIATE_PAYMENT:MEDIUM']);
+    // O administrador decide o valor pela tela, sem regra do Motor (DI-DEC007-2): mais frouxo que o padrão também vale.
     await setWithMfa(t, KEYS.newAccountThreshold, 6000);
     assert.equal((await payable(t, '5000.00', { bankAccountId: (await account(t)).id })).requiresManualReview, false, 'com o limite em 6.000, 5.000 passa');
     assert.equal((await payable(t, '6000.00', { bankAccountId: (await account(t)).id })).requiresManualReview, true, 'e 6.000 retém');
   });
 });
 
-test('dec007_multiplo_3_revisa_10_bloqueia: 3,0x retém para revisão (fluxo segue até a liquidação); 10,0x retém e bloqueia intenção e aprovação até a liberação', async () => {
+test('dec007_multiplo_3_revisa_10_bloqueia: 3,0x retém para revisão MEDIUM (fluxo segue até a liquidação); 10,0x HIGH retém e bloqueia intenção e aprovação até a liberação', async () => {
   await rollback(async (t) => {
     const acc = await account(t);
-    await settled(t, acc.id, ['1000.00', '1000.00']);
+    await settled(t, acc.id, ['1000.00', '1000.00', '1000.00', '1000.00', '1000.00']);
     assert.equal((await payable(t, '2999.99', { bankAccountId: acc.id })).requiresManualReview, false);
     const review = await payable(t, '3000.00', { bankAccountId: acc.id });
     assert.equal(review.requiresManualReview, true);
-    assert.deepEqual(await casesOf(t, review.id), ['AMOUNT_OUTLIER:HIGH']);
+    assert.deepEqual(await casesOf(t, review.id), ['AMOUNT_OUTLIER:MEDIUM']);
     await gate.evaluateAndAssertPreparable(review, t); // revisão: não bloqueia preparar (a liquidação continua presa até a revisão)
     const high = await payable(t, '9999.99', { bankAccountId: acc.id });
-    assert.deepEqual(await casesOf(t, high.id), ['AMOUNT_OUTLIER:HIGH']);
+    assert.deepEqual(await casesOf(t, high.id), ['AMOUNT_OUTLIER:MEDIUM']);
     const block = await payable(t, '10000.00', { bankAccountId: acc.id });
-    assert.deepEqual(await casesOf(t, block.id), ['AMOUNT_OUTLIER:CRITICAL']);
-    assert.match(block.manualReviewReason, /10\.0x a média histórica \(1000\.00\).*3x revisa, 10x bloqueia\)\. O pagamento fica bloqueado até a revisão/);
+    assert.deepEqual(await casesOf(t, block.id), ['AMOUNT_OUTLIER:HIGH']);
+    assert.match(block.manualReviewReason, /10\.0x a mediana \(1000\.00\).*3x revisa, 10x bloqueia\)\. O pagamento fica bloqueado até a revisão/);
     await rejectsWith(paymentIntentsService.createPaymentIntent({ financialEntryId: block.id }, tenant.userId, t), 'FINANCE_AMOUNT_OUTLIER_REVIEW_REQUIRED');
     await rejectsWith(approvalsService.createApprovalRequest({ ...base(), relatedEntityType: 'FinancialEntry', relatedEntityId: block.id, riskLevel: 'HIGH' }, tenant.userId, t), 'FINANCE_AMOUNT_OUTLIER_REVIEW_REQUIRED');
     const released = await antifraud.clearManualReview(block.id, users[1], t, 'Conferido com o fornecedor e a nota fiscal.');
     await gate.evaluateAndAssertPreparable(released, t); // liberado por uma pessoa, o fluxo segue
     await set(t, KEYS.outlierBlockMultiplier, 5);
-    assert.deepEqual(await casesOf(t, (await payable(t, '6000.00', { bankAccountId: acc.id })).id), ['AMOUNT_OUTLIER:CRITICAL'], 'bloqueio em 5x: 6x bloqueia');
+    assert.deepEqual(await casesOf(t, (await payable(t, '6000.00', { bankAccountId: acc.id })).id), ['AMOUNT_OUTLIER:HIGH'], 'bloqueio em 5x: 6x bloqueia');
   });
 });
 
@@ -147,7 +145,7 @@ test('dec007_duplicidade_90_dias: mesmo favorecido, valor e vencimento de pagame
     const twin = await payable(t, '700.00', { bankAccountId: acc.id, dueAt: '2027-03-10T12:00:00.000Z' }); // mesmo dia em São Paulo
     assert.equal(twin.requiresManualReview, true);
     assert.deepEqual(await casesOf(t, twin.id), ['DUPLICATE_PAYMENT_SUSPECT:HIGH']);
-    assert.match(twin.manualReviewReason, new RegExp(`lançamento ${first.id}.*últimos 90 dias`));
+    assert.match(twin.manualReviewReason, new RegExp(`lançamento ${first.id}.*mesmo vencimento.*últimos 90 dias`));
     await rejectsWith(gate.evaluateAndAssertPreparable(twin, t), 'FINANCE_DUPLICATE_PAYMENT_SUSPECT');
     assert.equal((await payable(t, '700.00', { bankAccountId: acc.id, dueAt: '2027-04-10T15:00:00.000Z' })).requiresManualReview, false, 'outro vencimento');
     assert.equal((await payable(t, '700.01', { bankAccountId: acc.id, dueAt: due })).requiresManualReview, false, 'outro valor');
@@ -200,14 +198,14 @@ async function reversible(t) {
 }
 const reversalCases = (t) => AnomalyCase.findAll({ where: { caseType: 'FREQUENT_REVERSAL', status: 'OPEN' }, transaction: t });
 
-test('dec007_estorno_frequente_usuario_3_empresa_3_em_30_dias: a 3ª pela mesma pessoa abre caso; 3 de pessoas diferentes também (empresa); o parâmetro da empresa muda o resultado', async () => {
+test('dec007_estorno_frequente_usuario_3_empresa_5_em_30_dias: a 3ª pela mesma pessoa abre caso MEDIUM; 5 de pessoas diferentes também (empresa); o parâmetro da empresa muda o resultado', async () => {
   await rollback(async (t) => {
     await set(t, KEYS.frequentReversalCompany30d, 100);
     for (let i = 0; i < 2; i += 1) await receiptService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[0], t);
     assert.equal((await reversalCases(t)).length, 0);
     await receiptService.reverseFinancialEntry((await reversible(t)).id, 'estorno 3', users[0], t);
     const [one] = await reversalCases(t);
-    assert.equal(one.riskLevel, 'HIGH');
+    assert.equal(one.riskLevel, 'MEDIUM');
     assert.match(one.reason, new RegExp(`3 estornos feitos pela mesma pessoa \\(usuário ${users[0]}\\) nos últimos 30 dias \\(limiar 3\\)`));
   });
   await rollback(async (t) => {
@@ -222,8 +220,10 @@ test('dec007_estorno_frequente_usuario_3_empresa_3_em_30_dias: a 3ª pela mesma 
   });
   await rollback(async (t) => {
     await set(t, KEYS.frequentReversalUser30d, 100);
-    for (let i = 0; i < 3; i += 1) await receiptService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[i], t);
-    assert.equal((await reversalCases(t)).length, 1, 'padrão da empresa = 3 (regra que já existia, falha segura)');
+    for (let i = 0; i < 4; i += 1) await receiptService.reverseFinancialEntry((await reversible(t)).id, `estorno ${i}`, users[i % 3], t);
+    assert.equal((await reversalCases(t)).length, 0, 'padrão da empresa = 5 (DEC-007): 4 estornos não abrem caso');
+    await receiptService.reverseFinancialEntry((await reversible(t)).id, 'estorno 5', users[0], t);
+    assert.equal((await reversalCases(t)).length, 1, 'o 5º abre');
   });
 });
 
@@ -275,7 +275,7 @@ test('dec007_conciliacao_manual_5_por_usuario_em_7_dias_ou_mais_de_30_por_cento_
   });
 });
 
-test('dec007_falha_segura: valor gravado ilegível vira o padrão; sem regra publicada o valor gravado só vale se for mais restritivo', async () => {
+test('dec007_falha_segura: valor gravado ilegível vira o padrão; o valor gravado válido vale, mais restritivo ou mais frouxo (DI-DEC007-2)', async () => {
   await rollback(async (t) => {
     await TenantSetting.create({ ...base(), key: KEYS.newAccountThreshold, value: 'abc' }, { transaction: t });
     await TenantSetting.create({ ...base(), key: KEYS.outlierBlockMultiplier, value: 'x' }, { transaction: t });
@@ -287,7 +287,7 @@ test('dec007_falha_segura: valor gravado ilegível vira o padrão; sem regra pub
     await setWithMfa(t, KEYS.newAccountThreshold, 50000); // mais frouxo que o padrão
     await setWithMfa(t, KEYS.bankAccountCooldownHours, 12);
     const loose = await antifraud.resolveAntifraudThresholds(tenant, t);
-    assert.deepEqual([loose.newAccountThreshold, loose.cooldownHours], [5000, 48], 'regra FIN-005 não publicada: o valor mais frouxo não vale');
+    assert.deepEqual([loose.newAccountThreshold, loose.cooldownHours], [50000, 12], 'o valor mais frouxo gravado pela tela vale, sem regra do Motor');
     await set(t, KEYS.newAccountThreshold, 1000, users[0]);
     await set(t, KEYS.bankAccountCooldownHours, 72, users[0]);
     const strict = await antifraud.resolveAntifraudThresholds(tenant, t);

@@ -467,18 +467,12 @@ function validateAgainstSchema(key, value) {
   }
 
   if (spec.type === 'number' || spec.type === 'integer') {
-    if (typeof value !== 'number' || Number.isNaN(value)) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser numérico.`, 'SETTING_INVALID_VALUE', { key });
-    }
-    if (spec.type === 'integer' && !Number.isInteger(value)) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser um número inteiro.`, 'SETTING_INVALID_VALUE', { key });
-    }
-    if (spec.min !== undefined && value < spec.min) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser >= ${spec.min}.`, 'SETTING_INVALID_VALUE', { key });
-    }
-    if (spec.max !== undefined && value > spec.max) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser <= ${spec.max}.`, 'SETTING_INVALID_VALUE', { key });
-    }
+    // Chave com `label`/`invalidStatus` (antifraude, DI-DEC007-2): frase com o rótulo e a faixa, e o status do dono (422); demais chaves: 400 de antes.
+    const { invalidNumberValue } = require('./settingInvalidValue');
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser numérico.`);
+    if (spec.type === 'integer' && !Number.isInteger(value)) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser um número inteiro.`);
+    if (spec.min !== undefined && value < spec.min) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser >= ${spec.min}.`);
+    if (spec.max !== undefined && value > spec.max) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser <= ${spec.max}.`);
     return;
   }
 

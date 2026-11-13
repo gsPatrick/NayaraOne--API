@@ -4,8 +4,9 @@ const { AnomalyCase } = require('../../../../models');
 const { resolveAntifraudThresholds } = require('./finance-antifraud.service');
 
 // Anomalias abertas para o agente financeiro da camada de IA (M9-D036): somente leitura. Devolve os casos em aberto da empresa
-// (finance.anomaly_cases) e os limiares da regra FIN-005 em vigor (Motor de Regras, com os parâmetros do painel), para a resposta dizer com
-// que limite cada caso foi apontado.
+// (finance.anomaly_cases) e os limiares do antifraude em vigor, para a resposta dizer com que limite cada caso foi apontado. O identificador
+// 'FIN-005' continua sendo o nome do conjunto de limiares para a NAY (M9-D036); a origem é sempre a tela de Configurações (DEC-007, DI-DEC007-2),
+// sem versão de regra do Motor (ruleVersionId nulo).
 const LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 async function getOpenAnomalies(tenant, transaction, { limit }) {
@@ -17,7 +18,7 @@ async function getOpenAnomalies(tenant, transaction, { limit }) {
     generatedAt: new Date().toISOString(),
     source: 'finance.anomaly_cases',
     rule: {
-      code: 'FIN-005', ruleVersionId: thresholds.ruleVersionId || null, historyMultiplier: thresholds.historyMultiplier,
+      code: 'FIN-005', ruleVersionId: null, historyMultiplier: thresholds.historyMultiplier,
       newAccountThreshold: thresholds.newAccountThreshold, cooldownHours: thresholds.cooldownHours,
     },
     openCount: rows.length,

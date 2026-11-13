@@ -88,10 +88,10 @@ test('M4-§17.7 parâmetros: o administrador grava e lê o limiar e a janela da 
   assert.deepEqual(Object.fromEntries(listed.body.data.map((row) => [row.key, row.value])), { [MIN]: 2, [WINDOW]: 15 });
 });
 
-test('M4-§17.7 parâmetros: valor fora da faixa ou do tipo é recusado com 400 SETTING_INVALID_VALUE e o valor gravado não muda', async () => {
+test('M4-§17.7 parâmetros: valor fora da faixa ou do tipo é recusado com 422 SETTING_INVALID_VALUE (DI-DEC007-2) e o valor gravado não muda', async () => {
   for (const [key, value] of [[MIN, 0], [MIN, 101], [MIN, 2.5], [MIN, '3'], [MIN, -1], [WINDOW, 0], [WINDOW, 366], [WINDOW, 7.5], [WINDOW, null]]) {
     const res = await put(key, value);
-    assert.equal(res.status, 400, `${key}=${JSON.stringify(value)}: ${JSON.stringify(res.body)}`);
+    assert.equal(res.status, 422, `${key}=${JSON.stringify(value)}: ${JSON.stringify(res.body)}`);
     assert.equal(res.code, 'SETTING_INVALID_VALUE', `${key}=${JSON.stringify(value)}`);
   }
   assert.equal(await read(MIN), 2);
@@ -126,10 +126,11 @@ test('M4-§17.7 parâmetros: as demais chaves do Financeiro (antifraude e AUTO_S
     assert.equal(res.status, 200, `${key}=${JSON.stringify(value)}: ${JSON.stringify(res.body)}`);
     assert.equal(await read(key), value);
   }
-  const bad = [[KEYS.bankAccountCooldownHours, 721], [KEYS.bankAccountCooldownHours, -1], [KEYS.historyMultiplier, 0.5], [KEYS.historyMultiplier, 101], [KEYS.newAccountThreshold, -1], [KEYS.reconciliationAutoStrong, 'sim']];
-  for (const [key, value] of bad) {
+  // Antifraude (DI-DEC007-2): 422 com a frase do rótulo; a chave booleana da conciliação automática continua com o 400 de antes.
+  const bad = [[KEYS.bankAccountCooldownHours, 721, 422], [KEYS.bankAccountCooldownHours, -1, 422], [KEYS.historyMultiplier, 0.5, 422], [KEYS.historyMultiplier, 101, 422], [KEYS.newAccountThreshold, -1, 422], [KEYS.reconciliationAutoStrong, 'sim', 400]];
+  for (const [key, value, status] of bad) {
     const res = await put(key, value);
-    assert.equal(res.status, 400, `${key}=${JSON.stringify(value)}`);
+    assert.equal(res.status, status, `${key}=${JSON.stringify(value)}`);
     assert.equal(res.code, 'SETTING_INVALID_VALUE', `${key}=${JSON.stringify(value)}`);
   }
   assert.equal((await put(KEYS.reconciliationAutoStrong, true, semPermissao)).code, 'PERMISSION_DENIED');

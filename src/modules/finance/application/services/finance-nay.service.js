@@ -3,7 +3,6 @@
 const { sequelize, CostCenter } = require('../../../../models');
 const { recordRuleRun } = require('../../../../features/ai/orchestrator/runs');
 const { getWeeklyHealthReport } = require('./finance-health.service');
-const { resolveAntifraudThresholds } = require('./finance-antifraud.service');
 const { startOfBusinessDay } = require('../../../../utils/businessDate');
 
 /**
@@ -137,7 +136,6 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
   const { current, previous } = monthBounds(now);
 
   const report = await getWeeklyHealthReport(transaction, { companyId: tenant.companyId, now });
-  const thresholds = await resolveAntifraudThresholds(tenant, transaction);
   const realized = await realizedByMonth(transaction, [current, previous]);
   const growth = await costCenterGrowth(transaction, [current, previous]);
   const overdueReceivables = await openEntries(transaction, 'RECEIVABLE', startToday);
@@ -227,7 +225,7 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
     tabelas: ['finance.financial_entries', 'finance.bank_transactions', 'finance.reconciliations', 'finance.bank_accounts', 'finance.commissions', 'finance.owner_repasses', 'finance.anomaly_cases', 'finance.cost_centers'],
     readModel: 'finance.weeklyHealthReport',
     sourceSnapshotAt: report.generatedAt,
-    regras: [{ codigo: 'FIN-005', ruleVersionId: thresholds.ruleVersionId || null, origem: thresholds.ruleVersionId ? 'Motor de Regras' : 'padrão (regra não publicada)' }],
+    regras: [{ codigo: 'FIN-005', ruleVersionId: null, origem: 'parâmetros do antifraude na tela de Configurações (DEC-007)' }],
   };
 
   const aiRun = await recordRuleRun(

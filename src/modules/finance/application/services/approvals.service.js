@@ -48,7 +48,7 @@ async function createApprovalRequest(payload, actorUserId, transaction) {
   }
   const relatedEntityForCheck = await RelatedModel.findOne({ where: { id: relatedEntityId, companyId }, transaction });
   if (!relatedEntityForCheck) throw AppError.notFound('A entidade a ser aprovada não foi encontrada nesta empresa.', 'FINANCE_APPROVAL_RELATED_ENTITY_NOT_FOUND');
-  if (relatedEntityType === 'FinancialEntry') await require('./payment-anomaly-gate').evaluateAndAssertPreparable(relatedEntityForCheck, transaction); // §17 + DEC-007 (achado bloqueante)
+  if (relatedEntityType === 'FinancialEntry') await require('./payment-anomaly-gate').evaluateAndAssertPreparable(relatedEntityForCheck, transaction, actorUserId); // §17 + DEC-007 (achado bloqueante; DI-DEC007-5)
 
   let existingPending = await ApprovalRequest.findOne({
     where: { relatedEntityType, relatedEntityId, status: 'PENDING' },

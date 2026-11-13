@@ -277,7 +277,7 @@ async function reverseFinancialEntry(id, reasonText, actorUserId, transaction, o
         groupId: original.groupId,
         companyId: original.companyId,
         caseType: 'FREQUENT_REVERSAL',
-        riskLevel: 'HIGH',
+        riskLevel: 'MEDIUM', // M4-D006 item 9 e M4-D022 item 8: FREQUENT_REVERSALS MEDIUM (DI-DEC007-6)
         relatedEntityType: 'FinancialEntry',
         relatedEntityId: original.id,
         reason: reversalAlert.reason,
