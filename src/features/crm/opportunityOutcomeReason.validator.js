@@ -1,90 +1,62 @@
 'use strict';
 
 const AppError = require('../../utils/AppError');
+const { readOutcomeReasonCatalog } = require('./crm.params');
+const { parseReasonList, DEFAULT_WON_REASONS, DEFAULT_LOST_REASONS, DEFAULT_WITHDRAWAL_REASONS } = require('./crm.settings');
 
 /**
- * M3-12 — Motivos ESTRUTURADOS de ganho, perda e desistência.
+ * M3-12 / CRMX-013 — motivos ESTRUTURADOS de ganho, perda e desistência (livro §3 crm.loss_reasons; Guia §8 "LOST sem reason
+ * não fecha"). As listas são parâmetros da empresa (crm.motivos.ganho / .perda / .desistencia, DI-M3CA-2), com os padrões abaixo.
+ * Desistência é LOST com motivo da categoria desistência (o livro §10 não tem estágio próprio; DI-M3CA-3): o código vai para
+ * lost_reason e também para withdrawn_reason, que marca a categoria do desfecho.
  *
- * PROBLEMA: `Opportunity.lostReason` era TEXT livre, sem validação nenhuma. Cada corretor
- * escrevia o motivo com palavras diferentes ("caro", "achou caro", "preço"), então o painel
- * (M3-17) não conseguia agregar "motivos de perda mais comuns" de forma confiável, e ganho e
- * desistência simplesmente não tinham motivo nenhum.
- *
- * DECISÃO DE ENGENHARIA — DOCUMENTADA PORQUE NÃO ESTAVA LITERALMENTE EXPLICITADA NO CADERNO
- * CURRENT (Marco 3): a lista exata de motivos abaixo foi definida por nós. É um enum FECHADO
- * por categoria de desfecho, com um 'OTHER' em cada categoria como válvula de escape (evita
- * travar o corretor quando o motivo real não está na lista, sem reabrir o texto livre).
- *
- * Também DECIDIMOS modelar "desistência" como um novo STAGE terminal `WITHDRAWN` (e não como
- * um flag booleano à parte): `stage` já é o campo que representa o estado da oportunidade no
- * funil, então manter UMA dimensão de estado é o modelo mais simples e mantém painel e
- * listagens coerentes automaticamente. `WITHDRAWN` entra em CLOSED_STAGES
- * (opportunityNextAction.validator.js): não exige nextAction e preenche closed_at.
- *
- * A validação é de APLICAÇÃO (não CHECK constraint no banco) pelo mesmo motivo já documentado
- * em opportunityNextAction.validator.js: `stage` é string livre (funil configurável por tenant
- * no futuro), então a regra "qual motivo vale para qual desfecho" pertence à camada que
- * conhece o funil. Dados legados em `lost_reason` (texto livre gravado antes desta regra)
- * continuam legíveis — a validação só vale para gravações novas.
+ * Regra do motivo (CRMX-005 e CRM-TS-008): ao ENTRAR num estágio de desfecho, o motivo precisa vir no pedido; o motivo de um
+ * desfecho anterior (a oportunidade foi reaberta) nunca fecha a oportunidade de novo sozinho. Reeditar uma oportunidade que já
+ * está no desfecho, sem mexer no motivo, mantém o motivo gravado.
  */
 
-const WON_REASONS = ['PRICE_ACCEPTED', 'FAST_DECISION', 'REFERRAL', 'OTHER'];
-const LOST_REASONS = ['PRICE_TOO_HIGH', 'COMPETITOR', 'FINANCING_DENIED', 'LOCATION', 'OTHER'];
-const WITHDRAWN_REASONS = ['CLIENT_GAVE_UP', 'NO_RESPONSE', 'CHANGED_MIND', 'OTHER'];
+const codesOf = (text) => parseReasonList(text).map((r) => r.code);
+const WON_REASONS = Object.freeze(codesOf(DEFAULT_WON_REASONS));
+const LOST_REASONS = Object.freeze(codesOf(DEFAULT_LOST_REASONS));
+const WITHDRAWN_REASONS = Object.freeze(codesOf(DEFAULT_WITHDRAWAL_REASONS));
+const OUTCOME_STAGES = Object.freeze(['WON', 'LOST']);
 
-const OUTCOME_REASONS = {
-  CLOSED_WON: { field: 'wonReason', allowed: WON_REASONS, label: 'ganho' },
-  CLOSED_LOST: { field: 'lostReason', allowed: LOST_REASONS, label: 'perda' },
-  WITHDRAWN: { field: 'withdrawnReason', allowed: WITHDRAWN_REASONS, label: 'desistência' },
-};
+const normalize = (value) => (value === undefined || value === null ? null : String(value).trim().toUpperCase() || null);
 
-const OUTCOME_STAGES = Object.keys(OUTCOME_REASONS);
-
-function isOutcomeStage(stage) {
-  return OUTCOME_STAGES.includes(String(stage || '').toUpperCase());
+function refuse(code, message, details) {
+  throw AppError.unprocessable(message, code, details);
 }
 
 /**
- * assertOutcomeReason — regra dura: toda oportunidade que entra num estágio de DESFECHO
- * (CLOSED_WON / CLOSED_LOST / WITHDRAWN) precisa carregar o motivo correspondente, e esse
- * motivo precisa pertencer ao enum daquele desfecho. Lança 422 se violada.
- *
- * Retorna o motivo NORMALIZADO (upper case) quando válido, ou null quando o stage não é de
- * desfecho (nada a validar).
+ * resolveOutcomeReason — devolve null (estágio não é desfecho) ou { stage, wonReason, lostReason, withdrawnReason } com os
+ * valores a gravar. `entering` = o pedido está levando a oportunidade para este desfecho agora. `current` = valores gravados.
+ * `withdrawal` = a entrada pediu WITHDRAWN (o motivo tem de ser de desistência).
  */
-function assertOutcomeReason({ stage, wonReason, lostReason, withdrawnReason }) {
-  const normalizedStage = String(stage || '').toUpperCase();
-  const spec = OUTCOME_REASONS[normalizedStage];
-  if (!spec) return null;
+async function resolveOutcomeReason({ stage, entering, withdrawal = false, input = {}, current = {} }, tenant, transaction) {
+  if (!OUTCOME_STAGES.includes(stage)) return null;
+  const catalog = await readOutcomeReasonCatalog(tenant, transaction);
 
-  const rawValue = { wonReason, lostReason, withdrawnReason }[spec.field];
-  const value = rawValue === undefined || rawValue === null ? null : String(rawValue).trim().toUpperCase();
-
-  if (!value) {
-    throw AppError.unprocessable(
-      `Fechar uma oportunidade como "${normalizedStage}" exige o motivo de ${spec.label} em "${spec.field}" (um de: ${spec.allowed.join(', ')}).`,
-      'OPPORTUNITY_OUTCOME_REASON_REQUIRED',
-      { stage: normalizedStage, field: spec.field, allowed: spec.allowed }
-    );
+  if (stage === 'WON') {
+    const value = normalize(input.wonReason) || (entering ? null : normalize(current.wonReason));
+    const allowed = catalog.won.map((r) => r.code);
+    if (!value) refuse('OPPORTUNITY_OUTCOME_REASON_REQUIRED', `Fechar como ganha (WON) exige o motivo de ganho em "wonReason" (um de: ${allowed.join(', ')}).`, { stage, field: 'wonReason', allowed });
+    if (!allowed.includes(value)) refuse('OPPORTUNITY_OUTCOME_REASON_INVALID', `O motivo "${value}" não é um motivo de ganho desta empresa. Use um de: ${allowed.join(', ')}.`, { stage, field: 'wonReason', allowed, received: value });
+    return { stage, wonReason: value };
   }
 
-  if (!spec.allowed.includes(value)) {
-    throw AppError.unprocessable(
-      `O motivo "${rawValue}" não é um motivo de ${spec.label} válido. Use um de: ${spec.allowed.join(', ')}.`,
-      'OPPORTUNITY_OUTCOME_REASON_INVALID',
-      { stage: normalizedStage, field: spec.field, allowed: spec.allowed, received: rawValue }
-    );
+  const requested = normalize(input.lostReason) || normalize(input.withdrawnReason);
+  const value = requested || (entering ? null : normalize(current.lostReason));
+  const lossCodes = catalog.lost.map((r) => r.code);
+  const withdrawalCodes = catalog.withdrawal.map((r) => r.code);
+  const allowed = withdrawal ? withdrawalCodes : [...lossCodes, ...withdrawalCodes];
+  if (!value) refuse('OPPORTUNITY_OUTCOME_REASON_REQUIRED', `Marcar como perdida (LOST) exige o motivo em "lostReason" (um de: ${allowed.join(', ')}).`, { stage, field: 'lostReason', allowed });
+  if (!allowed.includes(value)) {
+    const what = withdrawal ? 'de desistência' : 'de perda ou de desistência';
+    refuse('OPPORTUNITY_OUTCOME_REASON_INVALID', `O motivo "${value}" não é um motivo ${what} desta empresa. Use um de: ${allowed.join(', ')}.`, { stage, field: 'lostReason', allowed, received: value });
   }
-
-  return { field: spec.field, value };
+  const isWithdrawal = !lossCodes.includes(value) && withdrawalCodes.includes(value);
+  const keepCategory = !requested && current.withdrawnReason; // reedição sem motivo novo: a categoria gravada continua
+  return { stage, lostReason: value, withdrawnReason: isWithdrawal ? value : keepCategory ? current.withdrawnReason : null };
 }
 
-module.exports = {
-  WON_REASONS,
-  LOST_REASONS,
-  WITHDRAWN_REASONS,
-  OUTCOME_REASONS,
-  OUTCOME_STAGES,
-  isOutcomeStage,
-  assertOutcomeReason,
-};
+module.exports = { WON_REASONS, LOST_REASONS, WITHDRAWN_REASONS, OUTCOME_STAGES, resolveOutcomeReason };

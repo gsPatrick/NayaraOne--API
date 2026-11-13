@@ -12,7 +12,9 @@
  */
 const MAPA = {
   NOVO: 'NEW', CONTATO: 'QUALIFIED', VISITA: 'VISIT_SCHEDULED', PROPOSTA: 'PROPOSAL', QUALIFYING: 'QUALIFIED', VISIT: 'VISIT_SCHEDULED',
-  NEGOTIATION: 'PROPOSAL', GANHO: 'CLOSED_WON', WON: 'CLOSED_WON', PERDIDO: 'CLOSED_LOST', LOST: 'CLOSED_LOST',
+  // DI-M3CA-3 (11/11/2026): o funil grava os códigos do livro WON e LOST; GANHO/PERDIDO vão direto para eles e WON/LOST já são do
+  // livro (não são convertidos). A 20261111031001 converte o que esta migration gravou antes como CLOSED_WON/CLOSED_LOST.
+  NEGOTIATION: 'PROPOSAL', GANHO: 'WON', PERDIDO: 'LOST',
 };
 
 module.exports = {
@@ -25,7 +27,7 @@ module.exports = {
       await q('ALTER TABLE audit.audit_log NO FORCE ROW LEVEL SECURITY');
       try {
         for (const [antigo, livro] of Object.entries(MAPA)) {
-          const terminal = livro === 'CLOSED_WON' || livro === 'CLOSED_LOST';
+          const terminal = livro === 'WON' || livro === 'LOST';
           const [linhas] = await q(
             `UPDATE crm.opportunities o SET stage = :livro, closed_at = ${terminal ? 'COALESCE(o.closed_at, o.updated_at)' : 'o.closed_at'}, updated_at = now()
                FROM (SELECT id, stage AS antes, closed_at AS antes_fechamento FROM crm.opportunities WHERE upper(btrim(stage)) = :antigo FOR UPDATE) v

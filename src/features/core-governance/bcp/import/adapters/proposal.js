@@ -11,16 +11,16 @@ const { findOrCreatePerson } = require('../people');
 const { resolveRef } = require('../refs');
 const normalize = require('../normalize');
 
-const CLOSED = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
+const { CLOSED_STAGE_CODES: CLOSED } = require('../../../../crm/opportunityStages');
 
 /** Oportunidade aberta do proponente no imóvel, ou uma nova (pelo serviço normal), onde a proposta se pendura. */
-async function ensureOpportunity({ tenant, actorUserId, operation, person, property }, transaction) {
+async function ensureOpportunity({ tenant, actorUserId, operation, person, property, nextAction }, transaction) {
   const open = await Opportunity.findOne({ where: { personId: person.id, propertyId: property.id, stage: { [Op.notIn]: CLOSED } }, order: [['created_at', 'DESC']], transaction });
   if (open) return { opportunity: open, created: false };
   const hours = Number(await getSetting(IMPORT_LEAD_HOURS_KEY, tenant, transaction, BCP_SETTING_DEFAULTS[IMPORT_LEAD_HOURS_KEY]));
   const opportunity = await createOpportunity({
     groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, ownerUserId: actorUserId, stage: 'NEW',
-    nextAction: `Acompanhar a proposta de locação do formulário ${operation.manualReference}`, nextActionDueAt: new Date(Date.now() + hours * 3600 * 1000),
+    nextAction: nextAction || `Acompanhar a proposta de locação do formulário ${operation.manualReference}`, nextActionDueAt: new Date(Date.now() + hours * 3600 * 1000),
   }, actorUserId, transaction);
   return { opportunity, created: true };
 }
@@ -54,4 +54,4 @@ async function reverse({ actorUserId, effect, transaction }) {
   if (effect.personId) await deletePerson(effect.personId, actorUserId, transaction);
 }
 
-module.exports = { action: 'REGISTER_PROPOSAL', execute, reverse };
+module.exports = { action: 'REGISTER_PROPOSAL', execute, reverse, ensureOpportunity };

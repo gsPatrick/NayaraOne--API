@@ -154,13 +154,13 @@ test('Marco 3 ponta a ponta via HTTP real: pessoa -> merge -> imóvel -> 2 ofert
   assert.equal(message.status, 201, JSON.stringify(message.body));
   createdMessageIds.push(message.body.data.id);
 
-  // 7. Marcar CLOSED_LOST com motivo (CRM-TS-008, via rota HTTP real de update).
+  // 7. Marcar LOST com motivo (CRM-TS-008, via rota HTTP real de update).
   const lost = await http('PATCH', `/opportunities/${opportunity.body.data.id}`, {
-    stage: 'CLOSED_LOST',
+    stage: 'LOST',
     lostReason: 'PRICE_TOO_HIGH',
   });
   assert.equal(lost.status, 200, JSON.stringify(lost.body));
-  assert.equal(lost.body.data.stage, 'CLOSED_LOST');
+  assert.equal(lost.body.data.stage, 'LOST');
 
   // 8. Criar radar vinculado à pessoa.
   const radar = await http('POST', '/radar', {
@@ -189,7 +189,7 @@ test('Marco 3 HTTP real: LOST sem motivo é bloqueado pela rota real (CRM-TS-008
   assert.equal(opportunity.status, 201);
   createdOpportunityIds.push(opportunity.body.data.id);
 
-  const lostNoReason = await http('PATCH', `/opportunities/${opportunity.body.data.id}`, { stage: 'CLOSED_LOST' });
-  assert.ok(lostNoReason.status >= 400, 'CLOSED_LOST sem motivo deveria ser rejeitado pela rota HTTP real');
+  const lostNoReason = await http('PATCH', `/opportunities/${opportunity.body.data.id}`, { stage: 'LOST' });
+  assert.ok(lostNoReason.status >= 400, 'LOST sem motivo deveria ser rejeitado pela rota HTTP real');
   assert.equal(lostNoReason.body?.error?.code, 'OPPORTUNITY_OUTCOME_REASON_REQUIRED');
 });

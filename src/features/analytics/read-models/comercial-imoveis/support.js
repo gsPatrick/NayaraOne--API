@@ -10,7 +10,7 @@ const { readComercialParams } = require('../comercial.settings');
 /** Sem corretor atribuído: UUID zero na chave (nunca NULL na chave única), como o "sem setor" do Financeiro (DI-D616-1). */
 const NO_BROKER = '00000000-0000-0000-0000-000000000000';
 /** Estágios terminais (CLOSED_LIKE_STAGES de crm/dashboard.service.js): não entram nas contagens de "em andamento". */
-const CLOSED_STAGES = Object.freeze(['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN']);
+const CLOSED_STAGES = Object.freeze(['WON', 'LOST', 'WITHDRAWN']);
 const brokerExpr = (col) => `COALESCE(${col}, CAST('${NO_BROKER}' AS uuid))`;
 
 async function params(scope, transaction) {

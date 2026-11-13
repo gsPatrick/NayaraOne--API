@@ -3,8 +3,10 @@
 const { Opportunity, Person, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { CLOSED_STAGES, assertNextActionWhenActive } = require('./opportunityNextAction.validator');
-const { normalizeStage, canonicalStage, DEFAULT_STAGE } = require('./opportunityStages');
-const { assertOutcomeReason } = require('./opportunityOutcomeReason.validator');
+const { normalizeStage, canonicalStage, DEFAULT_STAGE, isWithdrawalRequest } = require('./opportunityStages');
+const { resolveOutcomeReason } = require('./opportunityOutcomeReason.validator');
+const { resolveOwnerUserId, assertResponsibleUser } = require('./crmUsers');
+const { cancelPendingTasks } = require('./opportunityTaskCancellation');
 const {
   publishOpportunityCreated,
   publishOpportunityStageChanged,
@@ -55,9 +57,15 @@ async function createOpportunity(payload, actorUserId, transaction) {
   }
 
   assertNextActionWhenActive({ stage: normalizedStage, nextAction, nextActionDueAt });
-  // M3-12: se já nasce num estágio de desfecho (CLOSED_WON/CLOSED_LOST/WITHDRAWN), o motivo
-  // estruturado é obrigatório e precisa pertencer ao enum daquele desfecho.
-  const outcome = assertOutcomeReason({ stage: normalizedStage, wonReason, lostReason, withdrawnReason });
+  const tenant = { groupId, companyId };
+  // M3-12: se já nasce num estágio de desfecho (WON/LOST), o motivo estruturado é obrigatório e precisa estar na lista da empresa.
+  const outcome = await resolveOutcomeReason(
+    { stage: normalizedStage, entering: true, withdrawal: isWithdrawalRequest(stage), input: { wonReason, lostReason, withdrawnReason } },
+    tenant,
+    transaction
+  );
+  // Guia §7 assertResponsibleUser / CRMX-006: toda oportunidade tem responsável (DI-M3CA-1).
+  const resolvedOwnerUserId = await resolveOwnerUserId({ ownerUserId, actorUserId }, tenant, transaction);
 
   const opportunity = await Opportunity.create(
     {
@@ -65,15 +73,15 @@ async function createOpportunity(payload, actorUserId, transaction) {
       companyId,
       personId,
       propertyId: propertyId || null,
-      ownerUserId: ownerUserId || null,
+      ownerUserId: resolvedOwnerUserId,
       stage: normalizedStage,
       temperature: temperature ? String(temperature).toUpperCase() : null,
       expectedValue: expectedValue !== undefined ? expectedValue : null,
       nextAction: nextAction || null,
       nextActionDueAt: nextActionDueAt || null,
-      wonReason: outcome && outcome.field === 'wonReason' ? outcome.value : null,
-      lostReason: outcome && outcome.field === 'lostReason' ? outcome.value : null,
-      withdrawnReason: outcome && outcome.field === 'withdrawnReason' ? outcome.value : null,
+      wonReason: outcome && outcome.wonReason ? outcome.wonReason : null,
+      lostReason: outcome && outcome.lostReason ? outcome.lostReason : null,
+      withdrawnReason: outcome && outcome.withdrawnReason ? outcome.withdrawnReason : null,
       closedAt: CLOSED_STAGES.includes(normalizedStage) ? new Date() : null,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -83,8 +91,8 @@ async function createOpportunity(payload, actorUserId, transaction) {
 
   await publishOpportunityCreated(opportunity, transaction);
   await publishOpportunityCreatedEvent(opportunity, transaction);
-  if (opportunity.stage === 'CLOSED_WON') await publishOpportunityWon(opportunity, transaction);
-  if (opportunity.stage === 'CLOSED_LOST') await publishOpportunityLost(opportunity, transaction);
+  if (opportunity.stage === 'WON') await publishOpportunityWon(opportunity, transaction);
+  if (opportunity.stage === 'LOST') await publishOpportunityLost(opportunity, transaction);
 
   await registrarAuditoria(
     {
@@ -161,15 +169,20 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
 
   assertNextActionWhenActive({ stage: nextStage, nextAction: nextNextAction, nextActionDueAt: nextNextActionDueAt });
 
-  // M3-12: ao MOVER para um estágio de desfecho, exige o motivo estruturado. O motivo pode
-  // vir no próprio payload ou já estar gravado (ex.: reeditar uma oportunidade já fechada sem
-  // reenviar o motivo) — por isso o fallback para o valor atual da entidade.
-  const outcome = assertOutcomeReason({
-    stage: nextStage,
-    wonReason: wonReason !== undefined ? wonReason : opportunity.wonReason,
-    lostReason: lostReason !== undefined ? lostReason : opportunity.lostReason,
-    withdrawnReason: withdrawnReason !== undefined ? withdrawnReason : opportunity.withdrawnReason,
-  });
+  const tenant = { groupId: opportunity.groupId, companyId: opportunity.companyId };
+  // M3-12 / CRM-TS-008: ao ENTRAR num desfecho o motivo tem de vir no pedido (o de um desfecho anterior não fecha de novo);
+  // reeditar a oportunidade que já está no desfecho mantém o motivo gravado.
+  const outcome = await resolveOutcomeReason(
+    {
+      stage: nextStage,
+      entering: nextStage !== previousStage,
+      withdrawal: stage !== undefined && isWithdrawalRequest(stage),
+      input: { wonReason, lostReason, withdrawnReason },
+      current: { wonReason: opportunity.wonReason, lostReason: opportunity.lostReason, withdrawnReason: opportunity.withdrawnReason },
+    },
+    tenant,
+    transaction
+  );
 
   if (temperature !== undefined) {
     if (temperature && !TEMPERATURES.includes(String(temperature).toUpperCase())) {
@@ -177,32 +190,26 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
     }
     opportunity.temperature = temperature ? String(temperature).toUpperCase() : null;
   }
-  if (ownerUserId !== undefined) opportunity.ownerUserId = ownerUserId;
+  // CRMX-006: o responsável troca, mas não some (nulo ou vazio é recusado); o novo precisa ser usuário ativo da empresa.
+  if (ownerUserId !== undefined) opportunity.ownerUserId = await assertResponsibleUser(ownerUserId, opportunity.companyId, transaction);
   if (expectedValue !== undefined) opportunity.expectedValue = expectedValue;
   if (nextAction !== undefined) opportunity.nextAction = nextAction;
   if (nextActionDueAt !== undefined) opportunity.nextActionDueAt = nextActionDueAt;
-  if (lostReason !== undefined) opportunity.lostReason = lostReason;
-  if (wonReason !== undefined) opportunity.wonReason = wonReason;
-  if (withdrawnReason !== undefined) opportunity.withdrawnReason = withdrawnReason;
-  // Grava o motivo já NORMALIZADO (upper case) do desfecho validado — garante que o painel
-  // (M3-17) agregue sempre sobre os mesmos valores canônicos.
-  if (outcome) opportunity[outcome.field] = outcome.value;
+  // Motivos só mudam junto com o desfecho validado (gravados normalizados, como o painel M3-17 agrega). CRMX-005: reabrir a
+  // oportunidade NÃO apaga o motivo do desfecho anterior; ele continua no registro e na linha do tempo (DI-M3CA-7).
+  if (outcome) {
+    if (outcome.wonReason !== undefined) opportunity.wonReason = outcome.wonReason;
+    if (outcome.lostReason !== undefined) {
+      opportunity.lostReason = outcome.lostReason;
+      opportunity.withdrawnReason = outcome.withdrawnReason;
+    }
+  }
   if (stage !== undefined) {
     opportunity.stage = nextStage;
     if (CLOSED_STAGES.includes(nextStage) && !opportunity.closedAt) {
       opportunity.closedAt = new Date();
     }
-    if (!CLOSED_STAGES.includes(nextStage)) {
-      // FIX (homologação 23/09/2026 — teste adversarial de Kanban): reabrir uma oportunidade
-      // fechada (ex.: Perdido -> Em Contato) já zerava `closedAt`, mas mantinha `wonReason`/
-      // `lostReason` preenchidos do fechamento anterior — distorcendo o painel de "motivo mais
-      // comum" (M3-17), que passava a contar motivo de um desfecho que não existe mais. Agora
-      // reabrir também limpa os dois campos, a menos que o próprio payload esteja setando um
-      // desfecho novo neste mesmo request (caso `outcome` acima já vá sobrescrever em seguida).
-      opportunity.closedAt = null;
-      if (!outcome || outcome.field !== 'wonReason') opportunity.wonReason = null;
-      if (!outcome || outcome.field !== 'lostReason') opportunity.lostReason = null;
-    }
+    if (!CLOSED_STAGES.includes(nextStage)) opportunity.closedAt = null;
   }
 
   opportunity.updatedBy = actorUserId || null;
@@ -210,8 +217,12 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
 
   if (stage !== undefined && nextStage !== previousStage) {
     await publishOpportunityStageChanged(opportunity, previousStage, transaction);
-    if (nextStage === 'CLOSED_WON') await publishOpportunityWon(opportunity, transaction);
-    if (nextStage === 'CLOSED_LOST') await publishOpportunityLost(opportunity, transaction);
+    if (nextStage === 'WON') await publishOpportunityWon(opportunity, transaction);
+    if (nextStage === 'LOST') {
+      await publishOpportunityLost(opportunity, transaction);
+      // Guia §8: markLost cancela as tarefas futuras na mesma transação (vale para toda via que marca LOST).
+      await cancelPendingTasks(opportunity, actorUserId, transaction, opportunity.lostReason);
+    }
   }
 
   const stageChanged = stage !== undefined && nextStage !== previousStage;

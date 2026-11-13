@@ -105,7 +105,7 @@ for (const model of ['rm_radar_matches', 'rm_broker_performance']) {
   test(`m9d633 ${model}: o rebuild reproduz o incremental`, async () => {
     const readModels = require('../../../src/features/analytics/read-models');
     const ctx = { groupId: env.cX.groupId, actorUserId: env.cX.userId, permissions: ['analytics:rebuild'], reason: 'Teste: tabela apagada e reconstruída da fonte.' };
-    const [opps] = await env.admin.query("SELECT id FROM crm.opportunities WHERE company_id = :c AND stage IN ('CLOSED_WON', 'CLOSED_LOST')", { replacements: { c: env.cX.companyId } });
+    const [opps] = await env.admin.query("SELECT id FROM crm.opportunities WHERE company_id = :c AND stage IN ('WON', 'LOST')", { replacements: { c: env.cX.companyId } });
     const [props] = await env.admin.query('SELECT id FROM real_estate.properties WHERE company_id = :c', { replacements: { c: env.cX.companyId } });
     const days = ['2026-09-20', '2026-10-08', '2026-10-09', '2026-10-10', '2026-10-12', '2026-10-13', '2026-10-28', '2026-10-29'];
     await asserts.assertRebuildEqualsIncremental({

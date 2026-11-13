@@ -4,6 +4,7 @@ const { Op } = require('sequelize');
 const { Message, Visit, Task, Proposal, AuditLog, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { RELATED_ENTITY_TYPE: TASK_RELATED_ENTITY_TYPE } = require('./opportunityTasks.service');
+const { canonicalStage } = require('./opportunityStages');
 
 /**
  * M3-19 — Timeline/interações omnichannel UNIFICADA de uma oportunidade.
@@ -44,7 +45,17 @@ const AUDIT_ACTION_TO_TYPE = {
 
 /** Dados do item da linha do tempo a partir da auditoria (antes/depois). */
 function auditItemData(type, entry, before, after) {
-  if (type === TYPES.STAGE_CHANGE) return { fromStage: before.stage || null, toStage: after.stage || null, reason: entry.reason };
+  if (type === TYPES.STAGE_CHANGE) {
+    return {
+      fromStage: before.stage || null,
+      toStage: after.stage || null,
+      reason: entry.reason,
+      // CRMX-005: o motivo de cada desfecho fica na linha do tempo para sempre, mesmo depois de a oportunidade ser reaberta.
+      wonReason: canonicalStage(after.stage) === 'WON' ? after.wonReason || null : null,
+      lostReason: canonicalStage(after.stage) === 'LOST' ? after.lostReason || null : null,
+      withdrawnReason: canonicalStage(after.stage) === 'LOST' ? after.withdrawnReason || null : null,
+    };
+  }
   if (type === TYPES.FINANCING_STATUS) {
     return { financingCaseId: after.financingCaseId || null, status: after.eventStatus || null, previousStatus: after.previousStatus || null, reason: entry.reason };
   }
@@ -98,7 +109,9 @@ async function getOpportunityTimeline(opportunityId, transaction, options = {}) 
     items.push({
       type: TYPES.MESSAGE,
       id: message.id,
-      occurredAt: createdAtOf(message),
+      // Guia §10 occurredAt: a interação entra na linha do tempo quando o contato aconteceu (registro feito depois do fato fica
+      // no lugar certo); mensagem antiga sem occurred_at usa a data de gravação.
+      occurredAt: message.occurredAt || createdAtOf(message),
       actorUserId: message.authorUserId || null,
       data: {
         channel: message.channel,

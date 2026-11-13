@@ -25,7 +25,7 @@ const KEYS = Object.freeze({
   maxNoBrokerPct: 'analytics.qualidade.max_oportunidade_sem_corretor_pct',
   stageOrder: 'analytics.comercial.ordem_estagios',
 });
-const DEFAULT_STAGE_ORDER = 'NEW,QUALIFIED,MATCHING,VISIT_SCHEDULED,VISITED,PROPOSAL,FINANCING,CONTRACT,NURTURE,CLOSED_WON,CLOSED_LOST,WITHDRAWN';
+const DEFAULT_STAGE_ORDER = 'NEW,QUALIFIED,MATCHING,VISIT_SCHEDULED,VISITED,PROPOSAL,FINANCING,CONTRACT,NURTURE,WON,LOST,WITHDRAWN';
 
 const CRM_KPI_DEFAULTS = Object.freeze({
   ...Object.fromEntries(CRM_KPI_CODES.map((code) => [OWNER_KEY(code), DEFAULT_OWNER])),

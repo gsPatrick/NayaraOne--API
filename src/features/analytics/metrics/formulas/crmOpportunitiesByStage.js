@@ -2,7 +2,7 @@
 
 /**
  * M9-D631 — KPI crm.opportunities_by_stage (Oportunidades por estágio), versão 1. Posição no fim do dia-base: contagem de oportunidades por estágio do
- * funil (as em aberto, do rm_crm_opportunity_stage, e os estágios terminais CLOSED_WON, CLOSED_LOST e WITHDRAWN fechados no mês de São Paulo da
+ * funil (as em aberto, do rm_crm_opportunity_stage, e os estágios terminais WON, LOST e WITHDRAWN fechados no mês de São Paulo da
  * data-base, do rm_crm_outcome), na ordem do funil (parâmetro stageOrder), e o tempo médio parado no estágio atual em dias (1 casa, meio para cima).
  * Entrada: { stages: [{ stage, brokerId, count, stalled, idleDays }], outcome: [{ brokerId, won, lost, withdrawn }] } (idleDays = soma dos dias
  * parados das oportunidades da linha). Regra de qualidade: oportunidade sem estágio -> DEGRADED, valor nulo.
@@ -10,7 +10,7 @@
 const money = require('./money');
 const { degraded, groupSum } = require('./_crmKpi');
 
-const TERMINALS = [['CLOSED_WON', 'won'], ['CLOSED_LOST', 'lost'], ['WITHDRAWN', 'withdrawn']];
+const TERMINALS = [['WON', 'won'], ['LOST', 'lost'], ['WITHDRAWN', 'withdrawn']];
 
 function rank(order) {
   const index = new Map((order || []).map((s, i) => [s, i]));
@@ -55,7 +55,7 @@ function compute(input, params = {}) {
 
 const stageRow = (stage, count, stalled = 0, idleDays = 0, brokerId = 'b1') => ({ stage, brokerId, count, stalled, idleDays });
 const out = (won, lost, withdrawn = 0, brokerId = 'b1') => ({ brokerId, won, lost, withdrawn });
-const ORDER = ['NEW', 'VISIT', 'PROPOSAL', 'CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
+const ORDER = ['NEW', 'VISIT', 'PROPOSAL', 'WON', 'LOST', 'WITHDRAWN'];
 const entry = (stage, count, stalled = '0', avgIdleDays = null) => ({ stage, count, stalled, avgIdleDays });
 const dims = (list, stalled, brokers) => [
   { key: 'paradas_qtd', value: stalled },
@@ -63,10 +63,10 @@ const dims = (list, stalled, brokers) => [
   ...brokers.map(([id, n]) => ({ key: `corretor:${id}`, value: n })),
 ];
 
-const emptyList = [entry('CLOSED_WON', '0'), entry('CLOSED_LOST', '0'), entry('WITHDRAWN', '0')];
-const singleList = [entry('NEW', '1', '0', '3.0'), entry('CLOSED_WON', '0'), entry('CLOSED_LOST', '0'), entry('WITHDRAWN', '0')];
-const typicalList = [entry('NEW', '20', '4', '5.5'), entry('VISIT', '38', '2', '2.0'), entry('PROPOSAL', '12', '0', '1.0'), entry('CLOSED_WON', '6'), entry('CLOSED_LOST', '14'), entry('WITHDRAWN', '0')];
-const roundList = [entry('NEW', '3', '0', '0.7'), entry('CLOSED_WON', '0'), entry('CLOSED_LOST', '0'), entry('WITHDRAWN', '0')];
+const emptyList = [entry('WON', '0'), entry('LOST', '0'), entry('WITHDRAWN', '0')];
+const singleList = [entry('NEW', '1', '0', '3.0'), entry('WON', '0'), entry('LOST', '0'), entry('WITHDRAWN', '0')];
+const typicalList = [entry('NEW', '20', '4', '5.5'), entry('VISIT', '38', '2', '2.0'), entry('PROPOSAL', '12', '0', '1.0'), entry('WON', '6'), entry('LOST', '14'), entry('WITHDRAWN', '0')];
+const roundList = [entry('NEW', '3', '0', '0.7'), entry('WON', '0'), entry('LOST', '0'), entry('WITHDRAWN', '0')];
 
 const testCases = [
   {
@@ -99,7 +99,7 @@ const testCases = [
     kind: 'rounding', name: 'estágio fora da ordem configurada vai depois dos conhecidos e em ordem alfabética', params: { stageOrder: ['NEW'] },
     input: { stages: [stageRow('ZETA', 1), stageRow('ALFA', 1), stageRow('NEW', 1)], outcome: [] },
     expected: (() => {
-      const list = [entry('NEW', '1', '0', '0.0'), entry('ALFA', '1', '0', '0.0'), entry('CLOSED_LOST', '0'), entry('CLOSED_WON', '0'), entry('WITHDRAWN', '0'), entry('ZETA', '1', '0', '0.0')];
+      const list = [entry('NEW', '1', '0', '0.0'), entry('ALFA', '1', '0', '0.0'), entry('LOST', '0'), entry('WITHDRAWN', '0'), entry('WON', '0'), entry('ZETA', '1', '0', '0.0')];
       return { value: '3', status: 'OK', details: { total: '3', stalled: '0', stages: list }, dimensions: dims(list, '0', [['b1', '3']]) };
     })(),
   },

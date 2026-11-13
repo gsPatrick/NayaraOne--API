@@ -20,7 +20,6 @@ require('../app');
 const { getSeedTenant, withTenantTransaction, uniqueSuffix, sequelize } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { FeedbackCase, OutboxEvent, AuditLog, Notification } = require('../src/models');
-const { MANAGER_PERMISSION } = require('../src/features/crm/feedbackCaseOpening');
 
 let tenant;
 let baseUrl;
@@ -119,7 +118,7 @@ test('LIVRO §13: visita, perda com motivo e radar pelos caminhos do livro', asy
   assert.equal(semMotivo.body.error.code, 'OPPORTUNITY_OUTCOME_REASON_REQUIRED');
   const perdida = await http('POST', `/crm/opportunities/${op.id}/lost`, { reasonCode: 'PRICE_TOO_HIGH' });
   assert.equal(perdida.status, 200, JSON.stringify(perdida.body));
-  assert.equal(perdida.body.data.stage, 'CLOSED_LOST');
+  assert.equal(perdida.body.data.stage, 'LOST');
   assert.equal(perdida.body.data.lostReason, 'PRICE_TOO_HIGH');
   const radar = await http('POST', '/crm/radars', { personId, criteriaJson: { city: 'Campinas', offerType: 'SALE' } });
   assert.equal(radar.status, 201, JSON.stringify(radar.body));
@@ -157,11 +156,13 @@ test('LIVRO §15: reclamação grave nasce escalonada e avisa a gerência (quem 
   assert.equal(grave.status, 201, JSON.stringify(grave.body));
   assert.equal(grave.body.data.status, 'ESCALATED');
   assert.ok(grave.body.data.escalatedAt);
-  const [gestores] = await sequelize.query(
+  // Gestores pela regra padrão (crm.gerencia.permissao = crm:dashboard:read), lidos no contexto da empresa (RLS), sem engolir erro.
+  const [gestores] = await withTenantTransaction(tenant, (t) => sequelize.query(
     `SELECT DISTINCT um.user_id FROM core.user_memberships um JOIN core.role_permissions rp ON rp.role_id = um.role_id
        JOIN core.permissions p ON p.id = rp.permission_id WHERE um.company_id = :c AND um.status = 'ACTIVE' AND p.code = :code`,
-    { replacements: { c: tenant.companyId, code: MANAGER_PERMISSION } }
-  ).catch(() => [[]]);
+    { replacements: { c: tenant.companyId, code: 'crm:dashboard:read' }, transaction: t }
+  ));
+  assert.ok(gestores.length >= 1, 'a empresa de teste tem ao menos um gestor (o administrador)');
   const ev = await outbox('crm.feedback_case.escalated', grave.body.data.id);
   assert.equal(ev.length, 1);
   assert.equal(ev[0].payloadJson.reason, 'GRAVE_COMPLAINT');

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * M9-D631 — KPI crm.loss_reasons (Motivos de perda), versão 1. Contagem das oportunidades CLOSED_LOST fechadas no mês de São Paulo da data-base, por
+ * M9-D631 — KPI crm.loss_reasons (Motivos de perda), versão 1. Contagem das oportunidades LOST fechadas no mês de São Paulo da data-base, por
  * motivo (mesmo agrupamento de getCrmDashboard), com o percentual de cada motivo (2 casas, uma vez). O total é o número de perdidas; perdida sem
  * motivo vai a NAO_INFORMADO ("Sem motivo"). Entrada (rm_crm_outcome no mês): { lostTotal, reasons: [{ reason, brokerId, count }] }.
  * Parâmetro: maxNoReasonPct. Regra de qualidade: "Sem motivo" acima do limite, ou motivos que não somam o total de perdidas -> DEGRADED, valor nulo.

@@ -82,7 +82,7 @@ test('ROTA funil do livro: estágio do livro aceito, WON normalizado com motivo,
 
   const ganho = await http('PATCH', `/opportunities/${visita.body.data.id}`, { stage: 'WON', wonReason: 'PRICE_ACCEPTED' });
   assert.equal(ganho.status, 200, JSON.stringify(ganho.body));
-  assert.equal(ganho.body.data.stage, 'CLOSED_WON');
+  assert.equal(ganho.body.data.stage, 'WON');
 
   const filtro = await http('GET', '/opportunities?stage=WON');
   assert.equal(filtro.status, 200);

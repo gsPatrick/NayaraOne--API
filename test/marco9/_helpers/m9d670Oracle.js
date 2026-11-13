@@ -63,7 +63,7 @@ async function leadsFromSource(env, t, month) {
         .sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at))[0];
       if (first) slot(first.campaign_id).first += 1;
     }
-    if (o.campaign_id && o.stage === 'CLOSED_WON' && o.closed_at && monthOf(o.closed_at) === month && o.attribution_valid !== false) slot(o.campaign_id).sales += 1;
+    if (o.campaign_id && o.stage === 'WON' && o.closed_at && monthOf(o.closed_at) === month && o.attribution_valid !== false) slot(o.campaign_id).sales += 1;
   }
   out.outside = events.filter((e) => e.event_type === 'SALE' && e.valid && monthOf(e.occurred_at) === month && e.evidence_json.attribution === 'NAO_ATRIBUIDA' && e.evidence_json.reason === 'SEM_TOQUE_VALIDO_NA_JANELA').length;
   return out;

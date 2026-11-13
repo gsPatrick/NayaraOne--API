@@ -43,7 +43,7 @@ const DEFINITIONS = Object.freeze([
   {
     metricCode: 'crm.loss_reasons', name: 'Motivos de perda', sourceReadModel: READ_MODELS.outcome, unit: 'COUNT', criticality: 'NORMAL', refreshPolicy: EVENT,
     description: 'Por que as oportunidades se perdem: perdidas no mês de São Paulo da data-base, por motivo, com a participação de cada motivo.',
-    formulaSemantic: 'Contagem das oportunidades CLOSED_LOST no período por lostReason (mesmo agrupamento de getCrmDashboard), percentual por motivo e total igual ao número de perdidas; perdida sem motivo vai a "Sem motivo" (NAO_INFORMADO). "Sem motivo" acima de analytics.qualidade.max_sem_motivo_pct deixa o KPI DEGRADED.',
+    formulaSemantic: 'Contagem das oportunidades LOST no período por lostReason (mesmo agrupamento de getCrmDashboard), percentual por motivo e total igual ao número de perdidas; perdida sem motivo vai a "Sem motivo" (NAO_INFORMADO). "Sem motivo" acima de analytics.qualidade.max_sem_motivo_pct deixa o KPI DEGRADED.',
     dimensions: ['empresa', 'motivo', 'corretor', 'origem'], qualityRule: quality(['lost_reason']),
   },
   {

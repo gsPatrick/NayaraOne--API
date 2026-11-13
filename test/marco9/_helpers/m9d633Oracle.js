@@ -34,8 +34,8 @@ async function capture(env, t) {
 }
 
 async function conversion(env, t) {
-  const list = await ROWS(env, `SELECT owner_user_id::text AS broker, count(*) FILTER (WHERE stage = 'CLOSED_WON')::int AS won, count(*) FILTER (WHERE stage = 'CLOSED_LOST')::int AS lost
-    FROM crm.opportunities WHERE company_id = :c AND deleted_at IS NULL AND stage IN ('CLOSED_WON', 'CLOSED_LOST') AND closed_at >= :from AND closed_at < :to GROUP BY 1`, t);
+  const list = await ROWS(env, `SELECT owner_user_id::text AS broker, count(*) FILTER (WHERE stage = 'WON')::int AS won, count(*) FILTER (WHERE stage = 'LOST')::int AS lost
+    FROM crm.opportunities WHERE company_id = :c AND deleted_at IS NULL AND stage IN ('WON', 'LOST') AND closed_at >= :from AND closed_at < :to GROUP BY 1`, t);
   const won = list.reduce((a, r) => a + r.won, 0);
   const lost = list.reduce((a, r) => a + r.lost, 0);
   return { brokers: Object.fromEntries(list.map((r) => [r.broker, r])), won, lost, rate: ((won * 100) / (won + lost)).toFixed(2) };

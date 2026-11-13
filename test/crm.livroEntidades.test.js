@@ -54,10 +54,12 @@ test('§3: visão e tabela de origem devolvem as mesmas linhas para a mesma empr
   });
 });
 
-test('§3/M3-12: crm.loss_reasons é exatamente o catálogo de motivos que o código valida', async () => {
-  const [rows] = await sequelize.query('SELECT outcome_stage, code FROM crm.loss_reasons ORDER BY outcome_stage, code');
-  const porDesfecho = (o) => rows.filter((r) => r.outcome_stage === o).map((r) => r.code).sort();
-  assert.deepEqual(porDesfecho('CLOSED_WON'), [...WON_REASONS].sort());
-  assert.deepEqual(porDesfecho('CLOSED_LOST'), [...LOST_REASONS].sort());
-  assert.deepEqual(porDesfecho('WITHDRAWN'), [...WITHDRAWN_REASONS].sort());
+test('§3/M3-12: crm.loss_reasons é o catálogo de motivos que o código valida (padrões quando a empresa não configurou)', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const [rows] = await sequelize.query('SELECT category, code FROM crm.loss_reasons WHERE company_id = :c ORDER BY category, sort_order', { replacements: { c: tenant.companyId }, transaction });
+    const porCategoria = (c) => rows.filter((r) => r.category === c).map((r) => r.code).sort();
+    assert.deepEqual(porCategoria('WON'), [...WON_REASONS].sort());
+    assert.deepEqual(porCategoria('LOSS'), [...LOST_REASONS].sort());
+    assert.deepEqual(porCategoria('WITHDRAWAL'), [...WITHDRAWN_REASONS].sort());
+  });
 });

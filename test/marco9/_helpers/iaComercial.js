@@ -12,6 +12,7 @@ const { registerAiAdapters } = require('../../../src/features/ai/providers');
 const { executeRequest } = require('../../../src/features/ai/runApi');
 const messagesService = require('../../../src/features/crm/messages.service');
 const proposalsService = require('../../../src/features/crm/proposals.service');
+const { Property } = require('../../../src/models');
 const propertiesService = require('../../../src/features/properties/properties.service');
 const offersService = require('../../../src/features/properties/propertyOffers.service');
 const radarService = require('../../../src/features/radar/radar.service');
@@ -52,7 +53,9 @@ const mensagem = (c, direction = 'OUTBOUND') => messagesService.createMessage({
 
 /** Proposta enviada (SENT, com sentAt de agora). */
 async function propostaEnviada(c, value = 450000) {
-  const base = { groupId: c.tenant.groupId, companyId: c.tenant.companyId, opportunityId: c.opp.id, value };
+  // M3-13: proposta é sempre de um imóvel (o de interesse da oportunidade ou um imóvel de teste).
+  const propertyId = c.opp.propertyId || (await Property.create({ groupId: c.tenant.groupId, companyId: c.tenant.companyId, title: `Imóvel proposta ${Date.now()}`, internalCode: `IA-PROP-${Date.now()}${Math.floor(Math.random() * 1e5)}`, propertyType: 'RESIDENTIAL', createdBy: c.tenant.userId, updatedBy: c.tenant.userId }, { transaction: c.tx })).id;
+  const base = { groupId: c.tenant.groupId, companyId: c.tenant.companyId, opportunityId: c.opp.id, propertyId, value };
   const p = await proposalsService.createProposal(base, c.tenant.userId, c.tx);
   await proposalsService.updateProposalStatus(p.id, { status: 'SENT' }, c.tenant.userId, c.tx);
   return p;

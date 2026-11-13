@@ -43,7 +43,7 @@ const TARGETS = Object.freeze({
       LEAD_LAST_CONTACT: LOCAL(`GREATEST(t.created_at, (SELECT max(m.created_at) FROM crm.messages m WHERE m.person_id = t.id), (SELECT max(o.updated_at) FROM crm.opportunities o WHERE o.person_id = t.id))`),
       PERSON_INACTIVE_SINCE: `CASE WHEN t.status <> 'ACTIVE' THEN ${LOCAL('t.updated_at')} END`,
     },
-    exceptions: { OPEN_OBLIGATION: "EXISTS (SELECT 1 FROM crm.opportunities oa WHERE oa.person_id = t.id AND oa.stage NOT IN ('CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'))" },
+    exceptions: { OPEN_OBLIGATION: "EXISTS (SELECT 1 FROM crm.opportunities oa WHERE oa.person_id = t.id AND oa.stage NOT IN ('WON', 'LOST', 'CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'))" },
     dispositions: [DISPOSITIONS.ANONYMIZE, DISPOSITIONS.REVIEW],
     anonymize: {
       columns: [{ column: 'legal_name' }, { column: 'preferred_name' }, { column: 'tax_id_normalized', distinct: true }, { column: 'tax_id_normalized_hash', distinct: true }],

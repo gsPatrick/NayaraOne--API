@@ -100,7 +100,7 @@ test('m9d633 replay do mesmo evento não altera o valor', async () => {
   const read = async () => (await Promise.all(['rm_radar_matches', 'rm_broker_performance'].map((m) => rows(env, m, env.cX)))).flat();
   const event = makeEvent(env.cX, 'radar.matched', { radarId: sc.src.uuid(), personId: sc.src.uuid(), propertyId: sc.src.uuid() }, { occurredAt: new Date('2026-10-10T15:00:00Z') });
   await asserts.assertReplayIdempotent({ applyEvent: () => apply(env.cX, event), readRow: read });
-  const won = await sc.src.opportunity(env, env.cX, { owner: ana, stage: 'CLOSED_WON', closedAt: sc.iso('2026-10-15'), created: sc.iso('2026-09-01') });
+  const won = await sc.src.opportunity(env, env.cX, { owner: ana, stage: 'WON', closedAt: sc.iso('2026-10-15'), created: sc.iso('2026-09-01') });
   await sc.src.update(env, 'crm.opportunities', won, { deleted_at: sc.iso('2026-10-16') });
   const lostEvent = makeEvent(env.cX, 'crm.opportunity.lost', { id: won });
   await asserts.assertReplayIdempotent({ applyEvent: () => apply(env.cX, lostEvent), readRow: read });

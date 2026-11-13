@@ -72,6 +72,8 @@ const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.
 const { MESSAGING_SETTINGS_SCHEMA } = require('../crm/messaging/messaging.settings');
 const { CARTEIRA_SETTINGS_SCHEMA } = require('../crm/carteira/carteira.settings');
 const { CRM_EXPORT_SETTINGS_SCHEMA } = require('../crm/opportunitiesExport.settings');
+const { CRM_SETTINGS_SCHEMA } = require('../crm/crm.settings'); // DI-M3CA: motivos, SLA da ocorrência e escalonamento do CRM
+require('../crm/crm.settingGuards');
 const { CONTRACT_SETTINGS_SCHEMA } = require('../integrations/contract/contract.settings');
 const { DOMAIN_SETTINGS_SCHEMA } = require('../integrations/domain/domain.settings');
 const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
@@ -350,6 +352,7 @@ const SETTINGS_SCHEMA = {
   ...CARTEIRA_SETTINGS_SCHEMA,
   // DEC-049 (X45-D018): teto de linhas e MFA da exportação de oportunidades do CRM.
   ...CRM_EXPORT_SETTINGS_SCHEMA,
+  ...CRM_SETTINGS_SCHEMA,
   // Marco 9, M9-D222 — contract tests dos adapters: validade do relatório que libera a connection.
   ...CONTRACT_SETTINGS_SCHEMA,
   // Marco 9, M9-D220 — integridade do domínio: tempo que a ação do usuário espera o fornecedor antes de responder "aceito".

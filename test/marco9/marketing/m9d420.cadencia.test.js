@@ -79,7 +79,7 @@ test('resposta_encerra_cadencia', async () => {
 test('oportunidade_encerrada_nao_recebe_acompanhamento', async () => {
   await inRollback(async (t) => {
     const lead = await silentLead(t);
-    await env.q(t, "UPDATE crm.opportunities SET stage = 'CLOSED_LOST' WHERE id = :id RETURNING id", { id: lead.opportunityId });
+    await env.q(t, "UPDATE crm.opportunities SET stage = 'LOST' WHERE id = :id RETURNING id", { id: lead.opportunityId });
     await tick(t, lead.personId, '2026-11-02');
     assert.equal((await sentOn(t, lead.personId)).length, 0);
   });

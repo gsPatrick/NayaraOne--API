@@ -2,7 +2,8 @@
 
 const { Op, fn, col, literal } = require('sequelize');
 const { sequelize, Opportunity, Proposal } = require('../../models');
-const { LOST_REASONS } = require('./opportunityOutcomeReason.validator');
+const { readOutcomeReasonCatalog } = require('./crm.params');
+const { TERMINAL_STAGES } = require('./opportunityStages');
 
 /**
  * M3-17 — Indicadores do painel calculados pela MESMA FONTE das listas.
@@ -21,19 +22,29 @@ const { LOST_REASONS } = require('./opportunityOutcomeReason.validator');
  *
  * Métricas:
  *  - opportunitiesByStage: contagem por stage (inclusive os terminais).
- *  - conversionRate: CLOSED_WON / total de oportunidades FECHADAS
- *    (CLOSED_WON + CLOSED_LOST + WITHDRAWN). Decisão documentada: o denominador é o total
+ *  - conversionRate: WON / total de oportunidades FECHADAS (WON + LOST; a desistência é LOST
+ *    com motivo de desistência, livro §10). Decisão documentada: o denominador é o total
  *    de oportunidades já DECIDIDAS — oportunidade ainda em aberto não conta nem como ganha
  *    nem como perdida, senão a taxa despencaria só por existir funil cheio.
  *  - topLostReasons: motivos de perda mais comuns, agregados sobre o ENUM do M3-12.
  *  - proposals: contagem por status + valor total das propostas aceitas.
+ *
+ * Escopo de carteira (M3-17 + livro §18 "Corretor visualizar carteira alheia"): o painel recebe o MESMO `ownerScope` que a
+ * listagem de oportunidades usa (opportunityScope.guard.js). Com escopo OWN, todo número sai só das oportunidades do próprio
+ * corretor (o filtro `ownerUserId` da consulta não amplia o escopo) e as propostas contadas são as das oportunidades dele.
  */
 
-const CLOSED_LIKE_STAGES = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
+const CLOSED_LIKE_STAGES = TERMINAL_STAGES;
+
+function effectiveOwner(filters = {}) {
+  if (filters.ownerScope && filters.ownerScope.mode === 'OWN') return filters.ownerScope.userId;
+  return filters.ownerUserId || null;
+}
 
 function buildOpportunityWhere(filters = {}) {
   const where = {};
-  if (filters.ownerUserId) where.ownerUserId = filters.ownerUserId;
+  const owner = effectiveOwner(filters);
+  if (owner) where.ownerUserId = owner;
   if (filters.personId) where.personId = filters.personId;
   if (filters.propertyId) where.propertyId = filters.propertyId;
   if (filters.createdFrom || filters.createdTo) {
@@ -44,8 +55,9 @@ function buildOpportunityWhere(filters = {}) {
   return where;
 }
 
-async function getCrmDashboard(filters = {}, transaction) {
+async function getCrmDashboard(filters = {}, transaction, tenant = null) {
   const where = buildOpportunityWhere(filters);
+  const owner = effectiveOwner(filters);
 
   const byStageRows = await Opportunity.findAll({
     attributes: ['stage', [fn('COUNT', col('id')), 'total']],
@@ -63,36 +75,41 @@ async function getCrmDashboard(filters = {}, transaction) {
     totalOpportunities += total;
   }
 
-  const won = opportunitiesByStage.CLOSED_WON || 0;
-  const lost = opportunitiesByStage.CLOSED_LOST || 0;
-  const withdrawn = opportunitiesByStage.WITHDRAWN || 0;
-  const totalClosed = won + lost + withdrawn;
+  const won = opportunitiesByStage.WON || 0;
+  const lost = opportunitiesByStage.LOST || 0;
+  // Desistência = perdida com motivo da categoria desistência (withdrawn_reason preenchido); já está dentro de `lost`.
+  const withdrawn = await Opportunity.count({ where: { ...where, stage: 'LOST', withdrawnReason: { [Op.ne]: null } }, transaction });
+  const totalClosed = won + lost;
   const openOpportunities = totalOpportunities - totalClosed;
 
   const lostReasonRows = await Opportunity.findAll({
     attributes: ['lostReason', [fn('COUNT', col('id')), 'total']],
-    where: { ...where, stage: 'CLOSED_LOST', lostReason: { [Op.ne]: null } },
+    where: { ...where, stage: 'LOST', lostReason: { [Op.ne]: null } },
     group: ['lost_reason'],
     order: [[literal('COUNT(id)'), 'DESC']],
     raw: true,
     transaction,
   });
 
+  const catalog = await readOutcomeReasonCatalog(tenant, transaction);
+  const knownLostCodes = [...catalog.lost, ...catalog.withdrawal].map((r) => r.code);
   const topLostReasons = lostReasonRows.map((row) => ({
     reason: row.lostReason,
     total: Number(row.total),
     // Motivos gravados antes do enum do M3-12 (texto livre legado) aparecem com
     // `inEnum: false` — o painel pode destacá-los como "a classificar" em vez de fingir que
     // são uma categoria válida.
-    inEnum: LOST_REASONS.includes(String(row.lostReason || '').toUpperCase()),
+    inEnum: knownLostCodes.includes(String(row.lostReason || '').toUpperCase()),
   }));
 
   // Propostas: mesma tabela que GET /crm/proposals lista.
   const proposalWhere = {};
   if (filters.opportunityId) proposalWhere.opportunityId = filters.opportunityId;
-  // CRM-TS-012: com o filtro de responsável (o corretor de escopo próprio sempre o tem), as propostas também são só das oportunidades dele.
-  if (filters.ownerUserId) {
-    proposalWhere[Op.and] = [{ opportunityId: { [Op.in]: literal(`(SELECT o.id FROM crm.opportunities o WHERE o.owner_user_id = ${sequelize.escape(filters.ownerUserId)} AND o.deleted_at IS NULL)`) } }];
+  if (owner) {
+    proposalWhere.opportunityId = {
+      [Op.in]: literal(`(SELECT id FROM crm.opportunities WHERE owner_user_id = ${sequelize.escape(owner)} AND deleted_at IS NULL)`),
+      ...(filters.opportunityId ? { [Op.eq]: filters.opportunityId } : {}),
+    };
   }
   const proposalRows = await Proposal.findAll({
     attributes: ['status', [fn('COUNT', col('id')), 'total'], [fn('COALESCE', fn('SUM', col('value')), 0), 'totalValue']],
@@ -150,15 +167,16 @@ async function getCrmDashboard(filters = {}, transaction) {
       ORDER BY occurred_at DESC
       LIMIT 1
     ) last_evt ON true
-    WHERE o.deleted_at IS NULL AND o.stage NOT IN ('CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN')
-      ${filters.ownerUserId ? 'AND o.owner_user_id = :ownerUserId' : ''}
+    WHERE o.deleted_at IS NULL AND o.stage NOT IN (:closedStages)
+      ${owner ? 'AND o.owner_user_id = :ownerUserId' : ''}
       ${filters.personId ? 'AND o.person_id = :personId' : ''}
       ${filters.propertyId ? 'AND o.property_id = :propertyId' : ''}
     GROUP BY o.stage
     `,
     {
       replacements: {
-        ownerUserId: filters.ownerUserId,
+        ownerUserId: owner,
+        closedStages: CLOSED_LIKE_STAGES,
         personId: filters.personId,
         propertyId: filters.propertyId,
       },

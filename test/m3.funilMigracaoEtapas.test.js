@@ -36,7 +36,7 @@ test('DI-M3-FUNIL-1: etapas antigas viram a etapa do livro, terminal ganha data 
     }
     return out;
   });
-  const legado = ['NOVO', 'NEGOTIATION', 'LOST', 'FASE_DESCONHECIDA'];
+  const legado = ['NOVO', 'NEGOTIATION', 'PERDIDO', 'FASE_DESCONHECIDA'];
   for (let i = 0; i < ids.length; i += 1) {
     await admin.query('UPDATE crm.opportunities SET stage = :s, closed_at = NULL WHERE id = :id', { replacements: { s: legado[i], id: ids[i] } });
   }
@@ -47,7 +47,8 @@ test('DI-M3-FUNIL-1: etapas antigas viram a etapa do livro, terminal ganha data 
   const por = Object.fromEntries(linhas.map((l) => [l.id, l]));
   assert.equal(por[ids[0]].stage, 'NEW');
   assert.equal(por[ids[1]].stage, 'PROPOSAL');
-  assert.equal(por[ids[2]].stage, 'CLOSED_LOST');
+  // DI-M3CA-3: o código antigo do quadro (PERDIDO) vai direto para o código do livro (LOST).
+  assert.equal(por[ids[2]].stage, 'LOST');
   assert.ok(por[ids[2]].closed_at, 'terminal convertido ganha data de fechamento');
   assert.equal(por[ids[3]].stage, 'FASE_DESCONHECIDA', 'valor fora do mapa não é tocado');
   const [aud] = await admin.query("SELECT entity_id, before_json, after_json FROM audit.audit_log WHERE action = 'opportunity.stage_migrated' AND entity_id IN (:ids)", { replacements: { ids } });

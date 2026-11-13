@@ -9,7 +9,7 @@ const { getOpportunityTimeline } = require('../../../crm/opportunityTimeline.ser
 const { daysBetween } = require('./comercial.format');
 const { assertVisible } = require('./comercial.scope');
 
-const CLOSED_STAGES = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
+const { CLOSED_STAGE_CODES: CLOSED_STAGES } = require('../../../crm/opportunityStages');
 const OPEN_TASK = ['OPEN', 'IN_PROGRESS'];
 const INCOMPLETE_DOCUMENT = ['PENDING', 'REJECTED', 'EXPIRED'];
 

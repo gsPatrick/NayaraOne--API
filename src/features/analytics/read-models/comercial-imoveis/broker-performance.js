@@ -31,9 +31,9 @@ const slice = ({ where }) => {
     SELECT ${brokerExpr('o.owner_user_id')}, ${sqlMonth('o.created_at')}, 0, COUNT(*), 0, 0, 0, 0
       FROM crm.opportunities o WHERE o.company_id = :companyId AND o.deleted_at IS NULL${f('o.owner_user_id', 'o.created_at')} GROUP BY 1, 2
     UNION ALL
-    ${closed('CLOSED_WON', '0, 0, COUNT(*), 0, 0, 0')}
+    ${closed('WON', '0, 0, COUNT(*), 0, 0, 0')}
     UNION ALL
-    ${closed('CLOSED_LOST', '0, 0, 0, COUNT(*), 0, 0')}
+    ${closed('LOST', '0, 0, 0, COUNT(*), 0, 0')}
   ) x GROUP BY 1, 2`;
 };
 
@@ -50,6 +50,6 @@ async function keyOf(event, { transaction }) {
 const keysSql = () => `SELECT DISTINCT broker_id::text AS broker_id, month FROM (
   SELECT ${brokerExpr('created_by')} AS broker_id, ${sqlMonth('created_at')} AS month FROM real_estate.properties WHERE company_id = :companyId AND deleted_at IS NULL
   UNION SELECT ${brokerExpr('owner_user_id')}, ${sqlMonth('created_at')} FROM crm.opportunities WHERE company_id = :companyId AND deleted_at IS NULL
-  UNION SELECT ${brokerExpr('owner_user_id')}, ${sqlMonth('closed_at')} FROM crm.opportunities WHERE company_id = :companyId AND deleted_at IS NULL AND stage IN ('CLOSED_WON', 'CLOSED_LOST') AND closed_at IS NOT NULL) k`;
+  UNION SELECT ${brokerExpr('owner_user_id')}, ${sqlMonth('closed_at')} FROM crm.opportunities WHERE company_id = :companyId AND deleted_at IS NULL AND stage IN ('WON', 'LOST') AND closed_at IS NOT NULL) k`;
 
 module.exports = defineAggregateModel({ name: NAME, keyColumns: ['broker_id', 'month'], eventTypes: EVENTS, keyOf, params, slice, keysSql, schedule: { kind: 'keys' } });

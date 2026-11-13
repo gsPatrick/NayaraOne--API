@@ -20,9 +20,9 @@ async function contract(env, t, { type = 'SALE', total = null, status = 'SIGNED'
   return id;
 }
 
-/** Oportunidade (CLOSED_WON por padrão) com proposta no estado dado (ACCEPTED soma; outro estado não). */
-async function opportunity(env, t, { stage = 'CLOSED_WON', closedAt = null, broker = null, origin = 'SITE', proposal = null, proposalStatus = 'ACCEPTED', deletedAt = null } = {}) {
-  const id = await bi.seed(env, t, 'crm.opportunities', { person_id: bi.uuid(), stage, owner_user_id: broker, lead_source: origin, closed_at: closedAt, won_reason: stage === 'CLOSED_WON' ? 'PRICE' : null, deleted_at: deletedAt, ...AUDIT });
+/** Oportunidade (WON por padrão) com proposta no estado dado (ACCEPTED soma; outro estado não). */
+async function opportunity(env, t, { stage = 'WON', closedAt = null, broker = null, origin = 'SITE', proposal = null, proposalStatus = 'ACCEPTED', deletedAt = null } = {}) {
+  const id = await bi.seed(env, t, 'crm.opportunities', { person_id: bi.uuid(), stage, owner_user_id: broker, lead_source: origin, closed_at: closedAt, won_reason: stage === 'WON' ? 'PRICE' : null, deleted_at: deletedAt, ...AUDIT });
   if (proposal !== null) await bi.seed(env, t, 'crm.proposals', { opportunity_id: id, value: proposal, status: proposalStatus, decided_at: closedAt, ...AUDIT });
   return id;
 }
@@ -66,7 +66,7 @@ async function oportunidades(env, t) {
   await won('b', { closedAt: at('28', '10:30:00'), broker: BROKER_A, origin: 'INDICACAO', proposal: '210000.00' });
   await won('semProposta', { closedAt: at('28', '11:00:00'), broker: BROKER_B, origin: 'SITE', proposal: '50000.00', proposalStatus: 'SENT' });
   await won('anterior', { closedAt: at('27', '14:00:00'), broker: BROKER_B, origin: 'SITE', proposal: '77000.00' });
-  ids.perdida = await opportunity(env, t, { stage: 'CLOSED_LOST', closedAt: at('28', '09:30:00'), broker: BROKER_A, proposal: '999.00' });
+  ids.perdida = await opportunity(env, t, { stage: 'LOST', closedAt: at('28', '09:30:00'), broker: BROKER_A, proposal: '999.00' });
   return ids;
 }
 

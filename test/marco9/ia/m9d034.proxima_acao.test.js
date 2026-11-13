@@ -34,7 +34,7 @@ test('m9d034_proxima_acao_regras_puras_na_ordem_do_livro', () => {
   assert.equal(nextActionRules({ closed: false, daysWithoutContact: 2, proposals: [{ unanswered: true, daysSinceSent: 5 }], pendingDocuments: [] }, PARAMS), null, 'exatamente 5 dias não passa de 5');
   const docs = nextActionRules({ closed: false, daysWithoutContact: 1, proposals: [], pendingDocuments: ['COMPROVANTE_RENDA', 'IPTU'] }, PARAMS);
   assert.equal(docs.title, 'Cobrar documentos COMPROVANTE_RENDA, IPTU');
-  assert.equal(nextActionRules({ closed: true, stage: 'CLOSED_WON', daysWithoutContact: null, proposals: [], pendingDocuments: ['RG'] }, PARAMS).rule, RULES.CLOSED);
+  assert.equal(nextActionRules({ closed: true, stage: 'WON', daysWithoutContact: null, proposals: [], pendingDocuments: ['RG'] }, PARAMS).rule, RULES.CLOSED);
 });
 
 test('m9d034_proxima_acao_por_regra_antes_de_modelo', async () => {
@@ -118,7 +118,7 @@ test('m9d034_proxima_acao_documentos_pendentes_do_financiamento', async () => {
 test('m9d034_proxima_acao_oportunidade_encerrada_nao_gera_recomendacao', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
     const c = await C.cenario(tenantA, tx, { dias: 30 });
-    await q("UPDATE crm.opportunities SET stage = 'CLOSED_WON', closed_at = now() WHERE id = :id RETURNING id", { id: c.opp.id }, tx);
+    await q("UPDATE crm.opportunities SET stage = 'WON', closed_at = now() WHERE id = :id RETURNING id", { id: c.opp.id }, tx);
     const { outcome: o } = await c.pedir(TASK, 'Qual a próxima ação?');
     assert.match(o.answer, /encerrada/);
     assert.deepEqual(o.proposals, []);

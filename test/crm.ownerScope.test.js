@@ -13,29 +13,15 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const opportunityService = require('../src/features/crm/opportunity.service');
-const { User } = require('../src/models');
+const { createMember } = require('./helpers/m3caCrm');
 
 after(async () => {
   await sequelize.close();
 });
 
-// owner_user_id tem FK para core.users — "outro corretor" precisa ser um usuário real da
-// mesma empresa, não um UUID fictício.
+// "Outro corretor" precisa ser um usuário real e ATIVO da mesma empresa (o responsável é validado: CRMX-006, DI-M3CA-1).
 async function createSecondBroker(tenant, transaction) {
-  const suffix = uniqueSuffix();
-  const user = await User.create(
-    {
-      groupId: tenant.groupId,
-      companyId: tenant.companyId,
-      name: `Corretor B ${suffix}`,
-      email: `corretor-b-${suffix}@teste.nayaraone.dev`,
-      passwordHash: 'x', // não autentica neste teste, só precisa satisfazer NOT NULL
-      mfaEnabled: false,
-      status: 'ACTIVE',
-    },
-    { transaction }
-  );
-  return user.id;
+  return createMember(tenant, transaction, { label: 'corretor-b' });
 }
 
 async function createOpportunityFor(tenant, ownerUserId, transaction) {

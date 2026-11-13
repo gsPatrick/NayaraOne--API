@@ -83,10 +83,10 @@ async function augustOutcomes(env, t) {
   const add = async (stage, i, reason) => {
     const id = await opp(env, t, { owner: brokers[i % 2], stage, created: '2026-07-20T15:00:00Z', closedAt: new Date(Date.UTC(2026, 7, 3 + i, 15)).toISOString(), lostReason: reason });
     ids.push(id);
-    closed[id] = stage === 'CLOSED_WON' ? 'won' : 'lost';
+    closed[id] = stage === 'WON' ? 'won' : 'lost';
   };
-  for (let i = 0; i < 6; i += 1) await add('CLOSED_WON', i);
-  for (let i = 0; i < 14; i += 1) await add('CLOSED_LOST', i, i < 6 ? 'PRICE' : i < 11 ? 'CLIENT_GAVE_UP' : null);
+  for (let i = 0; i < 6; i += 1) await add('WON', i);
+  for (let i = 0; i < 14; i += 1) await add('LOST', i, i < 6 ? 'PRICE' : i < 11 ? 'CLIENT_GAVE_UP' : null);
   await add('WITHDRAWN', 20);
   return { ids, closed, brokers };
 }

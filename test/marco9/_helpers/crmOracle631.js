@@ -4,7 +4,7 @@
 // fórmula. Datas pelo fuso de São Paulo (UTC-3 fixo) feitas na mão; contas em decimal exato (money.js) e arredondadas uma vez, no fim.
 const money = require('../../../src/features/analytics/metrics/formulas/money');
 
-const CLOSED = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN'];
+const CLOSED = ['WON', 'LOST', 'WITHDRAWN'];
 const spDate = (value) => new Date(new Date(value).getTime() - 3 * 3600 * 1000).toISOString().slice(0, 10);
 const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000);
 
@@ -38,8 +38,8 @@ async function stagesFromSource(env, t, asOf) {
 /** Conversão e motivos de perda do mês de SP da data-base. */
 async function outcomesFromSource(env, t, asOf) {
   const { opps } = await load(env, t);
-  const won = opps.filter((o) => o.stage === 'CLOSED_WON' && closedInMonth(o, asOf)).length;
-  const lostList = opps.filter((o) => o.stage === 'CLOSED_LOST' && closedInMonth(o, asOf));
+  const won = opps.filter((o) => o.stage === 'WON' && closedInMonth(o, asOf)).length;
+  const lostList = opps.filter((o) => o.stage === 'LOST' && closedInMonth(o, asOf));
   const byReason = {};
   for (const o of lostList) byReason[String(o.lost_reason || '').trim() || 'NAO_INFORMADO'] = (byReason[String(o.lost_reason || '').trim() || 'NAO_INFORMADO'] || 0) + 1;
   const closed = won + lostList.length;

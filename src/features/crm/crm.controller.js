@@ -239,8 +239,11 @@ const getDashboard = catchAsync(async (req, res) => {
         propertyId: req.query.propertyId,
         createdFrom: req.query.createdFrom,
         createdTo: req.query.createdTo,
+        // M3-17: o mesmo escopo de carteira da listagem (corretor de escopo próprio só vê os números da carteira dele).
+        ownerScope: resolveOpportunityOwnerScope(req.auth),
       },
-      transaction
+      transaction,
+      { groupId: req.auth.groupId, companyId: req.auth.companyId }
     )
   );
   return success(res, { data: dashboard });
