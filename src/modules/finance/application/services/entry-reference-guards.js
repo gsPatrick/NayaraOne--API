@@ -9,6 +9,7 @@
  */
 const AppError = require('../../../../utils/AppError');
 const entries = require('../../infrastructure/repositories/financial-entry.repository');
+const { getBankAccount } = require('./bank-accounts.service');
 
 async function assertCentersOfCompany({ costCenterId, resultCenterId }, _companyId, transaction) {
   if (costCenterId && !(await entries.findCostCenter(costCenterId, transaction))) {
@@ -19,4 +20,18 @@ async function assertCentersOfCompany({ costCenterId, resultCenterId }, _company
   }
 }
 
-module.exports = { assertCentersOfCompany };
+// FIX FIN-TS-004 (Caderno §20: "Empresa errada — conta BB Construção em despesa Locação — Bloqueado"): a
+// conta bancária de um lançamento é sempre da mesma empresa (FIN-002). A RLS de SELECT já esconde conta de
+// outra empresa (getBankAccount devolve FINANCE_BANK_ACCOUNT_NOT_FOUND); o teste explícito é defesa em
+// profundidade — erro de negócio claro, nunca mais um 500 cru da RLS no INSERT.
+async function assertBankAccountOfCompany(bankAccountId, companyId, transaction) {
+  const bankAccount = await getBankAccount(bankAccountId, transaction);
+  if (bankAccount.companyId !== companyId) {
+    throw AppError.badRequest(
+      'A conta bancária informada pertence a outra empresa — um lançamento só pode usar uma conta bancária da mesma empresa (FIN-002, contas segregadas).',
+      'FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH'
+    );
+  }
+}
+
+module.exports = { assertCentersOfCompany, assertBankAccountOfCompany };

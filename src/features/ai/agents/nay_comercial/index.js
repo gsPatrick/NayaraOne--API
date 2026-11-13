@@ -43,4 +43,9 @@ function registerNayComercial() {
   registerComercialSettingGuard();
 }
 
-module.exports = { ...policy, COMERCIAL_SETTING_DEFAULTS, COMERCIAL_SETTINGS_SCHEMA, registerNayComercial };
+// Lead esquecido (livro do Marco 3 §16, M3CB): o job de src/engines usa estes dois pelo barrel (archGuard). Leitura tardia: o barrel não carrega
+// recomendações e configurações no registro da NAY Comercial.
+const detectForgottenLeadsForCompany = (...args) => require('./comercial.forgottenJob').detectForgottenLeadsForCompany(...args);
+const readForgottenParams = (...args) => require('./comercial.capParams').readForgottenParams(...args);
+
+module.exports = { ...policy, COMERCIAL_SETTING_DEFAULTS, COMERCIAL_SETTINGS_SCHEMA, registerNayComercial, detectForgottenLeadsForCompany, readForgottenParams };

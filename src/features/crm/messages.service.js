@@ -11,7 +11,7 @@ const { businessDateKey } = require('../../utils/businessDate');
 const { describeMedia } = require('./messaging/whatsapp.mediaView');
 const { assertConversationRefsInScope } = require('./messages.refs');
 const { idOrNull, textOrNull, oneOf, actionKeyOrNull } = require('./messages.input');
-const { DIRECTIONS, AUTHOR_TYPES, CHANNELS, DELIVERY_STATUSES, MESSAGE_STATUSES, PURPOSE, COLUMN_LIMITS } = require('./messages.constants');
+const { DIRECTIONS, AUTHOR_TYPES, CHANNELS, DELIVERY_STATUSES, MESSAGE_STATUSES, COLUMN_LIMITS } = require('./messages.constants');
 
 /** Finalidade (M9-D230): só texto (objeto ou lista é 400; o String() dava 500). Vazio é "sem finalidade". */
 function purposeText(value) {

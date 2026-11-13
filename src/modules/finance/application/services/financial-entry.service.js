@@ -20,8 +20,7 @@ const { createAnomalyCase } = require('./anomaly-cases.service');
 const { publishFinancialEntryCreated } = require('./finance-events.service');
 const { resolveAccountVersionForEntry } = require('./chart-of-accounts.service');
 const { markApprovalRequestsStale } = require('./approvals.service');
-const { getBankAccount } = require('./bank-accounts.service');
-const { assertCentersOfCompany } = require('./entry-reference-guards'); // FIN-002: centros só da própria empresa (pentest M4 PT4-0839)
+const { assertCentersOfCompany, assertBankAccountOfCompany } = require('./entry-reference-guards'); // FIN-002: centros e conta só da própria empresa (pentest M4 PT4-0839)
 const { evaluatePayableAnomaly } = require('./payment-anomaly-gate'); // §17 valor fora do padrão / fornecedor novo de alto valor
 const { assertCompetenceOpen, assertPeriodOpenForEntry, resolveCompetenceMonth } = require('./competence-guard');
 const { resolveThirdPartyLinks } = require('./third-party-funds.service');
@@ -47,20 +46,6 @@ function assertReasonableDueDate(dueAt) {
     throw AppError.badRequest(
       `O campo "dueAt" tem um ano fora do intervalo plausível (${DUE_DATE_MIN_YEAR} a ${DUE_DATE_MAX_YEAR}) — verifique se não há um dígito a mais ou a menos na data.`,
       'FINANCE_ENTRY_VALIDATION'
-    );
-  }
-}
-
-// FIX FIN-TS-004 (Caderno §20: "Empresa errada — conta BB Construção em despesa Locação — Bloqueado"): a
-// conta bancária de um lançamento é sempre da mesma empresa (FIN-002). A RLS de SELECT já esconde conta de
-// outra empresa (getBankAccount devolve FINANCE_BANK_ACCOUNT_NOT_FOUND); o teste explícito é defesa em
-// profundidade — erro de negócio claro, nunca mais um 500 cru da RLS no INSERT.
-async function assertBankAccountOfCompany(bankAccountId, companyId, transaction) {
-  const bankAccount = await getBankAccount(bankAccountId, transaction);
-  if (bankAccount.companyId !== companyId) {
-    throw AppError.badRequest(
-      'A conta bancária informada pertence a outra empresa — um lançamento só pode usar uma conta bancária da mesma empresa (FIN-002, contas segregadas).',
-      'FINANCE_ENTRY_BANK_ACCOUNT_COMPANY_MISMATCH'
     );
   }
 }

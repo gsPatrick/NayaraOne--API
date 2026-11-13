@@ -2,8 +2,7 @@
 
 const { sequelize, Group, Company } = require('../../models');
 const { safeLogger } = require('../../features/ai/audit');
-const { detectForgottenLeadsForCompany } = require('../../features/ai/agents/nay_comercial/comercial.forgottenJob');
-const { readForgottenParams } = require('../../features/ai/agents/nay_comercial/comercial.capParams');
+const { detectForgottenLeadsForCompany, readForgottenParams } = require('../../features/ai/agents/nay_comercial');
 
 /**
  * nayComercialForgottenLeadsJob (livro do Marco 3 §16 "Detecta lead esquecido", rodada M3CB): a cada
