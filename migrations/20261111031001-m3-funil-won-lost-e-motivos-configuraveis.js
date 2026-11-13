@@ -64,6 +64,9 @@ const TRIGGER = `
     IF upper(btrim(NEW.stage)) = 'CLOSED_WON' THEN NEW.stage := 'WON';
     ELSIF upper(btrim(NEW.stage)) = 'CLOSED_LOST' THEN NEW.stage := 'LOST';
     END IF;
+    -- Etapa final sem a data de fechamento recebe a da gravação, como a conversão das linhas antigas (COALESCE(closed_at, updated_at)):
+    -- o BI do Marco 9 (rm_crm_outcome e rm_command_events) exige closed_at em toda oportunidade WON/LOST.
+    IF NEW.stage IN ('WON', 'LOST') AND NEW.closed_at IS NULL THEN NEW.closed_at := COALESCE(NEW.updated_at, now()); END IF;
     RETURN NEW;
   END $fn$;
   DROP TRIGGER IF EXISTS opportunities_stage_do_livro ON crm.opportunities;
