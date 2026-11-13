@@ -18,10 +18,11 @@ const settingsService = require('../src/features/settings/settings.service');
 const flagsService = require('../src/features/core-governance/feature-flags/feature-flags.service');
 const { TenantSetting, User } = require('../src/models');
 
-// Lista fechada (vale também no CI, sem a pasta Maturacao): as 19 chaves do catálogo com MFA que existem no dicionário + a equivalente
+// Lista fechada (vale também no CI, sem a pasta Maturacao): as 20 chaves do catálogo com MFA que existem no dicionário + a equivalente
 // finance.reconciliation.auto_strong (= conciliacao.auto_confirmacao_ativa do catálogo). O teste meta (settings.mfaCatalogo.meta) confere contra o CSV.
 const EXPECTED = [
   'billing.grace_period_days', 'billing.interest_percentage', 'billing.late_fee_percentage',
+  'exportacao.crm.exige_mfa',
   'finance.antifraud_new_account_threshold', 'finance.bank_account_cooldown_hours', 'finance.reconciliation.auto_strong',
   'governanca.flags.kill_teste_dias', 'ia.fallback.max_saltos',
   'integration.admin.mfa_on_prod_connection_change', 'integration.admin.mfa_on_prod_test_connection', 'integration.admin.mfa_on_secret_rotation',

@@ -27,4 +27,16 @@ async function applyAnswerHook(state, text) {
   return hook && typeof hook.checkAnswer === 'function' ? hook.checkAnswer(state, text) : text;
 }
 
-module.exports = { runServerTools, applyAnswerHook };
+/** Revisão do agente antes do aterramento (gancho `reviewAnswer`): devolve o texto revisado (o mesmo, sem gancho). */
+async function applyReviewHook(state, text) {
+  const hook = getAgentHooks(state.agent.code);
+  return hook && typeof hook.reviewAnswer === 'function' ? hook.reviewAnswer(state, text) : text;
+}
+
+/** Fontes do servidor para o modelo (gancho `serverSources`); vazio sem gancho. */
+async function serverSourcesOf(state) {
+  const hook = getAgentHooks(state.agent.code);
+  return hook && typeof hook.serverSources === 'function' ? (await hook.serverSources(state)) || [] : [];
+}
+
+module.exports = { runServerTools, applyAnswerHook, applyReviewHook, serverSourcesOf };

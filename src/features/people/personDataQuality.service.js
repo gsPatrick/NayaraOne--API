@@ -77,4 +77,4 @@ function scorePersonDataQuality(person) {
   };
 }
 
-module.exports = { scorePersonDataQuality, revisaoDoCadastro };
+module.exports = { scorePersonDataQuality, revisaoDoCadastro, CHECKS };

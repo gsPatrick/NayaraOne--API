@@ -2,6 +2,7 @@
 
 const { Person } = require('../../../models');
 const { canContact, resolveConsent } = require('../../people/personConsents.service');
+require('../messagePurpose'); // M3-18: registra a política de finalidades (lista única) que o canContact consulta
 const E = require('./whatsapp.errors');
 
 const CHANNEL = 'WHATSAPP';

@@ -14,6 +14,7 @@ const { assertE164 } = require('./messaging.phone');
 const { readWhatsappParams } = require('./whatsapp.params');
 const { assertSendTextLimits } = require('./messaging.textLimits');
 const { assertConsent } = require('./whatsapp.consent');
+const { resolveOutboundPurpose } = require('../messagePurpose');
 const { assertTemplate } = require('./whatsapp.templates');
 const { prepareOutboundMedia } = require('./whatsapp.media');
 const { ensureConversation, assertSessionWindow } = require('./whatsapp.conversation');
@@ -88,6 +89,8 @@ async function sendMessage(ctx, input, actorUserId, transaction, opts = {}) {
   const pedido = input || {};
   const operacaoPedida = checkInput(pedido);
   await assertRefsInScope(ctx, pedido, transaction);
+  // M3-18: o envio declara a finalidade (lista única da empresa); sem ela, 422 MESSAGE_PURPOSE_REQUIRED — nunca TRANSACTIONAL por omissão.
+  pedido.purpose = await resolveOutboundPurpose({ direction: 'OUTBOUND', personId: pedido.personId || null, purpose: pedido.purpose, required: true }, ctx, transaction);
   const params = await readMessagingParams(ctx, transaction);
   const wa = await readWhatsappParams(ctx, transaction);
   assertSendTextLimits(pedido, wa); // DI-M9R-16: limite do canal antes de gravar, enfileirar ou redigir o texto

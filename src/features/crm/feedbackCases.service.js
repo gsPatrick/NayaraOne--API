@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { FeedbackCase, Person, Opportunity, Notification } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('./carteira/carteira.scope');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const opening = require('./feedbackCaseOpening');
@@ -149,7 +150,7 @@ async function listFeedbackCases(transaction, filters = {}) {
     where.status = { [Op.in]: ESCALATABLE_STATUSES };
     where.slaDueAt = { [Op.lt]: new Date() };
   }
-  return FeedbackCase.findAll({ where, order: [['sla_due_at', 'ASC']], transaction });
+  return FeedbackCase.findAll({ where: withScope(where, 'feedback', filters.carteira), order: [['sla_due_at', 'ASC']], transaction }); // CRM-TS-012
 }
 
 async function getFeedbackCase(id, transaction, { lock = false } = {}) {

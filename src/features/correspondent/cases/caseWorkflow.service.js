@@ -5,7 +5,7 @@ const AppError = require('../../../utils/AppError');
 const { registrarAuditoria } = require('../../../engines/audit/auditLog.service');
 const { shouldApplyTransition } = require('../statusMachine');
 const { publishFinancingStatusChanged } = require('../correspondentEvents.service');
-const { syncOpportunityFromFinancingCase, STATUS_LABEL_PT } = require('../correspondentCrmSync.service');
+const { STATUS_LABEL_PT } = require('../correspondentCrmSync.service');
 const { resolveFinancingProviderAdapterByCode } = require('../adapters/resolveFinancingProviderAdapter');
 const { recordIntegrationError } = require('../integrationErrors.service');
 const { switchedByContingency } = require('../dispatch/providerSwitch');
@@ -140,7 +140,6 @@ async function applyStatusChange(financingCase, normalizedStatus, { rawStatus, s
   financingCase.updatedBy = actorUserId || null;
   await financingCase.save({ transaction });
   await publishFinancingStatusChanged(financingCase, { previousStatus, normalizedStatus, historyId: history.id }, transaction);
-  await syncOpportunityFromFinancingCase(financingCase, normalizedStatus, transaction);
   await registrarAuditoria(
     {
       groupId: financingCase.groupId,

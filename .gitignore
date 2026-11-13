@@ -19,3 +19,5 @@ reports/offline-run-ia.json
 # JUnit e registro de conexões da execução offline da suíte da NAY (M9-D047).
 reports/ai-ci/
 !docs/evidencias/regressao/*.log
+# TAP por etapa da esteira do Marco 3 (scripts/ci-marco3/executar.js): gerado pela esteira, arquivado pelo workflow, nunca versionado.
+reports/m3-ci/

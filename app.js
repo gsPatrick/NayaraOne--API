@@ -62,6 +62,7 @@ const { startAiRetentionJob } = require('./src/engines/jobs/aiRetentionJob');
 const { startAiEvaluationJob } = require('./src/engines/jobs/aiEvaluationJob');
 const { startAiBudgetPeriodJob } = require('./src/engines/jobs/aiBudgetPeriodJob');
 const { startAiMemoryExpiryJob } = require('./src/engines/jobs/aiMemoryExpiryJob');
+const { startNayComercialForgottenLeadsJob } = require('./src/engines/jobs/nayComercialForgottenLeadsJob');
 const { startAiRagJob } = require('./src/engines/jobs/aiRagJob');
 const { startAiSourceExpiryJob } = require('./src/engines/jobs/aiSourceExpiryJob');
 const { startAnalyticsReadModelRefreshJob } = require('./src/engines/jobs/analyticsReadModelRefreshJob');
@@ -473,6 +474,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_HEALTH_AGGREGATE_
   startAiEvaluationJob();
   startAiBudgetPeriodJob();
   startAiMemoryExpiryJob();
+  startNayComercialForgottenLeadsJob(); // livro do Marco 3 §16: a NAY Comercial detecta lead esquecido sem ninguém perguntar
   startAiRagJob();
   startAiSourceExpiryJob();
   startAnalyticsReadModelRefreshJob();

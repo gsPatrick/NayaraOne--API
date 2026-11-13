@@ -26,8 +26,7 @@ const proposalsService = require('../src/features/crm/proposals.service');
 const dashboardService = require('../src/features/crm/dashboard.service');
 const feedbackCasesService = require('../src/features/crm/feedbackCases.service');
 const exportService = require('../src/features/crm/opportunitiesExport.service');
-const mfaService = require('../src/features/users/mfa.service');
-const { authenticator } = require('otplib');
+const { decideExport, ENTRY: EXPORT_ENTRY } = require('./helpers/m3cbExportGuard');
 const radarService = require('../src/features/radar/radar.service');
 const { explainMatch } = require('../src/features/radar/radarMatching.service');
 const { escalateOverdueFeedbackCases } = require('../src/engines/jobs/feedbackCaseAlertJob');
@@ -754,115 +753,40 @@ test('M3-20: o job encontra e escalona um caso com SLA VENCIDO (tempo simulado v
 // M3-21 — Exportação sensível limitada e auditada
 // ---------------------------------------------------------------------------
 
+// Desde o M9-D822 a exportação sai SÓ pelo caminho vivo POST /exports (a rota antiga responde 410). Estes testes exercitam o guard do DLP
+// com o pedido que a rota monta; a prova pela rota, com login real, arquivo, carteira e auditoria, está em test/m3cb.exportacao.http.test.js.
 test('M3-21: exportação SEM a permissão dedicada é bloqueada (403)', async () => {
-  await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await assert.rejects(
-      () =>
-        exportService.exportOpportunities(
-          {
-            groupId: tenant.groupId,
-            companyId: tenant.companyId,
-            actorUserId: tenant.userId,
-            // Tem permissão de LEITURA, mas não a de EXPORTAÇÃO.
-            actorPermissions: ['crm:opportunities:read'],
-            format: 'csv',
-            filters: {},
-          },
-          transaction
-        ),
-      (err) => {
-        assert.ok(err instanceof AppError);
-        assert.equal(err.statusCode, 403);
-        assert.equal(err.code, 'PERMISSION_DENIED');
-        assert.equal(err.details.required, 'crm:opportunities:export');
-        return true;
-      }
-    );
-  });
+  const { error, decision } = await decideExport(tenant, { permissions: ['governance:dlp:export', 'crm:opportunities:read'], mfaOk: true });
+  assert.equal(decision.blockReason, 'PERMISSION');
+  assert.equal(error.statusCode, 403);
+  assert.equal(error.code, 'GOV_DLP_PERMISSION');
+  assert.equal(decision.job.status, 'BLOCKED');
 });
-
-async function disableExistingMfa(transaction) {
-  const { sequelize: db } = require('./testHelpers');
-  await db.query('DELETE FROM core.mfa_step_ups WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
-  await db.query('DELETE FROM core.mfa_credentials WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
-}
 
 test('M3-21/CRM-TS-013: exportação SEM MFA recente é bloqueada mesmo com a permissão certa', async () => {
-  await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await disableExistingMfa(transaction); // ver nota de determinismo no teste seguinte
-    await assert.rejects(
-      () =>
-        exportService.exportOpportunities(
-          {
-            groupId: tenant.groupId,
-            companyId: tenant.companyId,
-            actorUserId: tenant.userId,
-            actorPermissions: ['crm:opportunities:read', 'crm:opportunities:export'],
-            format: 'csv',
-            filters: {},
-          },
-          transaction
-        ),
-      (err) => {
-        assert.ok(err instanceof AppError);
-        assert.equal(err.statusCode, 403);
-        assert.equal(err.code, 'MFA_REQUIRED_NOT_ENABLED');
-        return true;
-      }
-    );
-  });
+  const { error, decision } = await decideExport(tenant, { permissions: ['governance:dlp:export', 'crm:opportunities:export', 'crm:opportunities:read'], mfaOk: false });
+  assert.equal(decision.blockReason, 'MFA');
+  assert.equal(error.statusCode, 403);
+  assert.equal(error.code, 'MFA_STEP_UP_REQUIRED');
 });
 
-test('M3-21: exportação COM a permissão e MFA recente funciona, limita os campos e audita a contagem certa', async () => {
+test('M3-21: exportação COM a permissão e MFA recente é liberada, limita os campos e audita o pedido', async () => {
+  const { error, decision } = await decideExport(tenant, { permissions: ['governance:dlp:export', 'crm:opportunities:export', 'crm:opportunities:read'], mfaOk: true, estimatedRows: 2 });
+  assert.equal(error, null);
+  assert.equal(decision.decision, 'ALLOW');
+  assert.equal(decision.classification, 'HIGH', 'base de clientes nunca sai abaixo de HIGH');
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const audit = await AuditLog.findAll({ where: { action: 'governance.dlp.export', entityId: decision.job.id }, transaction });
+    assert.equal(audit.length, 1, 'pedido liberado auditado');
     const person = await createLead(transaction, `Lead Export ${suffix}`);
     await createActiveOpportunity(transaction, person.id);
     await createActiveOpportunity(transaction, person.id);
-
-    // CRM-TS-013: exportação exige MFA recente, mesmo mecanismo do step-up financeiro.
-    // Determinismo (19/10/2026): o usuário semente do banco compartilhado já tem MFA configurado
-    // (commitado em 14/10). Dentro da transação de rollback a credencial existente é desativada e
-    // o teste configura a sua pelo fluxo real (setup -> confirm -> verify).
-    await disableExistingMfa(transaction);
-    const { otpauthUri } = await mfaService.setupMfa(tenant.userId, tenant, transaction);
-    const secret = /[?&]secret=([^&]+)/.exec(otpauthUri)[1];
-    await mfaService.confirmMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
-    await mfaService.verifyMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
-
-    const result = await exportService.exportOpportunities(
-      {
-        groupId: tenant.groupId,
-        companyId: tenant.companyId,
-        actorUserId: tenant.userId,
-        actorPermissions: ['crm:opportunities:read', 'crm:opportunities:export'],
-        format: 'csv',
-        filters: { personId: person.id },
-      },
-      transaction
-    );
-
-    assert.equal(result.recordCount, 2);
-    assert.equal(result.format, 'csv');
-
-    // Campos limitados: só as colunas declaradas em EXPORT_FIELDS, e NADA de texto livre
-    // (`nextAction`) nem de dado cadastral da pessoa.
-    assert.deepEqual(Object.keys(result.rows[0]), exportService.EXPORT_FIELDS);
-    assert.ok(!Object.keys(result.rows[0]).includes('nextAction'));
-    assert.ok(!result.content.includes('Ligar para o cliente'));
-    assert.ok(!result.content.includes(`Lead Export ${suffix}`));
-
-    // Cabeçalho + 2 linhas.
-    assert.equal(result.content.split('\n').length, 3);
-
-    // Auditoria obrigatória, com a contagem exata de registros exportados.
-    const logs = await AuditLog.findAll({ where: { action: 'data.export' }, transaction });
-    const thisExport = logs.filter(
-      (log) => log.afterJson && log.afterJson.filters && log.afterJson.filters.personId === person.id
-    );
-    assert.equal(thisExport.length, 1);
-    assert.equal(thisExport[0].afterJson.recordCount, 2);
-    assert.equal(thisExport[0].afterJson.exportType, 'crm.opportunities');
-    assert.equal(thisExport[0].userId, tenant.userId);
+    const { rows } = await EXPORT_ENTRY.collect({ groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId }, { personId: person.id }, transaction);
+    assert.equal(rows.length, 2);
+    assert.deepEqual(Object.keys(rows[0]), exportService.EXPORT_FIELDS);
+    assert.ok(!Object.keys(rows[0]).includes('nextAction'));
+    assert.ok(!JSON.stringify(rows).includes('Ligar para o cliente'));
+    assert.ok(!JSON.stringify(rows).includes(`Lead Export ${suffix}`));
   });
 });

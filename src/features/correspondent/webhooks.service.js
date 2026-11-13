@@ -16,7 +16,6 @@ const { confirmSubmitDispatchByStatus } = require('./dispatch/confirmByStatus');
 const { resolveFinancingProviderAdapterByCode } = require('./adapters/resolveFinancingProviderAdapter');
 const { shouldApplyTransition, shouldApplyPolledTransition } = require('./statusMachine');
 const { publishFinancingStatusChanged, publishIntegrationCorrespondentFailed } = require('./correspondentEvents.service');
-const { syncOpportunityFromFinancingCase } = require('./correspondentCrmSync.service');
 const { recordProposal, PROPOSAL_STATUSES, onCaseClosedByProvider } = require('./cases/caseWorkflow.service');
 const { recordIntegrationError } = require('./integrationErrors.service');
 const { peekEligibilityConfig } = require('./eligibility.service');
@@ -258,7 +257,6 @@ async function processFinancingWebhook(providerCodeRaw, rawBody, headers, body, 
           { previousStatus, normalizedStatus, historyId: historyEntry.id },
           transaction
         );
-        await syncOpportunityFromFinancingCase(financingCase, normalizedStatus, transaction);
         if (['CANCELED', 'REJECTED'].includes(normalizedStatus)) await onCaseClosedByProvider(financingCase, normalizedStatus, transaction);
         if (body.proposal && PROPOSAL_STATUSES.includes(normalizedStatus)) {
           try {
@@ -355,7 +353,6 @@ async function applyPolledStatus(financingCase, adapter, result, transaction) {
     }
     await financingCase.save({ transaction });
     await publishFinancingStatusChanged(financingCase, { previousStatus, normalizedStatus, historyId: historyEntry.id }, transaction);
-    await syncOpportunityFromFinancingCase(financingCase, normalizedStatus, transaction);
     if (['CANCELED', 'REJECTED'].includes(normalizedStatus)) await onCaseClosedByProvider(financingCase, normalizedStatus, transaction);
     if (result.proposal && PROPOSAL_STATUSES.includes(normalizedStatus)) {
       try {

@@ -9,6 +9,7 @@ const { semAcento } = require('../numbers/decimalText');
 const runs = require('../runs');
 const { executionCeiling, providerPolicy } = require('./flow.retrieve');
 const { memorySources } = require('./flow.memory');
+const { serverSourcesOf } = require('./flow.serverTools');
 
 const AVISO_RESTRITO = 'Parte do conteúdo restrito não foi usada.';
 const CLASSES = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'];
@@ -73,6 +74,8 @@ async function fetchSources(state) {
   await screenUserInput(state.parsed.input, { limits, ctx: state.ctx, runId: state.runId, transaction: state.transaction });
   state.execution = await executionCeiling({ registry: state.deps.registry, ctx: state.ctx, agent: state.agent, decision: state.decision, transaction: state.transaction });
   const policy = await providerPolicy(state.deps.registry, state.ctx, state.decision && state.decision.provider, state.transaction);
+  // Fontes que o servidor do agente escolhe para o modelo (gancho serverSources), antes da memória e do RAG: viram fonte-1, fonte-2...
+  state.sources.push(...(await serverSourcesOf(state)).map(normalizeSource));
   state.sources.push(...(await memorySources(state, policy)));
   if (!(await needsSources(state)) || typeof state.deps.retrieve !== 'function') return state.sources;
   const found = await retrieveIsolated(state, {

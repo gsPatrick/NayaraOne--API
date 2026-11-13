@@ -135,11 +135,26 @@ async function resolveConsent(personId, channel, purpose, transaction) {
  *     finalidades operacionais (ex.: TRANSACTIONAL — aviso de visita agendada) são permitidas
  *     por padrão, pois o Caderno só exige consentimento explícito para contato de alto
  *     impacto/marketing ("Não envia mensagem de alto impacto sem regras/consentimento.").
+ *
+ * M3-18 (CRMX-008 "Comunicação respeita opt-in/opt-out e finalidade"): quais finalidades exigem OPT_IN deixou de ser lista fixa no
+ * código e passou a ser a LISTA ÚNICA de finalidades da empresa (parâmetros `marketing.consent.exige_opt_in_para` e
+ * `marketing.consent.sem_opt_in_para`, M9-D418, aba Marketing de Configurações), entregue por uma porta (Pessoas não conhece o
+ * Marketing): o CRM registra a política em `crm/messagePurpose.js`. Finalidade fora das duas listas, ou sem política registrada,
+ * nunca autoriza o contato (fail closed).
  */
-const PURPOSES_REQUIRING_OPT_IN = new Set(['MARKETING', 'CADENCE', 'CAMPAIGN']);
+let purposePolicy = null;
 
-function purposeRequiresConsent(purpose) {
-  return PURPOSES_REQUIRING_OPT_IN.has(String(purpose || '').toUpperCase());
+/** Porta da política de finalidades: fn(purpose, tenant, transaction) -> { known, requiresOptIn }. */
+function registerPurposePolicy(fn) {
+  if (fn !== null && typeof fn !== 'function') throw new TypeError('A política de finalidades deve ser uma função.');
+  purposePolicy = fn;
+}
+
+/** A finalidade exige OPT_IN? true/false; null quando a finalidade não é conhecida (ou não há política registrada). */
+async function purposeRequiresConsent(purpose, tenant, transaction) {
+  if (!purposePolicy) return null;
+  const policy = await purposePolicy(String(purpose || '').toUpperCase(), tenant, transaction);
+  return policy && policy.known ? Boolean(policy.requiresOptIn) : null;
 }
 
 async function canContact(person, channel, purpose, transaction) {
@@ -156,7 +171,9 @@ async function canContact(person, channel, purpose, transaction) {
   const generalOptOut = await resolveConsent(person.id, normalizedChannel, 'ALL', transaction);
   if (generalOptOut && generalOptOut.status === 'OPT_OUT') return false;
 
-  if (purposeRequiresConsent(normalizedPurpose) && (!specificConsent || specificConsent.status !== 'OPT_IN')) {
+  const requiresOptIn = await purposeRequiresConsent(normalizedPurpose, { groupId: person.groupId, companyId: person.companyId }, transaction);
+  if (requiresOptIn === null) return false; // finalidade desconhecida: nunca autoriza
+  if (requiresOptIn && (!specificConsent || specificConsent.status !== 'OPT_IN')) {
     return false;
   }
 
@@ -170,6 +187,7 @@ module.exports = {
   resolveConsent,
   canContact,
   purposeRequiresConsent,
+  registerPurposePolicy,
   VALID_CHANNELS,
   VALID_STATUSES,
 };

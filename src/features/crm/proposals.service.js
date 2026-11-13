@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { Proposal, Opportunity, Property, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('./carteira/carteira.scope');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -168,7 +169,7 @@ async function listProposals(transaction, filters = {}) {
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.statusIn) where.status = { [Op.in]: filters.statusIn.map((s) => String(s).toUpperCase()) };
   return Proposal.findAll({
-    where,
+    where: withScope(where, 'proposal', filters.carteira), // CRM-TS-012: só a carteira do corretor de escopo próprio
     order: [
       ['opportunity_id', 'ASC'],
       ['version_number', 'DESC'],

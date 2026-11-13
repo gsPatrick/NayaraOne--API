@@ -25,7 +25,7 @@ const proposalsService = require('../src/features/crm/proposals.service');
 const visitsService = require('../src/features/crm/visits.service');
 const messagesService = require('../src/features/crm/messages.service');
 const feedbackCasesService = require('../src/features/crm/feedbackCases.service');
-const exportService = require('../src/features/crm/opportunitiesExport.service');
+const { decideExport } = require('./helpers/m3cbExportGuard');
 const opportunityTasksService = require('../src/features/crm/opportunityTasks.service');
 const { getOpportunityTimeline } = require('../src/features/crm/opportunityTimeline.service');
 const radarService = require('../src/features/radar/radar.service');
@@ -557,33 +557,14 @@ test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho err
 // --- Permissão, identidade e Radar ---------------------------------------------------------
 
 test('ADV-C15 exportar a base com apenas crm:opportunities:read (sem a permissão dedicada) é 403', async () => {
-  const suffix = uniqueSuffix();
-  await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const person = await createLead(transaction, `ADV C15 ${suffix}`);
-    await createActiveOpportunity(transaction, person.id);
-
-    for (const permissions of [[], ['crm:opportunities:read'], ['crm:opportunities:update', 'crm:proposals:read'], undefined]) {
-      await assert.rejects(
-        () =>
-          exportService.exportOpportunities(
-            {
-              groupId: tenant.groupId,
-              companyId: tenant.companyId,
-              actorUserId: tenant.userId,
-              actorPermissions: permissions,
-              format: 'csv',
-            },
-            transaction
-          ),
-        (err) => {
-          assert.equal(err.statusCode, 403);
-          assert.equal(err.code, 'PERMISSION_DENIED');
-          return true;
-        },
-        `permissões=${JSON.stringify(permissions)} não deveriam permitir exportar`
-      );
-    }
-  });
+  // Caminho vivo (POST /exports, guard do DLP): sem crm:opportunities:export nenhuma combinação exporta, nem com MFA recente.
+  for (const permissions of [[], ['crm:opportunities:read'], ['crm:opportunities:update', 'crm:proposals:read'], ['governance:dlp:export', 'crm:opportunities:read']]) {
+    const { decision, error } = await decideExport(tenant, { permissions, mfaOk: true });
+    assert.equal(decision.decision, 'DENY', `permissões=${JSON.stringify(permissions)} não deveriam permitir exportar`);
+    assert.equal(decision.blockReason, 'PERMISSION');
+    assert.equal(error.statusCode, 403);
+    assert.equal(error.code, 'GOV_DLP_PERMISSION');
+  }
 });
 
 test('ADV-C16 usuário SUSPENSO não pode ser escalado como responsável por tarefa de oportunidade', async () => {

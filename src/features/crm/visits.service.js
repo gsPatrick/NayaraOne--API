@@ -2,6 +2,7 @@
 
 const { Visit, Property, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('./carteira/carteira.scope');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { publishVisitScheduled, publishVisitCancelled, visitPayload } = require('./crmCalendarEvents.service');
 
@@ -109,7 +110,8 @@ async function listVisits(transaction, filters = {}) {
   if (filters.opportunityId) where.opportunityId = filters.opportunityId;
   if (filters.personId) where.personId = filters.personId;
   if (filters.status) where.status = String(filters.status).toUpperCase();
-  return Visit.findAll({ where, order: [['scheduled_at', 'DESC']], transaction });
+  // CRM-TS-012: o corretor de escopo próprio só lista visitas da carteira (filters.carteira vem da rota).
+  return Visit.findAll({ where: withScope(where, 'visit', filters.carteira), order: [['scheduled_at', 'DESC']], transaction });
 }
 
 async function getVisit(id, transaction) {

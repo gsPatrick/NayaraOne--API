@@ -2,14 +2,17 @@
 
 const { PropertyRadar, Person, Opportunity, Property, PropertyOffer, PropertyAddress } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('../crm/carteira/carteira.scope');
 const { matchRadarToProperties, explainMatch } = require('./radarMatching.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { validateCriteria } = require('./radarCriteria');
 const { listStoredMatches } = require('./radarMatchStore.service');
+const { publishRadarCreated, publishRadarUpdated } = require('./radarEvents.service');
 
 // CRUD de PropertyRadar — o matching determinístico contra properties/offers vive em
-// radarMatching.service.js; este service apenas orquestra o CRUD e aciona o matching quando
-// o radar é criado/atualizado ou consultado explicitamente.
+// radarMatching.service.js; este service orquestra o CRUD, devolve os matches do momento (leitura)
+// e publica crm.radar.created/updated no outbox: o matching que GRAVA (crm.radar_matches +
+// crm.radar.match.created + radar.matched) roda no consumidor do Radar (radarEventConsumers.js, CRMX-007).
 
 async function createRadar(payload, actorUserId, transaction) {
   const { groupId, companyId, personId, opportunityId, criteriaJson, status } = payload;
@@ -44,6 +47,7 @@ async function createRadar(payload, actorUserId, transaction) {
   );
 
   const matches = await matchRadarToProperties(radar, transaction);
+  await publishRadarCreated(radar, transaction);
 
   await registrarAuditoria(
     {
@@ -66,7 +70,7 @@ async function listRadars(transaction, filters = {}) {
   const where = {};
   if (filters.personId) where.personId = filters.personId;
   if (filters.status) where.status = filters.status;
-  return PropertyRadar.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return PropertyRadar.findAll({ where: withScope(where, 'radar', filters.carteira), order: [['created_at', 'DESC']], transaction }); // CRM-TS-012
 }
 
 async function getRadar(id, transaction) {
@@ -86,6 +90,7 @@ async function updateRadar(id, payload, actorUserId, transaction) {
   await radar.save({ transaction });
 
   const matches = await matchRadarToProperties(radar, transaction);
+  await publishRadarUpdated(radar, transaction);
 
   await registrarAuditoria(
     {

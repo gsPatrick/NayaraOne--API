@@ -31,13 +31,25 @@ const TYPES = {
   PROPOSAL: 'PROPOSAL',
   TASK: 'TASK',
   OPPORTUNITY_CREATED: 'OPPORTUNITY_CREATED',
+  FINANCING_STATUS: 'FINANCING_STATUS',
 };
 
 /** Ações de auditoria da própria Opportunity que viram item de timeline. */
 const AUDIT_ACTION_TO_TYPE = {
   'opportunity.stage_change': TYPES.STAGE_CHANGE,
   'opportunity.create': TYPES.OPPORTUNITY_CREATED,
+  // CAD-09: status do financiamento vinculado, gravado pelo consumidor do evento do Correspondente (financingStatus.consumer.js).
+  'crm.opportunity.financing_status_changed': TYPES.FINANCING_STATUS,
 };
+
+/** Dados do item da linha do tempo a partir da auditoria (antes/depois). */
+function auditItemData(type, entry, before, after) {
+  if (type === TYPES.STAGE_CHANGE) return { fromStage: before.stage || null, toStage: after.stage || null, reason: entry.reason };
+  if (type === TYPES.FINANCING_STATUS) {
+    return { financingCaseId: after.financingCaseId || null, status: after.eventStatus || null, previousStatus: after.previousStatus || null, reason: entry.reason };
+  }
+  return { stage: after.stage || null, reason: entry.reason };
+}
 
 /**
  * Vários models do sistema declaram `createdAt: 'created_at'`, o que RENOMEIA o atributo —
@@ -157,12 +169,9 @@ async function getOpportunityTimeline(opportunityId, transaction, options = {}) 
     items.push({
       type,
       id: entry.id,
-      occurredAt: entry.occurredAt || createdAtOf(entry),
+      occurredAt: (type === TYPES.FINANCING_STATUS && after.eventAt) || entry.occurredAt || createdAtOf(entry),
       actorUserId: entry.userId || null,
-      data:
-        type === TYPES.STAGE_CHANGE
-          ? { fromStage: before.stage || null, toStage: after.stage || null, reason: entry.reason }
-          : { stage: after.stage || null, reason: entry.reason },
+      data: auditItemData(type, entry, before, after),
     });
   }
 

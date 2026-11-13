@@ -20,8 +20,8 @@ const reasonOf = (explanation) => {
  * `{ opportunityId, radars, total, shown, hasMore, extra, matches: [{ propertyId, radarId, score, title, reason }] }`, ordenados por
  * pontuação do Radar (do maior ao menor; empate mantém a ordem do Radar, mais recente primeiro) e cortados em `limit`.
  */
-async function listRadarMatches(opportunityId, transaction, { limit }) {
-  const opportunity = await findOpportunity(opportunityId, transaction);
+async function listRadarMatches(opportunityId, transaction, { limit, ownerScope = null }) {
+  const opportunity = await findOpportunity(opportunityId, transaction, ownerScope);
   const radars = await PropertyRadar.findAll({ where: { opportunityId: opportunity.id, status: 'ACTIVE' }, order: [['created_at', 'ASC']], transaction });
   const all = [];
   for (const radar of radars) {

@@ -113,6 +113,7 @@ const listVisits = catchAsync(async (req, res) => {
       opportunityId: req.query.opportunityId,
       personId: req.query.personId,
       status: req.query.status,
+      carteira: req.carteira, // CRM-TS-012: escopo da carteira (carteira.guard.js)
     })
   );
   return success(res, { data: visits });
@@ -174,7 +175,7 @@ const refreshMessageStatus = catchAsync(async (req, res) => {
 
 const listMessages = catchAsync(async (req, res) => {
   const messages = await req.withTenantTransaction((transaction) =>
-    messagesService.listMessages(transaction, { personId: req.query.personId, opportunityId: req.query.opportunityId })
+    messagesService.listMessages(transaction, { personId: req.query.personId, opportunityId: req.query.opportunityId, carteira: req.carteira })
   );
   return success(res, { data: messages });
 });
@@ -207,6 +208,7 @@ const listProposals = catchAsync(async (req, res) => {
       opportunityId: req.query.opportunityId,
       propertyId: req.query.propertyId,
       status: req.query.status,
+      carteira: req.carteira, // CRM-TS-012
     })
   );
   return success(res, { data: proposals });
@@ -263,6 +265,7 @@ const listFeedbackCases = catchAsync(async (req, res) => {
       personId: req.query.personId,
       assignedToUserId: req.query.assignedToUserId,
       overdue: req.query.overdue === 'true',
+      carteira: req.carteira, // CRM-TS-012
     })
   );
   return success(res, { data: cases });

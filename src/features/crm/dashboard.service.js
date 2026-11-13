@@ -90,6 +90,10 @@ async function getCrmDashboard(filters = {}, transaction) {
   // Propostas: mesma tabela que GET /crm/proposals lista.
   const proposalWhere = {};
   if (filters.opportunityId) proposalWhere.opportunityId = filters.opportunityId;
+  // CRM-TS-012: com o filtro de responsável (o corretor de escopo próprio sempre o tem), as propostas também são só das oportunidades dele.
+  if (filters.ownerUserId) {
+    proposalWhere[Op.and] = [{ opportunityId: { [Op.in]: literal(`(SELECT o.id FROM crm.opportunities o WHERE o.owner_user_id = ${sequelize.escape(filters.ownerUserId)} AND o.deleted_at IS NULL)`) } }];
+  }
   const proposalRows = await Proposal.findAll({
     attributes: ['status', [fn('COUNT', col('id')), 'total'], [fn('COALESCE', fn('SUM', col('value')), 0), 'totalValue']],
     where: proposalWhere,

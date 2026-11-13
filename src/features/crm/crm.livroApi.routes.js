@@ -7,6 +7,7 @@ const crmController = require('./crm.controller');
 const radarController = require('../radar/radar.controller');
 const livro = require('./crm.livroApi.controller');
 const { requireOpportunityInScope } = require('./opportunityScope.guard');
+const carteira = require('./carteira/carteira.guard');
 
 /**
  * Guia do Marcelo §13 "APIs mínimas" do Marco 3, no caminho exato do livro. Os caminhos de sempre continuam valendo
@@ -22,9 +23,9 @@ crmLivroRouter.post('/crm/opportunities', scoped, requirePermission('crm:opportu
 crmLivroRouter.post('/crm/opportunities/:id/interactions', scoped, requireOpportunityInScope, requirePermission('crm:messages:create'), livro.recordInteraction);
 crmLivroRouter.post('/crm/opportunities/:id/visits', scoped, requireOpportunityInScope, requirePermission('crm:visits:create'), livro.scheduleVisit);
 crmLivroRouter.post('/crm/opportunities/:id/lost', scoped, requireOpportunityInScope, requirePermission('crm:opportunities:update'), livro.markLost);
-crmLivroRouter.post('/crm/radars', scoped, requirePermission('radar:create'), radarController.create);
-crmLivroRouter.get('/crm/radars/:id/matches', scoped, requirePermission('radar:read'), radarController.matches);
-crmLivroRouter.post('/crm/occurrences', scoped, requirePermission('crm:feedback:create'), crmController.createFeedbackCase);
+crmLivroRouter.post('/crm/radars', scoped, requirePermission('radar:create'), carteira.requireBodyOpportunityInScope, radarController.create);
+crmLivroRouter.get('/crm/radars/:id/matches', scoped, requirePermission('radar:read'), carteira.requireRecordInScope('radar'), radarController.matches);
+crmLivroRouter.post('/crm/occurrences', scoped, requirePermission('crm:feedback:create'), carteira.requireBodyOpportunityInScope, crmController.createFeedbackCase);
 crmLivroRouter.delete('/crm/occurrences/:id', scoped, requirePermission('crm:feedback:update'), livro.refuseOccurrenceDeletion);
 crmLivroRouter.delete('/crm/feedback-cases/:id', scoped, requirePermission('crm:feedback:update'), livro.refuseOccurrenceDeletion);
 
