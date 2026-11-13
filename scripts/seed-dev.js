@@ -38,12 +38,12 @@ const ADMIN_PERMISSIONS = [
   'crm:feedback:create', 'crm:feedback:read', 'crm:feedback:update',
   'crm:opportunities:export',
   'radar:create', 'radar:read', 'radar:update', 'radar:delete',
-  // Marco 4 — Financeiro (nomes conferidos em src/features/finance/finance.routes.js)
+  // Marco 4 — Financeiro (nomes conferidos em src/modules/finance/presentation/http/finance.routes.js)
   'finance:read', 'finance:create', 'finance:update',
   'finance:settle', 'finance:approve', 'finance:reconcile', 'finance:bankAccounts',
-  // Marco 5 — Contratos/Locação/Jurídico (nomes conferidos em src/features/legal/legal.routes.js)
+  // Marco 5 — Contratos/Locação/Jurídico (nomes conferidos em src/modules/legal/shared/legal.routes.js)
   'legal:read', 'legal:create', 'legal:update',
-  'legal:sign', 'legal:approve', 'legal:deliverKeys', 'legal:waive',
+  'legal:sign', 'legal:approve', 'legal:deliverKeys', 'lease.keys.deliver', 'legal:waive', 'legal:evidence:export',
   // Marco 6 — Obras e Pós-obra (nomes conferidos em src/features/construction/construction.routes.js)
   'construction:read', 'construction:create', 'construction:update', 'construction:approve', 'construction:delete',
   // Atividades (trilha de auditoria — nome conferido em src/features/audit/audit.routes.js)

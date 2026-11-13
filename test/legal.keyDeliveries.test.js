@@ -6,11 +6,12 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 const AppError = require('../src/utils/AppError');
+const { keyDeliveryReady, completeInsurance } = require('./m5fech.locacao.helpers');
 
 let tenant;
 
@@ -65,7 +66,9 @@ async function createActiveLeaseWithInspection(transaction) {
   await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'kd-qa-locador' }, tenant.userId, transaction);
   await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'kd-qa-locatario' }, tenant.userId, transaction);
 
-  return { contract, inspection, landlord, tenantPerson };
+  // Fechamento M5: checklist da etapa KEY_DELIVERY dispensado e via assinada do termo (gates do livro).
+  const termEvidenceFileId = await keyDeliveryReady(tenant, contract.id, transaction);
+  return { contract, inspection, landlord, tenantPerson, termEvidenceFileId };
 }
 
 // Caderno Anexo I "10. Entrega de chaves": "Exigir documentos e garantias válidos."
@@ -75,10 +78,10 @@ async function createActiveLeaseWithInspection(transaction) {
 // exatamente o cenário do achado: startsAt=2019-01-01, endsAt=2020-01-01, status ainda ACTIVE.
 test('releaseKeyDelivery bloqueia garantia com endsAt vencido mesmo com status ainda ACTIVE (A04)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE', startsAt: '2019-01-01', endsAt: '2020-01-01' },
+      await completeInsurance(tenant, transaction, { status: 'ACTIVE', startsAt: '2019-01-01', endsAt: '2020-01-01', renewalDueAt: '2019-12-01' }),
       tenant.userId,
       transaction
     );
@@ -89,7 +92,7 @@ test('releaseKeyDelivery bloqueia garantia com endsAt vencido mesmo com status a
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID');
@@ -101,7 +104,7 @@ test('releaseKeyDelivery bloqueia garantia com endsAt vencido mesmo com status a
 
 test('releaseKeyDelivery bloqueia quando existe garantia cadastrada mas nenhuma ACTIVE', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     await guaranteesService.createGuarantee(
       contract.id,
       { guaranteeType: 'DEPOSIT', value: 500, status: 'CANCELLED' },
@@ -115,7 +118,7 @@ test('releaseKeyDelivery bloqueia quando existe garantia cadastrada mas nenhuma 
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID');
@@ -127,10 +130,10 @@ test('releaseKeyDelivery bloqueia quando existe garantia cadastrada mas nenhuma 
 
 test('releaseKeyDelivery libera normalmente com garantia ACTIVE válida', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE' },
+      await completeInsurance(tenant, transaction, { status: 'ACTIVE' }),
       tenant.userId,
       transaction
     );
@@ -142,7 +145,7 @@ test('releaseKeyDelivery libera normalmente com garantia ACTIVE válida', async 
 
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 3, keysIdentification: '2 chaves + 1 controle', termSignedByPersonId: tenantPerson.id },
+      { termEvidenceFileId, keysCount: 3, keysIdentification: '2 chaves + 1 controle', termSignedByPersonId: tenantPerson.id },
       tenant.userId,
       transaction
     );
@@ -167,7 +170,7 @@ test('releaseKeyDelivery libera normalmente com garantia ACTIVE válida', async 
 // chaves/controles", "Assinatura do termo de entrega."
 test('releaseKeyDelivery exige keysCount e termSignedByPersonId (JUR-TS-004 "Chave cedo")', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const keyDelivery = await keyDeliveriesService.createKeyDelivery(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
       tenant.userId,
@@ -175,7 +178,7 @@ test('releaseKeyDelivery exige keysCount e termSignedByPersonId (JUR-TS-004 "Cha
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_VALIDATION');
         return true;
@@ -184,7 +187,7 @@ test('releaseKeyDelivery exige keysCount e termSignedByPersonId (JUR-TS-004 "Cha
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 2 }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 2 }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_VALIDATION');
         return true;
@@ -198,7 +201,7 @@ test('releaseKeyDelivery exige keysCount e termSignedByPersonId (JUR-TS-004 "Cha
 // mais "photosRequired" — se mandar, 400 LEGAL_KEY_DELIVERY_SERVER_POLICY.
 test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóvel usado)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const keyDelivery = await keyDeliveriesService.createKeyDelivery(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id, termType: 'USED_PROPERTY_DELIVERY' },
       tenant.userId,
@@ -206,7 +209,7 @@ test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóv
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, termSignedByPersonId: tenantPerson.id, photosRequired: false }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id, photosRequired: false }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_SERVER_POLICY');
         return true;
@@ -217,7 +220,7 @@ test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóv
       () =>
         keyDeliveriesService.releaseKeyDelivery(
           keyDelivery.id,
-          { keysCount: 1, termSignedByPersonId: tenantPerson.id },
+          { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id },
           tenant.userId,
           transaction
         ),
@@ -227,9 +230,17 @@ test('releaseKeyDelivery exige fotos quando a política do servidor exige (imóv
       }
     );
 
+    // Fechamento M5: id de foto inventado não conta como foto (LEGAL_KEY_DELIVERY_PHOTO_INVALID);
+    // a liberação usa uma imagem enviada de verdade.
+    const filesService = require('../src/features/files/files.service');
+    const photo = await filesService.uploadFile(
+      { groupId: tenant.groupId, companyId: tenant.companyId, fileName: 'sala.png', mimeType: 'image/png', contentBase64: Buffer.from(`foto ${uniqueSuffix()}`).toString('base64'), category: 'generic' },
+      tenant.userId,
+      transaction
+    );
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 1, termSignedByPersonId: tenantPerson.id, photosFileIds: ['11111111-1111-1111-1111-111111111111'] },
+      { termEvidenceFileId, keysCount: 1, termSignedByPersonId: tenantPerson.id, photosFileIds: [photo.id] },
       tenant.userId,
       transaction
     );
@@ -261,7 +272,7 @@ test('F6: createKeyDelivery recusa recebedor que não é parte do contrato (400)
 
 test('F6: releaseKeyDelivery recusa signatário que não é parte do contrato (400)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const outsider = await peopleService.createPerson(
       { groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `KD QA Estranho ${uniqueSuffix()}` },
       tenant.userId,
@@ -273,7 +284,7 @@ test('F6: releaseKeyDelivery recusa signatário que não é parte do contrato (4
       transaction
     );
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 2, termSignedByPersonId: outsider.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, termSignedByPersonId: outsider.id }, tenant.userId, transaction),
       (err) => err.statusCode === 400 && err.code === 'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID'
     );
   });
@@ -282,19 +293,19 @@ test('F6: releaseKeyDelivery recusa signatário que não é parte do contrato (4
 // F7: prévia do termo antes de liberar e termo gravado depois.
 test('F7: prévia do termo KD-TERM-v2 antes de liberar e termo gravado com hash depois', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, landlord, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, landlord, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const kd = await keyDeliveriesService.createKeyDelivery(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
       tenant.userId,
       transaction
     );
-    const prev = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, { keysCount: '3', termSignedByPersonId: landlord.id }, transaction);
+    const prev = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, { termEvidenceFileId, keysCount: '3', termSignedByPersonId: landlord.id }, transaction);
     assert.equal(prev.preview, true);
     assert.equal(prev.termVersion, 'KD-TERM-v3');
     assert.match(prev.termText, /TERMO DE ENTREGA DE CHAVES/);
     assert.match(prev.termText, /Quantidade entregue: 3 chaves\/controles/);
     assert.match(prev.termText, /PRÉVIA/);
-    await keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 3, termSignedByPersonId: landlord.id }, tenant.userId, transaction);
+    await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 3, termSignedByPersonId: landlord.id }, tenant.userId, transaction);
     const after = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, {}, transaction);
     assert.equal(after.preview, false);
     assert.match(after.termHash, /^[0-9a-f]{64}$/);
@@ -312,7 +323,7 @@ function randomCpf() {
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 test('KD-TERM-v2: termo humano (rótulo do tipo, imóvel por nome, política em frase, CPF formatado, data BR) e hash', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, landlord, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, landlord, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const cpf = randomCpf();
     const cpfFmt = `${cpf.slice(0, 3)}\\.${cpf.slice(3, 6)}\\.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
     await sequelize.query('UPDATE people.persons SET tax_id_normalized = :cpf WHERE id = :id', { replacements: { cpf, id: landlord.id }, transaction });
@@ -321,7 +332,7 @@ test('KD-TERM-v2: termo humano (rótulo do tipo, imóvel por nome, política em 
       tenant.userId,
       transaction
     );
-    const prev = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, { keysCount: '1', termSignedByPersonId: landlord.id }, transaction);
+    const prev = await keyDeliveriesService.previewKeyDeliveryTerm(kd.id, { termEvidenceFileId, keysCount: '1', termSignedByPersonId: landlord.id }, transaction);
     assert.equal(prev.termVersion, 'KD-TERM-v3');
     assert.doesNotMatch(prev.termText, UUID_RE);
     assert.match(prev.termText, /Locação/);
@@ -333,7 +344,7 @@ test('KD-TERM-v2: termo humano (rótulo do tipo, imóvel por nome, política em 
     assert.match(prev.termText, /Locatário\(a\) no contrato/);
     assert.match(prev.termText, /concluída em \d{2}\/\d{2}\/\d{4}/);
 
-    const released = await keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 1, keysIdentification: 'Porta principal', termSignedByPersonId: landlord.id }, tenant.userId, transaction);
+    const released = await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 1, keysIdentification: 'Porta principal', termSignedByPersonId: landlord.id }, tenant.userId, transaction);
     assert.equal(released.termVersion, 'KD-TERM-v3');
     assert.doesNotMatch(released.termText, UUID_RE);
     assert.doesNotMatch(released.termText, /\d{4}-\d{2}-\d{2}T/);
@@ -362,13 +373,13 @@ test('KD-TERM-v2: rótulo de venda com permuta e formatação de CNPJ', () => {
 
 test('KD-TERM-v1 continua válido: termo já gravado em v1 é devolvido intacto (texto e hash)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, landlord, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, landlord, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const kd = await keyDeliveriesService.createKeyDelivery(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
       tenant.userId,
       transaction
     );
-    await keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 2, termSignedByPersonId: landlord.id }, tenant.userId, transaction);
+    await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, termSignedByPersonId: landlord.id }, tenant.userId, transaction);
     // simula um termo legado gravado em v1
     const legacyText = 'TERMO DE ENTREGA DE CHAVES (KD-TERM-v1)\nContrato: X (LEASE)';
     const legacyHash = require('crypto').createHash('sha256').update(legacyText, 'utf8').digest('hex');
@@ -384,7 +395,7 @@ test('KD-TERM-v1 continua válido: termo já gravado em v1 é devolvido intacto 
 
 test('M45: cancelamento de entrega de chaves exige motivo, é auditado e bloqueia liberação', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, landlord, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, landlord, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const kd = await keyDeliveriesService.createKeyDelivery(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id },
       tenant.userId,
@@ -400,7 +411,7 @@ test('M45: cancelamento de entrega de chaves exige motivo, é auditado e bloquei
       { replacements: { id: kd.id }, transaction }
     );
     assert.equal(rows.length, 1);
-    await assert.rejects(() => keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 1, termSignedByPersonId: landlord.id }, tenant.userId, transaction),
+    await assert.rejects(() => keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 1, termSignedByPersonId: landlord.id }, tenant.userId, transaction),
       (err) => err.statusCode === 409 && err.code === 'LEGAL_KEY_DELIVERY_CANCELLED');
     await assert.rejects(() => keyDeliveriesService.cancelKeyDelivery(kd.id, { reason: 'de novo, outra vez' }, tenant.userId, transaction),
       (err) => err.statusCode === 409);

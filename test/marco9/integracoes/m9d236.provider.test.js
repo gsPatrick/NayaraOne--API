@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const env = require('../_helpers/m9d236Env');
 const settingsService = require('../../../src/features/settings/settings.service');
-const contractVersionsService = require('../../../src/features/legal/contractVersions.service');
+const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
 const { reconcileDispatch } = require('../../../src/features/integrations/dispatch/reconcile');
 
 let tenant;

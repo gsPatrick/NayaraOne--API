@@ -1,7 +1,7 @@
 'use strict';
 
 // M9-D035/D038/D039 — leituras compartilhadas entre agentes: a mesma tool devolve agregado ou lista nominal conforme o escopo de dados do agente chamador.
-const { getExpiringContracts } = require('../../legal/expiringContracts.service');
+const { getExpiringContracts } = require('../../../modules/legal/contracts/application/expiringContracts.service');
 const { getStalledSummary } = require('../../correspondent/stalledSummary.service');
 const { getSetting } = require('../../settings/settings.service');
 const { wantsDetail } = require('./summaryScope');

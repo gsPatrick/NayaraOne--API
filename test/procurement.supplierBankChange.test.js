@@ -13,7 +13,7 @@
 //   PO -> recebimento -> payable -> conta do fornecedor -> pagamento OK
 //   fornecedor troca dado bancário -> conta volta a PENDING_COOLDOWN -> pagamento seguinte BLOQUEADO
 //
-// e cobrem as duas brechas reais encontradas nesta auditoria (bankAccounts.service.js):
+// e cobrem as duas brechas reais encontradas nesta auditoria (bank-accounts.service.js):
 //   (1) reatribuir ao fornecedor uma conta já ACTIVE (ownerPersonId) não reabria o cooldown;
 //   (2) trocar PIX com a conta BLOCKED e depois desbloquear ia direto pra ACTIVE.
 
@@ -23,16 +23,17 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, settleFinancialEntryWithApproval } = require('./testHelpers');
 const itemsService = require('../src/features/inventory/items.service');
 const procurementService = require('../src/features/procurement/procurement.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const antifraudService = require('../src/features/finance/financeAntifraud.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const antifraudService = require('../src/modules/finance/application/services/finance-antifraud.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const { BankAccount, FinancialEntry, User } = require('../src/models');
 
 // M9-D807: dado bancário e PIX só mudam com origem informada.
 const EVIDENCE = { source: 'PERSON_STATEMENT', note: 'Fornecedor avisou a troca de banco por e-mail.' };
 
-// FIX FIN-004 (ver financialEntries.service.js#settleFinancialEntry): liquidar um PAYABLE com
+// FIX FIN-004 (ver receipt.service.js#settleFinancialEntry): liquidar um PAYABLE com
 // bankAccountId agora exige aprovação prévia. Estes testes são sobre COOLDOWN de conta
 // bancária, não sobre o fluxo de aprovação — aprova o pagamento antes de cada tentativa de
 // liquidação pra isolar exatamente o que cada teste quer provar.
@@ -164,9 +165,9 @@ test('Banco fornecedor alterado: troca de PIX do fornecedor reabre o cooldown e 
     // O pagamento seguinte do MESMO fornecedor, pela MESMA conta, fica retido.
     const secondPayable = await receiveAndPointPayableTo(transaction, order, location, 6, account.id);
     await approvePayable(tenant, secondPayable.id, transaction);
-    await assert.rejects(() => financialEntriesService.settleFinancialEntry(secondPayable.id, tenant.userId, transaction), assertCooldownError);
+    await assert.rejects(() => receiptService.settleFinancialEntry(secondPayable.id, tenant.userId, transaction), assertCooldownError);
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(secondPayable.id, 10, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntryPartial(secondPayable.id, 10, tenant.userId, transaction),
       assertCooldownError,
       'baixa parcial não pode ser atalho para pagar a conta recém-alterada'
     );
@@ -197,7 +198,7 @@ test('Banco fornecedor alterado: reatribuir ao fornecedor uma conta já ACTIVE d
     const { order, location } = await createAwardedOrder(transaction, supplier.id);
     const payable = await receiveAndPointPayableTo(transaction, order, location, 10, foreignAccount.id);
     await approvePayable(tenant, payable.id, transaction);
-    await assert.rejects(() => financialEntriesService.settleFinancialEntry(payable.id, tenant.userId, transaction), assertCooldownError);
+    await assert.rejects(() => receiptService.settleFinancialEntry(payable.id, tenant.userId, transaction), assertCooldownError);
   });
 });
 
@@ -222,7 +223,7 @@ test('Banco fornecedor alterado: trocar o PIX com a conta BLOQUEADA e depois des
     const { order, location } = await createAwardedOrder(transaction, supplier.id);
     const payable = await receiveAndPointPayableTo(transaction, order, location, 10, account.id);
     await approvePayable(tenant, payable.id, transaction);
-    await assert.rejects(() => financialEntriesService.settleFinancialEntry(payable.id, tenant.userId, transaction), assertCooldownError);
+    await assert.rejects(() => receiptService.settleFinancialEntry(payable.id, tenant.userId, transaction), assertCooldownError);
     await assert.rejects(() => bankAccountsService.updateBankAccount(account.id, { status: 'ACTIVE' }, tenant.userId, transaction), assertCooldownError);
   });
 });

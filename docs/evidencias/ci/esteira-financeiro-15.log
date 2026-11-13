@@ -1,0 +1,483 @@
+# estágio 15: failure_drills
+$ test -s docs/runbooks/banco-indisponivel-pagamento-incerto-estorno.md
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-15-1.xml test/f06.flowSecurity.test.js test/finance.bankPaymentConfirmation.test.js test/nayaraConferencia1810.payments.test.js
+(node:27571) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ F06-PAY-01 pular a aprovação: submeter ao banco uma intenção ainda PENDING é recusado (1439.506416ms)
+✔ F06-PAY-02 reaproveitar a aprovação de OUTRO lançamento numa intenção é recusado (17.775458ms)
+✔ F06-PAY-03 recuperação após falha DEFINITIVA: nova tentativa confirmada liquida uma vez; replays e confirmação tardia da tentativa rejeitada não duplicam (157.21975ms)
+✔ F06-PAY-04 enquanto um pagamento está SUBMITTED (em trânsito no banco), abrir outra intenção para o mesmo lançamento é recusado (64.787375ms)
+✔ F06-PAY-05 resposta INCERTA do banco seguida da confirmação real: o pagamento é registrado no ledger exatamente uma vez (68.768875ms)
+✔ F06-PAY-06 depois de uma resposta INCERTA, não se abre um segundo pagamento para o mesmo lançamento (53.475292ms)
+✔ F06-IDOR-01 outra empresa real com legal:read não exporta o dossiê de A pela rota (404) e não deixa rastro na cadeia de custódia (143.949333ms)
+✔ F06-IDOR-02 outra empresa real não lê o relatório de vistoria de A pela rota (404) (21.133083ms)
+✔ F06-IDOR-03 outra empresa real não baixa arquivo de A pela rota de conteúdo (404) (57.6635ms)
+✔ F06-IDOR-04 outra empresa real com finance:read não lê lançamento de A pela rota (404) (38.873375ms)
+✔ F06-RBAC-01 perfil da própria empresa SEM a permissão de leitura é barrado (403) no dossiê, no relatório de vistoria e no lançamento (9.284167ms)
+✔ F06-RBAC-02 download de arquivo exige permissão de leitura do módulo dono do arquivo (59.478083ms)
+✔ F06-RBAC-02b arquivo do Estoque exige inventory:read; arquivo sem módulo dono só para uploader ou admin (54.087667ms)
+(node:27605) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ FIN-TS-001/018: submissão ao banco não liquida o lançamento — só CONFIRMED libera o ledger (178.643125ms)
+✔ FIN-TS-019: callback CONFIRMED do banco libera o ledger (liquida o lançamento) (102.902375ms)
+✔ FIN-TS-002: callback de falha do banco NÃO liquida o lançamento e marca FAILED (89.764542ms)
+✔ Callback duplicado (idempotência): reprocessar CONFIRMED duas vezes não liquida duas vezes (99.746833ms)
+✔ Callback forjado: id de submissão externa inexistente é recusado, não cria nada (3.427791ms)
+✔ Resposta incerta do provedor (status desconhecido) não é tratada como confirmação — só CONFIRMED libera ledger (66.5515ms)
+✔ A1: a conta bancária de um PAYABLE não pode ser removida (era o atalho para liquidar sem controle) (52.847583ms)
+(node:27651) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ A1: PAYABLE SEM conta não é mais liquidado direto — exige aprovação e comprovante; com eles vira MANUAL_WITH_EVIDENCE (87.91875ms)
+✔ A2: baixa manual com intenção SUBMITTED no banco é recusada (104.047875ms)
+✔ A2: CONFIRMED do banco para lançamento já liquidado vira anomalia (pagamento em dobro), não erro em loop (69.407625ms)
+✔ A3: excedente classificado como PAYABLE vira obrigação PENDENTE (com centro de custo), nunca saída de caixa automática (19.78125ms)
+✔ C1: competência de mês fechado não recebe nem perde lançamento (criação, update atual/novo, classificação) (29.327542ms)
+✔ A4: comprovante informado só na baixa (sem anexar antes da aprovação) é recusado (23.396ms)
+✔ A4: anexar o comprovante invalida a aprovação anterior — aprovação precisa vir depois (51.45325ms)
+✔ A4: o mesmo comprovante não serve para duas baixas; comprovante precisa ser PDF ou imagem (21.931166ms)
+✔ A4: quem anexou o comprovante não pode ser quem aprovou a baixa manual (26.585ms)
+✔ A4: execução manual de intenção aprovada ANTES do comprovante é recusada (25.565167ms)
+✔ B1: erro/timeout na chamada ao banco deixa a intenção SUBMITTING (incerta) — nunca FAILED, nunca libera outra intenção (118.579083ms)
+✔ B1: o adapter real envia a chave de idempotência ao provedor (0.2485ms)
+✔ B2: ERROR é transitório (continua SUBMITTED); RETURNED depois de pago vira anomalia; resolver incerteza só com resposta final do banco (131.704542ms)
+✔ B4: CONFIRMED depois de FAILED abre anomalia (dinheiro pode ter saído duas vezes) (60.155709ms)
+✔ B5: confirmação via sandbox é SANDBOX_CONFIRMED; Santander incompleto falha fechado; sandbox proibido em produção (72.027917ms)
+✔ B5: webhook bancário exige assinatura HMAC também em sandbox (sem segredo configurado, falha fechado) (33.446ms)
+✔ B6: confirmação do banco não é recusada por controle de pré-pagamento (revisão manual posterior) — liquida e abre anomalia (61.920958ms)
+✔ D1: estornar o recebimento da caução com devolução ativa é bloqueado (20.802333ms)
+✔ D2: caução sem contrato/titular é recusada; titular precisa ser locatário/comprador/fiador (9.247292ms)
+✔ D3: baixa parcial da caução mantém a marca de terceiro; evento de saída só na liquidação (44.116875ms)
+✔ D3: compensação aponta a dívida do titular, exige aprovação, não move caixa e abate a dívida (56.066833ms)
+✔ E1: solicitação de aprovação recusa tipo inventado e entidade inexistente (2.179625ms)
+✔ B3: duas criações SIMULTÂNEAS de intenção para o mesmo lançamento — a 2ª espera o lock; o índice único barra a duplicata (1523.141417ms)
+✔ D4: duas devoluções SIMULTÂNEAS da mesma caução — a 2ª espera o lock da origem; juntas não passam do saldo (1525.715083ms)
+ℹ tests 44
+ℹ suites 0
+ℹ pass 44
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 20379.883167
+$ node scripts/restoreDrill/financeFullDrill.js --port 5523 --report-dir reports/fin-ci
+# Drill de restore/replay financeiro (Marco 4)
+Data: 2026-11-11T00:27:25.209Z
+Commit da API: 8ca398b6ff6e7d2da9b2ca3fb18e877f0b4c24ae (com alterações locais não commitadas)
+PostgreSQL: postgres (PostgreSQL) 17.11 (Homebrew)
+
+### 1. Cluster de ORIGEM descartável (porta 5523)
+  role nayara_runtime NOSUPERUSER/NOBYPASSRLS; 599 migrations; seeds base; GRANT em 18 schemas.
+
+### 2. Fixtures financeiras pelos serviços reais (role de runtime, RLS real, com commit)
+  Fixtures financeiras criadas: recebível 0,30 (0.10→saldo 0.20, 0.20→saldo 0.00), intenção 98ab5fb8-adce-4b45-8ec8-b624f90f7710 confirmada pelo callback, conciliação 2c8f20ad-ea26-4de1-a09a-c5fa158bda9f, caução 8e4bcd37-8835-4cba-800c-5ad7d4923fd9, repasse PAID, comissão (versão f0878c3d-44cd-4bf9-a981-b4c965d648c6, parcela 1 PAID), intercompany PENDING, período 2025-06 CLOSED, anomalia a5416d0a-66d6-46a9-b524-c540113ecbd6; 12 lançamentos no tenant A; tenant B 7dbb632e-8b62-4f85-af5a-a6f4e6c6f440.
+
+### 3. Backup com os scripts reais (npm run backup → pg_dump -Fc; scripts/backupStorage.js)
+  Backup gerado com sucesso: <tmp>/backup/drill_source_2026-11-11T00-27-49-293Z.dump (2.58 MB)
+  Backup do storage gerado: 6 arquivo(s) em <tmp>/backup/storage (manifest.json com SHA-256 por arquivo).
+
+### 4. Cluster de DESTINO NOVO (porta 5524, outro initdb)
+  4a. restore SEM as roles no destino → falhou apontando as roles ausentes ✅ (nayara_runtime, nayara_analytics_reader)
+  4b. runbook: roles nayara_runtime + nayara_migration + nayara_analytics_reader criadas; banco vazio; restore → Restore concluído em "drill_target" a partir de <tmp>/backup/drill_source_2026-11-11T00-27-49-293Z.dump
+      role nayara_runtime no destino: superuser/bypassrls = false/false
+  4c. Restore do storage concluído: 6/6 arquivo(s) conferidos contra o manifesto em <tmp>/uploads-target.
+
+### 5. Verificação pós-restore (verifyFinanceRestore.js)
+=== Drill de restore financeiro — comparação origem × destino restaurado ===
+Tenant A: company=6ee5bc0f-dd81-4ba9-84e2-5bbe90f702f1  |  Tenant B (isolamento): company=7dbb632e-8b62-4f85-af5a-a6f4e6c6f440
+  ✅ objetos do schema finance na origem: 39 (tabelas e views)
+  ✅ mesmos objetos no destino (39)
+
+--- finance.accounts_chart ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.anomaly_cases ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 13 comparações COM VALOR idênticas (1 registros × 16 campos; 3 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (7a6511c03f39936b…)
+
+--- finance.approval_requests ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 26 comparações COM VALOR idênticas (2 registros × 13 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (eea842b440e59071…)
+
+--- finance.approval_steps ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 24 comparações COM VALOR idênticas (2 registros × 12 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (6b1893f298bec096…)
+
+--- finance.bank_accounts ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 23 comparações COM VALOR idênticas (2 registros × 17 campos; 11 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (c5280fea17fd0bd6…)
+
+--- finance.bank_payment_provider_routing ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 6 comparações COM VALOR idênticas (1 registros × 6 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (4c8cb16a1fc9cd10…)
+
+--- finance.bank_statement_entries ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.bank_statement_imports ---
+  ✅ registros na origem: 1 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 11 comparações COM VALOR idênticas (1 registros × 12 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (baf25a850f4b6b57…)
+
+--- finance.bank_transactions ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (a96ee28b6e846836…)
+
+--- finance.billing_schedule_items ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.billing_schedules ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.budgets_forecasts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.chart_of_account_versions ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.chart_of_accounts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.closing_periods ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 23 comparações COM VALOR idênticas (1 registros × 29 campos; 6 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (f340a33629bef631…)
+
+--- finance.collection_cadence_steps ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.collection_cases ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.commission_installments ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 28 comparações COM VALOR idênticas (2 registros × 15 campos; 2 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (a752dd421e5f923c…)
+
+--- finance.commissions ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 17 comparações COM VALOR idênticas (1 registros × 21 campos; 4 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (f17fe3efc319d04e…)
+
+--- finance.cost_centers ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 7 comparações COM VALOR idênticas (1 registros × 11 campos; 4 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (55c6435476580f22…)
+
+--- finance.entry_installments ---
+  ✅ registros na origem: 3 (mínimo exigido 3)
+  ✅ mesma quantidade de registros (origem 3, destino 3)
+  ✅ 26 comparações COM VALOR idênticas (3 registros × 9 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (7afd1e3217ab685a…)
+
+--- finance.financial_entries ---
+  ✅ registros na origem: 14 (mínimo exigido 14)
+  ✅ mesma quantidade de registros (origem 14, destino 14)
+  ✅ 279 comparações COM VALOR idênticas (14 registros × 42 campos; 309 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (a31ed31381a3f5a5…)
+
+--- finance.guaranteed_rent_contracts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.intercompany_transfers ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 20 comparações COM VALOR idênticas (1 registros × 25 campos; 5 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (5fe7036cb10c6338…)
+
+--- finance.ledger ---
+  ✅ registros na origem: 8 (mínimo exigido 8)
+  ✅ mesma quantidade de registros (origem 8, destino 8)
+  ✅ 103 comparações COM VALOR idênticas (8 registros × 15 campos; 17 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (5d216b012ec4cc18…)
+
+--- finance.owner_repasses ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 24 comparações COM VALOR idênticas (1 registros × 27 campos; 3 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (be694eddfc555132…)
+
+--- finance.ownership_transfer_tasks ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.payment_intents ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 22 comparações COM VALOR idênticas (1 registros × 31 campos; 9 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (22dab56a6c2b6aad…)
+
+--- finance.period_closure_snapshots ---
+  ✅ registros na origem: 1 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 9 comparações COM VALOR idênticas (1 registros × 9 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (535703c2e6ecfa34…)
+
+--- finance.period_closures ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 23 comparações COM VALOR idênticas (1 registros × 29 campos; 6 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (f340a33629bef631…)
+
+--- finance.reconciliations ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 11 comparações COM VALOR idênticas (1 registros × 12 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (66c7b0e68dd3b7c3…)
+
+--- finance.rent_adjustments ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.rent_advances ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.result_centers ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 14 comparações COM VALOR idênticas (2 registros × 11 campos; 8 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (33584f4b49f2bf85…)
+
+--- finance.security_deposits ---
+  ✅ registros na origem: 2 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 19 comparações COM VALOR idênticas (2 registros × 12 campos; 5 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (1cc24ca858399d6e…)
+
+--- finance.tax_documents ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.utility_accounts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.utility_obligations ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.utility_reimbursements ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- audit.audit_log (ações finance.*) ---
+  ✅ registros na origem: 56 (mínimo exigido 20)
+  ✅ mesma quantidade de registros (origem 56, destino 56)
+  ✅ 793 comparações COM VALOR idênticas (56 registros × 19 campos; 271 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (fc244f468ea57f65…)
+
+--- integration.outbox_events (finance.*) ---
+  ✅ registros na origem: 41 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 41, destino 41)
+  ✅ 574 comparações COM VALOR idênticas (41 registros × 23 campos; 369 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (5c0dbeddd87dac65…)
+
+--- integration.domain_events (finance.*) ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- core.rule_versions (regra de comissão) ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 15 comparações COM VALOR idênticas (1 registros × 16 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (739e7c03eda4aa9f…)
+
+--- people.files (comprovantes financeiros) ---
+  ✅ registros na origem: 3 (mínimo exigido 3)
+  ✅ mesma quantidade de registros (origem 3, destino 3)
+  ✅ 54 comparações COM VALOR idênticas (3 registros × 22 campos; 12 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (560a0f83141cc105…)
+
+--- Bytes dos comprovantes (storage cifrado restaurado) ---
+  ✅ 029320c1: blob cifrado idêntico (1463 bytes)
+  ✅ 029320c1: SHA-256 decifrado = SHA-256 calculado nas fixtures (a9342d9a1471fb62…)
+  ✅ 029320c1: não vazio e do tamanho gravado (1428 bytes)
+  ✅ 77bba604: blob cifrado idêntico (1471 bytes)
+  ✅ 77bba604: SHA-256 decifrado = SHA-256 calculado nas fixtures (70c9e0c565d942b7…)
+  ✅ 77bba604: não vazio e do tamanho gravado (1436 bytes)
+  ✅ e5e13b19: blob cifrado idêntico (1471 bytes)
+  ✅ e5e13b19: SHA-256 decifrado = SHA-256 calculado nas fixtures (df3d310094b3f5af…)
+  ✅ e5e13b19: não vazio e do tamanho gravado (1436 bytes)
+
+--- Invariantes no destino (role de runtime, contexto do tenant A) ---
+  ✅ pai restaurado: valor 0.30, status SETTLED
+  ✅ filhas SETTLED restauradas: 0.10 + 0.20 = 0.30
+  ✅ saldo = 0,30 − Σ filhas SETTLED = 0.00
+  ✅ saldos registrados antes do backup: após 0.10 → 0.20 (PARTIALLY_SETTLED); após 0.20 → 0.00 (SETTLED)
+  ✅ finance.ledger: PARTIAL_RECEIVABLE/CREDIT 0.10, PARTIAL_RECEIVABLE/CREDIT 0.20
+  ✅ UPDATE do valor de um movimento liquidado recusado pelo banco restaurado — finance.financial_entries é append-only (FIN-003/010): a coluna "amount" não pode ser alterada após a criação 
+  ✅ UPDATE da chave idempotente de um movimento liquidado recusado pelo banco restaurado — finance.financial_entries é append-only (FIN-003/010): a coluna "idempotency_key" não pode ser alterada após a
+  ✅ DELETE de um movimento liquidado recusado pelo banco restaurado — finance.financial_entries é append-only (FIN-003/010): DELETE direto não é permitido (id=72bd6c15-3fe9-41d5-82
+  ✅ escrita na view finance.ledger recusada — A view finance.ledger é somente leitura (nomes do Caderno M4 §5); escreva pelo serviço do Financeiro.
+  ✅ período 2025-06 restaurado com status CLOSED
+
+--- RLS no destino: tenant B não lê nada do tenant A ---
+  ✅ tenant B vê 0 linhas do A em 13 objetos — {"financial_entries":0,"ledger":0,"payment_intents":0,"approval_requests":0,"bank_transactions":0,"reconciliations":0,"owner_repasses":0,"commissions":0,"commission_installments":0,"intercompany_transfers":0,"period_closures":0,"anomaly_cases":0,"bank_accounts":0}
+  ✅ controle positivo: tenant B vê o próprio lançamento (1)
+  ✅ tenant B alterando anomalia do A → 0 linha(s) afetada(s)
+  ✅ sem contexto de tenant a role de runtime vê 0 lançamentos (fail-closed)
+  ✅ role nayara_runtime no destino: superuser=false, bypassrls=false
+
+=== Resumo por objeto ===
+  ✅ finance.accounts_chart: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.anomaly_cases: 1 registro(s), 13 comparações, hash 7a6511c03f39936b…
+  ✅ finance.approval_requests: 2 registro(s), 26 comparações, hash eea842b440e59071…
+  ✅ finance.approval_steps: 2 registro(s), 24 comparações, hash 6b1893f298bec096…
+  ✅ finance.bank_accounts: 2 registro(s), 23 comparações, hash c5280fea17fd0bd6…
+  ✅ finance.bank_payment_provider_routing: 1 registro(s), 6 comparações, hash 4c8cb16a1fc9cd10…
+  ✅ finance.bank_statement_entries: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.bank_statement_imports: 1 registro(s), 11 comparações, hash baf25a850f4b6b57…
+  ✅ finance.bank_transactions: 1 registro(s), 12 comparações, hash a96ee28b6e846836…
+  ✅ finance.billing_schedule_items: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.billing_schedules: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.budgets_forecasts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.chart_of_account_versions: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.chart_of_accounts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.closing_periods: 1 registro(s), 23 comparações, hash f340a33629bef631…
+  ✅ finance.collection_cadence_steps: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.collection_cases: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.commission_installments: 2 registro(s), 28 comparações, hash a752dd421e5f923c…
+  ✅ finance.commissions: 1 registro(s), 17 comparações, hash f17fe3efc319d04e…
+  ✅ finance.cost_centers: 1 registro(s), 7 comparações, hash 55c6435476580f22…
+  ✅ finance.entry_installments: 3 registro(s), 26 comparações, hash 7afd1e3217ab685a…
+  ✅ finance.financial_entries: 14 registro(s), 279 comparações, hash a31ed31381a3f5a5…
+  ✅ finance.guaranteed_rent_contracts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.intercompany_transfers: 1 registro(s), 20 comparações, hash 5fe7036cb10c6338…
+  ✅ finance.ledger: 8 registro(s), 103 comparações, hash 5d216b012ec4cc18…
+  ✅ finance.owner_repasses: 1 registro(s), 24 comparações, hash be694eddfc555132…
+  ✅ finance.ownership_transfer_tasks: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.payment_intents: 1 registro(s), 22 comparações, hash 22dab56a6c2b6aad…
+  ✅ finance.period_closure_snapshots: 1 registro(s), 9 comparações, hash 535703c2e6ecfa34…
+  ✅ finance.period_closures: 1 registro(s), 23 comparações, hash f340a33629bef631…
+  ✅ finance.reconciliations: 1 registro(s), 11 comparações, hash 66c7b0e68dd3b7c3…
+  ✅ finance.rent_adjustments: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.rent_advances: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.result_centers: 2 registro(s), 14 comparações, hash 33584f4b49f2bf85…
+  ✅ finance.security_deposits: 2 registro(s), 19 comparações, hash 1cc24ca858399d6e…
+  ✅ finance.tax_documents: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.utility_accounts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.utility_obligations: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.utility_reimbursements: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ audit.audit_log (ações finance.*): 56 registro(s), 793 comparações, hash fc244f468ea57f65…
+  ✅ integration.outbox_events (finance.*): 41 registro(s), 574 comparações, hash 5c0dbeddd87dac65…
+  ✅ integration.domain_events (finance.*): 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ core.rule_versions (regra de comissão): 1 registro(s), 15 comparações, hash 739e7c03eda4aa9f…
+  ✅ people.files (comprovantes financeiros): 3 registro(s), 54 comparações, hash 560a0f83141cc105…
+
+202/202 checagens aprovadas (verificação).
+
+### 6. Replay pós-restore e adulteração deliberada (replayFinanceRestore.js)
+--- Replay 1: mesmo callback bancário CONFIRMED contra o banco restaurado ---
+  ✅ 2 entregas do mesmo callback: {"received":true,"processed":false,"reason":"duplicate_event"} | {"received":true,"processed":false,"reason":"duplicate_event"}
+  ✅ intenção segue EXECUTED; lançamentos 14 → 14; filhos 0; lock_version 1 → 1
+
+--- Replay 2: reimportação do mesmo extrato ---
+  ✅ reimportação: importadas 0, duplicadas 1; bank_transactions 1 → 1
+
+--- Replay 3: lançamento com idempotencyKey já existente ---
+  ✅ serviço recusou: FINANCE_DUPLICATE_PAYMENT
+  ✅ INSERT direto com a mesma chave recusado pelo banco: 23505 duplicate key value violates unique constraint "financial_entries_idempotency_ke
+  ✅ lançamentos 14 → 14
+
+--- Replay 4: mesma baixa parcial do recebível de R$ 0,30 (mesma chave) ---
+  ✅ chave idempotente gravada na baixa restaurada: sim; replay → devolvida a baixa original (mesmo id) idempotentReplay=true
+  ✅ filhas do recebível 2 → 2 (nenhuma baixa nova)
+
+--- Replay 5: mesma comissão (mesma idempotencyKey) ---
+  ✅ replay → recusada FINANCE_COMMISSION_DUPLICATE; comissões 1 → 1
+
+--- Período CLOSED restaurado ---
+  ✅ lançamento novo em 2025-06: FINANCE_PERIOD_CLOSED
+  ✅ edição de lançamento do mês fechado: FINANCE_PERIOD_CLOSED
+
+--- Adulteração deliberada no destino (superusuário, triggers desligados) ---
+
+--- finance.financial_entries ---
+  ✅ registros na origem: 14 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 14, destino 14)
+  ✅ 279 comparações COM VALOR idênticas (14 registros × 42 campos; 309 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (a31ed31381a3f5a5…)
+  (comparação com a adulteração — os ❌ abaixo são o esperado)
+
+--- finance.financial_entries ---
+  ✅ registros na origem: 14 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 14, destino 14)
+  ❌ 68147cdf-6878-4831-9d41-183245eaccf5.amount — origem "1234.56" ≠ destino "2234.56"
+  ❌ 279 comparações COM VALOR idênticas (14 registros × 42 campos; 309 nulo=nulo à parte)
+  ❌ hash canônico SHA-256 origem = destino (a31ed31381a3f5a5…) — destino 72c523c75a340c82…
+  ✅ antes da adulteração: hash origem = destino (a31ed31381a3f5a5…)
+  ✅ valor do pagamento alterado no destino (1234.56 → 2234.56): divergência de campo detectada (1) e hash diverge (a31ed31381a3f5a5… ≠ 72c523c75a340c82…)
+
+13/13 checagens aprovadas (replay e adulteração).
+(node:28493) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Resultado do drill: APROVADO — 215/215 checagens aprovadas.
+
+### 7. Teardown
+  relatório salvo em reports/fin-ci/drill-finance-restore-2026-11-11-8ca398b.{log,json}
+  clusters parados e diretório temporário apagado — nenhum resíduo. Duração: 39.0 s.
+# estágio 15: failure_drills => VERDE

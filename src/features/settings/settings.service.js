@@ -8,6 +8,7 @@ const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
 const { runSettingGuard } = require('./settingGuards');
 const { isPlatformOnly } = require('./settingPlatform');
+const { assertMfaForSettingWrite } = require('./settingMfa');
 require('./ambienteBi.guard'); // M9-D708: trava de PRODUCAO do ambiente do BI (aceite dos owners)
 require('./legadoEmpresa.guard'); // M9-D900: o código da empresa no sistema antigo é único no grupo
 require('../marketing/mass.settingGuard'); // M9-D402: o teto absoluto de destinatários nunca fica abaixo do limite sem aprovação
@@ -50,12 +51,13 @@ const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settin
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { WEBHOOK_SETTINGS_SCHEMA } = require('../integrations/webhooks/webhooks.settings');
-const { SIGNATURE_SETTINGS_SCHEMA } = require('../legal/signature/signature.settings');
+const { SIGNATURE_SETTINGS_SCHEMA } = require('../../modules/legal/signatures/framework/signature.settings');
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { INSURANCE_SETTINGS_SCHEMA } = require('../procurement/insurance/insurance.settings');
 const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
-const { BANK_SETTINGS_SCHEMA } = require('../finance/bank/bank.settings');
+const { BANK_SETTINGS_SCHEMA } = require('../../modules/finance/infrastructure/bank/hub/bank.settings');
+const { FINANCE_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/finance-settings');
 const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
 const { STORAGE_SETTINGS_SCHEMA } = require('../integrations/storage/storage.settings');
 const { IDENTITY_SETTINGS_SCHEMA } = require('../integrations/identity/identity.settings');
@@ -135,26 +137,23 @@ const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics
  * documentado — a confirmar com o cliente antes de produção.
  */
 const SETTINGS_SCHEMA = {
-  // FIN-005 (contrato bruto, Centro Financeiro §2 "Princípios constitucionais": "Limites vêm
-  // do Motor de Regras; aprovação usa snapshot/hash.") — o QUANTO (multiplicador/limiar em
-  // R$) é ajustável aqui, mas o SE a regra de antifraude está ativa para o tenant continua
-  // decidido pelo Motor de Regras (evaluateRule('FIN-005', ...), fail-closed) — mesmo padrão
-  // já usado em billing.late_fee_percentage/REG-LOC-001 (collectionCase.service.js).
-  'finance.antifraud_history_multiplier': { type: 'number', min: 1 },
-  'finance.antifraud_new_account_threshold': { type: 'number', min: 0 },
-  // FIN-TS-013 "Conta nova | Pagamento alto imediato | Controle extra" — período de
-  // resfriamento (em horas) de conta bancária nova/alterada, mesma regra FIN-005.
-  'finance.bank_account_cooldown_hours': { type: 'integer', min: 0 },
+  // Financeiro (aba "Financeiro" de Configurações): antifraude FIN-005, conciliação manual recorrente (§17) e política AUTO_STRONG (§11), com faixas.
+  ...FINANCE_SETTINGS_SCHEMA,
   // EST-013 / Guia §12 (NAY Estoque, inventoryNay.service.js): lead time padrão (dias) usado
   // pela sugestão de compra quando o item ainda não tem histórico real de reposição
   // (pedido de compra -> recebimento) para medir o prazo observado.
   'inventory.nay_default_lead_time_days': { type: 'integer', min: 0, max: 365 },
-  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100 },
-  'billing.interest_percentage': { type: 'number', min: 0, max: 100 },
-  'billing.grace_period_days': { type: 'integer', min: 0 },
+  // Marco 6 (matriz de fechamento, 10/11/2026): base do custo financeiro realizado das obras — lacuna do Caderno
+  // (Construção §5 actual_financial_cost). CAIXA = só o pago (padrão, comportamento anterior); COMPETENCIA = soma as
+  // medições aprovadas ainda a pagar (src/features/construction/costBasis.js). Gravação exige construction:approve.
+  'construction.custo_realizado.base': { type: 'string', enum: ['CAIXA', 'COMPETENCIA'] },
+  // parametros.csv exige_mfa_para_alterar = sim (settingMfa.js): multa, juros e carência só mudam com MFA recente de quem altera.
+  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
+  'billing.interest_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true },
+  'billing.grace_period_days': { type: 'integer', min: 0, requiresMfa: true },
   'billing.default_index_code': { type: 'string' },
-  'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120 },
-  'mfa.required_for_sensitive_roles': { type: 'boolean' },
+  'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120, requiresMfa: true },
+  'mfa.required_for_sensitive_roles': { type: 'boolean', requiresMfa: true },
   'legal.signature_provider': { type: 'string', enum: ['sandbox', 'sandbox-alt', 'clicksign', 'zapsign'] },
   // Campos abaixo são segredos de provedor externo — CRIPTOGRAFADOS em repouso (AES-256-GCM,
   // ver src/utils/mfaCrypto.js) seguindo o mesmo padrão já usado para o segredo TOTP
@@ -276,12 +275,12 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
-  'integration.admin.mfa_on_prod_test_connection': { type: 'boolean' },
-  'integration.admin.mfa_on_prod_connection_change': { type: 'boolean' },
+  'integration.admin.mfa_on_prod_test_connection': { type: 'boolean', requiresMfa: true },
+  'integration.admin.mfa_on_prod_connection_change': { type: 'boolean', requiresMfa: true },
   // Tamanho mínimo (caracteres) de texto base64/hex sem espaço tratado como segredo embutido em config_json/policy_json.
-  'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256 },
+  'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256, requiresMfa: true },
   // Resolução por domínio quando há mais de uma conexão ACTIVE no mesmo domínio e ambiente.
-  'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'] },
+  'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'], requiresMfa: true },
   // M9-D204: esperas (ms) entre as tentativas de publicação interna do outbox; o tamanho da lista é o limite de tentativas.
   'integration.outbox.backoff_ms': {
     type: 'string',
@@ -443,6 +442,13 @@ const SETTINGS_SCHEMA = {
   ...ACCEPTANCE_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
+  // Fechamento M5 — Locação (o que o livro não fixa vira parâmetro; padrão = comportamento anterior/livro).
+  'legal.inspection_default_room_code': { type: 'string' },
+  'legal.guarantee_other_flows': { type: 'string' }, // JSON: [{ "code", "label", "requiredFields": [] }] — vazio = nenhuma "outra" homologada
+  'locacao.titularidade.prazo_dias': { type: 'integer', min: 1, max: 90 },
+  ...Object.fromEntries(['WATER', 'ELECTRICITY', 'GAS', 'CONDO', 'IPTU', 'SPU', 'OTHER'].map((t) => [
+    `locacao.obrigacoes.periodicidade.${t}`, { type: 'string', enum: ['MONTHLY', 'BIMONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL', 'ONE_TIME'] },
+  ])),
 };
 
 /** Tira de `details` o valor recebido (`value`) de uma recusa de configuração; o resto do erro fica igual. */
@@ -569,6 +575,8 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction, optio
   if (isPlatformOnly(SETTINGS_SCHEMA[key]) && options.platform !== true) {
     throw AppError.forbidden('Este parâmetro só é alterado pela equipe da plataforma.', 'SETTING_PLATFORM_ONLY', { key });
   }
+  // Chave sensível (`requiresMfa`, settingMfa.js): MFA recente de quem altera, em todo caminho, antes de olhar o valor e de qualquer escrita.
+  await assertMfaForSettingWrite(key, SETTINGS_SCHEMA[key], actorUserId, transaction);
   // Rodada 7 (DI-M9R-19): a recusa nunca devolve o valor recebido (podia ser um segredo, ou uma estrutura enorme que derrubava a resposta de erro);
   // `details` leva só a chave. Vale para as regras próprias das chaves (whatsapp.settings.js, identity.settings.js ...) e para a trava do dono.
   try {
@@ -745,7 +753,7 @@ async function getIntegrationsStatus(tenant, transaction) {
 
   // Santander (PROVIDER_BANCARIO.md): autenticação exige mTLS (certificado A1) + OAuth2, não um
   // simples bearer token, então aqui só confirmamos que as 5 credenciais necessárias estão
-  // salvas — resolveBankAdapter.js já usa essa mesma lista pra decidir entre o adapter real e o
+  // salvas — resolve-bank-adapter.js já usa essa mesma lista pra decidir entre o adapter real e o
   // Sandbox. Não há "ping" de rede real (não vale abrir uma conexão mTLS só pra health-check
   // deste painel); "Conectado" aqui significa "configurado por completo", não "testado contra o
   // banco" — a mesma distinção que já vale pro resto desta função quando não há chamada de rede.

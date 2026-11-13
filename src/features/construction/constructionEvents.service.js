@@ -4,7 +4,7 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
 const { projectCalendarFields, warrantyCaseCalendarFields } = require('./constructionCalendarEvents.service');
 
 // Publicação dos domain events do módulo construction (Transactional Outbox), seguindo o
-// mesmo padrão de src/features/legal/legalEvents.service.js e financeEvents.service.js —
+// mesmo padrão de src/modules/legal/shared/legalEvents.service.js e finance-events.service.js —
 // sempre dentro da MESMA transação da operação de negócio.
 //
 // CONVENÇÃO OFICIAL DE NOMENCLATURA DO MÓDULO (M6-69/M6-71/M6-72/M6-105/M6-106 — decisão final

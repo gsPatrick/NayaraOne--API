@@ -1,0 +1,5 @@
+# estágio 2: typecheck
+$ node scripts/financeiro/ci/typecheck.js
+[typecheck] node --check em 122 arquivos: 122 ok, 0 com erro.
+[typecheck] require em 35 módulos de src/features/finance: 35 carregaram, 0 falharam.
+# estágio 2: typecheck => VERDE

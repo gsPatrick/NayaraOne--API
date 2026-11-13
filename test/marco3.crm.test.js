@@ -60,7 +60,7 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
-      stage: 'QUALIFYING',
+      stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
       ...extra,
@@ -481,7 +481,11 @@ test('M3-15: imóvel que falha só no preço mostra priceRange matched=false com
     assert.equal(explanation.criteria.propertyType.matched, true);
     assert.equal(explanation.criteria.city.matched, true);
     assert.equal(explanation.criteria.offerType.matched, true);
-    assert.ok(explanation.score > 0 && explanation.score < 1);
+    // Guia §9 ("Radar scoring"): obrigatório que falha zera o score (REQUIRED_FAILED); a fração dos obrigatórios atendidos
+    // continua visível em requiredScore.
+    assert.equal(explanation.score, 0);
+    assert.deepEqual(explanation.reasons, ['REQUIRED_FAILED']);
+    assert.ok(explanation.requiredScore > 0 && explanation.requiredScore < 1);
   });
 });
 
@@ -525,7 +529,7 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
       transaction
     );
 
-    await createActiveOpportunity(transaction, person.id); // segue aberta em QUALIFYING
+    await createActiveOpportunity(transaction, person.id); // segue aberta em QUALIFIED
 
     const dashboard = await dashboardService.getCrmDashboard({ personId: person.id }, transaction);
 
@@ -578,7 +582,8 @@ test('M3-20: criação calcula o SLA correto por severidade (HIGH 24h, MEDIUM 72
         transaction
       );
 
-      assert.equal(feedbackCase.status, 'OPEN');
+      // Reclamação HIGH é "reclamação grave": nasce escalonada para a gerência (livro §15); as demais nascem abertas.
+      assert.equal(feedbackCase.status, severity === 'HIGH' ? 'ESCALATED' : 'OPEN');
       assert.equal(feedbackCase.severity, severity);
       const deltaHours = (new Date(feedbackCase.slaDueAt).getTime() - before) / 3600000;
       // Tolerância de alguns segundos entre o `before` do teste e o `new Date()` do service.
@@ -687,7 +692,8 @@ test('M3-20: o job encontra e escalona um caso com SLA VENCIDO (tempo simulado v
         personId: person.id,
         type: 'COMPLAINT',
         description: `Reclamação vencida ${suffix}`,
-        severity: 'HIGH',
+        // MEDIUM: reclamação HIGH já nasce escalonada para a gerência (livro §15), e aqui o que se prova é o SLA vencido.
+        severity: 'MEDIUM',
         assignedToUserId: tenant.userId,
       },
       tenant.userId,

@@ -26,7 +26,7 @@ before(async () => {
   require('../app');
   const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
   const { Company, Role, UserMembership, User, RolePermission, Permission } = require('../src/models');
-  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
   const tenant = await getSeedTenant();
   const suffix = uniqueSuffix();
   const password = `Sw!${suffix}aA`;

@@ -3,7 +3,7 @@
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, Contract, RentAdjustment, BillingSchedule } = require('../../models');
 const billingScheduleService = require('../../features/billing/billingSchedule.service');
-const { LEASE_LIKE_TYPES } = require('../../features/legal/contracts.service');
+const { LEASE_LIKE_TYPES } = require('../../modules/legal/contracts/application/contract.service');
 
 /**
  * billingScheduleAutoGenerateJob — JUR-faltante (auditoria externa Nayara, 11/10/2026):

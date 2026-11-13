@@ -85,7 +85,7 @@ async function main() {
         if (missingRoles.length > 0) {
           reject(new Error(
             `pg_restore falhou: role(s) ausente(s) no servidor de destino: ${missingRoles.join(', ')}. ` +
-            'Crie as roles antes do restore — nayara_runtime (LOGIN, NOSUPERUSER, NOBYPASSRLS) e nayara_migration (NOLOGIN) — ' +
+            'Crie as roles antes do restore — nayara_runtime (LOGIN, NOSUPERUSER, NOBYPASSRLS), nayara_migration (NOLOGIN) e, a partir do BI do Marco 9, nayara_analytics_reader (NOLOGIN, NOSUPERUSER, NOBYPASSRLS) — ' +
             'e refaça o restore num banco de destino vazio.'
           ));
           return;

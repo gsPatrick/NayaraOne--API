@@ -42,10 +42,10 @@ test('m9d615 nenhum dado pessoal restrito é copiado para o read model', async (
 });
 
 test('m9d615 eventos do read model conferem com o Financeiro e o parâmetro está no SETTINGS_SCHEMA', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../../../src/features/finance/financeEvents.service.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../../src/modules/finance/application/services/finance-events.service.js'), 'utf8');
   for (const name of ['finance.entry.created', 'finance.entry.settled', 'finance.entry.reversed', 'finance.owner_repasse.created', 'finance.commission.created', 'finance.reconciliation.matched', 'finance.anomaly.opened']) {
     assert.ok(HEALTH_EVENTS.includes(name), `${name} consumido`);
-    assert.ok(source.includes(`'${name}'`), `${name} existe em financeEvents.service.js`);
+    assert.ok(source.includes(`'${name}'`), `${name} existe em finance-events.service.js`);
   }
   assert.deepEqual(SETTINGS_SCHEMA['analytics.inadimplencia.janela_dias'], { type: 'integer', min: 1, max: 3650 });
 });

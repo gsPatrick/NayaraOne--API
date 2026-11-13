@@ -5,7 +5,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d237Env');
 const { hashPayload } = require('../../../src/features/integrations/dispatch');
-const { SandboxBankAdapter } = require('../../../src/features/finance/adapters/BankAdapter');
+const { SandboxBankAdapter } = require('../../../src/modules/finance/infrastructure/bank/providers/sandbox.provider');
 
 const { sequelize, withRollbackTenantTransaction } = env;
 let tenant;
@@ -95,7 +95,7 @@ test('banco_circuito_aberto_reagenda_sem_enviar', async () => {
   const espiao = espiar();
   try {
     await withRollbackTenantTransaction(tenant, async (t) => {
-      const { ensureBankConnection } = require('../../../src/features/finance/bank');
+      const { ensureBankConnection } = require('../../../src/modules/finance/application/services/bank-hub');
       const { updateCircuitState } = require('../../../src/features/integrations/health');
       const conexao = await ensureBankConnection(env.ctxDe(), 'sandbox', t);
       await updateCircuitState(conexao.id, { circuitState: 'OPEN', circuitOpenedAt: new Date(), circuitCooldownS: 600 }, t);

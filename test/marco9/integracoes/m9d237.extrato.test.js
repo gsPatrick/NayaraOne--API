@@ -4,8 +4,8 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d237Env');
-const { SandboxBankAdapter } = require('../../../src/features/finance/adapters/BankAdapter');
-const bank = require('../../../src/features/finance/bank');
+const { SandboxBankAdapter } = require('../../../src/modules/finance/infrastructure/bank/providers/sandbox.provider');
+const bank = require('../../../src/modules/finance/application/services/bank-hub');
 const { Group, Company } = require('../../../src/models');
 
 const { sequelize, withTenantTransaction, uniqueSuffix } = env;

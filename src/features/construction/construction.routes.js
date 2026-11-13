@@ -4,6 +4,7 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const constructionController = require('./construction.controller');
+const costBasisController = require('./costBasis.controller');
 const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto
 
 const constructionRouter = Router();
@@ -181,5 +182,8 @@ constructionRouter.post('/construction/material-requests/:id/return', requirePer
 // não existia NENHUMA interface (nem rota) para configurar isso.
 constructionRouter.get('/construction/settings/sla-rule', requirePermission('construction:read'), constructionController.getActiveSlaRule);
 constructionRouter.post('/construction/settings/sla-rule', requirePermission('construction:approve'), constructionController.createSlaRule);
+// Base do custo financeiro realizado (CAIXA | COMPETENCIA) — lacuna do Caderno §5 que vira parâmetro da empresa.
+constructionRouter.get('/construction/settings/cost-basis', requirePermission('construction:read'), costBasisController.getCostBasisSetting);
+constructionRouter.put('/construction/settings/cost-basis', requirePermission('construction:approve'), costBasisController.updateCostBasisSetting);
 
 module.exports = constructionRouter;

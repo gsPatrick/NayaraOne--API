@@ -7,7 +7,7 @@ const { sequelize, Rule, RuleVersion, RuleScope, RulePublication } = require('..
 /**
  * seedFinanceAntifraudRules — auditoria externa (contrato bruto, 2026-10-07, Centro Financeiro
  * §2 "Princípios constitucionais", FIN-005: "Limites vêm do Motor de Regras; aprovação usa
- * snapshot/hash."). Antes desta rodada, financeAntifraud.service.js tinha os limiares
+ * snapshot/hash."). Antes desta rodada, finance-antifraud.service.js tinha os limiares
  * (multiplicador de desvio histórico, limite de conta nova, cooldown de conta nova/alterada)
  * fixos via `process.env.FINANCE_ANOMALY_*`/`FINANCE_BANK_ACCOUNT_COOLDOWN_HOURS` — nem
  * hard-code puro, nem o Motor de Regras exigido pelo contrato.
@@ -33,7 +33,7 @@ const RULES = [
     conditionAstJson: { fact: 'financeAntifraudRuleActive', op: '==', value: true },
     actionJson: {
       historyMultiplier: 3,
-      newAccountThreshold: 10000,
+      newAccountThreshold: 5000, // DEC-007 (conta nova R$ 5.000,00); a regra publicada só aperta o padrão do catálogo
       bankAccountCooldownHours: 48,
     },
   },

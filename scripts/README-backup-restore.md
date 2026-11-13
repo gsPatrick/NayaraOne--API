@@ -18,6 +18,21 @@ node scripts/restoreDatabase.js --file <caminho-do-dump> --target-db <banco-dest
 
 Exige um banco de destino explícito e **recusa rodar** se `--target-db` for igual ao banco principal configurado no ambiente (`DB_NAME`/`DATABASE_URL`) — proteção contra sobrescrever produção/dev ao testar um restore.
 
+Roles que precisam existir no servidor de destino ANTES do restore (o dump traz GRANTs para elas):
+`nayara_runtime` (LOGIN, NOSUPERUSER, NOBYPASSRLS), `nayara_migration` (NOLOGIN) e, desde as migrations de BI do
+Marco 9 (`20260101009612`), `nayara_analytics_reader` (NOLOGIN, NOSUPERUSER, NOBYPASSRLS). Achado no drill de Obras
+de 10/11/2026: sem a terceira role o `pg_restore` falha com "role nayara_analytics_reader does not exist".
+
+## Drill de restore de Obras (Marco 6) — `npm run restore-drill:construction-full`
+
+`scripts/restoreDrill/constructionFullDrill.js [--port 5543] [--report-dir <dir>]`: dois clusters descartáveis;
+fixtures de uma obra inteira pelos serviços reais (orçamento + aditivo, requisição + devolução, RDO + correção,
+medição PAYABLE, NC, perda + estorno, entrega, garantia fechada); `npm run backup`; restore pelo runbook num cluster
+novo; `verifyConstructionRestore.js` compara origem × destino (contagem + SHA-256) de todas as tabelas de
+`construction.*` e dos reflexos (lançamentos, movimentos de estoque, Outbox, auditoria e fotos), confere as
+invariantes da obra, RLS ENABLE+FORCE, isolamento da role de runtime e a UNIQUE da conta a pagar; e prova que uma
+adulteração no destino é acusada.
+
 ## Evidência real de execução (08/10/2026)
 
 1. `pg_dump` 17.11 (Homebrew, `postgresql@17`) contra o banco de dev real — dump de 2.01 MB gerado com sucesso.

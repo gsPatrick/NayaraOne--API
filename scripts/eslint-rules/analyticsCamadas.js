@@ -36,7 +36,7 @@ function motivo(camada, spec, dir) {
     return alvo === path.join(BASE, 'metrics') || alvo.startsWith(path.join(BASE, 'metrics') + path.sep) ? null : 'a fórmula só importa de metrics/';
   }
   if (rel === 'models' || rel.startsWith('models/')) return 'tabelas de origem pelos models';
-  if (/^features\//.test(rel) && !rel.startsWith('features/analytics')) return 'serviço de outro módulo';
+  if (/^(features|modules)\//.test(rel) && !rel.startsWith('features/analytics')) return 'serviço de outro módulo'; // M4-D140: src/modules também é módulo
   const m = /^features\/analytics\/read-models\/(.+)$/.exec(rel);
   if (m && m[1] !== 'index' && m[1] !== 'index.js') return 'use a API pública de read-models (index.js)';
   return null;

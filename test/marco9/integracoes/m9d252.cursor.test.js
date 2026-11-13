@@ -29,7 +29,7 @@ async function comTenant(fn) {
 before(async () => {
   tenant = await getSeedTenant();
   ctx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId };
-  await comTenant((t) => settingsService.upsertSetting('integration.admin.mfa_on_prod_connection_change', false, tenant, tenant.userId, t));
+  await comTenant((t) => require('../../helpers/mfaRecente').gravarParametroSensivel('integration.admin.mfa_on_prod_connection_change', false, tenant, t)); // sensível: operador com MFA recente real
 });
 after(async () => {
   await comTenant(async (t) => { await sequelize.query("DELETE FROM core.tenant_settings WHERE company_id = :c AND key LIKE 'integration.sync.%'", { replacements: { c: tenant.companyId }, transaction: t }); });

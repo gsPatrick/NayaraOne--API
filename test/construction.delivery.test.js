@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
@@ -199,7 +200,7 @@ test('delivery: deliverProject BLOQUEIA entrega quando há não conformidade CRI
     const project = await createTestProject(transaction, 'FINAL_INSPECTION');
     await nonconformitiesService.createNonconformity(
       project.id,
-      withTenant({ description: 'Rachadura estrutural', severity: 'CRITICAL', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
+      withTenant({ description: 'Rachadura estrutural', severity: 'CRITICAL', responsibleUserId: tenant.userId, beforeEvidenceFileIds: await evidenceIds(tenant, transaction) }),
       tenant.userId,
       transaction
     );
@@ -266,7 +267,7 @@ test('delivery: reprovar item de checklist ESTRUTURA abre NC CRITICAL e BLOQUEIA
     );
     await qualityChecklistService.checkQualityItem(
       item.id,
-      { status: 'NOT_OK', notes: 'Fissura visível na viga.', evidenceFileIds: ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'] },
+      { status: 'NOT_OK', notes: 'Fissura visível na viga.', evidenceFileIds: await evidenceIds(tenant, transaction) },
       tenant.userId,
       transaction
     );
@@ -349,8 +350,8 @@ test('closeProjectWarranty: fecha a obra quando todos os casos de garantia estã
       {
         status: 'CLOSED',
         rootCauseCode: 'WORKMANSHIP',
-        beforeMediaFileIds: ['77777777-7777-7777-7777-777777777777'],
-        afterMediaFileIds: ['88888888-8888-8888-8888-888888888888'],
+        beforeMediaFileIds: await evidenceIds(tenant, transaction),
+        afterMediaFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
@@ -518,7 +519,7 @@ test('removeProject: concorrente com createChangeOrder — não pode excluir a o
             description: 'Aditivo de concorrência',
             budgetImpact: 100,
             scheduleImpactDays: 0,
-            evidenceFileIds: ['11111111-1111-1111-1111-111111111111'],
+            evidenceFileIds: await evidenceIds(tenant, t),
             idempotencyKey: uniqueSuffix(),
           }),
           tenant.userId,

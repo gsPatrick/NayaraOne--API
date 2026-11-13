@@ -4,11 +4,12 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const mfaService = require('../src/features/users/mfa.service');
 const { authenticator } = require('otplib');
 const { User } = require('../src/models');
@@ -248,10 +249,10 @@ test('conciliação: valores batendo concilia; conciliar de novo o mesmo lançam
 test('estorno: lançamento estornado não pode ser estornado de novo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const entry = await createEntry(transaction, tenant.userId);
-    await financialEntriesService.reverseFinancialEntry(entry.id, 'HOMO QA — estorno de teste', tenant.userId, transaction);
+    await receiptService.reverseFinancialEntry(entry.id, 'HOMO QA — estorno de teste', tenant.userId, transaction);
 
     await assert.rejects(
-      () => financialEntriesService.reverseFinancialEntry(entry.id, 'HOMO QA — segunda tentativa', tenant.userId, transaction),
+      () => receiptService.reverseFinancialEntry(entry.id, 'HOMO QA — segunda tentativa', tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_ALREADY_REVERSED');
         return true;

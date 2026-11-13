@@ -13,13 +13,16 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, uniqueClosingTestMonth, confirmPeriodChecksForTest, createThirdPartyLink, settleFinancialEntryWithApproval, createManualSettlementEvidence } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const chartOfAccountsService = require('../src/features/finance/chartOfAccounts.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const intercompanyTransfersService = require('../src/features/finance/intercompanyTransfers.service');
-const periodClosuresService = require('../src/features/finance/periodClosures.service');
-const financialHealthReportService = require('../src/features/finance/financialHealthReport.service');
-const { publishFinancialEntryCreated } = require('../src/features/finance/financeEvents.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const chartOfAccountsService = require('../src/modules/finance/application/services/chart-of-accounts.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const paymentIntentDomain = require('../src/modules/finance/domain/payment-intent');
+const intercompanyTransfersService = require('../src/modules/finance/application/services/intercompany-transfers.service');
+const periodClosuresService = require('../src/modules/finance/application/services/closing.service');
+const financialHealthReportService = require('../src/modules/finance/application/services/finance-health.service');
+const { publishFinancialEntryCreated } = require('../src/modules/finance/application/services/finance-events.service');
 const { Company, FinancialEntry, OutboxEvent, User } = require('../src/models');
 
 let tenant;
@@ -181,7 +184,7 @@ test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do sna
     assert.equal(intent.snapshotJson.amount, '2500.00');
     assert.equal(
       intent.snapshotHash,
-      paymentIntentsService.computeSnapshotHash(intent.snapshotJson),
+      paymentIntentDomain.computeSnapshotHash(intent.snapshotJson),
       'o hash gravado tem que ser o SHA-256 do snapshot gravado'
     );
 
@@ -232,7 +235,7 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
     // Revisão 18/10/2026 (A1/A4): PAYABLE sem conta também é saída de caixa — a execução manual
     // da intenção exige comprovante anexado antes da aprovação.
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
-    await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, transaction);
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
 
     const approver = await User.create(
@@ -808,7 +811,7 @@ test('M4-25 replay de liquidação não paga duas vezes o mesmo lançamento', as
 
     // Replay da mesma liquidação: recusada, e o carimbo original não é sobrescrito.
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS'); return true; }
     );
 

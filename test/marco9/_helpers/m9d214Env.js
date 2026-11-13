@@ -1,12 +1,13 @@
 'use strict';
 
+const { gravarParametro } = require('../../helpers/mfaRecente'); // parâmetro sensível (requiresMfa): operador com MFA recente real (DI-DEC007-1)
+
 // Apoio dos testes do Dispatch Service (M9-D214, M9-D216, M9-D218): conexões ATIVAS, limpeza de pendências de outros testes,
 // adapter programável (respostas e erros em fila) e leitura direta das linhas. Roda em banco descartável (os testes COMMITAM).
 const { sequelize, comTenant, carregarTenants, ctxDe, conexao, forcar, ler, uniqueSuffix, dispatch } = require('../../integrations/dispatch/dispatchHelpers');
 const adapterRegistry = require('../../../src/features/integrations/registry/adapterRegistry');
 const { registerBuiltInAdapters } = require('../../../src/features/integrations/adapters');
 const { transitionConnection } = require('../../../src/features/integrations/registry/connections.transition');
-const settingsService = require('../../../src/features/settings/settings.service');
 
 /** Cria a conexão do domínio e a deixa ACTIVE, desativando a que já estivesse ativa do mesmo fornecedor. */
 async function conexaoAtiva(tenant, domain) {
@@ -52,7 +53,7 @@ const eventos = (tenant, tipo, id) => comTenant(tenant, async (t) => (await sequ
   'SELECT * FROM integration.outbox_events WHERE event_type = :tipo AND idempotency_key = :k', { replacements: { tipo, k: `${tipo}:${id}` }, transaction: t },
 ))[0]);
 
-const config = (tenant, chave, valor) => comTenant(tenant, (t) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t));
+const config = (tenant, chave, valor) => comTenant(tenant, (t) => gravarParametro(chave, valor, tenant, t));
 
 /** Zera um parâmetro da empresa (volta ao padrão). */
 const limparConfig = (tenant, chaves) => comTenant(tenant, (t) => sequelize.query(

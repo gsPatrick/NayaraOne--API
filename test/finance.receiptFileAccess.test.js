@@ -21,7 +21,7 @@ before(async () => {
   const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
   const { Company } = require('../src/models');
   const filesService = require('../src/features/files/files.service');
-  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
   const tenant = await getSeedTenant();
   const file = await withTenantTransaction(tenant, (t) =>
     filesService.uploadFile(

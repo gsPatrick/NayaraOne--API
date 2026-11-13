@@ -2296,6 +2296,7 @@
    "description",
    "escalated_at",
    "lock_version",
+   "message_id",
    "opportunity_id",
    "person_id",
    "resolution_notes",
@@ -2325,6 +2326,7 @@
    "failure_reason",
    "media_quarantine_id",
    "media_state",
+   "occurred_at",
    "opportunity_id",
    "person_id",
    "purpose",
@@ -2382,6 +2384,16 @@
    "valid_until",
    "value",
    "version_number"
+  ],
+  "crm.radar_matches": [
+   "criteria_fingerprint",
+   "criteria_version",
+   "explanation",
+   "failed_criteria",
+   "matched_criteria",
+   "property_id",
+   "radar_id",
+   "score"
   ],
   "crm.visits": [
    "agent_user_id",
@@ -2496,6 +2508,7 @@
    "created_by",
    "description",
    "external_transaction_id",
+   "fingerprint",
    "transaction_date",
    "updated_by"
   ],
@@ -2730,6 +2743,7 @@
    "created_by",
    "deleted_at",
    "deleted_by",
+   "due_date",
    "evidence_file_id",
    "from_person_id",
    "lock_version",
@@ -2804,6 +2818,7 @@
    "created_by",
    "financial_entry_id",
    "match_group_id",
+   "match_method",
    "matched_at",
    "matched_by_user_id",
    "updated_by"
@@ -2883,21 +2898,6 @@
    "status",
    "updated_by",
    "utility_obligation_id"
-  ],
-  "finance.utility_obligations": [
-   "account_number",
-   "contract_id",
-   "created_by",
-   "deleted_at",
-   "deleted_by",
-   "evidence_file_id",
-   "lock_version",
-   "provider",
-   "responsible_party",
-   "status",
-   "transfer_required",
-   "updated_by",
-   "utility_type"
   ],
   "finance.utility_reimbursements": [
    "amount",
@@ -4302,18 +4302,51 @@
    "status",
    "updated_by"
   ],
-  "legal.contract_amendments": [
+  "legal.addenda": [
    "amendment_number",
+   "base_contract_version_id",
+   "changed_clauses",
    "changes_json",
    "contract_id",
    "created_by",
    "document_file_id",
+   "effective_from",
+   "effective_until",
    "reason",
    "status"
   ],
-  "legal.contract_clauses": [
+  "legal.addendum_signatures": [
+   "addendum_id",
+   "collected_by_user_id",
+   "evidence_file_id",
+   "party_role",
+   "person_id",
+   "signed_at"
+  ],
+  "legal.case_parties": [
+   "created_by",
+   "legal_case_id",
+   "party_role",
+   "person_id",
+   "updated_by"
+  ],
+  "legal.case_receivables": [
+   "amount",
+   "basis",
+   "basis_reference",
+   "created_by",
+   "financial_entry_id",
+   "legal_case_id"
+  ],
+  "legal.clause_library": [
+   "code",
+   "created_by",
+   "legal_responsible_user_id"
+  ],
+  "legal.clause_versions": [
    "body_text",
    "category",
+   "clause_library_id",
    "code",
    "condition_approved_at",
    "condition_approved_by",
@@ -4336,14 +4369,17 @@
    "deleted_by",
    "party_role",
    "person_id",
+   "represented_by_person_id",
    "updated_by"
   ],
   "legal.contract_requirements": [
    "contract_id",
    "created_by",
    "description",
+   "required_stage",
    "requirement_code",
    "requirement_type",
+   "rule_version_id",
    "satisfied_at",
    "satisfied_by_file_id",
    "status",
@@ -4354,19 +4390,24 @@
    "contract_clause_id",
    "contract_template_id",
    "created_by",
-   "sort_order"
+   "sort_order",
+   "template_version_id"
   ],
   "legal.contract_templates": [
    "contract_type",
    "created_by",
    "is_active",
+   "legal_responsible_user_id",
    "name",
    "updated_by"
   ],
   "legal.contract_versions": [
+   "approved_at",
+   "approved_by",
    "clause_version_ids",
    "condition_context",
    "content",
+   "content_file_id",
    "content_hash",
    "contract_id",
    "created_by",
@@ -4374,11 +4415,14 @@
    "effective_from",
    "excluded_clauses",
    "signed_document_file_id",
+   "status",
    "template_id",
+   "template_version_id",
    "updated_by",
    "version_number"
   ],
   "legal.contracts": [
+   "approved_version_id",
    "construction_project_id",
    "contract_number",
    "contract_type",
@@ -4388,6 +4432,7 @@
    "ends_at",
    "lock_version",
    "opportunity_id",
+   "parent_contract_id",
    "property_id",
    "starts_at",
    "status",
@@ -4407,14 +4452,33 @@
    "package_hash"
   ],
   "legal.guarantees": [
+   "acceptance_file_id",
+   "accepted_at",
+   "additional_guarantor_person_ids",
+   "annual_premium",
+   "auto_renew",
+   "certificate_file_id",
+   "certificate_number",
    "contract_id",
    "created_by",
    "deleted_at",
    "deleted_by",
+   "document_file_ids",
    "ends_at",
+   "finance_entry_id",
+   "flow_data",
    "guarantee_type",
    "guarantor_person_id",
+   "holder_person_id",
+   "homologated_flow_code",
    "lock_version",
+   "notes",
+   "policy_file_id",
+   "policy_number",
+   "premium_installments",
+   "provider_name",
+   "redemption_amount",
+   "renewal_due_at",
    "replaced_by_guarantee_id",
    "starts_at",
    "status",
@@ -4427,11 +4491,25 @@
    "damage_description",
    "deleted_at",
    "deleted_by",
+   "description",
    "estimated_budget",
    "inspection_id",
+   "item_code",
    "item_name",
    "notes",
    "responsible_party",
+   "room_code",
+   "updated_by"
+  ],
+  "legal.inspection_media": [
+   "captured_at",
+   "created_by",
+   "file_id",
+   "file_link_id",
+   "inspection_id",
+   "item_id",
+   "media_type",
+   "sha256",
    "updated_by"
   ],
   "legal.inspection_signatures": [
@@ -4441,6 +4519,7 @@
    "signature_hash",
    "signed_at",
    "signed_by_user_id",
+   "snapshot_hash",
    "updated_by"
   ],
   "legal.inspections": [
@@ -4494,7 +4573,10 @@
    "photos_file_ids",
    "photos_required",
    "status",
+   "term_evidence_file_id",
+   "term_evidence_sha256",
    "term_hash",
+   "term_signature_method",
    "term_signed_at",
    "term_signed_by_person_id",
    "term_text",
@@ -4502,12 +4584,24 @@
    "term_version",
    "updated_by"
   ],
-  "legal.legal_case_parties": [
+  "legal.lease_obligations": [
+   "account_number",
+   "contract_id",
    "created_by",
-   "legal_case_id",
-   "party_role",
-   "person_id",
-   "updated_by"
+   "deleted_at",
+   "deleted_by",
+   "due_day",
+   "evidence_file_id",
+   "lock_version",
+   "next_due_on",
+   "periodicity",
+   "provider",
+   "responsible_party",
+   "starts_on",
+   "status",
+   "transfer_required",
+   "updated_by",
+   "utility_type"
   ],
   "legal.legal_cases": [
    "case_class",
@@ -4535,6 +4629,9 @@
    "updated_by"
   ],
   "legal.legal_deadlines": [
+   "cancel_reason",
+   "cancelled_at",
+   "cancelled_by",
    "conclusion_evidence_file_id",
    "conclusion_note",
    "created_by",
@@ -4551,15 +4648,34 @@
    "responsible_user_id",
    "source_document",
    "source_event",
+   "source_event_id",
+   "source_event_type",
+   "source_file_id",
    "status",
+   "task_id",
    "updated_by"
   ],
+  "legal.notice_versions": [
+   "channel",
+   "content",
+   "content_file_id",
+   "content_sha256",
+   "created_by",
+   "drafted_by_ai",
+   "notice_id",
+   "reason",
+   "recipient_description",
+   "recipient_person_id",
+   "version_number"
+  ],
   "legal.notices": [
+   "approved_version",
    "channel",
    "content",
    "content_file_id",
    "contract_id",
    "created_by",
+   "current_version",
    "deleted_at",
    "delivered_at",
    "delivery_evidence_file_id",
@@ -4610,6 +4726,15 @@
    "signer_email",
    "status",
    "updated_by"
+  ],
+  "legal.template_versions": [
+   "created_by",
+   "legal_responsible_user_id",
+   "published_at",
+   "published_by",
+   "status",
+   "template_id",
+   "version_number"
   ],
   "marketing.attribution_events": [
    "campaign_id",

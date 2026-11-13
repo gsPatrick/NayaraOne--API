@@ -11,14 +11,14 @@ const {
 } = require('./constructionEvents.service');
 const { getProjectStage } = require('./projectStages.service');
 const { getNotDonePredecessors } = require('./stageDependencies.service');
-const financialEntriesService = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
 const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4): a validação transversal "centro de custo obrigatório para despesa" virou
 // fail-closed em createFinancialEntry — o fallback previsto no comentário abaixo (medição sem
 // centro de custo configurado nem na medição nem na obra) agora precisa de um valor, não mais
-// opcional. Ver getOrCreateDefaultCostCenter em costCenters.service.js.
+// opcional. Ver getOrCreateDefaultCostCenter em cost-centers.service.js.
 const MEASUREMENT_COST_CENTER_CODE = 'OBRAS-MEDICOES';
 
 // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 59, 2026-10-06): quando a medição é
@@ -74,7 +74,7 @@ function assertNonNegativeItem(item) {
 /**
  * createMeasurementItems — cria os itens (M6-11) de uma medição e devolve o total (em string
  * com 2 casas, mesma precisão do DECIMAL(18,2)) — soma feita em CENTAVOS inteiros para não
- * sofrer erro de arredondamento de ponto flutuante (mesmo padrão de financialEntries.service.js).
+ * sofrer erro de arredondamento de ponto flutuante (mesmo padrão de receipt.service.js / domain/ledger-movement.js).
  */
 async function createMeasurementItems(measurement, items, actorUserId, transaction) {
   let totalCents = 0;

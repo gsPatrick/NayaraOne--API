@@ -11,7 +11,7 @@ const registry = require('../../../src/features/integrations/registry/registry.s
 const { readConnectionSecret } = require('../../../src/features/integrations/secrets');
 const { IntegrationConnection, IntegrationProvider } = require('../../../src/models');
 const { BankSantanderContractAdapter } = require('../../../src/features/integrations/adapters/legacy/bank.santander');
-const bank = require('../../../src/features/finance/bank');
+const bank = require('../../../src/modules/finance/application/services/bank-hub');
 
 const { sequelize, withTenantTransaction, uniqueSuffix } = env;
 let tenant;
@@ -54,7 +54,7 @@ test('m9_d237_segredo_lido_pelo_secretstore', async () => {
 
 /** Cadastro manual de connection bancária com segredo exige MFA recente (D202); o teste desliga a exigência só durante a criação. */
 async function semMfaNaTroca(fn, t) {
-  const troca = (valor) => settingsService.upsertSetting('integration.secret.mfa_on_bank_secret_change', valor, tenant, tenant.userId, t);
+  const troca = (valor) => require('../../helpers/mfaRecente').gravarParametroSensivel('integration.secret.mfa_on_bank_secret_change', valor, tenant, t); // sensível: operador com MFA recente real
   await troca(false);
   try { return await fn(); } finally { await troca(true); }
 }
@@ -83,7 +83,7 @@ test('banco_santander_registrado_no_registro_de_adapters', async () => {
   assert.deepEqual([...linha.capabilities].sort(), ['getPaymentStatus', 'getStatement', 'submitPayment', 'verifyWebhook']);
   assert.equal(new BankSantanderContractAdapter(null).providerCode(), 'bank-santander');
   // o objeto antigo (mTLS + OAuth2) continua sendo quem executa, com a credencial vinda do cofre
-  const { SantanderBankAdapter } = require('../../../src/features/finance/adapters/BankAdapter');
+  const { SantanderBankAdapter } = require('../../../src/modules/finance/infrastructure/bank/providers/santander.provider');
   const { getSecretStore } = require('../../../src/features/integrations/secrets');
   const desligar = useTempSecretStore();
   try {

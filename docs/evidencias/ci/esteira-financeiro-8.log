@@ -1,0 +1,53 @@
+# estágio 8: bank_adapter_contract_tests
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-8-0.xml test/finance.bankPaymentConfirmation.test.js test/finance.bankWebhookSignature.test.js test/bankPaymentReconciliationJob.candidates.test.js test/nayaraConferencia1810.payments.test.js
+(node:26689) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ job de reconciliação bancária: a consulta de candidatos executa e devolve o intent preso (antigo), não o recente (94.159ms)
+(node:26716) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ FIN-TS-001/018: submissão ao banco não liquida o lançamento — só CONFIRMED libera o ledger (132.623834ms)
+✔ FIN-TS-019: callback CONFIRMED do banco libera o ledger (liquida o lançamento) (95.328458ms)
+✔ FIN-TS-002: callback de falha do banco NÃO liquida o lançamento e marca FAILED (76.183709ms)
+✔ Callback duplicado (idempotência): reprocessar CONFIRMED duas vezes não liquida duas vezes (82.910333ms)
+✔ Callback forjado: id de submissão externa inexistente é recusado, não cria nada (2.779208ms)
+✔ Resposta incerta do provedor (status desconhecido) não é tratada como confirmação — só CONFIRMED libera ledger (65.042625ms)
+✔ bank webhook: verifyBankWebhookSignature aceita HMAC válido e rejeita ausente/errado/sem secret (timing-safe) (1.026292ms)
+✔ A1: a conta bancária de um PAYABLE não pode ser removida (era o atalho para liquidar sem controle) (49.669458ms)
+(node:26995) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ A1: PAYABLE SEM conta não é mais liquidado direto — exige aprovação e comprovante; com eles vira MANUAL_WITH_EVIDENCE (108.054ms)
+✔ A2: baixa manual com intenção SUBMITTED no banco é recusada (125.230417ms)
+✔ A2: CONFIRMED do banco para lançamento já liquidado vira anomalia (pagamento em dobro), não erro em loop (90.579458ms)
+✔ A3: excedente classificado como PAYABLE vira obrigação PENDENTE (com centro de custo), nunca saída de caixa automática (28.138834ms)
+✔ C1: competência de mês fechado não recebe nem perde lançamento (criação, update atual/novo, classificação) (38.7975ms)
+✔ A4: comprovante informado só na baixa (sem anexar antes da aprovação) é recusado (40.98175ms)
+✔ A4: anexar o comprovante invalida a aprovação anterior — aprovação precisa vir depois (83.192ms)
+✔ A4: o mesmo comprovante não serve para duas baixas; comprovante precisa ser PDF ou imagem (52.225708ms)
+✔ A4: quem anexou o comprovante não pode ser quem aprovou a baixa manual (39.346666ms)
+✔ A4: execução manual de intenção aprovada ANTES do comprovante é recusada (44.170542ms)
+✔ B1: erro/timeout na chamada ao banco deixa a intenção SUBMITTING (incerta) — nunca FAILED, nunca libera outra intenção (188.902334ms)
+✔ B1: o adapter real envia a chave de idempotência ao provedor (0.25525ms)
+✔ B2: ERROR é transitório (continua SUBMITTED); RETURNED depois de pago vira anomalia; resolver incerteza só com resposta final do banco (203.56025ms)
+✔ B4: CONFIRMED depois de FAILED abre anomalia (dinheiro pode ter saído duas vezes) (65.754209ms)
+✔ B5: confirmação via sandbox é SANDBOX_CONFIRMED; Santander incompleto falha fechado; sandbox proibido em produção (79.458208ms)
+✔ B5: webhook bancário exige assinatura HMAC também em sandbox (sem segredo configurado, falha fechado) (34.389542ms)
+✔ B6: confirmação do banco não é recusada por controle de pré-pagamento (revisão manual posterior) — liquida e abre anomalia (61.923708ms)
+✔ D1: estornar o recebimento da caução com devolução ativa é bloqueado (21.47175ms)
+✔ D2: caução sem contrato/titular é recusada; titular precisa ser locatário/comprador/fiador (10.160083ms)
+✔ D3: baixa parcial da caução mantém a marca de terceiro; evento de saída só na liquidação (44.698125ms)
+✔ D3: compensação aponta a dívida do titular, exige aprovação, não move caixa e abate a dívida (46.938ms)
+✔ E1: solicitação de aprovação recusa tipo inventado e entidade inexistente (2.224417ms)
+✔ B3: duas criações SIMULTÂNEAS de intenção para o mesmo lançamento — a 2ª espera o lock; o índice único barra a duplicata (1512.775625ms)
+✔ D4: duas devoluções SIMULTÂNEAS da mesma caução — a 2ª espera o lock da origem; juntas não passam do saldo (1530.010083ms)
+ℹ tests 33
+ℹ suites 0
+ℹ pass 33
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 17798.447334
+$ node scripts/contractReport.js bank-sandbox bank-santander
+PASSED bank-sandbox: 88/88 execuções em v1 -> ./reports/contract/bank-sandbox.json
+PASSED bank-santander: 88/88 execuções em v1 -> ./reports/contract/bank-santander.json
+# estágio 8: bank_adapter_contract_tests => VERDE

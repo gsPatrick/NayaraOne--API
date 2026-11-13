@@ -22,13 +22,14 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { confirmReceipt: confirmInventoryReceipt, createReceipt: createInventoryReceipt } = require('../inventory/receipts.service');
 const { recordMovement } = require('../inventory/movements.service');
-const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
+const { reverseFinancialEntry } = require('../../modules/finance/application/services/receipt.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
 const { getActiveSecondApprovalThreshold } = require('./approvalThresholdRules.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4: "Centro de custo obrigatório para despesa"): o payable de recebimento de
 // materiais nasce de um fluxo automático (confirmação de goods receipt) sem nenhum centro de
-// custo informado — ver getOrCreateDefaultCostCenter em costCenters.service.js.
+// custo informado — ver getOrCreateDefaultCostCenter em cost-centers.service.js.
 const PROCUREMENT_COST_CENTER_CODE = 'COMPRAS-RECEBIMENTOS';
 
 // Texto de trilha legível (auditoria Marco 7 "final2", 18/10/2026): a nota da divergência aceita

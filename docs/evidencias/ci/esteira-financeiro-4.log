@@ -1,0 +1,8 @@
+# estágio 4: db_migrations
+$ node scripts/financeiro/ci/estagio4Migracoes.js
+[estagio 4] 597 migrations aplicadas do zero num banco vazio em 17.1 s (o repositório tem 597 arquivos; todos aplicados).
+[estagio 4] SequelizeMeta tem as 597 migrations; reaplicar não executou nenhuma (idempotente).
+[estagio 4] schema finance: as 19 entidades do §5 presentes; 39 tabelas/views; 39 tabelas com company_id, todas com RLS forçada e política (exceção documentada sem RLS: finance.bank_payment_provider_routing); views do §5 com security_invoker; gatilho(s) do ledger: trg_financial_entries_append_only, trg_financial_entries_row_change_audit; nenhuma coluna de ponto flutuante.
+[estagio 4] banco ci_fin_migr_mwbdnvei apagado.
+[estagio 4] db_migrations: OK
+# estágio 4: db_migrations => VERDE

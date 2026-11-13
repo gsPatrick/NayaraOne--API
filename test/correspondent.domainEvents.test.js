@@ -243,7 +243,7 @@ test('CORRESPONDENT-EVT-07: status aplicado com opportunityId vinculado atualiza
   );
   const opportunity = await withTenantTransaction(tenant, (t) =>
     Opportunity.create(
-      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'NEGOTIATION', createdBy: tenant.userId, updatedBy: tenant.userId },
+      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'FINANCING', createdBy: tenant.userId, updatedBy: tenant.userId },
       { transaction: t }
     )
   );
@@ -262,7 +262,7 @@ test('CORRESPONDENT-EVT-07: status aplicado com opportunityId vinculado atualiza
   assert.ok(auditEntry, 'audit log de atualização da oportunidade não foi criado');
 
   const reloaded = await withTenantTransaction(tenant, (t) => Opportunity.findOne({ where: { id: opportunity.id }, transaction: t }));
-  assert.equal(reloaded.stage, 'NEGOTIATION', 'o módulo de financiamento nunca deve escrever direto no stage da oportunidade');
+  assert.equal(reloaded.stage, 'FINANCING', 'o módulo de financiamento nunca deve escrever direto no stage da oportunidade');
 });
 
 test('CORRESPONDENT-EVT-08: case sem opportunityId não quebra e não gera audit log de oportunidade', async () => {

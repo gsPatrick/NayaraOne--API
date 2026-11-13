@@ -5,7 +5,7 @@ const { randomUUID } = require('node:crypto');
 const { Property, Person, InsurancePolicy, InsuranceRenewalTask } = require('../../../src/models');
 const peopleService = require('../../../src/features/people/people.service');
 const opportunitiesService = require('../../../src/features/crm/opportunities.service');
-const legalCasesService = require('../../../src/features/legal/legalCases.service');
+const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
 const assetsService = require('../../../src/features/inventory/assets.service');
 
 const sfx = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;
@@ -17,7 +17,7 @@ async function person(t, tx) {
 
 async function opportunity(t, tx) {
   const owner = await person(t, tx);
-  return opportunitiesService.createOpportunity({ groupId: t.groupId, companyId: t.companyId, personId: owner.id, stage: 'QUALIFYING', nextAction: 'Ligar', nextActionDueAt: future(3) }, t.userId, tx);
+  return opportunitiesService.createOpportunity({ groupId: t.groupId, companyId: t.companyId, personId: owner.id, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: future(3) }, t.userId, tx);
 }
 
 async function property(t, tx) {

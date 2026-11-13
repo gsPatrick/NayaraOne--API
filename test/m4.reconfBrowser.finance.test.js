@@ -6,9 +6,10 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const { User, PaymentIntent, AnomalyCase } = require('../src/models');
 
 let tenant;
@@ -73,8 +74,8 @@ test('F-05 (controle): primeira definição da conta e edição sem mudar o retr
 });
 
 // ---- F-07 / F-08: repasse (lista de elegíveis, duplicado e dedução) com mensagens em português
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const { Person, Property } = require('../src/models');
 const { createTestResultCenter } = require('./testHelpers');
 
@@ -87,7 +88,7 @@ async function repasseSetup(t) {
   const e = await financialEntriesService.createFinancialEntry(
     { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, resultCenterId: rc.id, contractId: contract.id, competenceMonth: '2026-09', dueAt: new Date('2026-09-10T15:00:00Z') },
     tenant.userId, t);
-  await financialEntriesService.settleFinancialEntry(e.id, tenant.userId, t);
+  await receiptService.settleFinancialEntry(e.id, tenant.userId, t);
   return { owner, prop, e, base: { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: prop.id, ownerPersonId: owner.id, referenceMonth: '2026-09', sourceEntryIds: [e.id] } };
 }
 
@@ -110,7 +111,7 @@ test('F-08: dedução sem motivo, valor acima do elegível e repasse duplicado v
 });
 
 // ---- F-11: as duas medidas de terceiros do relatório de saúde dizem o que medem
-const healthService = require('../src/features/finance/financialHealthReport.service');
+const healthService = require('../src/modules/finance/application/services/finance-health.service');
 
 test('Relatório de saúde: "em aberto (previsto)" e "retido em caixa (realizado)" são medidas rotuladas e distintas', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {

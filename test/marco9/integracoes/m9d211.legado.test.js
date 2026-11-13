@@ -37,10 +37,11 @@ test('webhook_rotas_legadas_aliases', async () => {
   const click = await enviar(ROTAS.clicksign, '{"event":{"name":"upload"}}');
   assert.equal(click.status, 200);
   assert.deepEqual([dados(click).acknowledged, dados(click).processed, dados(click).reason], [true, false, 'no_identifier_in_payload']);
-  // Clicksign: roteamento desconhecido segue 200 para o fornecedor não reenviar em laço.
+  // Clicksign: roteamento desconhecido sem assinatura verificável responde IGUAL à assinatura inválida (401), sem
+  // revelar se o signatário existe (pentest M5, oráculo) — mesmo padrão do financiamento abaixo.
   const desconhecido = await enviar(ROTAS.clicksign, JSON.stringify({ event: { name: 'sign', data: { signer: { key: `chave-${env.uniqueSuffix()}` } } } }));
-  assert.equal(desconhecido.status, 200);
-  assert.equal(dados(desconhecido).reason, 'unknown_routing');
+  assert.equal(desconhecido.status, 401);
+  assert.equal(desconhecido.json.error.code, 'LEGAL_WEBHOOK_HMAC_INVALID');
   // Banco e seguro: corpo sem identificação é 400 invalid_payload e submissão desconhecida é 200 unknown_routing, como antes.
   for (const rota of [ROTAS.banco, ROTAS.seguro]) {
     const invalido = await enviar(rota, '{"status":"PAID"}');

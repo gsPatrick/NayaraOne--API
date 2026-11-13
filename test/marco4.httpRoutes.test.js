@@ -23,9 +23,10 @@ require('../app');
 const { getSeedTenant, uniqueSuffix, withTenantTransaction, sequelize: seqHelper, createTestResultCenter, createCommissionSource } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { ChartOfAccount, CostCenter, ResultCenter, FinancialEntry, BudgetForecast, Commission, AnomalyCase, Person } = require('../src/models');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
 const propertiesService = require('../src/features/properties/properties.service');
 
 let tenant;
@@ -247,7 +248,7 @@ async function withCommitted(fn) {
 }
 
 // GAP REAL CORRIGIDO (ciclo de verificação adicional, Marco 4, 12/10/2026 — varredura
-// função-por-função de todo src/features/finance/): 5 funções de service existiam, completas e
+// função-por-função de todo o módulo financeiro, hoje src/modules/finance/): 5 funções de service existiam, completas e
 // usadas em teste direto, mas NENHUMA tinha rota HTTP nem controller — settleFinancialEntryPartial
 // (FIN-TS-006, fora deste arquivo por exigir MFA, já provado em test/marco4.batch3.test.js),
 // listClassificationPendings/resolveClassificationPending, autoReconcileSuggestion (nunca
@@ -358,7 +359,7 @@ test('GAP fechado via HTTP: composição do repasse de proprietário é consult�
       tenant.userId,
       t
     );
-    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, t);
+    await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, t);
     return ownerRepassesService.createOwnerRepasse(
       {
         groupId: tenant.groupId,

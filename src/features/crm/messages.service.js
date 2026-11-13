@@ -18,6 +18,15 @@ function purposeText(value) {
   return value;
 }
 
+/** Guia §10 occurredAt: quando o contato aconteceu. Data válida e não no futuro (tolerância de 5 minutos de relógio). */
+function parseOccurredAt(value) {
+  if (value === undefined || value === null || value === '') return new Date();
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw AppError.badRequest('O campo "occurredAt" precisa ser uma data válida.', 'MESSAGE_VALIDATION');
+  if (date.getTime() > Date.now() + 5 * 60 * 1000) throw AppError.badRequest('O campo "occurredAt" não pode estar no futuro.', 'MESSAGE_VALIDATION');
+  return date;
+}
+
 /**
  * "crm"."messages" não tem `deleted_at`/paranoid no model (ver src/models/Message.js) — é
  * append-only por design (histórico de atendimento nunca é apagado). Este service expõe
@@ -26,6 +35,7 @@ function purposeText(value) {
  */
 async function createMessage(payload, actorUserId, transaction) {
   const { groupId, companyId, channel, direction, authorType } = payload;
+  const occurredAt = parseOccurredAt(payload.occurredAt);
 
   if (!groupId || !companyId || !direction || !authorType) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "direction" e "authorType" são obrigatórios.', 'MESSAGE_VALIDATION');
@@ -100,6 +110,7 @@ async function createMessage(payload, actorUserId, transaction) {
       authorType: normalizedAuthorType,
       authorUserId: authorUserId || null,
       body: body || null,
+      occurredAt,
       status: deliveryStatus || 'RECEIVED',
       externalMessageId: externalMessageId || null,
       connectionId: connectionId || null,

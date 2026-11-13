@@ -21,7 +21,10 @@ function scanSource(relPath, content) {
   const out = [];
   const inReadModels = file.startsWith('src/features/analytics/read-models/');
   const inFeatures = /^src\/features\/analytics\/[^/]+$/.test(file); // stores soltos na raiz (as camadas ficam em subpastas)
-  if (RM.test(content) && !inReadModels && !inFeatures) {
+  // M4-D140: migration (DDL) não lê o BI em tempo de execução; as da pasta raiz migrations/ já ficavam fora da varredura de src/,
+  // e as do Financeiro moram em src/modules/finance/infrastructure/db/migrations/ (Guia M4 §2).
+  const isMigration = /^src\/modules\/[^/]+\/infrastructure\/db\/migrations\//.test(file);
+  if (RM.test(content) && !inReadModels && !inFeatures && !isMigration) {
     out.push({ file, rule: 'R1', message: 'cita read model do BI fora da camada read-models' });
   }
   if (inReadModels && RM.test(content) && !/require\((['"])\.\.\/security(\/[a-zA-Z.]*)?\1\)/.test(content)) {

@@ -70,7 +70,7 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
-      stage: 'QUALIFYING',
+      stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
       ...extra,
@@ -295,7 +295,7 @@ test('M3-19: timeline traz mensagem, visita e mudança de estágio da MESMA opor
 
     // O item de mudança de estágio carrega de onde para onde foi.
     const stageChange = byType('STAGE_CHANGE')[0];
-    assert.equal(stageChange.data.fromStage, 'QUALIFYING');
+    assert.equal(stageChange.data.fromStage, 'QUALIFIED');
     assert.equal(stageChange.data.toStage, 'PROPOSAL');
 
     // E a criação da oportunidade também aparece, como o item mais antigo do funil.

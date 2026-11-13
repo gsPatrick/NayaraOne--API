@@ -49,10 +49,19 @@ function fileAttachGuard(req, res, next) {
   const fileIds = [...collectFileIds(req.body)];
   if (fileIds.length === 0) return next();
 
+  // Pentest M5 (achado 10): a recusa do anexo fica ADIADA até a permissão da rota — quem não tem a permissão
+  // recebe PERMISSION_DENIED (requirePermission), não FILE_ATTACH_FORBIDDEN. Com a permissão, requirePermission
+  // devolve a recusa guardada; rota sem requirePermission recebe a recusa na primeira transação (withTenantTransaction).
   return req
     .withTenantTransaction((transaction) => fileAccessService.assertCanAttachFiles(fileIds, req.auth, transaction))
     .then(() => next())
-    .catch(next);
+    .catch((err) => {
+      if (err && err.code === 'FILE_ATTACH_FORBIDDEN') {
+        req.deferredFileAttachError = err;
+        return next();
+      }
+      return next(err);
+    });
 }
 
 module.exports = fileAttachGuard;

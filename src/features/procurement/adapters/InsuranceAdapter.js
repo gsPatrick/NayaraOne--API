@@ -6,7 +6,7 @@ const { hostOf } = require('../../integrations/http/egressPolicy');
 // M9-D238 (reabertura L6): o cliente HTTP vem de quem monta o adapter (ctx.http do registro, ou insuranceHttpFor no fluxo antigo), já com os
 // tempos da empresa (integration.dispatch.timeout_ms.*) e uma só tentativa por chamada; este arquivo não guarda mais tempo nem tentativas.
 
-// Interface comum (duck-typed, mesmo estilo de BankAdapter.js/SignatureAdapter.js):
+// Interface comum (duck-typed, mesmo estilo de bank-adapter.port.js/SignatureAdapter.js):
 //   async quote(req) -> { externalId, premiumAmount, coverageSummary, raw }
 //   async issuePolicy(req) -> { externalId, policyNumber, status, raw }
 //   async getPolicyStatus(externalId) -> { externalId, status, raw }

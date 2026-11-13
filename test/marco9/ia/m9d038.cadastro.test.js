@@ -11,7 +11,7 @@ const { computeConfigHash } = require('../../../src/features/ai/agents/agentConf
 const { AiEvaluationService } = require('../../../src/features/ai/evaluations');
 const policy = require('../../../src/features/ai/agents/nay_juridica/juridica.policy');
 const { AGENTE } = require('../../../migrations/_helpers/aiAgentJuridica');
-const nay = require('../../../src/features/legal/legalNay.service');
+const nay = require('../../../src/modules/legal/cases/legalNay.service');
 const H = require('../_helpers/m9d037Agente');
 const J = require('../_helpers/m9d038Juridico');
 

@@ -5,7 +5,7 @@
 // sandbox, banco descartável (RLS real, nayara_runtime) e transação com rollback.
 
 const { withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('../../testHelpers');
-const financialEntriesService = require('../../../src/features/finance/financialEntries.service');
+const financialEntriesService = require('../../../src/modules/finance/application/services/financial-entry.service');
 const { startOfBusinessDay } = require('../../../src/utils/businessDate');
 const { sequelize, q, prepararTenants, carregarPessoas, ctxDe } = require('../../helpers/aiRuns');
 const { criarOrcamento, gastar, agente } = require('./iaOrcamento');

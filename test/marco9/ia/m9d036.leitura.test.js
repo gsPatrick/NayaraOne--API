@@ -93,8 +93,8 @@ test('m9d036_anomalias_com_limiar_fin_005_e_fonte', async () => {
     assert.ok(res.answer.includes(`Anomalias financeiras abertas: ${base + 2}.`), res.answer);
     assert.match(res.answer, /- Risco crítico \(BENEFICIARY_CHANGED\): Conta do favorecido trocada após a aprovação\./);
     assert.match(res.answer, /- Risco alto \(AMOUNT_OUTLIER\): Valor fora do padrão do favorecido\./);
-    // Limiar da regra FIN-005 em vigor (padrão: 3 vezes o histórico, R$ 10.000,00 para conta nova, 48 horas de resfriamento).
-    assert.match(res.answer, /FIN-005.*acima de 3 vezes o histórico.*acima de R\$ 10\.000,00 para conta nova.*resfriamento de 48 horas/);
+    // Limiar da regra FIN-005 em vigor (padrão da DEC-007: 3 vezes o histórico, R$ 5.000,00 para conta nova — antes 10.000 —, 48 horas de resfriamento).
+    assert.match(res.answer, /FIN-005.*acima de 3 vezes o histórico.*acima de R\$ 5\.000,00 para conta nova.*resfriamento de 48 horas/);
     assert.match(res.sources[0].title, /Anomalias financeiras abertas/);
     // O limiar vem do parâmetro da empresa (finance.antifraud_*), não do código.
   });

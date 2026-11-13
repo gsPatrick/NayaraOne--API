@@ -1,7 +1,7 @@
 'use strict';
 
 const { BankAdapter } = require('../../providers/bank/bank.port');
-const { SantanderBankAdapter } = require('../../../finance/adapters/BankAdapter');
+const { SantanderBankAdapter } = require('../../../../modules/finance/infrastructure/bank/providers/santander.provider');
 const { getDecryptedSetting, getSetting } = require('../../../settings/settings.service');
 const AppError = require('../../../../utils/AppError');
 const { wrapLegacy } = require('../legacyWrap');

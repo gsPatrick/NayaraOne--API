@@ -9,8 +9,8 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestCostCenter, uniqueSuffix } = require('./testHelpers');
 const { BankAccount } = require('../src/models');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
 const { findReconcileCandidates } = require('../src/engines/jobs/bankPaymentReconciliationJob');
 
 let tenant;

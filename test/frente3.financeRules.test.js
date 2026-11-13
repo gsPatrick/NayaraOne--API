@@ -15,12 +15,14 @@ const {
   createTestCostCenter,
   createTestResultCenter,
 } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const intercompanyService = require('../src/features/finance/intercompanyTransfers.service');
-const commissionsService = require('../src/features/finance/commissions.service');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
-const chartService = require('../src/features/finance/chartOfAccounts.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const intercompanyService = require('../src/modules/finance/application/services/intercompany-transfers.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
+const chartService = require('../src/modules/finance/application/services/chart-of-accounts.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const filesService = require('../src/features/files/files.service');
 const {
   Company,
@@ -98,7 +100,7 @@ async function newReceivable(transaction, amount, extra = {}) {
 async function settlePayableWithEvidence(transaction, entryId) {
   const file = await newFile(transaction);
   const manualSettlement = { evidenceFileId: file.id, reason: 'Pagamento feito fora da integração — comprovante anexado (teste frente 3).' };
-  await financialEntriesService.attachSettlementEvidence(entryId, manualSettlement, tenant.userId, transaction);
+  await settlementEvidence.attachSettlementEvidence(entryId, manualSettlement, tenant.userId, transaction);
   const approver = await newUser(transaction, 'aprovador-baixa');
   const request = await approvalsService.createApprovalRequest(
     { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entryId, riskLevel: 'LOW' },
@@ -106,7 +108,7 @@ async function settlePayableWithEvidence(transaction, entryId) {
     transaction
   );
   await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
-  const settled = await financialEntriesService.settleFinancialEntry(entryId, tenant.userId, transaction, { manualSettlement });
+  const settled = await receiptService.settleFinancialEntry(entryId, tenant.userId, transaction, { manualSettlement });
   return { settled, file };
 }
 
@@ -374,7 +376,7 @@ test('F3-CM3 pagamento da comissão proporcional ao valor efetivamente recebido'
     await expectCode(() => commissionsService.markInstallmentPaid(installments[0].id, pay1.id, tenant.userId, t), 'FINANCE_COMMISSION_NOT_RELEASED');
 
     // Recebe 50% -> libera 50% da comissão (R$ 50 = uma parcela).
-    await financialEntriesService.settleFinancialEntryPartial(source.id, 500, tenant.userId, t);
+    await receiptService.settleFinancialEntryPartial(source.id, 500, tenant.userId, t);
     release = await commissionsService.getCommissionRelease(commission.id, t);
     assert.equal(release.receivedAmount, 500);
     assert.equal(release.releasedAmount, 50);
@@ -383,7 +385,7 @@ test('F3-CM3 pagamento da comissão proporcional ao valor efetivamente recebido'
     await expectCode(() => commissionsService.markInstallmentPaid(installments[1].id, pay2.id, tenant.userId, t), 'FINANCE_COMMISSION_NOT_RELEASED');
 
     // Recebe o restante -> libera o resto.
-    await financialEntriesService.settleFinancialEntryPartial(source.id, 500, tenant.userId, t);
+    await receiptService.settleFinancialEntryPartial(source.id, 500, tenant.userId, t);
     release = await commissionsService.getCommissionRelease(commission.id, t);
     assert.equal(release.receivedAmount, 1000);
     assert.equal(release.availableAmount, 50);
@@ -401,7 +403,7 @@ async function repasseSetup(t) {
   const owner = await Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Proprietário F3 ${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
   const property = await Property.create({ groupId: tenant.groupId, companyId: tenant.companyId, title: `Imóvel F3 ${suffix}`, internalCode: `F3-${suffix}`, propertyType: 'HOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
   const received = await newReceivable(t, 3000);
-  await financialEntriesService.settleFinancialEntry(received.id, tenant.userId, t);
+  await receiptService.settleFinancialEntry(received.id, tenant.userId, t);
   const bankAccount = await newBankAccount(t);
   const costCenter = await createTestCostCenter(tenant, t);
   const base = { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: bankAccount.id, sourceEntryIds: [received.id], grossAmount: 1000, deductionsAmount: 100, deductionsReason: 'Taxa de administração', referenceMonth: '2026-09' };
@@ -644,7 +646,7 @@ test('F3-LG ledger: colunas mutáveis mudam, e toda mudança fica auditada pelo 
     assert.equal(await AuditLog.count({ where: { entityType: 'FinancialEntryRow', entityId: entry.id }, transaction: t }), 1);
 
     // A mudança pelo serviço (liquidação) também deixa o rastro do banco.
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t);
+    await receiptService.settleFinancialEntry(entry.id, tenant.userId, t);
     const after = await AuditLog.findAll({ where: { entityType: 'FinancialEntryRow', entityId: entry.id }, order: [['occurred_at', 'ASC']], transaction: t });
     assert.ok(after.length >= 2);
     assert.ok(after.some((l) => l.afterJson.status === 'SETTLED'));

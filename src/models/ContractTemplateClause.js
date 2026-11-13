@@ -5,7 +5,7 @@ const { DataTypes } = require('sequelize');
 /**
  * ContractTemplateClause — tabela "legal"."contract_template_clauses"
  * Junção template x cláusula com ordem explícita (`sortOrder`) usada por renderTemplate.
- * Aponta para a VERSÃO específica da cláusula (contract_clauses.id é único por versão).
+ * Aponta para a VERSÃO específica da cláusula (clause_versions.id é único por versão).
  */
 module.exports = (sequelize) => {
   const ContractTemplateClause = sequelize.define(
@@ -16,6 +16,7 @@ module.exports = (sequelize) => {
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       contractTemplateId: { type: DataTypes.UUID, allowNull: false, field: 'contract_template_id' },
       contractClauseId: { type: DataTypes.UUID, allowNull: false, field: 'contract_clause_id' },
+      templateVersionId: { type: DataTypes.UUID, allowNull: false, field: 'template_version_id' },
       sortOrder: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'sort_order' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
     },

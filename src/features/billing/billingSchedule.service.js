@@ -3,6 +3,7 @@
 const { BillingSchedule, BillingScheduleItem, Contract } = require('../../models');
 const { publishScheduleUpserted, publishSchedulePaid } = require('./billingCalendarEvents.service');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishBillingGenerated } = require('./billingEvents.service');
 
@@ -36,6 +37,8 @@ function assertValidPeriod(period) {
  */
 async function generateBillingSchedule(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, period, dueDate, items } = payload;
+  if (contractId) assertUuid(contractId, 'contractId', 'BILLING_SCHEDULE_VALIDATION');
+  if (dueDate && ((typeof dueDate !== 'string' && !(dueDate instanceof Date)) || Number.isNaN(new Date(dueDate).getTime()))) throw AppError.badRequest('"dueDate" deve ser uma data.', 'BILLING_SCHEDULE_VALIDATION');
 
   if (!groupId || !companyId || !contractId || !dueDate) {
     throw AppError.badRequest('Os campos "groupId", "companyId", "contractId" e "dueDate" são obrigatórios.', 'BILLING_SCHEDULE_VALIDATION');
@@ -49,7 +52,8 @@ async function generateBillingSchedule(payload, actorUserId, transaction) {
     if (!COMPONENT_TYPES.includes(componentType)) {
       throw AppError.badRequest(`"componentType" deve ser um de: ${COMPONENT_TYPES.join(', ')}.`, 'BILLING_SCHEDULE_VALIDATION');
     }
-    const amount = Number(item.amount);
+    assertText(item.description, 'description', 255, 'BILLING_SCHEDULE_VALIDATION');
+    const amount = typeof item.amount === 'object' ? NaN : Number(item.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
       throw AppError.badRequest('Cada item precisa de "amount" numérico positivo.', 'BILLING_SCHEDULE_VALIDATION');
     }
@@ -150,7 +154,7 @@ async function registerPayment(id, amountPaid, actorUserId, transaction) {
   // registerPayment para a mesma competência liam o mesmo paidAmount/balance e a segunda
   // sobrescrevia o resultado da primeira (lost update) — permitindo baixa duplicada não
   // contabilizada ou saldo final incorreto. Mesmo padrão de lock já usado em
-  // settleFinancialEntryPartial (financialEntries.service.js). O lock é pego numa consulta
+  // settleFinancialEntryPartial (receipt.service.js). O lock é pego numa consulta
   // separada, sem include, porque `SELECT ... FOR UPDATE` não é compatível com o LEFT JOIN
   // de `items` que getBillingSchedule usa.
   const lockedRow = await BillingSchedule.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });

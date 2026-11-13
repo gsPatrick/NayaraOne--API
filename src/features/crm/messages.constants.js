@@ -11,7 +11,8 @@ const AUTHOR_TYPES = Object.freeze(['CLIENT', 'NAY', 'EMPLOYEE']);
  * M3-24 (correção): `channel` era gravado sem NENHUMA validação (a coluna é só um VARCHAR(32) sem CHECK), então um typo — "whatsap", "zap",
  * "" — entrava no histórico e quebrava silenciosamente qualquer filtro/relatório por canal. Enum fechado, mesmo padrão de `direction`/`authorType`.
  */
-const CHANNELS = Object.freeze(['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'INSTAGRAM', 'OTHER']);
+// SITE: livro do Marco 3 §12 ("WhatsApp, telefone, e-mail, site, presencial e portal geram interaction").
+const CHANNELS = Object.freeze(['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'SITE', 'INSTAGRAM', 'OTHER']);
 /** Status de entrega: o conjunto da CHECK `messages_delivery_status_ck` (migration 20260101000763). */
 const DELIVERY_STATUSES = Object.freeze(['QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'CANCELLED', 'UNKNOWN']);
 /** Status da mensagem (`status`, varchar(32)): `RECEIVED` (o padrão da coluna) e os status de entrega, os únicos que algum caminho grava. */

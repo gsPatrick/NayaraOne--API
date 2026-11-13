@@ -11,7 +11,9 @@ const skip = DISPOSABLE ? false : SKIP_DISPOSABLE;
 
 // Recursos do escopo jurídico (JUR-011): contratos, assinaturas, vistorias e provas críticas (dossiê, processo, notificação, aditivo, entrega de chaves, prazo, versão).
 const ESCOPO = /\/legal\/(contracts|signatures|inspections|evidence-packages|cases|notices|amendments|key-deliveries|deadlines|contract-versions)\b/;
-const SERVICOS = ['contracts', 'contractVersions', 'contractAmendments', 'signatures', 'inspections', 'evidencePackages', 'legalCases', 'legalDeadlines', 'notices', 'keyDeliveries'];
+// Caminhos da árvore do Guia do Marco 5, §2 (src/modules/legal).
+const SERVICOS = ['contracts/application/contract', 'contracts/application/contractVersions', 'contracts/application/contractAmendments', 'signatures/signature', 'inspections/inspection',
+  'cases/evidence-package', 'cases/legal-case', 'cases/deadline', 'contracts/application/notices', 'leasing/key-delivery'];
 
 after(async () => { if (DISPOSABLE) await require('../../../src/models').sequelize.close(); });
 
@@ -30,7 +32,7 @@ test('m9d809 AUD-018 retention apply pula registro do escopo jurídico e nenhuma
 
   // 3) nenhum serviço do escopo exporta função de exclusão física
   for (const nome of SERVICOS) {
-    const exportadas = Object.keys(require(`../../../src/features/legal/${nome}.service`));
+    const exportadas = Object.keys(require(`../../../src/modules/legal/${nome}.service`));
     assert.deepEqual(exportadas.filter((n) => /^(delete|remove|destroy|purge)/i.test(n)), [], `${nome}.service exporta exclusão física`);
   }
 

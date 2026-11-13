@@ -37,7 +37,7 @@ const stageMeasurementsService = require('../src/features/construction/stageMeas
 const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 
 let tenant;
 

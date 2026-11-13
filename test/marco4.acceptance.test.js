@@ -7,10 +7,12 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const { assertBankAccountEligibleForPayment } = require('../src/features/finance/financeAntifraud.service');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const { assertBankAccountEligibleForPayment } = require('../src/modules/finance/application/services/finance-antifraud.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const {  Person } = require('../src/models');
 
@@ -102,7 +104,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
 
     const repasse = await ownerRepassesService.createOwnerRepasse(
       {
@@ -146,7 +148,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(outroRecebimento.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(outroRecebimento.id, tenant.userId, transaction);
     await assert.rejects(
       () =>
         ownerRepassesService.createOwnerRepasse(
@@ -216,7 +218,7 @@ test('FIN-TS-015: repasse gera exatamente UM lançamento a pagar (na aprovação
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
 
     const { FinancialEntry } = require('../src/models');
     const countAntes = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
@@ -248,16 +250,16 @@ test('FIN-TS-015: repasse gera exatamente UM lançamento a pagar (na aprovação
 
     // Baixa formal do lançamento a pagar: comprovante anexado -> aprovação de outra pessoa -> baixa.
     const { createManualSettlementEvidence } = require('./testHelpers');
-    const approvalsService = require('../src/features/finance/approvals.service');
+    const approvalsService = require('../src/modules/finance/application/services/approvals.service');
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
-    await financialEntriesService.attachSettlementEvidence(financialEntry.id, manualSettlement, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(financialEntry.id, manualSettlement, tenant.userId, transaction);
     const approval = await approvalsService.createApprovalRequest(
       { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: financialEntry.id, riskLevel: 'LOW' },
       tenant.userId,
       transaction
     );
     await approvalsService.decideApprovalStep(approval.id, { decision: 'APPROVED' }, checker.id, transaction);
-    await financialEntriesService.settleFinancialEntry(financialEntry.id, tenant.userId, transaction, { manualSettlement });
+    await receiptService.settleFinancialEntry(financialEntry.id, tenant.userId, transaction, { manualSettlement });
     const countAntesConfirmar = await FinancialEntry.count({ where: { companyId: tenant.companyId }, transaction });
     const paid = await ownerRepassesService.payOwnerRepasse(repasse.id, tenant.userId, transaction);
     assert.equal(paid.status, 'PAID');

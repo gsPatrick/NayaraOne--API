@@ -7,10 +7,10 @@
 //   INT-006 — Retry depende da classe de erro; validation/auth não entram em loop.
 //   INT-007 — Circuit breaker evita avalanche contra fornecedor indisponível.
 //   INT-008 — Rate limits/quota são monitorados e respeitados.
-// Nenhum adapter externo do projeto (InsuranceAdapter.js, BankAdapter.js, SignatureAdapter.js)
+// Nenhum adapter externo do projeto (InsuranceAdapter.js, os provedores bancários do Financeiro, SignatureAdapter.js)
 // implementava isso — primeira implementação do padrão, pensada para ser reaproveitada por
 // qualquer adapter futuro. Nesta sessão, aplicado só em InsuranceAdapter.js (Seguros é Marco 7);
-// BankAdapter.js/SignatureAdapter.js têm a mesma lacuna mas pertencem a outros módulos, fora do
+// os provedores bancários/SignatureAdapter.js têm a mesma lacuna mas pertencem a outros módulos, fora do
 // escopo desta auditoria.
 //
 // Contrato não especifica números de timeout/retry — valores abaixo são decisão de engenharia documentada:

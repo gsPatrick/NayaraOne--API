@@ -1,0 +1,11 @@
+# estágio 1: lint
+$ npm run lint
+
+> nayara-one-api@0.1.0 lint
+> node scripts/lintRatchet.js
+
+ESLint: 6943 arquivos, 0 erro(s) (todos dentro da linha de base Marcos 4/5: 0 arquivo(s)), 280 aviso(s).
+$ npx eslint --max-warnings=0 scripts/financeiro test/m4.ciEsteiraFinanceiro.test.js
+$ node scripts/check-file-size.js scripts/financeiro
+OK: 7 arquivos, nenhum acima de 400 linhas.
+# estágio 1: lint => VERDE

@@ -36,11 +36,15 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'item_name',
       },
+      // Fechamento M5 (Caderno §11 "Cada ambiente contém itens estruturados"; Guia §9 InspectionItem).
+      roomCode: { type: DataTypes.STRING(60), allowNull: true, field: 'room_code' },
+      itemCode: { type: DataTypes.STRING(60), allowNull: true, field: 'item_code' },
+      description: { type: DataTypes.TEXT, allowNull: true, field: 'description' },
       condition: {
         type: DataTypes.STRING(32),
         allowNull: true,
         field: 'condition',
-        comment: "GOOD|REGULAR|DAMAGED",
+        comment: 'NEW|GOOD|REGULAR|DAMAGED',
       },
       notes: {
         type: DataTypes.TEXT,

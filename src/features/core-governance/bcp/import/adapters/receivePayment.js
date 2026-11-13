@@ -2,7 +2,7 @@
 
 const { QueryTypes } = require('sequelize');
 const { sequelize, FinancialEntry } = require('../../../../../models');
-const { settleFinancialEntry, reverseFinancialEntry } = require('../../../../finance/financialEntries.service');
+const { settleFinancialEntry, reverseFinancialEntry } = require('../../../../../modules/finance/application/services/receipt.service');
 const { resolveRef, UUID } = require('../refs');
 const { commandRejected } = require('../../bcp.errors');
 const normalize = require('../normalize');

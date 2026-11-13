@@ -7,11 +7,13 @@ const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d802Env');
 const origin = require('../_helpers/m9d802Origins');
 const { locacaoAtiva } = require('../_helpers/m9d809Lease');
-const guaranteesService = require('../../../src/features/legal/guarantees.service');
-const keyDeliveriesService = require('../../../src/features/legal/keyDeliveries.service');
-const deadlines = require('../../../src/features/legal/legalDeadlines.service');
-const { publishContractRenewalChange } = require('../../../src/features/legal/legalDeadlineCalendarEvents.service');
+const guaranteesService = require('../../../src/modules/legal/leasing/guarantee.service');
+const keyDeliveriesService = require('../../../src/modules/legal/leasing/key-delivery.service');
+const deadlines = require('../../../src/modules/legal/cases/deadline.service');
+const { origemNaTransacao } = require('../../helpers/prazoOrigem');
+const { publishContractRenewalChange } = require('../../../src/modules/legal/cases/legalDeadlineCalendarEvents.service');
 const { OutboxEvent } = require('../../../src/models');
+const locacaoHelpers = require('../../m5fech.locacao.helpers');
 
 require('../../../src/features/core-governance'); // carrega o módulo como em produção: registra o projetor no outbox
 let tenants;
@@ -25,15 +27,17 @@ test('m9d809 AUD-020 evento de contrato assinado, chaves entregues e prazo gera 
   const t = tenants.A;
   await env.withRollbackTenantTransaction(t, async (tx) => {
     const { contract, inspection, tenantPerson } = await locacaoAtiva(t, tx, { status: 'SIGNED', endsAt: '2028-06-30' });
-    await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE' }, t.userId, tx);
+    // Fechamento M5 (Caderno §9/§10): garantia com os dados do tipo, checklist da entrega e via assinada do termo.
+    await guaranteesService.createGuarantee(contract.id, await locacaoHelpers.completeInsurance(t, tx, { status: 'ACTIVE' }), t.userId, tx);
+    const termEvidenceFileId = await locacaoHelpers.keyDeliveryReady(t, contract.id, tx);
 
     // contrato assinado -> renovação; prazo jurídico -> prazo; chaves -> keys.delivered (e legal.key_delivery.released)
     const renovacao = await publishContractRenewalChange(contract, tx);
     assert.ok(renovacao, 'contrato assinado com término publica o evento de renovação');
     const lc = await origin.legalCase(t, tx);
-    const prazo = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', responsibleUserId: t.userId }, t.userId, tx);
+    const prazo = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', sourceFileId: await origemNaTransacao(t, tx), responsibleUserId: t.userId }, t.userId, tx);
     const entrega = await keyDeliveriesService.createKeyDelivery({ groupId: t.groupId, companyId: t.companyId, contractId: contract.id, inspectionId: inspection.id, deliveredToPersonId: tenantPerson.id }, t.userId, tx);
-    await keyDeliveriesService.releaseKeyDelivery(entrega.id, { keysCount: 2, termSignedByPersonId: tenantPerson.id }, t.userId, tx);
+    await keyDeliveriesService.releaseKeyDelivery(entrega.id, { keysCount: 2, termSignedByPersonId: tenantPerson.id, termEvidenceFileId }, t.userId, tx);
 
     // cada operação publicou o seu evento UMA vez, na mesma transação
     assert.equal(await publicados(contract.id, 'contract.renewal.upserted', tx), 1);

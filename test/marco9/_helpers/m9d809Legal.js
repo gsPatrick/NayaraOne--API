@@ -3,11 +3,11 @@
 // Dados de partida do Jurídico para os testes M9-D809 (não é teste). Cada função grava por commit real (a API enxerga) e só deve rodar em banco descartável.
 const { withTenantTransaction } = require('../../testHelpers');
 const propertiesService = require('../../../src/features/properties/properties.service');
-const inspectionsService = require('../../../src/features/legal/inspections.service');
-const contractsService = require('../../../src/features/legal/contracts.service');
-const contractVersionsService = require('../../../src/features/legal/contractVersions.service');
-const contractAmendmentsService = require('../../../src/features/legal/contractAmendments.service');
-const noticesService = require('../../../src/features/legal/notices.service');
+const inspectionsService = require('../../../src/modules/legal/inspections/inspection.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
+const contractAmendmentsService = require('../../../src/modules/legal/contracts/application/contractAmendments.service');
+const noticesService = require('../../../src/modules/legal/contracts/application/notices.service');
 const { File, BillingSchedule, CollectionCase } = require('../../../src/models');
 
 const sfx = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;
@@ -32,6 +32,7 @@ const vistoriaAssinada = (t) => withTenantTransaction(t, async (transaction) => 
 /** Contrato de locação com aditivo, notificação e caso de inadimplência (as três fontes da linha do tempo). */
 const contratoComLinhaDoTempo = (t) => withTenantTransaction(t, async (transaction) => {
   const contract = await contractsService.createContract({ groupId: t.groupId, companyId: t.companyId, contractType: 'LEASE_RESIDENTIAL', totalValue: 1500 }, t.userId, transaction);
+  await contractVersionsService.createContractVersion(contract.id, { content: `Contrato base ${sfx()}`, requireDocument: false }, t.userId, transaction); // Matriz M5: o aditivo referencia a versão base
   const amendment = await contractAmendmentsService.createAmendment(contract.id, { reason: `Reajuste combinado ${sfx()}`, changes: [{ field: 'totalValue', oldValue: 1500, newValue: 1600 }] }, t.userId, transaction);
   const notice = await noticesService.createNotice({ groupId: t.groupId, companyId: t.companyId, contractId: contract.id, channel: 'EMAIL', content: 'Aviso de vencimento próximo' }, t.userId, transaction);
   const schedule = await BillingSchedule.create({

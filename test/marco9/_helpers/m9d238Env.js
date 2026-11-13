@@ -1,5 +1,7 @@
 'use strict';
 
+const { gravarParametro } = require('../../helpers/mfaRecente'); // parâmetro sensível (requiresMfa): operador com MFA recente real (DI-DEC007-1)
+
 // Apoio dos testes das seguradoras (M9-D238): apólice, escolha do fornecedor (sandbox, fluxo manual), cotação e emissão pelo serviço de Compras, arquivo com hash, eventos
 // do outbox e webhook assinado. Roda em banco descartável (os testes COMMITAM). Quem usa define process.env.PORT ANTES de requerer este arquivo (ele sobe o app de teste).
 const crypto = require('node:crypto');
@@ -13,7 +15,7 @@ const { resetSandbox, calls } = require('../../../src/features/integrations/adap
 const { comTenant, sql, uniqueSuffix, ctxDe } = env;
 
 const actorDe = (tenant) => ({ userId: tenant.userId, groupId: tenant.groupId, companyId: tenant.companyId });
-const config = (tenant, chave, valor) => comTenant(tenant, (t) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t));
+const config = (tenant, chave, valor) => comTenant(tenant, (t) => gravarParametro(chave, valor, tenant, t));
 const escolher = (tenant, provedor) => config(tenant, 'procurement.insurance_provider', provedor);
 
 /** Apólice nova (rascunho). */

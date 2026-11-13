@@ -110,6 +110,10 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'term_signed_by_person_id',
       },
+      // Fechamento M5 (Caderno §10 "Assinatura do termo de entrega", migration 20260101009993): via assinada do termo.
+      termEvidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'term_evidence_file_id' },
+      termEvidenceSha256: { type: DataTypes.STRING(64), allowNull: true, field: 'term_evidence_sha256' },
+      termSignatureMethod: { type: DataTypes.STRING(24), allowNull: true, field: 'term_signature_method' },
       // Frente 5 (migration 20260101000460): termo e política gerados pelo SERVIDOR.
       termText: { type: DataTypes.TEXT, allowNull: true, field: 'term_text' },
       termVersion: { type: DataTypes.STRING(32), allowNull: true, field: 'term_version' },

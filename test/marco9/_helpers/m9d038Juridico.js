@@ -2,13 +2,14 @@
 
 // Fábricas jurídicas dos testes da NAY Jurídica (M9-D038): contrato com duas versões, requisitos, processo e prazo, pelos serviços de
 // aplicação do Marco 5, na transação do teste (rollback). `semVersao` cria o contrato sem nenhuma versão (prazo sem fonte exata).
-const contractsService = require('../../../src/features/legal/contracts.service');
-const contractVersionsService = require('../../../src/features/legal/contractVersions.service');
-const requirementsService = require('../../../src/features/legal/requirements.service');
-const legalCasesService = require('../../../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../../../src/features/legal/legalDeadlines.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
+const requirementsService = require('../../../src/modules/legal/contracts/application/requirement.service');
+const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../../../src/modules/legal/cases/deadline.service');
 const { ContractRequirement } = require('../../../src/models');
 const { uniqueSuffix } = require('../../testHelpers');
+const { origemNaTransacao } = require('../../helpers/prazoOrigem');
 
 const DAY = 86400000;
 const V1 = 'Cláusula 1 — objeto\nCláusula 2 — aluguel mensal\nCláusula 3 — foro';
@@ -27,7 +28,7 @@ async function cenarioJuridico(tenant, tx, { semVersao = false } = {}) {
   }
   const legalCase = await legalCasesService.createLegalCase({ ...base, contractId: contract.id, caseType: 'LITIGATION', caseNumber: `QAM9-${uniqueSuffix()}`, summary: 'Despejo por falta de pagamento' }, tenant.userId, tx);
   const dueAt = new Date(Date.now() + 10 * DAY);
-  const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt, sourceDocument: 'Mandado de citação' }, tenant.userId, tx);
+  const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt, sourceDocument: 'Mandado de citação', sourceFileId: await origemNaTransacao(tenant, tx), responsibleUserId: tenant.userId }, tenant.userId, tx);
   const fresh = await contractsService.getContract(contract.id, tx);
   return { contract: fresh, requirements, v1, v2, legalCase, deadline, dueDay: dueAt.toISOString().slice(0, 10) };
 }

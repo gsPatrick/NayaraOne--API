@@ -2,6 +2,7 @@
 
 const { CollectionCase, BillingSchedule } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const billingScheduleService = require('./billingSchedule.service');
@@ -38,6 +39,9 @@ async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, t
   // compatível com o LEFT JOIN de `items` que getBillingSchedule usa. Travar a linha de
   // billing_schedule serializa as duas chamadas concorrentes: a segunda só prossegue depois da
   // primeira commitar, e aí enxerga o CollectionCase já criado pela primeira.
+  // Fechamento M5 (pentest): id e dias com tipo errado viram 400, nunca 500.
+  assertUuid(billingScheduleId, 'billingScheduleId', 'COLLECTION_CASE_VALIDATION');
+  if (!Number.isFinite(daysPastDue) || daysPastDue < 0) throw AppError.badRequest('"daysPastDue" deve ser um número de dias maior ou igual a zero.', 'COLLECTION_CASE_VALIDATION');
   await BillingSchedule.findByPk(billingScheduleId, { transaction, lock: transaction.LOCK.UPDATE });
 
   const billingSchedule = await billingScheduleService.getBillingSchedule(billingScheduleId, transaction);
@@ -168,6 +172,10 @@ async function createAgreement(collectionCaseId, payload, actorUserId, transacti
   if (!installments || !agreedAmount) {
     throw AppError.badRequest('Os campos "installments" e "agreedAmount" são obrigatórios.', 'COLLECTION_AGREEMENT_VALIDATION');
   }
+  if (!Number.isInteger(Number(installments)) || Number(installments) <= 0 || typeof installments === 'object' || typeof agreedAmount === 'object' || !Number.isFinite(Number(agreedAmount)) || Number(agreedAmount) <= 0) {
+    throw AppError.badRequest('"installments" deve ser um inteiro positivo e "agreedAmount" um valor maior que zero.', 'COLLECTION_AGREEMENT_VALIDATION');
+  }
+  assertText(notes, 'notes', 2000, 'COLLECTION_AGREEMENT_VALIDATION');
   const beforeJson = collectionCase.toJSON();
 
   const previousAgreements = Array.isArray(collectionCase.agreementsJson) ? collectionCase.agreementsJson : [];

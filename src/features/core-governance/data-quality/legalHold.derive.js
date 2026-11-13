@@ -12,7 +12,7 @@ const { TABLES, LINK_TYPES, qualified, localDate } = require('./legalHold.catalo
  * pela checagem. Tudo é INSERT ... SELECT em lote com ON CONFLICT DO NOTHING (idempotente).
  */
 const CONTRACTS_OF_PERSON = 'SELECT cp.contract_id::text FROM legal.contract_parties cp WHERE cp.person_id::text = :itemId AND cp.deleted_at IS NULL';
-const CASES_OF_PERSON = `SELECT lp.legal_case_id::text FROM legal.legal_case_parties lp WHERE lp.person_id::text = :itemId UNION SELECT lc.id::text FROM legal.legal_cases lc WHERE lc.contract_id::text IN (${CONTRACTS_OF_PERSON})`;
+const CASES_OF_PERSON = `SELECT lp.legal_case_id::text FROM legal.case_parties lp WHERE lp.person_id::text = :itemId UNION SELECT lc.id::text FROM legal.legal_cases lc WHERE lc.contract_id::text IN (${CONTRACTS_OF_PERSON})`;
 const CASES_OF_CONTRACT = 'SELECT lc.id::text FROM legal.legal_cases lc WHERE lc.contract_id::text = :itemId';
 
 const linked = (alternatives) => `EXISTS (SELECT 1 FROM people.file_links fl WHERE fl.file_id = x.id AND fl.deleted_at IS NULL AND (${alternatives.join(' OR ')}))`;

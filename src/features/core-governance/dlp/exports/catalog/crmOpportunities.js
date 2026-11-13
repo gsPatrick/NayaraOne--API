@@ -16,6 +16,9 @@ module.exports = {
   formats: ['CSV', 'XLSX', 'PDF'],
   permission: 'crm:opportunities:export',
   registryTable: 'crm.opportunities',
+  // Livro do Marco 3 §18 ("Exportar base de clientes — Permissão, MFA, volume limit, audit") e M3-21/CRM-TS-013: a exportação
+  // de oportunidades exige justificativa e MFA recente mesmo quando o registro de classificação da tabela der classe menor.
+  minClassification: 'HIGH',
   sourceFiles: ['features/crm/opportunitiesExport.service.js'],
   lineage: {
     area: 'OTHER', ownerDomain: 'CRM', criticality: 'NORMAL', description: 'Exportação das oportunidades do CRM (CSV, XLSX ou PDF) pelo POST /exports, com finalidade, MFA, expiração e auditoria.',

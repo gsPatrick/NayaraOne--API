@@ -31,11 +31,16 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'bank_account_id',
       },
+      // Guia M4 §10: unicidade por CONTA (bank_account_id + chave e bank_account_id + fingerprint), migration 9985.
       externalTransactionId: {
         type: DataTypes.STRING(128),
         allowNull: true,
-        unique: true,
         field: 'external_transaction_id',
+      },
+      fingerprint: {
+        type: DataTypes.STRING(64),
+        allowNull: false,
+        field: 'fingerprint',
       },
       amount: {
         type: DataTypes.DECIMAL(18, 2),
@@ -70,6 +75,15 @@ module.exports = (sequelize) => {
       createdAt: 'created_at',
       updatedAt: 'updated_at',
       underscored: true,
+      hooks: {
+        // A impressão digital nasce de toda linha gravada, por qualquer caminho (import, API, provedor).
+        beforeValidate(row) {
+          if (!row.fingerprint) {
+            const { bankTransactionFingerprint } = require('../modules/finance/infrastructure/db/bank-transaction-fingerprint');
+            row.fingerprint = bankTransactionFingerprint(row);
+          }
+        },
+      },
     }
   );
 

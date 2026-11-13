@@ -6,7 +6,7 @@
  * (o cliente não recebeu a resposta) devolve replayed e fica com um só pagamento.
  */
 const approval = require('../../../src/features/ai/approval');
-const paymentIntents = require('../../../src/features/finance/paymentIntents.service');
+const paymentIntents = require('../../../src/modules/finance/application/services/payment.service');
 const { ctxAprovador, contar, lerRec } = require('../../../test/marco9/_helpers/iaAprovacao');
 const { propor, proporOutra } = require('../../../test/marco9/_helpers/iaAprovacaoFluxo');
 

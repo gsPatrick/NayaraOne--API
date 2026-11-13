@@ -13,8 +13,9 @@ const dispatchApi = require('../../../src/features/integrations/dispatch');
 const { clearCircuitCache } = require('../../../src/features/integrations/health');
 const health = require('../../../src/features/integrations/health');
 const { IntegrationConnection } = require('../../../src/models');
-const bankPayments = require('../../../src/features/finance/bankPayments.service');
-const paymentIntents = require('../../../src/features/finance/paymentIntents.service');
+const bankPayments = require('../../../src/modules/finance/application/services/bank-submission.service');
+const paymentService = require('../../../src/modules/finance/application/services/payment.service');
+const paymentIntents = require('../../../src/modules/finance/application/services/payment.service');
 const { runEventConsumers } = require('../../../src/engines/events/consumers');
 const { OutboxEvent } = require('../../../src/models');
 
@@ -31,7 +32,7 @@ const linhaDe = (id) => e215.ler(tenant, id);
 before(async () => {
   ({ tenant } = await e215.carregarTenants());
   contingency.installContingency();
-  require('../../../src/features/finance/bank');
+  require('../../../src/modules/finance/application/services/bank-hub');
 });
 beforeEach(async () => {
   Banco = e215.bancoReconciliavel();
@@ -162,7 +163,7 @@ test('contingencia_pendencia_72h_nao_vira_pago_sem_evidencia', async () => {
     await intent.reload({ transaction: t });
     assert.equal(intent.status, 'SUBMITTING');
     await assert.rejects(paymentIntents.executePaymentIntent(intent.id, e237.tenant.userId, t), (e) => e.statusCode === 409 && e.code === 'FINANCE_PAYMENT_INTENT_NOT_APPROVED');
-    await assert.rejects(bankPayments.confirmBankPayment('ext-que-o-banco-nunca-informou', 'PAID', t), (e) => e.statusCode === 404 && e.code === 'FINANCE_BANK_PAYMENT_ROUTING_NOT_FOUND');
+    await assert.rejects(paymentService.confirmBankPayment('ext-que-o-banco-nunca-informou', 'PAID', t), (e) => e.statusCode === 404 && e.code === 'FINANCE_BANK_PAYMENT_ROUTING_NOT_FOUND');
     assert.equal((await entry.reload({ transaction: t })).status, 'PENDING');
     // O banco volta: a ordem é consultada pela chave e reenviada com a mesma chave; ainda assim só o status FINAL, com o valor conferido, liquida.
     await health.updateCircuitState(connection.id, { circuitState: 'CLOSED', circuitOpenedAt: null, circuitCooldownS: null, consecutiveFailures: 0 }, t);
@@ -170,9 +171,9 @@ test('contingencia_pendencia_72h_nao_vira_pago_sem_evidencia', async () => {
     await intent.reload({ transaction: t });
     assert.equal(intent.status, 'SUBMITTED', 'o banco aceitou a ordem');
     assert.ok(intent.externalSubmissionId);
-    await bankPayments.confirmBankPayment(intent.externalSubmissionId, 'PROCESSING', t);
+    await paymentService.confirmBankPayment(intent.externalSubmissionId, 'PROCESSING', t);
     assert.equal((await entry.reload({ transaction: t })).status, 'PENDING', 'status não final nunca liquida');
-    await bankPayments.confirmBankPayment(intent.externalSubmissionId, 'PAID', t, { amount: '3000.00', source: 'STATUS_QUERY' });
+    await paymentService.confirmBankPayment(intent.externalSubmissionId, 'PAID', t, { amount: '3000.00', source: 'STATUS_QUERY' });
     assert.equal((await intent.reload({ transaction: t })).status, 'EXECUTED', 'a evidência (status final do banco com o valor) é o que paga');
     assert.equal((await entry.reload({ transaction: t })).status, 'SETTLED');
   });

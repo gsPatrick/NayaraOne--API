@@ -16,18 +16,14 @@ function prefixFrom(layer) {
   return m ? m[1].replace(/\\\//g, '/') : '';
 }
 
-function walk(stack, prefix, out) {
+/** Visita cada rota (método × caminho completo) com a lista de funções da cadeia, na ordem do Express. */
+function percorrerRotas(stack, prefix, visitar) {
   for (const layer of stack) {
     if (layer.route) {
       const handlers = layer.route.stack.map((l) => l.handle);
-      const permissions = [...new Set(handlers.map((h) => h.requiredPermission).filter(Boolean))];
-      const mfa = handlers.some((h) => h.name === 'requireRecentMfa');
-      const scope = handlers.map((h) => h.requiredScope).find(Boolean) || null; // rota da API externa (M9-D844): scope exigido do token de cliente
-      for (const method of Object.keys(layer.route.methods)) {
-        out.push({ method: method.toUpperCase(), path: prefix + layer.route.path, permissions, mfaRecente: mfa, ...(scope ? { scope } : {}) });
-      }
+      for (const method of Object.keys(layer.route.methods)) visitar(method.toUpperCase(), prefix + layer.route.path, handlers);
     } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
-      walk(layer.handle.stack, prefix + prefixFrom(layer), out);
+      percorrerRotas(layer.handle.stack, prefix + prefixFrom(layer), visitar);
     }
   }
 }
@@ -35,7 +31,12 @@ function walk(stack, prefix, out) {
 function gerar() {
   const router = require('../src/routes');
   const out = [];
-  walk(router.stack, '/api', out);
+  percorrerRotas(router.stack, '/api', (method, rota, handlers) => {
+    const permissions = [...new Set(handlers.map((h) => h.requiredPermission).filter(Boolean))];
+    const mfa = handlers.some((h) => h.name === 'requireRecentMfa');
+    const scope = handlers.map((h) => h.requiredScope).find(Boolean) || null; // rota da API externa (M9-D844): scope exigido do token de cliente
+    out.push({ method, path: rota, permissions, mfaRecente: mfa, ...(scope ? { scope } : {}) });
+  });
   return out.sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
 }
 
@@ -52,7 +53,7 @@ function gerarCatalogoGovernanca(rotas) {
   }));
 }
 
-module.exports = { gerar, gerarCatalogoGovernanca };
+module.exports = { gerar, gerarCatalogoGovernanca, percorrerRotas };
 
 if (require.main === module) {
   const rotas = gerar();

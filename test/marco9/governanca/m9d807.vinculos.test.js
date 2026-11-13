@@ -6,7 +6,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d807Env');
 const ownersService = require('../../../src/features/properties/propertyOwners.service');
-const { resolveRepasseDestination } = require('../../../src/features/finance/ownerRepasseDestination.service');
+const { resolveRepasseDestination } = require('../../../src/modules/finance/application/services/owner-repasse-destination.service');
 
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);

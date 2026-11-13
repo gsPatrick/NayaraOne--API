@@ -60,4 +60,10 @@ const explainMatch = catchAsync(async (req, res) => {
   return success(res, { data: explanation });
 });
 
-module.exports = { create, list, getOne, update, remove, matches, explainMatch };
+// Histórico dos matches gravados (crm.radar_matches): score, critérios atendidos/falhos, impressão digital e versão (livro §13).
+const matchHistory = catchAsync(async (req, res) => {
+  const rows = await req.withTenantTransaction((transaction) => radarService.getStoredRadarMatches(req.params.id, transaction));
+  return success(res, { data: rows });
+});
+
+module.exports = { create, list, getOne, update, remove, matches, explainMatch, matchHistory };

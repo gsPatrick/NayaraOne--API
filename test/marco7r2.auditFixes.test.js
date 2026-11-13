@@ -31,7 +31,8 @@ const usersService = require('../src/features/users/users.service');
 const insuranceService = require('../src/features/procurement/insurance.service');
 const requisitionsService = require('../src/features/inventory/requisitions.service');
 const itemsService = require('../src/features/inventory/items.service');
-const { createFinancialEntry, settleFinancialEntry } = require('../src/features/finance/financialEntries.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
+const { settleFinancialEntry } = require('../src/modules/finance/application/services/receipt.service');
 
 let tenant;
 

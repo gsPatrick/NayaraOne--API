@@ -15,11 +15,13 @@ const portalListingsRouter = require('../features/integrations/portal/portal.rou
 const crmRouter = require('../features/crm/crm.routes');
 const crmController = require('../features/crm/crm.controller');
 const radarRouter = require('../features/radar/radar.routes');
-const financeRouter = require('../features/finance/finance.routes');
-const financeExportRouter = require('../features/finance/financeExport.routes');
-const legalRouter = require('../features/legal/legal.routes');
-const legalController = require('../features/legal/legal.controller');
-const financeController = require('../features/finance/finance.controller');
+const crmLivroRouter = require('../features/crm/crm.livroApi.routes');
+const financeRouter = require('../modules/finance/presentation/http/finance.routes');
+const financeExportRouter = require('../modules/finance/presentation/http/finance-export.routes');
+const financeOfficialRouter = require('../modules/finance/presentation/http/finance-official.routes'); // Guia M4 §15 (caminhos literais)
+const legalRouter = require('../modules/legal/shared/legal.routes');
+const legalController = require('../modules/legal/shared/legal.controller');
+const financeController = require('../modules/finance/presentation/http/finance.controller');
 const constructionRouter = require('../features/construction/construction.routes');
 const inventoryRouter = require('../features/inventory/inventory.routes');
 const inventoryNayRouter = require('../features/inventory/inventoryNay.routes');
@@ -78,6 +80,8 @@ router.use('/', healthRouter);
 // legal.controller.js), validado contra o segredo por-tenant resolvido via a tabela de
 // roteamento sem RLS (migration 20260101000172).
 // Marco 9 (M9-D211): a rota única POST /v1/webhooks/:provider/:channel (e o alias da raiz) e os aliases abaixo passam pelo mesmo framework: corpo bruto e limite WEBHOOK compartilhado.
+// Matriz M5 (Guia §14): rota literal do livro POST /webhooks/signature/:provider — antes da rota única genérica, que capturaria /webhooks/signature/:canal.
+router.post('/v1/webhooks/signature/:provider', require('../modules/legal/signatures/signatureWebhook.route').signatureWebhookRoute({ webhookPreflight: require('../features/integrations/webhooks/webhooks.preflight').webhookPreflight, legacyAlias: integrationWebhooks.legacyAlias }, legalController.clicksignPublicWebhook));
 router.use(integrationWebhooks.router);
 router.post('/v1/legal/webhooks/clicksign', ...integrationWebhooks.legacyAlias('clicksign', legalController.clicksignPublicWebhook));
 // Mesmo motivo acima, pro webhook do provider bancário (PROVIDER_BANCARIO.md) — resolve o
@@ -125,8 +129,11 @@ router.use('/v1', propertiesRouter);
 router.use('/v1', portalListingsRouter);
 router.use('/v1', crmRouter);
 router.use('/v1', radarRouter);
+// Guia do Marcelo §13 (Marco 3): APIs mínimas no caminho do livro, delegando aos mesmos services.
+router.use('/v1', crmLivroRouter);
 router.use('/v1', financeRouter);
 router.use('/v1', financeExportRouter);
+router.use('/v1', financeOfficialRouter);
 router.use('/v1', legalRouter);
 router.use('/v1', constructionRouter);
 router.use('/v1', inventoryRouter);

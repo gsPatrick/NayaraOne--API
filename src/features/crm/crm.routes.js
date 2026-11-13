@@ -5,10 +5,13 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const crmController = require('./crm.controller');
 const { validarMensagem } = require('./messages.validate');
+const { requireOpportunityInScope } = require('./opportunityScope.guard');
 
 const crmRouter = Router();
 
 crmRouter.use(authMiddleware, tenantMiddleware);
+// CRM-TS-012 / livro §18: corretor só acessa oportunidade da própria carteira, em toda rota com o id da oportunidade.
+crmRouter.use('/opportunities/:id', requireOpportunityInScope);
 
 // M3-21 — exportação sensível: permissão DEDICADA (não basta crm:opportunities:read) e
 // sempre auditada. Precisa vir ANTES de '/opportunities/:id' para não ser capturada por ele.

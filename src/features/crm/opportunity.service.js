@@ -3,6 +3,7 @@
 const { Opportunity, Person, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { CLOSED_STAGES, assertNextActionWhenActive } = require('./opportunityNextAction.validator');
+const { normalizeStage, canonicalStage, DEFAULT_STAGE } = require('./opportunityStages');
 const { assertOutcomeReason } = require('./opportunityOutcomeReason.validator');
 const {
   publishOpportunityCreated,
@@ -48,7 +49,7 @@ async function createOpportunity(payload, actorUserId, transaction) {
     if (!property) throw AppError.notFound('Imóvel de interesse não encontrado.', 'PROPERTY_NOT_FOUND');
   }
 
-  const normalizedStage = stage ? String(stage).toUpperCase() : 'NEW';
+  const normalizedStage = stage !== undefined && stage !== null && stage !== '' ? normalizeStage(stage) : DEFAULT_STAGE;
   if (temperature && !TEMPERATURES.includes(String(temperature).toUpperCase())) {
     throw AppError.badRequest(`O campo "temperature" deve ser um de: ${TEMPERATURES.join(', ')}.`, 'OPPORTUNITY_VALIDATION');
   }
@@ -123,7 +124,7 @@ async function createOpportunity(payload, actorUserId, transaction) {
 //     permissões de escopo granular `crm:opportunities:read:own`/`:all`).
 async function listOpportunities(transaction, filters = {}) {
   const where = {};
-  if (filters.stage) where.stage = String(filters.stage).toUpperCase();
+  if (filters.stage) where.stage = canonicalStage(filters.stage);
   if (filters.personId) where.personId = filters.personId;
   if (filters.propertyId) where.propertyId = filters.propertyId;
   if (filters.ownerScope && filters.ownerScope.mode === 'OWN') {
@@ -154,7 +155,7 @@ async function updateOpportunity(id, payload, actorUserId, transaction) {
   const { stage, temperature, expectedValue, nextAction, nextActionDueAt, lostReason, wonReason, withdrawnReason, ownerUserId } =
     payload;
 
-  const nextStage = stage !== undefined ? String(stage).toUpperCase() : opportunity.stage;
+  const nextStage = stage !== undefined ? normalizeStage(stage) : opportunity.stage;
   const nextNextAction = nextAction !== undefined ? nextAction : opportunity.nextAction;
   const nextNextActionDueAt = nextActionDueAt !== undefined ? nextActionDueAt : opportunity.nextActionDueAt;
 

@@ -33,14 +33,16 @@ const {
 const { signAccessToken } = require('../src/utils/jwt');
 const { encryptSecret } = require('../src/utils/mfaCrypto');
 const { User, BankAccount, Person, Property, OutboxEvent, MfaCredential, MfaStepUp, AuditLog } = require('../src/models');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const anomalyCasesService = require('../src/features/finance/anomalyCases.service');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
-const chartOfAccountsService = require('../src/features/finance/chartOfAccounts.service');
-const { exportFinancialEntries } = require('../src/features/finance/financeExport.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const anomalyCasesService = require('../src/modules/finance/application/services/anomaly-cases.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
+const chartOfAccountsService = require('../src/modules/finance/application/services/chart-of-accounts.service');
+const { exportFinancialEntries } = require('../src/modules/finance/application/services/finance-export.service');
 
 let tenant;
 let baseUrl;
@@ -101,7 +103,7 @@ test('M45-M4-01 eventos mínimos do Guia §14 com o nome literal: payment.prepar
       T({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 12.34, description: `M45-M4-01 pagar ${uniqueSuffix()}`, costCenterId: cc.id }), tenant.userId, t
     );
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
-    await financialEntriesService.attachSettlementEvidence(payable.id, manualSettlement, tenant.userId, t);
+    await settlementEvidence.attachSettlementEvidence(payable.id, manualSettlement, tenant.userId, t);
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: payable.id }, tenant.userId, t);
     assert.ok((await eventTypesFor(intent.id, t)).includes('finance.payment.prepared'));
     const approver = await newUser(t, 'aprovador');
@@ -112,7 +114,7 @@ test('M45-M4-01 eventos mínimos do Guia §14 com o nome literal: payment.prepar
     assert.ok(payableEvents.includes('finance.payment.completed'), payableEvents.join(','));
     assert.ok(!payableEvents.includes('finance.receipt.completed'));
 
-    await financialEntriesService.reverseFinancialEntry(payable.id, 'M45-M4-01 estorno de teste', tenant.userId, t);
+    await receiptService.reverseFinancialEntry(payable.id, 'M45-M4-01 estorno de teste', tenant.userId, t);
     assert.ok((await eventTypesFor(payable.id, t)).includes('finance.payment.reversed'));
 
     // Recebimento com conta: receipt.completed; conciliação com o extrato: reconciliation.completed.
@@ -121,7 +123,7 @@ test('M45-M4-01 eventos mínimos do Guia §14 com o nome literal: payment.prepar
     const receivable = await financialEntriesService.createFinancialEntry(
       T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 45.6, description: `M45-M4-01 receber ${uniqueSuffix()}`, resultCenterId: rc.id, bankAccountId: bank.id }), tenant.userId, t
     );
-    await financialEntriesService.settleFinancialEntry(receivable.id, tenant.userId, t);
+    await receiptService.settleFinancialEntry(receivable.id, tenant.userId, t);
     assert.ok((await eventTypesFor(receivable.id, t)).includes('finance.receipt.completed'));
     const bankTx = await bankTransactionsService.createBankTransaction(
       T({ bankAccountId: bank.id, externalTransactionId: `M45M4-${uniqueSuffix()}`, amount: 45.6, transactionDate: new Date(), description: 'M45-M4-01 extrato' }), tenant.userId, t
@@ -142,7 +144,7 @@ async function repasseSetup(t) {
   const received = await financialEntriesService.createFinancialEntry(
     T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, resultCenterId: rc.id, description: `M45-M4 aluguel ${suffix}` }), tenant.userId, t
   );
-  await financialEntriesService.settleFinancialEntry(received.id, tenant.userId, t);
+  await receiptService.settleFinancialEntry(received.id, tenant.userId, t);
   const bank = await newBankAccount(t);
   const costCenter = await createTestCostCenter(tenant, t);
   const base = T({ propertyId: property.id, ownerPersonId: owner.id, bankAccountId: bank.id, sourceEntryIds: [received.id], grossAmount: 1000, deductionsAmount: 100, referenceMonth: '2026-09' });
@@ -174,9 +176,9 @@ test('M45-M4-02 repasse: dedução sem motivo é recusada (serviço e CHECK no b
     const checker = await newUser(t, 'checker');
     const { financialEntry } = await ownerRepassesService.approveOwnerRepasse(repasse.id, { costCenterId: costCenter.id }, checker.id, t);
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
-    await financialEntriesService.attachSettlementEvidence(financialEntry.id, manualSettlement, tenant.userId, t);
+    await settlementEvidence.attachSettlementEvidence(financialEntry.id, manualSettlement, tenant.userId, t);
     await approveFinancialEntryForSettlement(tenant, financialEntry.id, tenant.userId, t);
-    await financialEntriesService.settleFinancialEntry(financialEntry.id, tenant.userId, t, { manualSettlement });
+    await receiptService.settleFinancialEntry(financialEntry.id, tenant.userId, t, { manualSettlement });
     const paid = await ownerRepassesService.payOwnerRepasse(repasse.id, tenant.userId, t);
     assert.equal(paid.status, 'PAID');
     assert.ok((await eventTypesFor(repasse.id, t)).includes('finance.owner_repass.completed'));
@@ -262,7 +264,7 @@ test('M45-M4-07 §5 tabelas do caderno: ledger, entry_installments, security_dep
     );
     const [[before]] = await sequelize.query('SELECT count(*)::int AS n FROM finance.ledger WHERE id = :id', { replacements: { id: entry.id }, transaction: t });
     assert.equal(before.n, 0, 'previsto não é ledger');
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, t);
+    await receiptService.settleFinancialEntry(entry.id, tenant.userId, t);
     const [[row]] = await sequelize.query('SELECT direction, amount::text AS amount, movement_type FROM finance.ledger WHERE id = :id', { replacements: { id: entry.id }, transaction: t });
     assert.deepEqual(row, { direction: 'CREDIT', amount: '77.70', movement_type: 'RECEIVABLE' });
 

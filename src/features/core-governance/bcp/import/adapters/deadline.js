@@ -1,7 +1,7 @@
 'use strict';
 
 const { LegalDeadline } = require('../../../../../models');
-const { createLegalDeadline, updateLegalDeadline } = require('../../../../legal/legalDeadlines.service');
+const { createLegalDeadline, updateLegalDeadline } = require('../../../../../modules/legal/cases/deadline.service');
 const { resolveRef } = require('../refs');
 const { parseOccurredAt } = require('../../bcp.time');
 const { commandRejected } = require('../../bcp.errors');
@@ -19,7 +19,7 @@ async function execute({ tenant, actorUserId, operation, payload, transaction })
   const deadline = await createLegalDeadline(legalCase.id, {
     description: `${kind}: ${payload.descricao}`.slice(0, 500), dueAt, responsibleUserId: actorUserId,
     sourceDocument: `Formulário contingencial ${operation.manualReference} (ciência em ${payload.dataCiencia}; conferido por ${payload.conferidoPor})`.slice(0, 500),
-  }, actorUserId, transaction);
+  }, actorUserId, transaction, { contingencyOrigin: true }); // Guia §12: na contingência a origem é o formulário registrado na operação do BCP
   const saved = await LegalDeadline.findByPk(deadline.id, { transaction });
   return {
     commandRef: `LegalDeadline:${saved.id}`,

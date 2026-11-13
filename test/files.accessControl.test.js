@@ -27,7 +27,7 @@ const {
 const { signAccessToken } = require('../src/utils/jwt');
 const filesService = require('../src/features/files/files.service');
 const fileAccessService = require('../src/features/files/fileAccess.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const projectsService = require('../src/features/construction/projects.service');
 const diskStorage = require('../src/utils/diskStorage');
 const { User, Role, UserMembership, Company, File, AuditLog } = require('../src/models');

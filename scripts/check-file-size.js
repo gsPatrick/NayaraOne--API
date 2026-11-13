@@ -19,6 +19,7 @@ const DEFAULT_DIRS = [
   'src/features/integrations',
   'src/features/marketing',
   'src/features/analytics',
+  'src/modules/finance', // M4-D140: o Financeiro inteiro na árvore do Guia M4 §2, inclusive as migrations da pasta do módulo
 ];
 
 // Migrations do Marco 9 começam em 20260101000650 (as de BI, em 20260101009600, já estão acima).

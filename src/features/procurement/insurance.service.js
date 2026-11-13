@@ -26,8 +26,9 @@ const { publishQuoteReceived, publishPolicyIssued } = require('./insurance/insur
 const { installInsuranceEvents } = require('./insurance/insurance.webhook');
 const { installInsuranceReactions } = require('./insurance/insurance.react');
 const { quoteDomainObject, quoteFromResponse, proposeDomainObject, claimDomainObject, pendingTaskOf, providerResultOf } = require('./insurance/insurance.domain');
-const { createFinancialEntry, reverseFinancialEntry } = require('../finance/financialEntries.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
+const { reverseFinancialEntry } = require('../../modules/finance/application/services/receipt.service');
+const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
 const filesService = require('../files/files.service');
 
 installInsuranceReactions(); // M9-D220: o aviso ao responsável e a apólice vigente por evento interno do envio
@@ -38,7 +39,7 @@ installInsuranceEvents(); // M9-D238: o status da apólice que a seguradora info
 // provider_submissions. Apólice com provider/número/vigência/cobertura/prêmio/documentos;
 // renovação alerta; sinistro timeline; indenização confirmada integra Financeiro."
 //
-// Mesmo princípio já usado em bankPayments.service.js: o caminho NOVO (via adapter) nunca
+// Mesmo princípio já usado em bank-submission.service.js (Financeiro): o caminho NOVO (via adapter) nunca
 // presume sucesso — só confirmSettlement (webhook/polling) grava ledger, e só quando o status
 // reportado pela seguradora é de fato liquidação confirmada.
 
@@ -536,7 +537,7 @@ async function finalizeIssuance(policy, issued, { issueRequest, effectiveDate: n
   // "parcelas" como campo da apólice (seguro-fiança, linha 8179) e "installments" como entidade
   // própria do Insurance Hub (linha 9514) — a migration/model já existiam, mas nada no sistema
   // jamais criava uma linha: `generateInstallments` divide o prêmio em N parcelas (padrão já
-  // usado em `commissions.service.js` para Commission/CommissionInstallment), a última parcela
+  // usado em `commission.service.js` para Commission/CommissionInstallment), a última parcela
   // absorve a diferença de arredondamento de centavos.
   const installments = policy.premiumAmount
     ? await generateInstallments(policy, issueRequest?.installmentsCount || 1, policy.effectiveDate, actor, transaction)
@@ -568,7 +569,7 @@ async function finalizeIssuance(policy, issued, { issueRequest, effectiveDate: n
 const INSURANCE_PREMIUM_COST_CENTER_CODE = 'SEGUROS-PREMIOS';
 
 async function generateInstallments(policy, count, firstDueAt, actor, transaction) {
-  const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+  const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
   const n = Math.max(1, Number(count) || 1);
   const baseInstallment = Math.floor((policy.premiumAmount / n) * 100) / 100;
   const installments = [];
@@ -649,7 +650,7 @@ async function listPolicyInstallments(policyId, groupId, companyId, transaction)
 }
 
 // payInsurancePolicyInstallment — mesmo padrão de validação fail-closed de
-// `commissions.service.js#markInstallmentPaid`: a parcela só vira PAID se apontar pra um
+// `commission.service.js#markInstallmentPaid`: a parcela só vira PAID se apontar pra um
 // FinancialEntry que já existe, está SETTLED, tem o mesmo valor, e ainda não foi usado por
 // outra parcela — nunca aceita a baixa "porque alguém clicou no botão".
 async function payInsurancePolicyInstallment(installmentId, financialEntryId, actor, transaction) {
@@ -981,7 +982,7 @@ async function submitClaim(claimId, actor, transaction) {
 // BLINDADO v1, §4: "Centro de resultado obrigatório para receita"): confirmClaimSettlement
 // criava um lançamento RECEIVABLE (indenização de sinistro) sem nenhum resultCenterId — a
 // confirmação chega por webhook da seguradora, que não tem como informar essa dimensão. Usa
-// getOrCreateDefaultResultCenter (ver resultCenters.service.js) com um código dedicado.
+// getOrCreateDefaultResultCenter (ver result-centers.service.js) com um código dedicado.
 const INSURANCE_RESULT_CENTER_CODE = 'SEGUROS-INDENIZACOES';
 
 async function confirmClaimSettlement(externalSubmissionId, externalStatus, settledAmount, transaction) {

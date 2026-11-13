@@ -6,8 +6,8 @@ const { authenticator } = require('otplib');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
 const mfaService = require('../src/features/users/mfa.service');
-const approvalsService = require('../src/features/finance/approvals.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 const { User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 

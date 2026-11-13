@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d236Env');
 const e227 = require('../_helpers/m9d227Env');
 const contingency = require('../../../src/features/integrations/contingency');
-const signatureFlow = require('../../../src/features/legal/signature');
+const signatureFlow = require('../../../src/modules/legal/signatures/framework');
 const { File } = require('../../../src/models');
 const { transitionConnection } = require('../../../src/features/integrations/registry/connections.transition');
 

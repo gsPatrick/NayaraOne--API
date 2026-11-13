@@ -21,10 +21,10 @@ const {
 } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Company } = require('../src/models');
-const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
-const { createBankAccount } = require('../src/features/finance/bankAccounts.service');
-const { createBankTransaction } = require('../src/features/finance/bankTransactions.service');
-const { getFinanceInsights } = require('../src/features/finance/financeNay.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
+const { createBankAccount } = require('../src/modules/finance/application/services/bank-accounts.service');
+const { createBankTransaction } = require('../src/modules/finance/application/services/bank-transactions.service');
+const { getFinanceInsights } = require('../src/modules/finance/application/services/finance-nay.service');
 
 let tenant;
 let fresh; // empresa nova, mesmo grupo, sem nenhum dado financeiro

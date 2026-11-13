@@ -8,8 +8,8 @@ const { test, before } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, settleFinancialEntryWithApproval } = require('./testHelpers');
-const budgetsForecastsService = require('../src/features/finance/budgetsForecasts.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const budgetsForecastsService = require('../src/modules/finance/application/services/budgets-forecasts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 
 let tenant;
 before(async () => {

@@ -5,6 +5,7 @@ const { FeedbackCase, Person, Opportunity, Notification } = require('../../model
 const AppError = require('../../utils/AppError');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const opening = require('./feedbackCaseOpening');
 
 /**
  * M3-20 — Reclamações, elogios e conflitos com SLA e escalonamento.
@@ -26,7 +27,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
  * não existe divergência de comportamento entre escalonar na mão e escalonar pelo job.
  */
 
-const TYPES = ['COMPLAINT', 'COMPLIMENT', 'CONFLICT'];
+// Livro do Marco 3 §15: reclamação, elogio, conflito, atendimento inadequado (POOR_SERVICE) e retorno pendente (PENDING_RETURN).
+const TYPES = ['COMPLAINT', 'COMPLIMENT', 'CONFLICT', 'POOR_SERVICE', 'PENDING_RETURN'];
 const SEVERITIES = ['LOW', 'MEDIUM', 'HIGH'];
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'ESCALATED'];
 
@@ -49,7 +51,7 @@ function computeSlaDueAt(severity, from = new Date()) {
 }
 
 async function createFeedbackCase(payload, actorUserId, transaction) {
-  const { groupId, companyId, personId, opportunityId, type, description, severity, assignedToUserId } = payload;
+  const { groupId, companyId, personId, opportunityId, messageId, type, description, severity, assignedToUserId } = payload;
 
   if (!groupId || !companyId || !personId || !type || !description) {
     throw AppError.badRequest(
@@ -76,6 +78,7 @@ async function createFeedbackCase(payload, actorUserId, transaction) {
     if (!opportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
   }
 
+  const originMessage = await opening.resolveOriginInteraction(messageId, personId, transaction);
   const slaDueAt = computeSlaDueAt(normalizedSeverity);
 
   const feedbackCase = await FeedbackCase.create(
@@ -83,7 +86,8 @@ async function createFeedbackCase(payload, actorUserId, transaction) {
       groupId,
       companyId,
       personId,
-      opportunityId: opportunityId || null,
+      opportunityId: opportunityId || (originMessage && originMessage.opportunityId) || null,
+      messageId: originMessage ? originMessage.id : null,
       type: normalizedType,
       description,
       severity: normalizedSeverity,
@@ -127,6 +131,9 @@ async function createFeedbackCase(payload, actorUserId, transaction) {
     },
     transaction
   );
+
+  await opening.publishOccurrenceOpened(feedbackCase, transaction);
+  await opening.escalateGraveComplaint(feedbackCase, actorUserId, transaction);
 
   return feedbackCase;
 }

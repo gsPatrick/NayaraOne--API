@@ -14,7 +14,7 @@ const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.ser
 const { resolveDomainAssignee } = require('../../../src/features/integrations/contingency/contingency.assignee');
 
 let tenant;
-before(async () => { tenant = (await env.carregarTenants()).tenant; require('../../../src/features/finance/bank'); require('../../../src/features/correspondent/dispatch/submitViaDispatch'); });
+before(async () => { tenant = (await env.carregarTenants()).tenant; require('../../../src/modules/finance/application/services/bank-hub'); require('../../../src/features/correspondent/dispatch/submitViaDispatch'); });
 after(async () => { await env.restaurar(tenant, ['integration.bank.manual_task_assignee_role']); await env.sequelize.close(); process.exit(0); });
 
 const SRC = path.join(__dirname, '../../../src');
@@ -23,7 +23,8 @@ const lerTudo = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((d
 test('contingencia_banco_parametro_do_papel_declarado_e_lido', async () => {
   const k = 'integration.bank.manual_task_assignee_role';
   assert.ok(SETTINGS_SCHEMA[k], `${k} declarado em SETTINGS_SCHEMA`);
-  assert.ok(lerTudo(path.join(SRC, 'features')).some((f) => !/\.settings\.js$/.test(f.file) && f.text.includes(`'${k}'`) && /resolveDomainAssignee\(/.test(f.text)), `${k} é lido pelo código`);
+  // O hub do banco mora em src/modules/finance (Guia do Marco 4, §2): a varredura olha src/features e src/modules.
+  assert.ok([...lerTudo(path.join(SRC, 'features')), ...lerTudo(path.join(SRC, 'modules'))].some((f) => !/\.settings\.js$/.test(f.file) && f.text.includes(`'${k}'`) && /resolveDomainAssignee\(/.test(f.text)), `${k} é lido pelo código`);
   // Sem ninguém no papel configurado, a tarefa vai para o papel das tarefas manuais da contingência (nunca fica sem responsável se houver um).
   const comPapelInexistente = await env.comTenant(tenant, async (t) => {
     await env.parametro(tenant, k, 'Papel que não existe');

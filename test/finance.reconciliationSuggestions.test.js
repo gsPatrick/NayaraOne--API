@@ -13,10 +13,10 @@ process.env.PORT = process.env.FINANCE_RECON_HTTP_TEST_PORT || '21594';
 require('../app');
 const { getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
 
 let tenant;
 let baseUrl;

@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d807Env');
 const guard = require('../../../src/features/core-governance/data-quality/evidence.guard');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
-const bankAccountsService = require('../../../src/features/finance/bankAccounts.service');
+const bankAccountsService = require('../../../src/modules/finance/application/services/bank-accounts.service');
 
 let tenants;
 const skip = () => (env.DISPOSABLE ? false : env.SKIP_DISPOSABLE);

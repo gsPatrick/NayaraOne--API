@@ -5,10 +5,10 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./constructionEvents.service');
 const { getApprovalThreshold } = require('./lossRecords.service');
-const financialEntriesService = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
-// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em costCenters.service.js.
+// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em cost-centers.service.js.
 const WARRANTY_COST_CENTER_CODE = 'OBRAS-GARANTIA';
 const { setTeamAndMaterial } = require('./warrantyActionTeamMaterialColumns');
 const { getActiveSlaDaysMap, DEFAULT_SLA_DAYS } = require('./slaRules.service');
@@ -20,6 +20,7 @@ const CONTEXT_WARRANTY_RESOLUTION = 'WARRANTY_RESOLUTION';
 // fontes, sem enum documentado — workflow abaixo segue o mesmo padrão de "chamado" já usado
 // em finance.approval_requests e crm.opportunities (aberto -> em andamento -> resolvido/fechado).
 const { assertClosedCaseStillMeetsRequirements, isBlankRootCause } = require('./maintenanceCaseClosedRules');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 // Grafo de transição válido — mesmo usado no front (app/painel/obras/pos-obra/[id]/page.js,
 // NEXT_STATUS_OPTIONS). CLOSED é terminal: reabertura exige fluxo próprio (fora de escopo aqui).
@@ -209,6 +210,7 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
   const slaBaseDate = warrantyDeadlineAt || now;
   const slaDueAt = await computeSlaDueAt(slaBaseDate, normalizedSeverity, groupId, companyId, transaction, actorUserId);
 
+  await assertEvidenceFilesExist(validateMediaFileIds(beforeMediaFileIds, 'beforeMediaFileIds'), companyId, transaction, 'beforeMediaFileIds');
   const maintenanceCase = await MaintenanceCase.create(
     {
       groupId,
@@ -388,6 +390,8 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
   if (beforeMedia !== undefined) maintenanceCase.beforeMediaFileIds = beforeMedia;
   const afterMedia = validateMediaFileIds(afterMediaFileIds, 'afterMediaFileIds');
   if (afterMedia !== undefined) maintenanceCase.afterMediaFileIds = afterMedia;
+  await assertEvidenceFilesExist(beforeMedia, maintenanceCase.companyId, transaction, 'beforeMediaFileIds');
+  await assertEvidenceFilesExist(afterMedia, maintenanceCase.companyId, transaction, 'afterMediaFileIds');
   if (laborCost !== undefined) maintenanceCase.laborCost = validateMonetaryCost(laborCost, 'laborCost');
   if (materialCost !== undefined) maintenanceCase.materialCost = validateMonetaryCost(materialCost, 'materialCost');
 

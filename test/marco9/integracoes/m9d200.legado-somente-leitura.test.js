@@ -65,15 +65,19 @@ test('legado_nenhuma_das_migrations_650_656_658_cria_gatilho_de_somente_leitura'
 });
 
 test('legado_9964_e_a_ultima_migration', () => {
-  // A 9964 fecha o plano do Marco 9 (docs/DEPLOY_MARCO_9.md). As que vêm depois são da correção de 10 e 11/11/2026: nenhuma pode
-  // tocar os gatilhos de somente leitura nem as três tabelas do legado, e cada uma precisa estar no roteiro de deploy.
+  // A 9964 fecha o plano do Marco 9 (docs/DEPLOY_MARCO_9.md). As que vêm depois (correção do Marco 9 de 10 e 11/11/2026 e fechamentos dos
+  // Marcos 3 a 6) não podem tocar os gatilhos de somente leitura nem as três tabelas do legado, e cada uma precisa estar num roteiro de deploy
+  // (docs/DEPLOY_*.md): as do Marco 9 no docs/DEPLOY_MARCO_9.md, as dos outros marcos no roteiro do fechamento deles.
   const todas = fs.readdirSync(DIR).filter((f) => /^\d{14}-.*\.js$/.test(f)).sort();
   const i = todas.findIndex((f) => /^20260101009964-/.test(f));
   assert.ok(i >= 0, 'a 9964 existe');
-  const roteiro = fs.readFileSync(path.join(__dirname, '../../../docs/DEPLOY_MARCO_9.md'), 'utf8');
+  const docs = path.join(__dirname, '../../../docs');
+  const roteiros = fs.readdirSync(docs).filter((f) => /^DEPLOY_.*\.md$/.test(f)).map((f) => fs.readFileSync(path.join(docs, f), 'utf8'));
+  assert.ok(roteiros.length > 0 && fs.existsSync(path.join(docs, 'DEPLOY_MARCO_9.md')), 'o roteiro do Marco 9 existe');
   for (const f of todas.slice(i + 1)) {
     const texto = fs.readFileSync(path.join(DIR, f), 'utf8');
     assert.doesNotMatch(texto, /read_only|provider_accounts|integration_errors|webhook_inbox/, `${f} não pode mexer no legado nem nos gatilhos da 9964`);
-    assert.ok(roteiro.includes(f.replace(/\.js$/, '')), `${f} precisa estar no roteiro docs/DEPLOY_MARCO_9.md`);
+    const nome = f.replace(/\.js$/, '');
+    assert.ok(roteiros.some((r) => r.includes(nome)), `${f} precisa estar num roteiro de deploy (docs/DEPLOY_*.md)`);
   }
 });

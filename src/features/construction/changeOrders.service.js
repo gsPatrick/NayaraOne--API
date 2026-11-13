@@ -2,6 +2,7 @@
 
 const { ChangeOrder, Budget, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const marginRulesService = require('./marginRules.service');
 const { computeMarginProjection } = require('./projectHealth.service');
@@ -67,6 +68,8 @@ async function createChangeOrder(projectId, payload, actorUserId, transaction) {
       'CHANGE_ORDER_VALIDATION'
     );
   }
+
+  await assertEvidenceFilesExist(evidenceFileIds, companyId, transaction, 'evidenceFileIds');
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): lock pessimista na
   // linha do Project, serializando contra removeProject concorrente (ver comentário detalhado

@@ -9,7 +9,7 @@ const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { prepararTenants } = require('../../helpers/marketingExecucao');
 const approval = require('../../../src/features/ai/approval');
 const recommendations = require('../../../src/features/ai/recommendations');
-const paymentIntents = require('../../../src/features/finance/paymentIntents.service');
+const paymentIntents = require('../../../src/modules/finance/application/services/payment.service');
 const { sequelize, ctxAprovador, lerRec, lerRunDb, lerChamada, contar, q, run, setParam } = require('../_helpers/iaAprovacao');
 const { propor, proporOutra, aprovador } = require('../_helpers/iaAprovacaoFluxo');
 

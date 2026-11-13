@@ -7660,8 +7660,11 @@ components:
         - PROPERTY_ADMIN
         - SERVICE
         - CONSTRUCTION
+        - ADDENDUM
+        - KEY_DELIVERY
+        - USED_PROPERTY_DELIVERY
       x-closed: true
-      description: Os 12 tipos de contrato (JUR-003).
+      description: Os 12 tipos de contrato do caderno do Marco 5, §3 (SALE_CASH, SALE_FINANCED, SALE_TRADE, SALE_INSTALLMENTS, LEASE_RESIDENTIAL, LEASE_COMMERCIAL, LEASE_SEASONAL, PROPERTY_ADMIN, CONSTRUCTION, ADDENDUM, KEY_DELIVERY, USED_PROPERTY_DELIVERY; os três últimos exigem parentContractId) e os legados SALE, LEASE e SERVICE (JUR-003).
     TokenRequest:
       type: object
       required:

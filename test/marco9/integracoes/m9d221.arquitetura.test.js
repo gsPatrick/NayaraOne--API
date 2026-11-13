@@ -8,7 +8,8 @@ const path = require('node:path');
 
 const SRC = path.join(__dirname, '..', '..', '..', 'src', 'features');
 const PADRAO = /\b(providerCode|provider|provider_code)\s*(===|!==|==|!=)\s*['"][a-z0-9]+-[a-z0-9-]+['"]/;
-const DOMINIOS = ['crm', 'legal', 'integrations/swap', 'integrations/contract'];
+// O Jurídico vive em src/modules/legal (árvore do Guia do Marco 5, §2).
+const DOMINIOS = ['crm', '../modules/legal', 'integrations/swap', 'integrations/contract'];
 
 function arquivos(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? arquivos(path.join(dir, d.name)) : (d.name.endsWith('.js') ? [path.join(dir, d.name)] : [])));
