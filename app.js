@@ -89,6 +89,8 @@ const app = express();
 // TEC-08: correlation ID por requisição — precisa vir antes de qualquer outro middleware pra
 // cobrir toda a cadeia de chamadas (auditoria, eventos) desde o primeiro byte processado.
 app.use(correlationIdMiddleware);
+// Rodada 8 (DI-M9R-23): depois de uma falha fatal, as respostas em andamento pedem ao cliente para fechar a conexão (o processo vai encerrar).
+app.use(require('./src/utils/processGuards').marcarConexaoParaFechar);
 
 // TEC-13: log estruturado + métrica de latência por requisição — /health e /api/metrics ficam
 // de fora do log (ruído de healthcheck/scraping, não interessa pra investigar incidente).
@@ -205,9 +207,17 @@ const listen = () => {
   app.server = server;
   return server;
 };
-// Rodada 7 da verificação do Marco 9 (DI-M9R-19): promessa rejeitada ou exceção sem tratamento vira registro (erro ou fatal), não queda da API.
-// Instalada depois das conferências do boot acima, que continuam encerrando o processo quando a configuração está errada.
-require('./src/utils/processGuards').installProcessGuards({ log: logger });
+// Rodada 8 da verificação do Marco 9 (DI-M9R-23): exceção ou promessa rejeitada sem tratamento é registrada como FATAL e o processo para de aceitar
+// conexões, espera os pedidos em andamento (PROCESS_FATAL_GRACE_MS) e sai com código 1, para o supervisor reiniciar a API limpa (seguir atendendo
+// deixava transação aberta, linha travada e o pool esgotado). Só no processo do servidor (`node app.js`, ou API_PROCESS_GUARDS=on): os testes que
+// carregam o app.js no próprio processo continuam com o tratamento do executor de testes. Instalada depois das conferências do boot acima.
+if (require.main === module || process.env.API_PROCESS_GUARDS === 'on') {
+  require('./src/utils/processGuards').installProcessGuards({
+    log: logger,
+    getServer: () => app.server || null,
+    closePool: () => require('./src/config/database').sequelize.close(),
+  });
+}
 require('./src/features/integrations/secrets').gateListenOnSecretStore(listen, { log: logger });
 
 // Job periódico de matching do Radar — não roda em ambiente de teste (evita efeitos

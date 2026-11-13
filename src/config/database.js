@@ -1,6 +1,7 @@
 'use strict';
 
 const { Sequelize } = require('sequelize');
+const { opcoesDeTempoDaSessao } = require('./dbSessionTimeouts');
 
 /**
  * Configuração central do Sequelize para PostgreSQL.
@@ -48,6 +49,10 @@ const commonOptions = {
         : undefined,
     // Garante que o driver interprete/serialize datas sempre em UTC.
     useUTC: true,
+    // Rodada 8 (DI-M9R-23): transação parada e comando longo têm tempo máximo na sessão (DB_IDLE_IN_TRANSACTION_TIMEOUT_MS, DB_STATEMENT_TIMEOUT_MS).
+    ...opcoesDeTempoDaSessao(),
+    // Nome da aplicação nas sessões do banco (pg_stat_activity): separa as conexões da API das de scripts e jobs externos na investigação.
+    application_name: process.env.DB_APPLICATION_NAME || 'nayaraone-api',
   },
 };
 

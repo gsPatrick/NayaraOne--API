@@ -177,16 +177,24 @@ test('erro de tipo: 400 só com prova no pedido (o campo citado tem o tipo errad
   assert.equal(mapClientTypeError(new Error('email.toLowerCase is not a function'), { body: { email: {} } }), null, 'só TypeError');
 });
 
-test('proteção do processo: promessa rejeitada e exceção sem tratamento são registradas e não encerram', () => {
+test('proteção do processo (contrato da rodada 8, DI-M9R-23): promessa rejeitada e exceção sem tratamento são registradas e ENCERRAM o processo', async () => {
+  // Na rodada 7 a API seguia atendendo; a rodada 8 mostrou o estado corrompido que isso deixa (transação aberta, trava presa, pool esgotado).
+  // O encerramento completo (servidor, prazo, pool, processo de verdade) está em test/entradaGlobal.processo.test.js.
+  require('../src/utils/processGuards')._reiniciarParaTeste();
   const proc = new EventEmitter();
+  proc.stdout = { write: (_t, cb) => cb() };
   const registros = [];
+  const saidas = [];
   const log = { error: (o, m) => registros.push(['error', o.code, m]), fatal: (o, m) => registros.push(['fatal', o.code, m]) };
-  assert.equal(installProcessGuards({ log, proc }), true);
-  assert.equal(installProcessGuards({ log, proc }), false, 'uma vez só');
+  assert.equal(installProcessGuards({ log, proc, exit: (c) => saidas.push(c) }), true);
+  assert.equal(installProcessGuards({ log, proc, exit: (c) => saidas.push(c) }), false, 'uma vez só');
   proc.emit('unhandledRejection', new RangeError('Maximum call stack size exceeded'));
   proc.emit('uncaughtException', new Error('boom'), 'uncaughtException');
-  assert.deepEqual(registros.map((r) => r.slice(0, 2)), [['error', 'PROCESS_UNHANDLED_REJECTION'], ['fatal', 'PROCESS_UNCAUGHT_EXCEPTION']]);
+  await new Promise((r) => setTimeout(r, 50));
+  assert.deepEqual(registros.map((r) => r.slice(0, 2)), [['fatal', 'PROCESS_UNHANDLED_REJECTION'], ['error', 'PROCESS_UNCAUGHT_EXCEPTION'], ['fatal', 'PROCESS_EXIT']]);
+  assert.deepEqual(saidas, [1]);
   assert.equal(proc.listenerCount('unhandledRejection'), 1);
+  require('../src/utils/processGuards')._reiniciarParaTeste();
 });
 
 test('registro do erro: só texto, cortado (nunca percorre objeto do cliente)', () => {

@@ -13,6 +13,7 @@ require('dotenv').config();
 // local não a sobrescreve — mas aqui as chaves são deliberadamente diferentes
 // (DB_MIGRATION_USER/DB_MIGRATION_PASSWORD) para nunca colidir com DB_USER/DB_PASSWORD.
 require('dotenv').config({ path: path.resolve(process.cwd(), '.env.migration.local') });
+const { opcoesDeTempoDaSessao } = require('./dbSessionTimeouts');
 
 const {
   DATABASE_URL,
@@ -35,6 +36,8 @@ const dialectOptions = {
         }
       : undefined,
   useUTC: true,
+  // Rodada 8 (DI-M9R-23): transação parada tem tempo máximo também nas migrations; comando longo só com DB_MIGRATION_STATEMENT_TIMEOUT_MS.
+  ...opcoesDeTempoDaSessao({ migracao: true }),
 };
 
 function buildEnvConfig() {
