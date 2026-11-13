@@ -111,22 +111,11 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   // além da GET de leitura.
   const nay = fs.readFileSync(path.join(financeDir, 'application', 'services', 'finance-nay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   const requires = [...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort();
-  // Guia §13 (DI-M4CC-4): os números vêm do read model (repositório de leitura do analytics) e a montagem das seções é pura; nada de serviço que escreve.
-  // DEC-007 (DI-DEC007-2): a fonte dos limiares do antifraude é a tela de Configurações; a NAY Financeira não lê o resolvedor.
-  assert.deepEqual(requires, ['../../../../models', '../../../../features/ai/orchestrator/runs', '../../../../utils/businessDate', 
-    '../../infrastructure/repositories/finance-health-read-model.repository', './finance-nay-sections', '../../domain/money', '../../../../features/analytics/metrics/freshness.settings',
-    '../../infrastructure/repositories/ledger-sql', // M4LR: saldo em aberto da fila de trabalho (fragmentos de SQL, só leitura)
-    '../../../../features/analytics/read-models/finance-assistant.read'].sort()); // o BI pela camada dele, com a permissão do domínio (M9-D700)
-  assert.match(nay, /const \{ sequelize \} = require\('\.\.\/\.\.\/\.\.\/\.\.\/models'\)/);
-  for (const file of ['infrastructure/repositories/finance-health-read-model.repository.js', 'application/services/finance-nay-sections.js', 'infrastructure/repositories/ledger-sql.js']) {
-    const src = fs.readFileSync(path.join(financeDir, file), 'utf8');
-    assert.doesNotMatch(src, /\b(INSERT|UPDATE|DELETE)\b|\.(create|update|destroy|save|bulkCreate)\(/, `${file} só lê`);
-  }  { // a leitura do BI para a NAY Financeira (camada read-models) também só lê e confere a permissão do domínio
-    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'features', 'analytics', 'read-models', 'finance-assistant.read.js'), 'utf8');
-    assert.doesNotMatch(src, /\b(INSERT|UPDATE|DELETE)\b|\.(create|update|destroy|save|bulkCreate)\(/, 'finance-assistant.read.js só lê');
-    assert.match(src, /assertDomainAccess\(ctx, 'FINANCE', transaction\)/);
-  }
-
+  // DEC-007 (DI-DEC007-2): a fonte dos limiares do antifraude é a tela de Configurações; a NAY Financeira não lê mais o resolvedor (o Motor saiu).
+  // M4LR: + ledger-sql (saldo em aberto da fila de trabalho: valor menos o realizado pelas baixas; só fragmentos de SQL de leitura).
+  assert.deepEqual(requires, ['../../../../models', '../../../../features/ai/orchestrator/runs', '../../../../utils/businessDate', './finance-health.service',
+    '../../infrastructure/repositories/ledger-sql'].sort());
+  assert.match(nay, /const \{ sequelize, CostCenter \} = require\('\.\.\/\.\.\/\.\.\/\.\.\/models'\)/);
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
   assert.ok(!/\b(INSERT|UPDATE|DELETE|TRUNCATE)\b/.test(nay.replace(/'[^']*'/g, '')), 'SQL da NAY é só SELECT');

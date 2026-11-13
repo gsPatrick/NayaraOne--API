@@ -1,50 +1,96 @@
 'use strict';
 
-const { sequelize } = require('../../../../models');
+const { sequelize, CostCenter } = require('../../../../models');
 const { recordRuleRun } = require('../../../../features/ai/orchestrator/runs');
-const { startOfBusinessDay, businessDateKey } = require('../../../../utils/businessDate');
-const readModel = require('../../infrastructure/repositories/finance-health-read-model.repository');
-// O BI é lido pela camada de leitura dele, com a permissão do domínio Financeiro (M9-D700; integração dos Marcos 3 a 6 com o Marco 9).
-const biRead = require('../../../../features/analytics/read-models/finance-assistant.read');
-const { buildExplanations, buildSectorGrowth } = require('./finance-nay-sections');
-const { toCents } = require('../../domain/money');
+const { getWeeklyHealthReport } = require('./finance-health.service');
+const { startOfBusinessDay } = require('../../../../utils/businessDate');
 const { REALIZED_BY_CHILDREN } = require('../../infrastructure/repositories/ledger-sql'); // saldo em aberto = valor - realizado pelas baixas (M4LR)
 
 /**
- * NAY Financeira — Caderno Marco 4 §18 ("NAY Financeira"), Guia §13 ("Relatório semanal da NAY": FinanceHealthReport { freeCash, thirdPartyCash,
- * payables7d/30d, receivables7d/30d, overdueAmount, pendingReconciliations, pendingOwnerRepasses, provisionedCommissions, openHighRiskAnomalies,
- * breathingNeed, sourceSnapshotAt } — "A NAY recebe esse read model; não precisa varrer ledger bruto a cada pergunta") e DoD "NAY sem permissão de
- * execução financeira" / FIN-014 ("NAY recomenda, não paga").
+ * NAY Financeira — Caderno Marco 4 §18 ("NAY Financeira"), Guia §13 ("Relatório semanal da NAY":
+ * a NAY recebe o read model, não varre ledger bruto) e DoD "NAY sem permissão de execução
+ * financeira" / FIN-014 ("NAY recomenda, não paga").
  *
- * Os números vêm do READ MODEL que o BI já mantém (saúde financeira e margem por setor, recalculados pelo worker a cada
- * evento financeiro e pela agenda), lido pela camada de leitura do BI com a permissão do domínio Financeiro (features/analytics/read-models/
- * finance-assistant.read.js): nenhuma soma sobre o ledger por pergunta. As sugestões que apontam um lançamento a cobrar ou a pagar leem só a
- * fila de itens EM ABERTO (até 200, status PENDING, ordenada por vencimento) — a lista de trabalho, não o ledger (DI-M4CC-4). Se o read model ainda
- * não existe para a empresa ou está mais velho que o limite de atualização do domínio Financeiro (analytics.freshness.max_minutos.FINANCE), a
- * conclusão é PARCIAL e diz a data do retrato.
+ * Mesma decisão de engenharia da NAY Estoque/Obras: não há integração de LLM contratada nesta
+ * fase; a NAY Financeira é RULE-BASED/determinística sobre o read model getWeeklyHealthReport e
+ * sobre somas diretas de finance.financial_entries, sempre sob o RLS da empresa do contexto.
  *
- * Fronteira "recomenda, não paga", garantida por construção (e travada por test/marco4.nayNoExecution.test.js): só SELECT e a linha de auditoria
- * da execução em "ai"."ai_runs". Não cria ledger, não liquida, não altera favorecido, não fecha período.
+ * Fronteira "recomenda, não paga", garantida por construção (e travada por
+ * test/marco4.nayNoExecution.test.js): este arquivo só importa o read model, o resolvedor de
+ * limiares (leitura do Motor de Regras), os modelos AiRun/CostCenter e o sequelize para SELECT.
+ * A única escrita é a linha de auditoria da execução em "ai"."ai_runs". Não cria ledger, não
+ * liquida, não altera favorecido, não fecha período.
+ *
+ * Toda resposta: cita as fontes internas (tabelas, read model, sourceSnapshotAt, versão da regra
+ * FIN-005 usada), marca cada número como REALIZADO / PREVISTO / ESTIMADO e, se faltarem dados,
+ * devolve conclusaoParcial=true com os motivos.
  */
 
 const AGENT_NAME = 'NAY_FINANCEIRA';
-const READ_MODEL = biRead.FINANCE_ASSISTANT_READ_MODELS.health;
-const SECTOR_READ_MODEL = biRead.FINANCE_ASSISTANT_READ_MODELS.sectorMargin;
 const LIMITES =
   'A NAY Financeira só explica e sugere. Ela não cria ledger, não paga, não altera favorecido, não fecha período nem executa nenhuma ação: toda ação continua nas rotas humanas, com permissão, aprovação e MFA.';
 
+const round2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
 function monthBounds(now) {
-  const key = businessDateKey(now); // AAAA-MM-DD em São Paulo
-  const [y, m] = key.split('-').map(Number);
-  const fmt = (yy, mm) => `${yy}-${String(mm).padStart(2, '0')}`;
-  return { current: fmt(y, m), previous: m === 1 ? fmt(y - 1, 12) : fmt(y, m - 1) };
+  // Limites do mês no fuso de São Paulo (mesma regra do fechamento).
+  const spNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const y = spNow.getFullYear();
+  const m = spNow.getMonth();
+  const fmt = (yy, mm) => `${yy}-${String(mm + 1).padStart(2, '0')}`;
+  const prevY = m === 0 ? y - 1 : y;
+  const prevM = m === 0 ? 11 : m - 1;
+  return { current: fmt(y, m), previous: fmt(prevY, prevM) };
 }
 
-// Fila de trabalho (itens em aberto) para as sugestões que citam um lançamento específico.
+// M4LR (verificação 11/11/2026, sonda P10): o realizado vem da view finance.ledger — o recebimento quitado em baixas
+// parciais conta uma vez (as baixas são as linhas; o pai não) e o estorno entra com o sinal contrário no mês em que ocorreu.
+async function realizedByMonth(transaction, months) {
+  const rows = await sequelize.query(
+    `SELECT to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS month, business_nature AS nature,
+            COUNT(*)::int AS count,
+            COALESCE(SUM(CASE WHEN business_nature = 'PAYABLE' THEN -cash_amount ELSE cash_amount END), 0)::numeric AS total
+       FROM finance.ledger
+      WHERE NOT is_third_party_funds AND business_nature IN ('PAYABLE','RECEIVABLE')
+        AND to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') IN (:months)
+      GROUP BY 1, 2`,
+    { transaction, type: sequelize.QueryTypes.SELECT, replacements: { months } }
+  );
+  const out = {};
+  for (const month of months) out[month] = { RECEIVABLE: 0, PAYABLE: 0 };
+  for (const r of rows) out[r.month][r.nature] = round2(r.total);
+  return out;
+}
+
+async function costCenterGrowth(transaction, months) {
+  const rows = await sequelize.query(
+    `SELECT cost_center_id, to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') AS month,
+            COALESCE(-SUM(cash_amount), 0)::numeric AS total
+       FROM finance.ledger
+      WHERE NOT is_third_party_funds AND business_nature = 'PAYABLE' AND cost_center_id IS NOT NULL
+        AND to_char(occurred_at AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') IN (:months)
+      GROUP BY 1, 2`,
+    { transaction, type: sequelize.QueryTypes.SELECT, replacements: { months } }
+  );
+  const by = new Map();
+  for (const r of rows) {
+    if (!by.has(r.cost_center_id)) by.set(r.cost_center_id, { atual: 0, anterior: 0 });
+    by.get(r.cost_center_id)[r.month === months[0] ? 'atual' : 'anterior'] = round2(r.total);
+  }
+  const ids = [...by.keys()];
+  const centers = ids.length ? await CostCenter.findAll({ where: { id: ids }, attributes: ['id', 'name'], transaction }) : [];
+  const names = new Map(centers.map((c) => [c.id, c.name]));
+  return [...by.entries()]
+    .map(([id, v]) => ({ costCenterId: id, nome: names.get(id) || null, mesAtual: v.atual, mesAnterior: v.anterior, crescimento: round2(v.atual - v.anterior) }))
+    .filter((x) => x.crescimento > 0)
+    .sort((a, b) => b.crescimento - a.crescimento)
+    .slice(0, 5);
+}
+
 async function openEntries(transaction, nature, startToday) {
   return sequelize.query(
-    `SELECT o.id, o.description, o.amount::text AS amount, o.due_at FROM (
-       SELECT e.id, e.description, (e.amount - ${REALIZED_BY_CHILDREN('e')})::numeric AS amount, e.due_at
+    `SELECT * FROM (
+       SELECT e.id, e.description, (e.amount - ${REALIZED_BY_CHILDREN('e')})::numeric AS amount, e.due_at, e.contract_id, e.cost_center_id
          FROM finance.financial_entries e
         WHERE e.status IN ('PENDING', 'PARTIALLY_SETTLED') AND e.is_third_party_funds = false AND e.nature = :nature AND e.ledger_exclusion_reason IS NULL
           ${nature === 'RECEIVABLE' ? 'AND e.due_at < :startToday' : ''}) o
@@ -55,25 +101,33 @@ async function openEntries(transaction, nature, startToday) {
   );
 }
 
-async function freshnessLimitMinutes(tenant, transaction) {
-  const { readFreshnessParams } = require('../../../../features/analytics/metrics/freshness.settings'); // leitura tardia (dicionário de parâmetros)
-  const params = await readFreshnessParams(tenant, transaction);
-  return params.limits.FINANCE;
-}
-
-function completeness({ health, accounts, current, now, limitMinutes }) {
+async function dataCompleteness(transaction, currentMonth, report) {
   const motivos = [];
-  if (!health) {
-    motivos.push('O retrato financeiro desta empresa (read model) ainda não foi calculado: os números ficam indisponíveis até a próxima atualização.');
-    return motivos;
+  const [accounts] = await sequelize.query(
+    `SELECT COUNT(*)::int AS total FROM finance.bank_accounts WHERE deleted_at IS NULL AND status <> 'BLOCKED'`,
+    { transaction, type: sequelize.QueryTypes.SELECT }
+  );
+  if (!accounts || accounts.total === 0) {
+    motivos.push('Nenhuma conta bancária em uso cadastrada: o caixa disponível não tem extrato que o sustente.');
+  } else {
+    const withoutStatement = await sequelize.query(
+      `SELECT ba.id FROM finance.bank_accounts ba
+        WHERE ba.deleted_at IS NULL AND ba.status <> 'BLOCKED'
+          AND NOT EXISTS (SELECT 1 FROM finance.bank_transactions bt
+                           WHERE bt.bank_account_id = ba.id
+                             AND to_char(bt.transaction_date AT TIME ZONE 'America/Sao_Paulo', 'YYYY-MM') = :month)`,
+      { transaction, type: sequelize.QueryTypes.SELECT, replacements: { month: currentMonth } }
+    );
+    if (withoutStatement.length > 0) {
+      motivos.push(`${withoutStatement.length} conta(s) bancária(s) em uso sem extrato importado em ${currentMonth}.`);
+    }
   }
-  const idadeMin = Math.floor((now.getTime() - new Date(health.source_snapshot_at || health.refreshed_at).getTime()) / 60000);
-  if (idadeMin > limitMinutes) motivos.push(`Retrato financeiro de ${health.as_of_date} com ${idadeMin} minuto(s), acima do limite de atualização de ${limitMinutes} minuto(s).`);
-  if (accounts === 0) motivos.push('Nenhuma conta bancária em uso cadastrada: o caixa disponível não tem extrato que o sustente.');
-  else if (!health.last_statement_import_date || health.last_statement_import_date.slice(0, 7) < current) {
-    motivos.push(`Extrato bancário de ${current} ainda não importado (última importação: ${health.last_statement_import_date || 'nenhuma'}).`);
+  if (report.pendingReconciliations && report.pendingReconciliations.count > 0) {
+    motivos.push(`${report.pendingReconciliations.count} transação(ões) de extrato ainda sem conciliação.`);
   }
-  if (health.pending_reconciliations > 0) motivos.push(`${health.pending_reconciliations} transação(ões) de extrato ainda sem conciliação.`);
+  if (report.openHighRiskAnomalies === null) {
+    motivos.push('Contagem de anomalias indisponível (empresa do contexto não informada).');
+  }
   return motivos;
 }
 
@@ -85,30 +139,67 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
   const startToday = startOfBusinessDay(now);
   const { current, previous } = monthBounds(now);
 
-  // `options.permissions`: as da sessão (rota); sem elas, as do vínculo do usuário com a empresa (camada do BI).
-  const biCtx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: actorUserId, permissions: options.permissions };
-  const health = await biRead.readFinanceHealthForAssistant(biCtx, businessDateKey(now), transaction);
-  const margins = await biRead.readSectorMarginsForAssistant(biCtx, [current, previous], transaction);
-  const accounts = await readModel.countActiveBankAccounts(transaction);
-  const limitMinutes = await freshnessLimitMinutes(tenant, transaction);
-  const growth = await buildSectorGrowth(margins, current, previous, (ids) => readModel.findResultCenterNames(ids, transaction));
+  const report = await getWeeklyHealthReport(transaction, { companyId: tenant.companyId, now });
+  const realized = await realizedByMonth(transaction, [current, previous]);
+  const growth = await costCenterGrowth(transaction, [current, previous]);
   const overdueReceivables = await openEntries(transaction, 'RECEIVABLE', startToday);
   const pendingPayables = await openEntries(transaction, 'PAYABLE', startToday);
-  const motivosParcial = completeness({ health, accounts, current, now, limitMinutes });
+  const motivosParcial = await dataCompleteness(transaction, current, report);
 
-  const sourceSnapshotAt = health ? health.source_snapshot_at : null;
-  const fonteReadModel = { readModel: READ_MODEL, asOfDate: health ? health.as_of_date : null, sourceSnapshotAt };
-  const fonteSetores = { readModel: SECTOR_READ_MODEL, meses: [current, previous] };
-  const explicacoes = buildExplanations({ health, margins, current, previous, fonteReadModel, fonteSetores });
+  const fonteReadModel = { readModel: 'finance.weeklyHealthReport', sourceSnapshotAt: report.generatedAt };
+  const fonteEntries = { tabela: 'finance.financial_entries' };
 
+  const netAtual = round2(realized[current].RECEIVABLE - realized[current].PAYABLE);
+  const netAnterior = round2(realized[previous].RECEIVABLE - realized[previous].PAYABLE);
+
+  const explicacoes = {
+    fluxoCaixa: {
+      texto: `Caixa livre de R$ ${report.freeCash.value.toFixed(2)} (extrato importado R$ ${report.freeCash.grossBankBalance.toFixed(2)} menos R$ ${report.freeCash.thirdPartyHeld.toFixed(2)} de terceiros retidos). Nos próximos 7 dias: R$ ${report.dueNextSevenDays.receivable.total.toFixed(2)} a receber e R$ ${report.dueNextSevenDays.payable.total.toFixed(2)} a pagar.`,
+      numeros: [
+        { indicador: 'caixaLivre', valor: report.freeCash.value, natureza: 'REALIZADO', fontes: [fonteReadModel, { tabela: 'finance.bank_transactions' }] },
+        { indicador: 'dinheiroTerceirosRetido', valor: report.freeCash.thirdPartyHeld, natureza: 'REALIZADO', fontes: [fonteReadModel, fonteEntries] },
+        { indicador: 'aReceber7d', valor: report.dueNextSevenDays.receivable.total, natureza: 'PREVISTO', fontes: [fonteReadModel] },
+        { indicador: 'aPagar7d', valor: report.dueNextSevenDays.payable.total, natureza: 'PREVISTO', fontes: [fonteReadModel] },
+        { indicador: 'saldoProjetado', valor: report.projectedNetBalance, natureza: 'PREVISTO', fontes: [fonteReadModel] },
+      ],
+    },
+    variacoes: {
+      texto: `Resultado realizado de ${current}: R$ ${netAtual.toFixed(2)}; de ${previous}: R$ ${netAnterior.toFixed(2)} (variação R$ ${round2(netAtual - netAnterior).toFixed(2)}).`,
+      numeros: [
+        { indicador: `recebido_${current}`, valor: realized[current].RECEIVABLE, natureza: 'REALIZADO', fontes: [fonteEntries] },
+        { indicador: `pago_${current}`, valor: realized[current].PAYABLE, natureza: 'REALIZADO', fontes: [fonteEntries] },
+        { indicador: `recebido_${previous}`, valor: realized[previous].RECEIVABLE, natureza: 'REALIZADO', fontes: [fonteEntries] },
+        { indicador: `pago_${previous}`, valor: realized[previous].PAYABLE, natureza: 'REALIZADO', fontes: [fonteEntries] },
+        { indicador: 'variacaoResultado', valor: round2(netAtual - netAnterior), natureza: 'REALIZADO', fontes: [fonteEntries] },
+      ],
+    },
+    inadimplencia: {
+      texto: `R$ ${report.overdue.receivable.total.toFixed(2)} a receber vencido em ${report.overdue.receivable.count} lançamento(s); índice de vencidos sobre o total elegível: ${(report.delinquencyRatio * 100).toFixed(2)}%.`,
+      numeros: [
+        { indicador: 'recebiveisVencidos', valor: report.overdue.receivable.total, natureza: 'REALIZADO', fontes: [fonteReadModel] },
+        { indicador: 'indiceInadimplencia', valor: report.delinquencyRatio, natureza: 'REALIZADO', fontes: [fonteReadModel] },
+      ],
+    },
+    necessidadeCapital: {
+      texto:
+        report.breathingNeed.value > 0
+          ? `Estimativa de necessidade de R$ ${report.breathingNeed.value.toFixed(2)} para cobrir as saídas vencidas e da próxima semana (saídas obrigatórias − caixa livre − entradas prováveis).`
+          : `Sem necessidade de capital estimada para a próxima semana (folga de R$ ${Math.abs(report.breathingNeed.value).toFixed(2)}).`,
+      numeros: [{ indicador: 'necessidadeParaRespirar', valor: report.breathingNeed.value, natureza: 'ESTIMADO', fontes: [fonteReadModel] }],
+    },
+    anomalias: {
+      texto: `${report.openHighRiskAnomalies ?? 'indisponível'} caso(s) de anomalia HIGH/CRITICAL em aberto.`,
+      numeros: [{ indicador: 'anomaliasAltoRisco', valor: report.openHighRiskAnomalies, natureza: 'REALIZADO', fontes: [{ tabela: 'finance.anomaly_cases' }] }],
+    },
+  };
+
+  // Dias de calendário em São Paulo entre o dia do vencimento e hoje.
   const daysBetween = (a, b) => Math.max(0, Math.round((b.getTime() - startOfBusinessDay(new Date(a)).getTime()) / 86400000));
-  const fonteFila = { tabela: 'finance.financial_entries', filtro: 'itens em aberto (PENDING), até 200' };
   const overdueRanked = overdueReceivables
     .map((e) => {
       const dias = daysBetween(e.due_at, startToday);
-      const cents = toCents(e.amount);
-      // prioridade = valor × log2(dias+2): ordenação (não é dinheiro); o valor exibido sai dos centavos exatos.
-      return { financialEntryId: e.id, descricao: e.description, valor: cents / 100, diasEmAtraso: dias, prioridade: Math.round(cents * Math.log2(dias + 2)) / 100, natureza: 'REALIZADO', fontes: [fonteFila] };
+      const valor = round2(e.amount);
+      return { financialEntryId: e.id, descricao: e.description, valor, diasEmAtraso: dias, prioridade: round2(valor * Math.log2(dias + 2)), natureza: 'REALIZADO' };
     })
     .sort((a, b) => b.prioridade - a.prioridade);
 
@@ -121,27 +212,23 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
       .filter((x) => x.diasEmAtraso > 30)
       .slice(0, 10)
       .map((x) => ({ ...x, razao: `Vencido há mais de 30 dias (${x.diasEmAtraso}).`, acaoSugerida: 'Avaliar acordo de cobrança versionado (ação humana).' })),
-    reducaoCusto: growth.map((g) => ({ ...g, natureza: 'REALIZADO', fontes: [fonteSetores], razao: `Custo realizado do setor cresceu R$ ${g.crescimento.toFixed(2)} de ${previous} para ${current}.` })),
+    reducaoCusto: growth.map((g) => ({ ...g, natureza: 'REALIZADO', razao: `Gasto liquidado cresceu R$ ${g.crescimento.toFixed(2)} de ${previous} para ${current}.` })),
     priorizacaoPagaveis: pendingPayables.slice(0, 10).map((e, i) => ({
       ordem: i + 1,
       financialEntryId: e.id,
       descricao: e.description,
-      valor: toCents(e.amount) / 100,
+      valor: round2(e.amount),
       vencimento: e.due_at,
       vencido: e.due_at ? new Date(e.due_at) < startToday : false,
       natureza: 'PREVISTO',
-      fontes: [fonteFila],
       razao: 'Ordem por vencimento (vencidos primeiro). Pagamento só pelo fluxo de intenção + aprovação + MFA.',
     })),
   };
 
   const fontes = {
-    readModels: [READ_MODEL, SECTOR_READ_MODEL],
-    readModel: READ_MODEL,
-    asOfDate: health ? health.as_of_date : null,
-    sourceSnapshotAt,
-    filaDeTrabalho: 'finance.financial_entries (itens em aberto, só nas sugestões que citam um lançamento)',
-    cadastros: ['finance.bank_accounts', 'finance.result_centers'],
+    tabelas: ['finance.financial_entries', 'finance.bank_transactions', 'finance.reconciliations', 'finance.bank_accounts', 'finance.commissions', 'finance.owner_repasses', 'finance.anomaly_cases', 'finance.cost_centers'],
+    readModel: 'finance.weeklyHealthReport',
+    sourceSnapshotAt: report.generatedAt,
     regras: [{ codigo: 'FIN-005', ruleVersionId: null, origem: 'parâmetros do antifraude na tela de Configurações (DEC-007)' }],
   };
 
@@ -150,7 +237,7 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
     {
       agentName: AGENT_NAME,
       inputSummary: `Explicação financeira e sugestões (${current} x ${previous}).`,
-      toolCallsJson: { method: 'RULE_BASED', readModels: fontes.readModels, asOfDate: fontes.asOfDate, sourceSnapshotAt, months: [current, previous], ruleVersions: fontes.regras },
+      toolCallsJson: { method: 'RULE_BASED', readModel: 'finance.weeklyHealthReport', months: [current, previous], ruleVersions: fontes.regras },
       outputSummary: `${sugestoes.cobranca.length + sugestoes.renegociacao.length + sugestoes.reducaoCusto.length + sugestoes.priorizacaoPagaveis.length} sugestão(ões); conclusão ${motivosParcial.length ? 'PARCIAL' : 'completa'}. Nenhuma ação executada (FIN-014).`,
       groundingStatus: motivosParcial.length ? 'INSUFFICIENT_SOURCES' : 'GROUNDED',
     },
@@ -162,7 +249,7 @@ async function getFinanceInsights(tenant, actorUserId, transaction, options = {}
     metodo: 'RULE_BASED',
     aiRunId: aiRun.id,
     geradoEm: now.toISOString(),
-    sourceSnapshotAt,
+    sourceSnapshotAt: report.generatedAt,
     conclusaoParcial: motivosParcial.length > 0,
     motivosParcial,
     explicacoes,
