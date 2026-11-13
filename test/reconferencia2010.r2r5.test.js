@@ -101,7 +101,7 @@ test('R5: troca de conta invalida intenção aprovada e o envio ao banco de inte
     const other = await bank(t);
     await entries.updateFinancialEntry(e.id, { bankAccountId: other.id }, tenant.userId, t);
     await i.reload({ transaction: t });
-    assert.equal(i.status, 'CANCELLED');
+    assert.equal(i.status, 'CANCELED');
     await assert.rejects(bankPayments.submitPaymentIntentToBank(i.id, 'PIX', { userId: tenant.userId }, t), (err) => err.code === 'FINANCE_PAYMENT_INTENT_NOT_APPROVED');
   });
 });
@@ -112,7 +112,7 @@ test('R5: submit sandbox de intenção aprovada fica SUBMITTED e o lançamento c
     const i = await intents.createPaymentIntent({ financialEntryId: e.id }, tenant.userId, t);
     await intents.approvePaymentIntent(i.id, approver.id, t);
     const sent = await bankPayments.submitPaymentIntentToBank(i.id, 'PIX', { userId: tenant.userId }, t);
-    assert.ok(['SUBMITTED', 'SUBMITTING'].includes(sent.status));
+    assert.ok(['EXECUTING'].includes(sent.status));
     const cur = await entries.getFinancialEntry(e.id, t);
     assert.equal(cur.status, 'PENDING');
   });

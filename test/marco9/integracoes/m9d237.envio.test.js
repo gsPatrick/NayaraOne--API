@@ -29,7 +29,7 @@ test('banco_http_200_nao_confirma_pagamento', async () => {
   try {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const { entry, intent } = await env.intencaoEnviada(t);
-      assert.equal(intent.status, 'SUBMITTED', 'a ordem aceita pelo banco é só SUBMITTED');
+      assert.equal(intent.submissionPhase, 'SUBMITTED', 'a ordem aceita pelo banco é só SUBMITTED');
       assert.equal((await entry.reload({ transaction: t })).status, 'PENDING', 'o lançamento não é liquidado por uma resposta de envio');
       const [d, ...outros] = await env.envios(t, intent.id);
       assert.equal(outros.length, 0);
@@ -65,7 +65,7 @@ test('banco_timeout_nao_duplica_pagamento', async () => {
   try {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const { intent: incerta } = await env.intencaoEnviada(t);
-      assert.equal(incerta.status, 'SUBMITTING');
+      assert.equal(incerta.status, 'EXECUTING');
       assert.equal(incerta.externalStatus, 'UNCERTAIN');
       const [d] = await env.envios(t, incerta.id);
       assert.equal(d.status, 'UNKNOWN', 'timeout depois do envio: incerto, nunca reenviado às cegas');
@@ -81,7 +81,7 @@ test('banco_timeout_nao_duplica_pagamento', async () => {
   try {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const { intent } = await env.intencaoEnviada(t);
-      assert.equal(intent.status, 'SUBMITTING');
+      assert.equal(intent.status, 'EXECUTING');
       const r = await env.bankPayments.reconcilePaymentIntent(intent.id, { userId: null }, t);
       assert.ok(r.intent.externalSubmissionId, 'a ordem saiu depois que o banco afirmou que não a conhecia');
       assert.equal(naoChegou.chamadas.length, 2);
@@ -100,7 +100,7 @@ test('banco_circuito_aberto_reagenda_sem_enviar', async () => {
       const conexao = await ensureBankConnection(env.ctxDe(), 'sandbox', t);
       await updateCircuitState(conexao.id, { circuitState: 'OPEN', circuitOpenedAt: new Date(), circuitCooldownS: 600 }, t);
       const { intent } = await env.intencaoEnviada(t);
-      assert.equal(intent.status, 'SUBMITTING', 'fornecedor fora: a ordem espera, não é dada como enviada');
+      assert.equal(intent.status, 'EXECUTING', 'fornecedor fora: a ordem espera, não é dada como enviada');
       assert.equal(espiao.chamadas.length, 0, 'o banco fora não é chamado');
       const [d] = await env.envios(t, intent.id);
       assert.ok(['PENDING', 'RETRY_WAIT'].includes(d.status), `o envio fica reagendado (${d.status})`);

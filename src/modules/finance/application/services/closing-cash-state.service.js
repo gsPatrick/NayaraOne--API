@@ -18,7 +18,8 @@ const { centsOf, moneyOf, sha256, canonicalJson } = require('./closing-hash');
 // Brasília pertence ao dia 31, não ao dia 1º do mês seguinte.
 const SAO_PAULO_UTC_OFFSET_HOURS = 3;
 
-const IN_TRANSIT_INTENT_STATUSES = ['SUBMITTED', 'SUBMITTING'];
+// Guia M4 §3 (DEC-056): enviando/enviado ao banco e sem resposta final = EXECUTING (a fase fica em submission_phase).
+const IN_TRANSIT_INTENT_STATUSES = ['EXECUTING'];
 
 // Início (inclusive) e fim (exclusivo) do mês em São Paulo, mais o primeiro e o último dia de
 // calendário ("YYYY-MM-DD") — usados para cobertura de extrato.

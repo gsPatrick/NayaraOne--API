@@ -29,7 +29,7 @@ async function onFailed(ctx, event, transaction) {
   if (!intent) return null;
   const classe = (event.payloadJson || {}).errorClass || 'ERROR';
   const antes = { status: intent.status, externalStatus: intent.externalStatus };
-  if (classe === 'VALIDATION' && intent.status === 'SUBMITTING' && !intent.externalSubmissionId) {
+  if (classe === 'VALIDATION' && intent.status === 'EXECUTING' && ['SUBMITTING', 'UNCERTAIN'].includes(intent.submissionPhase) && !intent.externalSubmissionId) {
     await intent.update({
       status: 'FAILED', failedAt: new Date(), uncertainSince: null, externalStatus: 'REJECTED',
       failureReason: 'O banco recusou a ordem de pagamento: confira os dados do favorecido e do valor e crie uma nova intenção de pagamento.',
@@ -47,7 +47,7 @@ async function onManualReview(ctx, event, transaction) {
   const p = paymentEvent(event);
   if (!p) return null;
   const intent = await lockIntent(ctx, p.aggregate.id, transaction);
-  if (!intent || !['SUBMITTING', 'SUBMITTED'].includes(intent.status)) return null;
+  if (!intent || intent.status !== 'EXECUTING') return null;
   const caso = await createAnomalyCase({
     groupId: intent.groupId, companyId: intent.companyId, caseType: 'BANK_PAYMENT_UNRESOLVED', riskLevel: 'HIGH', relatedEntityType: PAYMENT_AGGREGATE, relatedEntityId: intent.id,
     reason: `Não foi possível descobrir se o banco executou a ordem ${p.dispatchId} depois de várias consultas: confira no extrato ou no painel do banco antes de criar outra ordem.`,

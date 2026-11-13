@@ -73,13 +73,13 @@ test('M4-§8.4 o envio ao banco reaproveita a MESMA chave da criação (o adapte
   assert.ok([200, 202].includes(sent.status), JSON.stringify(sent.body));
   const after = await inTenant((t) => PaymentIntent.findByPk(created.id, { transaction: t }));
   assert.equal(after.idempotencyKey, created.idempotencyKey, 'mesma chave da criação');
-  assert.ok(['SUBMITTED', 'SUBMITTING', 'EXECUTED'].includes(after.status), after.status);
+  assert.ok(['EXECUTING', 'CONFIRMED'].includes(after.status), after.status);
   assert.equal(after.externalSubmissionId, `sandbox-${created.idempotencyKey}`, 'o provedor sandbox recebeu a chave da criação');
 
   const other = await payableWithPix();
   const toCancel = await inTenant((t) => paymentIntentsService.createPaymentIntent({ financialEntryId: other.id }, users.maker.id, t));
   const cancelled = await inTenant((t) => paymentIntentsService.cancelPaymentIntent(toCancel.id, 'Cancelada em teste do §8.4.', users.maker.id, t));
-  assert.equal(cancelled.status, 'CANCELLED');
+  assert.equal(cancelled.status, 'CANCELED');
   assert.equal(cancelled.idempotencyKey, `payment-intent:${toCancel.id}`);
 });
 

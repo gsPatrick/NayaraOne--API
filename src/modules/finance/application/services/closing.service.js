@@ -191,10 +191,12 @@ async function approvePeriodClosure(payload, actorUserId, transaction) {
 }
 
 /**
- * reopenPeriod — motivo é OBRIGATÓRIO. Reabrir um mês fechado é exatamente o tipo de ação que
- * precisa deixar rastro do "por quê", não só do "quem".
+ * applyPeriodReopen — efetiva a reabertura de um mês fechado. Só é chamada pelo fluxo CRITICAL de period-reopen.service.js (Caderno §16
+ * "Reabertura requer permissão CRITICAL, MFA, motivo e auditoria"; Guia §18 "Não reabrir fechamento sem fluxo CRITICAL"): o pedido de uma
+ * pessoa e a aprovação de outra, as duas com finance:periodReopen e MFA recente. `actorUserId` é quem aprovou; `context.requestedByUserId`
+ * e `context.approvalRequestId` ficam na auditoria.
  */
-async function reopenPeriod(payload, actorUserId, transaction) {
+async function applyPeriodReopen(payload, actorUserId, transaction, context = {}) {
   const { companyId, reason } = payload;
   const referenceMonth = assertValidReferenceMonth(payload.referenceMonth);
   if (!companyId) {
@@ -248,7 +250,7 @@ async function reopenPeriod(payload, actorUserId, transaction) {
       entityId: closure.id,
       beforeJson,
       afterJson: closure.toJSON(),
-      reason: `Período ${referenceMonth} REABERTO. Justificativa: ${closure.reopenReason}`,
+      reason: `Período ${referenceMonth} REABERTO pelo fluxo CRITICAL (pedido de ${context.requestedByUserId || '-'}, aprovado por ${actorUserId}, aprovação ${context.approvalRequestId || '-'}). Justificativa: ${closure.reopenReason}`,
     },
     transaction
   );
@@ -320,7 +322,9 @@ module.exports = {
   returnPeriodToOpen,
   assertCompetenceOpen,
   approvePeriodClosure,
-  reopenPeriod,
+  applyPeriodReopen,
+  // Reabrir é sempre o PEDIDO do fluxo CRITICAL (duas pessoas): ninguém reabre sozinho por este nome.
+  reopenPeriod: (...args) => require('./period-reopen.service').requestPeriodReopen(...args),
   listPeriodClosures,
   getPeriodPreconditions,
   computePeriodPreconditions,

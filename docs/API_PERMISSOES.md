@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 870. Rotas só com login ou públicas: 44.
+Rotas com permissão exigida: 876. Rotas só com login ou públicas: 44.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -369,7 +369,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/cost-centers` | `finance:create` | não |
 | `POST` | `/api/v1/finance/entries/:id/clear-manual-review` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/entries/:id/impact` | `finance:settle` | não |
-| `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:settle` | não |
+| `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:reverse` | sim |
 | `POST` | `/api/v1/finance/entries/:id/settle-partial` | `finance:settle` | sim |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence/detach` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence` | `finance:settle` | não |
@@ -389,7 +389,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/intercompany-transfers/destination-companies` | `finance:read` | não |
 | `GET` | `/api/v1/finance/intercompany-transfers` | `finance:read` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers` | `finance:settle` | sim |
-| `POST` | `/api/v1/finance/ledger/:id/reverse` | `finance:settle` | não |
+| `POST` | `/api/v1/finance/ledger/:id/reverse` | `finance:reverse` | sim |
 | `GET` | `/api/v1/finance/nay/insights` | `finance:read` | não |
 | `POST` | `/api/v1/finance/owner-repasses/:id/approve` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/owner-repasses/:id/composition` | `finance:read` | não |
@@ -412,7 +412,10 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/period-closures/:referenceMonth/preconditions` | `finance:read` | não |
 | `POST` | `/api/v1/finance/period-closures/approve` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/period-closures/checks` | `finance:settle` | não |
-| `POST` | `/api/v1/finance/period-closures/reopen` | `finance:approve` | sim |
+| `POST` | `/api/v1/finance/period-closures/reopen-requests/:id/approve` | `finance:periodReopen` | sim |
+| `POST` | `/api/v1/finance/period-closures/reopen-requests/:id/reject` | `finance:periodReopen` | sim |
+| `GET` | `/api/v1/finance/period-closures/reopen-requests` | `finance:read` | não |
+| `POST` | `/api/v1/finance/period-closures/reopen` | `finance:periodReopen` | sim |
 | `POST` | `/api/v1/finance/period-closures/return-to-open` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/period-closures` | `finance:read` | não |
 | `POST` | `/api/v1/finance/period-closures` | `finance:settle` | não |
@@ -428,6 +431,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/finance/result-centers/:id` | `finance:update` | não |
 | `GET` | `/api/v1/finance/result-centers` | `finance:read` | não |
 | `POST` | `/api/v1/finance/result-centers` | `finance:create` | não |
+| `POST` | `/api/v1/finance/reversal-cases/:id/approve` | `finance:approve` | sim |
+| `POST` | `/api/v1/finance/reversal-cases/:id/reject` | `finance:approve` | sim |
+| `GET` | `/api/v1/finance/reversal-cases` | `finance:read` | não |
 | `GET` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/cancel` | `correspondent:create` | não |

@@ -461,7 +461,7 @@ async function verifyExportAndPermissions(A, B, targetSuper) {
        (SELECT COUNT(*)::int FROM finance.financial_entries WHERE id = $2 AND status = 'SETTLED') AS settled,
        (SELECT COUNT(*)::int FROM finance.financial_entries WHERE parent_entry_id = $2) AS children,
        (SELECT lock_version FROM finance.financial_entries WHERE id = $2) AS lock_version,
-       (SELECT COUNT(*)::int FROM finance.payment_intents WHERE financial_entry_id = $2 AND status = 'EXECUTED') AS executed`,
+       (SELECT COUNT(*)::int FROM finance.payment_intents WHERE financial_entry_id = $2 AND status = 'CONFIRMED') AS executed`,
     [A.companyId, bp.financialEntryId]
   )).rows[0];
   const beforeReplay = await countRows();

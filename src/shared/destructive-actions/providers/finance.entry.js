@@ -7,9 +7,12 @@ async function financeEntry({ id, transaction, itemsMax }) {
   const e = await one(transaction, 'SELECT id, status, amount, description, entry_type FROM finance.financial_entries WHERE id = :id', { id }, 'Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
   const children = await rows(transaction, `SELECT id, amount, status, description FROM finance.financial_entries WHERE (third_party_origin_entry_id = :id OR parent_entry_id = :id) AND status NOT IN ('REVERSED','CANCELLED') ORDER BY created_at LIMIT :limit`, { id, limit: itemsMax });
   const [thirdParty] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.financial_entries WHERE third_party_origin_entry_id = :id AND parent_entry_id IS NULL AND status NOT IN ('REVERSED','CANCELLED')`, { id });
-  const [intents] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.payment_intents WHERE financial_entry_id = :id AND status NOT IN ('CANCELLED')`, { id });
+  const [intents] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.payment_intents WHERE financial_entry_id = :id AND status NOT IN ('CANCELED', 'FAILED')`, { id });
   const [kids] = await rows(transaction, `SELECT COUNT(*)::int AS n, ${centsSql('amount')} AS cents FROM finance.financial_entries WHERE (third_party_origin_entry_id = :id OR parent_entry_id = :id) AND status NOT IN ('REVERSED','CANCELLED')`, { id });
+  // Guia M4 §8 (M4PG): o estorno nasce de um caso; com um pedido aguardando aprovação, outro pedido é impedido.
+  const [pendingCase] = await rows(transaction, `SELECT COUNT(*)::int AS n FROM finance.approval_requests WHERE related_entity_type = 'LedgerReversal' AND related_entity_id = :id AND status = 'PENDING'`, { id });
   const blockers = [];
+  if (pendingCase.n > 0) blockers.push(blocker('REVERSAL_ALREADY_REQUESTED', 'o estorno deste lançamento já foi pedido e aguarda a aprovação de outra pessoa'));
   if (e.status === 'REVERSED') blockers.push(blocker('ENTRY_ALREADY_REVERSED', 'o lançamento já foi estornado'));
   if (e.status === 'CANCELLED') blockers.push(blocker('ENTRY_CANCELLED', 'o lançamento está cancelado e não pode ser estornado'));
   if (thirdParty.n > 0) blockers.push(blocker('THIRD_PARTY_RELEASES', `${thirdParty.n} liberação(ões) de dinheiro de terceiro ainda ativa(s) dependem deste lançamento`));

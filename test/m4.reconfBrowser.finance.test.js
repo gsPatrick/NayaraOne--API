@@ -43,8 +43,8 @@ test('F-05: trocar a conta do favorecido cancela a intenção aprovada, abre cas
     await financialEntriesService.updateFinancialEntry(entry.id, { bankAccountId: b.id }, tenant.userId, t);
 
     const after1 = await PaymentIntent.findByPk(intent.id, { transaction: t });
-    assert.equal(after1.status, 'CANCELLED', 'a intenção aprovada sobre a conta antiga precisa ser invalidada');
-    assert.match(after1.cancelReason, /alterado após a aprovação/i);
+    assert.equal(after1.status, 'CANCELED', 'a intenção aprovada sobre a conta antiga precisa ser invalidada (Guia M4 §3: CANCELED)');
+    assert.match(after1.cancelReason, /Lançamento alterado após a preparação/i);
     const cases = await AnomalyCase.findAll({ where: { relatedEntityId: entry.id, caseType: 'BENEFICIARY_CHANGED' }, transaction: t });
     assert.equal(cases.length, 1, 'a troca de favorecido abre um caso de revisão');
     assert.equal(cases[0].riskLevel, 'HIGH');
@@ -52,7 +52,7 @@ test('F-05: trocar a conta do favorecido cancela a intenção aprovada, abre cas
     assert.equal(entry.requiresManualReview, true);
     // libera nova intenção sobre a versão atual
     const again = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, t);
-    assert.equal(again.status, 'PENDING');
+    assert.equal(again.status, 'PENDING_APPROVAL');
     assert.equal(again.snapshotJson.bankAccountId, b.id);
   });
 });
@@ -69,7 +69,7 @@ test('F-05 (controle): primeira definição da conta e edição sem mudar o retr
     assert.equal(await AnomalyCase.count({ where: { relatedEntityId: entry.id, caseType: 'BENEFICIARY_CHANGED' }, transaction: t }), 0, 'primeira definição não é redirecionamento');
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, t);
     await financialEntriesService.updateFinancialEntry(entry.id, { bankAccountId: a.id, description: `F05c ${sfx}` }, tenant.userId, t);
-    assert.equal((await PaymentIntent.findByPk(intent.id, { transaction: t })).status, 'PENDING');
+    assert.equal((await PaymentIntent.findByPk(intent.id, { transaction: t })).status, 'PENDING_APPROVAL');
   });
 });
 

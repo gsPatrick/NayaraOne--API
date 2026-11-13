@@ -75,7 +75,7 @@ async function main() {
     const after1 = { entries: await nEntries(), lock: (await target.query('SELECT lock_version FROM finance.financial_entries WHERE id = $1', [p.financialEntryId])).rows[0].lock_version, children: await count(target, 'SELECT count(*)::int AS n FROM finance.financial_entries WHERE parent_entry_id = $1', [p.financialEntryId]) };
     rec.check('replay callback bancário', `2 entregas do mesmo callback: ${outcomes.join(' | ')}`, outcomes.every((o) => !o.startsWith('erro') && /"processed":false/.test(o)));
     rec.check('replay callback bancário', `intenção segue ${intent.status}; lançamentos ${before1.entries} → ${after1.entries}; filhos ${after1.children}; lock_version ${before1.lock} → ${after1.lock}`,
-      intent.status === 'EXECUTED' && before1.entries === after1.entries && after1.children === 0 && before1.lock === after1.lock);
+      intent.status === 'CONFIRMED' && before1.entries === after1.entries && after1.children === 0 && before1.lock === after1.lock);
     replays.push({ replay: 'callback bancário CONFIRMED (2 entregas)', resultado: outcomes, lancamentosAntes: before1.entries, lancamentosDepois: after1.entries });
 
     console.log('\n--- Replay 2: reimportação do mesmo extrato ---');

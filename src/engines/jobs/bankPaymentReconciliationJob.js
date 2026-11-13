@@ -12,14 +12,14 @@ const { runReconciliation } = require('../../modules/finance/workers/reconciliat
 // (SUBMITTED) ficava presa para sempre. Este job consulta o banco para cada uma delas
 // (idempotente: confirmBankPayment só age enquanto a intenção está incerta/em trânsito).
 
-// Coleta as intenções presas (SUBMITTING/SUBMITTED) há mais que a idade mínima da empresa. Precisa rodar numa transação já com o tenant definido.
+// Coleta as intenções presas (EXECUTING nas fases SUBMITTING/UNCERTAIN/SUBMITTED — DEC-056) há mais que a idade mínima da empresa. Precisa rodar numa transação já com o tenant definido.
 // Atenção: o model PaymentIntent declara `updatedAt: 'updated_at'` nas opções, o que RENOMEIA o atributo; o nome certo no where é `updated_at`
 // (usar `updatedAt` gera "column PaymentIntent.updatedAt does not exist" e o job nunca rodava).
 async function findReconcileCandidates({ groupId, companyId }, transaction) {
   // M9-D237: idade mínima da consulta é parâmetro da empresa (integration.bank.reconcile_min_age_min, padrão 2 minutos).
   const { reconcileMinAgeMin } = await bank.readBankParams({ groupId, companyId }, transaction);
   return PaymentIntent.findAll({
-    where: { status: ['SUBMITTING', 'SUBMITTED'], updated_at: { [Op.lt]: new Date(Date.now() - reconcileMinAgeMin * 60 * 1000) } },
+    where: { status: 'EXECUTING', submissionPhase: ['SUBMITTING', 'SUBMITTED', 'UNCERTAIN'], updated_at: { [Op.lt]: new Date(Date.now() - reconcileMinAgeMin * 60 * 1000) } },
     transaction,
   });
 }
@@ -43,7 +43,7 @@ async function reconcileCompany(group, company) {
         });
         return reconcilePaymentIntent(candidate.id, { userId: null }, transaction);
       });
-      if (['EXECUTED', 'FAILED'].includes(result.intent.status)) summary.resolved += 1;
+      if (['CONFIRMED', 'FAILED'].includes(result.intent.status)) summary.resolved += 1;
     } catch (err) {
       summary.errors += 1;
       // eslint-disable-next-line no-console

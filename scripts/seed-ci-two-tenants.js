@@ -54,7 +54,7 @@ const PROFILES = [
     roleName: 'CI GESTOR',
     permissions: [
       'finance:read', 'finance:create', 'finance:update', 'finance:settle', 'finance:approve',
-      'finance:reconcile', 'finance:bankAccounts', 'finance:chartOfAccounts',
+      'finance:reconcile', 'finance:bankAccounts', 'finance:chartOfAccounts', 'finance:reverse', // M4PG: pedir estorno (DEC-062); reabrir período fica só com o ADMIN
       'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'legal:deliverKeys', 'lease.keys.deliver', 'legal:waive', 'legal:evidence:export',
       'billing:read', 'billing:create', 'billing:update', 'billing:approve', 'billing:cadence:manage',
       'people:read', 'people:create', 'people:update', 'properties:read', 'properties:create', 'properties:update',

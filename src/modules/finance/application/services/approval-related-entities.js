@@ -53,6 +53,22 @@ function buildFallbackLabel(request) {
   return createdAt ? `Solicitação criada em ${createdAt}` : 'Solicitação de aprovação';
 }
 
+// M4PG: pedidos com fluxo próprio (pagamento, estorno, reabertura) descrevem-se pelo próprio retrato gravado no pedido.
+function dedicatedLabel(r) {
+  const snap = r.snapshotJson || {};
+  const amount = formatBrAmount(r.amount);
+  if (r.relatedEntityType === 'PaymentIntent') {
+    const nome = snap.beneficiary && snap.beneficiary.name;
+    return `Pagamento${amount ? ` de R$ ${amount}` : ''}${nome ? ` para ${nome}` : ''}${snap.description ? ` — ${snap.description}` : ''}`;
+  }
+  if (r.relatedEntityType === 'LedgerReversal') return `Estorno${amount ? ` de R$ ${amount}` : ''}${r.reason ? ` — ${r.reason}` : ''}`;
+  if (r.relatedEntityType === 'PeriodReopen') {
+    const month = r.payloadJson && r.payloadJson.referenceMonth;
+    return `Reabertura do período ${month ? `${month.slice(5, 7)}/${month.slice(0, 4)}` : ''}`.trim();
+  }
+  return null;
+}
+
 async function resolveRelatedEntityLabels(requests, transaction) {
   const byType = {};
   requests.forEach((r) => {
@@ -89,7 +105,7 @@ async function resolveRelatedEntityLabels(requests, transaction) {
   );
 
   return requests.map((r) => {
-    const label = labelsByTypeAndId[r.relatedEntityType]?.[r.relatedEntityId] || buildFallbackLabel(r);
+    const label = labelsByTypeAndId[r.relatedEntityType]?.[r.relatedEntityId] || dedicatedLabel(r) || buildFallbackLabel(r);
     const json = r.toJSON ? r.toJSON() : r;
     return { ...json, relatedEntityLabel: label };
   });

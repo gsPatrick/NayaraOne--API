@@ -158,7 +158,7 @@ test('A2: baixa manual com intenção SUBMITTED no banco é recusada', async () 
   await withRollbackTenantTransaction(tenant, async (t) => {
     const entry = await payable(t);
     const intent = await submittedIntent(t, entry);
-    assert.equal(intent.status, 'SUBMITTED');
+    assert.equal(intent.status, 'EXECUTING');
     const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, t);
     await expectCode(
       receiptService.settleFinancialEntry(entry.id, tenant.userId, t, { manualSettlement }),
@@ -178,7 +178,7 @@ test('A2: CONFIRMED do banco para lançamento já liquidado vira anomalia (pagam
     // Simula o legado: lançamento liquidado por outro caminho enquanto a intenção estava no banco.
     await FinancialEntry.update({ status: 'SETTLED', settledAt: new Date() }, { where: { id: entry.id }, transaction: t });
     const result = await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
-    assert.equal(result.status, 'EXECUTED');
+    assert.equal(result.status, 'CONFIRMED');
     assert.equal((await anomalies(t, intent.id, 'DUPLICATE_SETTLEMENT')).length, 1);
     // Reentrega: idempotente, sem erro e sem segundo caso.
     await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
@@ -365,7 +365,7 @@ test('B1: erro/timeout na chamada ao banco deixa a intenção SUBMITTING (incert
     await withRollbackTenantTransaction(tenant, async (t) => {
       const entry = await payable(t);
       const intent = await submittedIntent(t, entry);
-      assert.equal(intent.status, 'SUBMITTING');
+      assert.equal(intent.status, 'EXECUTING');
       assert.equal(intent.externalStatus, 'UNCERTAIN');
       assert.equal(intent.idempotencyKey, `payment-intent:${intent.id}`);
       await expectCode(paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, t), 'FINANCE_PAYMENT_INTENT_ALREADY_OPEN');
@@ -375,7 +375,7 @@ test('B1: erro/timeout na chamada ao banco deixa a intenção SUBMITTING (incert
       // obtém o id e consulta o status: CONFIRMED liquida.
       const { intent: after } = await bankPaymentsService.reconcilePaymentIntent(intent.id, { userId: null }, t);
       assert.deepEqual(adapter.calls, [`payment-intent:${intent.id}`, `payment-intent:${intent.id}`]);
-      assert.equal(after.status, 'EXECUTED');
+      assert.equal(after.status, 'CONFIRMED');
       const settled = await FinancialEntry.findByPk(entry.id, { transaction: t });
       assert.equal(settled.status, 'SETTLED');
       assert.equal(settled.settlementMethod, 'SANDBOX_CONFIRMED');
@@ -406,7 +406,7 @@ test('B2: ERROR é transitório (continua SUBMITTED); RETURNED depois de pago vi
       const entry = await payable(t);
       const intent = await submittedIntent(t, entry);
       const afterError = await paymentService.confirmBankPayment(intent.externalSubmissionId, 'error', t);
-      assert.equal(afterError.status, 'SUBMITTED', 'ERROR não encerra como falha');
+      assert.equal(afterError.status, 'EXECUTING', 'ERROR não encerra como falha');
 
       adapter.status = 'PROCESSING';
       await expectCode(bankPaymentsService.resolveUncertainPaymentIntent(intent.id, { reason: '' }, { userId: tenant.userId }, t), 'FINANCE_PAYMENT_INTENT_RESOLUTION_REASON_REQUIRED');
@@ -513,7 +513,7 @@ test('B6: confirmação do banco não é recusada por controle de pré-pagamento
     const intent = await submittedIntent(t, entry);
     await FinancialEntry.update({ requiresManualReview: true, manualReviewReason: 'teste B6' }, { where: { id: entry.id }, transaction: t });
     const result = await paymentService.confirmBankPayment(intent.externalSubmissionId, 'CONFIRMED', t);
-    assert.equal(result.status, 'EXECUTED');
+    assert.equal(result.status, 'CONFIRMED');
     const settled = await FinancialEntry.findByPk(entry.id, { transaction: t });
     assert.equal(settled.status, 'SETTLED');
     assert.equal((await anomalies(t, entry.id, 'BANK_CONFIRMATION_UNDER_REVIEW')).length, 1);
@@ -677,7 +677,7 @@ test('B3: duas criações SIMULTÂNEAS de intenção para o mesmo lançamento �
   const t2 = await openTenantTx();
   try {
     const first = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, t1);
-    assert.equal(first.status, 'PENDING');
+    assert.equal(first.status, 'PENDING_APPROVAL');
 
     await sequelize.query("SET LOCAL lock_timeout = '1500ms'", { transaction: t2 });
     await assert.rejects(
@@ -690,7 +690,7 @@ test('B3: duas criações SIMULTÂNEAS de intenção para o mesmo lançamento �
     await sequelize.query('SAVEPOINT b3_dup', { transaction: t1 });
     await assert.rejects(
       () => PaymentIntent.create(
-        { groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: entry.id, status: 'PENDING', snapshotJson: first.snapshotJson, snapshotHash: first.snapshotHash, createdBy: tenant.userId },
+        { groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: entry.id, status: 'PENDING_APPROVAL', snapshotJson: first.snapshotJson, snapshotHash: first.snapshotHash, createdBy: tenant.userId },
         { transaction: t1 }
       ),
       (err) => { assert.equal(err.name, 'SequelizeUniqueConstraintError', err.message); return true; }

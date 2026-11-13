@@ -18,6 +18,7 @@ after(async () => { await env.stopHttp({}); });
 
 test('m9d852 estornar lançamento (nível 3): impacto com valor em centavos, código LAN-, recusa sem código e estorno com a justificativa como motivo', async (t) => {
   if (h.skip) return t.skip(h.skip);
+  await grantRecentMfa(A); // Guia M4 §8 / DEC-062 (M4PG): pedir estorno exige finance:reverse + MFA recente
   const entryId = await env.insertEntry(A, { amount: 250.5 });
   const { impact, confirmation } = await confirmationFor(h, 'gestor', `/finance/entries/${entryId}/impact`);
   assert.equal(impact.totalAmountCents, 25050);
@@ -26,25 +27,27 @@ test('m9d852 estornar lançamento (nível 3): impacto com valor em centavos, có
   const refused = await h.call('gestor', 'POST', `/finance/entries/${entryId}/reverse`, { reason: 'Estorno de teste', confirmation: { ...confirmation, typedCode: 'LAN-00000000' } });
   assert.deepEqual([refused.status, refused.body.error.code, refused.body.error.details.missing], [422, 'GOV_CONFIRMATION_REQUIRED', ['typedCode']]);
   assert.equal(await env.statusOf('finance.financial_entries', entryId), 'SETTLED');
+  // Guia M4 §8 (M4PG): a confirmação abre o CASO de estorno (202); o lançamento só é estornado quando outra pessoa aprovar.
   const ok = await h.call('gestor', 'POST', `/finance/entries/${entryId}/reverse`, { confirmation });
-  assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  assert.equal(await env.statusOf('finance.financial_entries', entryId), 'REVERSED');
+  assert.equal(ok.status, 202, JSON.stringify(ok.body));
+  assert.equal(ok.body.data.relatedEntityType, 'LedgerReversal');
+  assert.equal(await env.statusOf('finance.financial_entries', entryId), 'SETTLED');
   const again = await h.call('gestor', 'POST', `/finance/entries/${entryId}/reverse`, await withConfirmation(h, 'gestor', `/finance/entries/${entryId}/impact`));
   assert.deepEqual([again.status, again.body.error.code], [409, 'GOV_ACTION_BLOCKED']);
-  assert.match(again.body.error.message, /já foi estornado/);
+  assert.match(again.body.error.message, /já foi pedido/);
 });
 
 test('m9d852 cancelar pagamento (nível 3): pagamento já enviado ao banco é impedimento e o pendente cancela com confirmação', async (t) => {
   if (h.skip) return t.skip(h.skip);
   const entryId = await env.insertEntry(A, { status: 'PENDING', amount: 80 });
-  const sent = await env.insertIntent(A, entryId, 'SUBMITTED');
+  const sent = await env.insertIntent(A, entryId, 'EXECUTING'); // Guia M4 §3: enviado ao banco = EXECUTING
   const blocked = await h.call('gestor', 'POST', `/finance/payment-intents/${sent}/cancel`, await withConfirmation(h, 'gestor', `/finance/payment-intents/${sent}/impact`));
   assert.deepEqual([blocked.status, blocked.body.error.code], [409, 'GOV_ACTION_BLOCKED']);
   assert.match(blocked.body.error.message, /já enviado ao banco/);
-  const pending = await env.insertIntent(A, await env.insertEntry(A, { status: 'PENDING', amount: 80 }), 'PENDING');
+  const pending = await env.insertIntent(A, await env.insertEntry(A, { status: 'PENDING', amount: 80 }), 'PENDING_APPROVAL');
   const ok = await h.call('gestor', 'POST', `/finance/payment-intents/${pending}/cancel`, await withConfirmation(h, 'gestor', `/finance/payment-intents/${pending}/impact`));
   assert.equal(ok.status, 200, JSON.stringify(ok.body));
-  assert.equal(await env.statusOf('finance.payment_intents', pending), 'CANCELLED');
+  assert.equal(await env.statusOf('finance.payment_intents', pending), 'CANCELED');
 });
 
 test('m9d852 cancelar obra (nível 3): só a transição para CANCELLED pede confirmação; as outras seguem a regra de transição', async (t) => {

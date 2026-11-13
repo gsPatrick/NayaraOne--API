@@ -2,9 +2,11 @@
   "demanda": "M4-D140",
   "geradoNoCommit": "a8335d22073a3ac4a7a0fdda5a634313888dcb9b",
   "atualizacoes": [
-    "DEC-007 rodada 2 (DI-DEC007-2): + GET /finance/antifraud/parameters"
+    "DEC-007 rodada 2 (DI-DEC007-2): + GET /finance/antifraud/parameters",
+    "Pagamentos (m4fix/pagamentos-verificacao f1e4b50f): + rotas de reabertura de período por pedido; estorno exige finance:reverse e MFA recente; reabertura exige finance:periodReopen",
+    "Integração dos Marcos 3 a 6 sobre o Marco 9 (13/11/2026): cadeias com o contrato da consulta (contratoDaConsulta) e o esquema de entrada (middleware) do Marco 9"
   ],
-  "total": 101,
+  "total": 107,
   "rotas": [
     {
       "method": "GET",
@@ -15,6 +17,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -27,6 +30,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -39,6 +43,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -51,6 +56,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -63,6 +69,8 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -75,6 +83,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -87,6 +96,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -99,6 +109,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -111,6 +122,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -123,6 +135,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -136,6 +149,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -148,6 +162,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -160,6 +175,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -172,7 +188,9 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "middleware",
         "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -185,6 +203,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -197,6 +216,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -209,6 +229,8 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -221,6 +243,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -233,7 +256,9 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "middleware",
         "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -246,6 +271,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -258,6 +284,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -270,6 +297,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -282,6 +310,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -294,6 +323,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -306,6 +336,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -318,6 +349,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -330,6 +362,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -343,6 +376,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -355,6 +389,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -367,6 +402,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -379,6 +415,8 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -391,6 +429,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -403,6 +442,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -415,6 +455,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -427,6 +468,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -439,6 +481,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -451,6 +494,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -463,6 +507,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -475,6 +520,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -487,6 +533,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -499,7 +546,9 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "middleware",
         "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -512,6 +561,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -524,6 +574,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -537,6 +588,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -551,6 +603,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -558,12 +611,15 @@
       "method": "POST",
       "path": "/api/v1/finance/entries/:id/reverse",
       "permissions": [
-        "finance:settle"
+        "finance:reverse"
       ],
-      "mfaRecente": false,
+      "mfaRecente": true,
       "middlewares": [
         "requirePermissionMiddleware",
+        "requireRecentMfa",
         "wrapped",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -577,6 +633,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -591,6 +648,7 @@
         "requirePermissionMiddleware",
         "requireRecentMfa",
         "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -603,6 +661,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -615,6 +674,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -627,6 +687,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -639,6 +700,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -653,6 +715,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "(anônima)"
       ]
     },
@@ -667,6 +730,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -679,6 +743,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -693,6 +758,7 @@
         "requirePermissionMiddleware",
         "requireRecentMfa",
         "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -706,6 +772,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -718,6 +785,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -730,6 +798,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -742,6 +811,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -754,6 +824,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -761,14 +832,17 @@
       "method": "POST",
       "path": "/api/v1/finance/ledger/:id/reverse",
       "permissions": [
-        "finance:settle"
+        "finance:reverse"
       ],
-      "mfaRecente": false,
+      "mfaRecente": true,
       "middlewares": [
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "requireRecentMfa",
         "wrapped",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -781,6 +855,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -793,6 +868,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -806,6 +882,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -819,6 +896,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -831,6 +909,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -843,6 +922,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -855,6 +935,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -867,6 +948,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -879,6 +961,8 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -891,6 +975,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -904,6 +989,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "wrapped",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -917,6 +1003,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -931,6 +1018,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -943,6 +1031,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -956,6 +1045,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -969,6 +1059,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -983,6 +1074,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -998,6 +1090,7 @@
         "tenantMiddleware",
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1012,6 +1105,8 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1024,6 +1119,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1036,6 +1132,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1048,6 +1145,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1061,6 +1159,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1073,6 +1172,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1080,12 +1180,54 @@
       "method": "POST",
       "path": "/api/v1/finance/period-closures/reopen",
       "permissions": [
-        "finance:approve"
+        "finance:periodReopen"
       ],
       "mfaRecente": true,
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/period-closures/reopen-requests",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/reopen-requests/:id/approve",
+      "permissions": [
+        "finance:periodReopen"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/reopen-requests/:id/reject",
+      "permissions": [
+        "finance:periodReopen"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1099,6 +1241,7 @@
       "middlewares": [
         "requirePermissionMiddleware",
         "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1113,6 +1256,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1127,6 +1271,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1141,6 +1286,7 @@
         "authMiddleware",
         "tenantMiddleware",
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1153,6 +1299,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1165,6 +1312,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1177,6 +1325,8 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1189,6 +1339,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1201,6 +1352,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1213,6 +1365,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1225,6 +1378,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1237,6 +1391,7 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1249,6 +1404,48 @@
       "mfaRecente": false,
       "middlewares": [
         "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reversal-cases",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reversal-cases/:id/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reversal-cases/:id/reject",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
         "wrapped"
       ]
     },
@@ -1260,6 +1457,7 @@
       "middlewares": [
         "rawBodyMiddleware",
         "wrapped",
+        "contratoDaConsulta",
         "wrapped"
       ]
     }

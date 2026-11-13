@@ -188,6 +188,9 @@ async function updateBankAccount(id, payload, actorUserId, transaction) {
 
   if (sensitiveChanged) {
     await publishBankAccountSensitiveDataChanged(bankAccount, transaction);
+    // Caderno §9 / §17 / FIN-TS-003 (M4PG): a troca do favorecido invalida as intenções e aprovações anteriores e abre o alerta.
+    const changedFields = SENSITIVE_FIELDS.filter((f) => (beforeJson[f] || null) !== (bankAccount[f] || null));
+    await require('./payment-intent-invalidation').invalidateForBeneficiaryChange(bankAccount, changedFields, actorUserId, transaction);
   }
 
   await registrarAuditoria(

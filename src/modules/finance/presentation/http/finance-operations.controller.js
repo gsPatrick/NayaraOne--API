@@ -144,10 +144,6 @@ const approvePeriodClosure = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.approvePeriodClosure(withTenant(req), req.auth.userId, t));
   return success(res, { data: item });
 });
-const reopenPeriod = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => periodClosuresService.reopenPeriod(withTenant(req), req.auth.userId, t));
-  return success(res, { data: item });
-});
 // F02 (2ª rodada) — devolve um pedido de fechamento em REVIEW para OPEN, com motivo.
 const returnPeriodToOpen = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) => periodClosuresService.returnPeriodToOpen(withTenant(req), req.auth.userId, t));
@@ -275,5 +271,5 @@ const listChartAccountVersions = catchAsync(async (req, res) => {
 });
 
 module.exports = {
-  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission, getCommissionAdjustments, createOwnerRepasse, listEligibleRepasseSources, listOwnerRepasses, payOwnerRepasse, getOwnerRepasseComposition, createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount, createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer, closePeriod, approvePeriodClosure, reopenPeriod, returnPeriodToOpen, getPeriodPreconditions, confirmPeriodCheck, listPeriodClosures, getWeeklyHealthReport, getFinanceInsights, createBudgetForecast, listBudgetForecasts, compareBudgetForecastToRealized, approveIntercompanyTransfer, rejectIntercompanyTransfer, getGroupConsolidatedReport, listIntercompanyDestinationAccounts, listIntercompanyDestinationCompanies, publishCommissionRule, getCommissionRule, listCommissionRuleVersions, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
+  createCommission, listCommissions, listCommissionInstallments, payCommissionInstallment, cancelCommission, getCommissionAdjustments, createOwnerRepasse, listEligibleRepasseSources, listOwnerRepasses, payOwnerRepasse, getOwnerRepasseComposition, createChartAccount, listChartAccounts, updateChartAccount, deactivateChartAccount, createIntercompanyTransfer, listIntercompanyTransfers, reconcileIntercompanyTransfer, closePeriod, approvePeriodClosure, returnPeriodToOpen, getPeriodPreconditions, confirmPeriodCheck, listPeriodClosures, getWeeklyHealthReport, getFinanceInsights, createBudgetForecast, listBudgetForecasts, compareBudgetForecastToRealized, approveIntercompanyTransfer, rejectIntercompanyTransfer, getGroupConsolidatedReport, listIntercompanyDestinationAccounts, listIntercompanyDestinationCompanies, publishCommissionRule, getCommissionRule, listCommissionRuleVersions, getCommissionRelease, approveOwnerRepasse, listChartAccountVersions,
 };

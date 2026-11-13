@@ -6,7 +6,7 @@
  * pagamento confere. Cada função recebe a transação; as consultas e travas são as mesmas que estavam nos
  * serviços.
  */
-const { PaymentIntent, BankAccount, BankPaymentProviderRouting } = require('../../../../models');
+const { PaymentIntent, BankAccount, BankPaymentProviderRouting, AnomalyCase } = require('../../../../models');
 
 const forUpdate = (transaction) => (transaction ? transaction.LOCK.UPDATE : undefined);
 
@@ -29,6 +29,16 @@ function findOneForEntry(financialEntryId, statuses, transaction) {
 /** Intenções do lançamento nos estados informados, com lock (invalidação depois de uma edição). */
 function findForEntryForUpdate(financialEntryId, statuses, transaction) {
   return PaymentIntent.findAll({ where: { financialEntryId, status: statuses }, transaction, lock: forUpdate(transaction) });
+}
+
+/** Intenções nos estados informados que congelaram esta conta de destino, com lock (troca do favorecido). */
+function findForBankAccountForUpdate(bankAccountId, statuses, transaction) {
+  return PaymentIntent.findAll({ where: { bankAccountId, status: statuses }, transaction, lock: forUpdate(transaction) });
+}
+
+/** Caso de anomalia ainda aberto de um tipo para a intenção (um por intenção). */
+function findOpenAnomaly(paymentIntentId, caseType, transaction) {
+  return AnomalyCase.findOne({ where: { relatedEntityType: 'PaymentIntent', relatedEntityId: paymentIntentId, caseType, status: 'OPEN' }, transaction });
 }
 
 function countForEntry(financialEntryId, statuses, transaction) {
@@ -65,6 +75,8 @@ module.exports = {
   findOneForEntry,
   findForEntryForUpdate,
   countForEntry,
+  findForBankAccountForUpdate,
+  findOpenAnomaly,
   create,
   save,
   list,

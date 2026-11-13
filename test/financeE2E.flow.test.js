@@ -82,7 +82,8 @@ test('Financeiro E2E: lançamento -> intenção -> callback sandbox HMAC -> ledg
     // 3) Envio ao banco sandbox: SUBMITTED, lançamento continua PENDING (sem ledger antes da confirmação).
     const submitted = await bankPaymentsService.submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, t);
     const sentIntent = await PaymentIntent.findByPk(intent.id, { transaction: t });
-    assert.equal(sentIntent.status, 'SUBMITTED');
+    assert.equal(sentIntent.status, 'EXECUTING');
+    assert.equal(sentIntent.submissionPhase, 'SUBMITTED');
     const externalSubmissionId = sentIntent.externalSubmissionId || submitted.externalSubmissionId;
     assert.ok(externalSubmissionId, 'o sandbox devolve o id externo do pagamento');
     assert.equal((await FinancialEntry.findByPk(entry.id, { transaction: t })).status, 'PENDING');
@@ -106,7 +107,7 @@ test('Financeiro E2E: lançamento -> intenção -> callback sandbox HMAC -> ledg
     assert.equal(settled.settlementMethod, 'SANDBOX_CONFIRMED');
     assert.ok(settled.settledAt);
     assert.equal(Number(settled.amount), amount);
-    assert.equal((await PaymentIntent.findByPk(intent.id, { transaction: t })).status, 'EXECUTED');
+    assert.equal((await PaymentIntent.findByPk(intent.id, { transaction: t })).status, 'CONFIRMED');
     const rowAudit = await AuditLog.findOne({ where: { entityId: entry.id, action: 'finance.financial_entry.row_change' }, transaction: t });
     assert.ok(rowAudit, 'a mudança de status no ledger foi registrada pelo trigger do banco');
     // Replay do mesmo callback: nada novo (nenhum filho, mesma versão).

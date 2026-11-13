@@ -42,7 +42,7 @@ async function onMismatchResolved({ error, decision, ctx, transaction }) {
     await transitionDispatch(ctx, dispatch.id, 'FAILED', { lastErrorClass: 'VALIDATION', lastErrorCode: MISMATCH_CODE }, { motivo: 'Revisão humana: o pagamento com valor divergente não vale.' }, transaction);
   }
   const intent = await PaymentIntent.findOne({ where: { id: dispatch.aggregateId }, transaction, lock: transaction.LOCK.UPDATE });
-  if (intent && ['SUBMITTING', 'SUBMITTED'].includes(intent.status)) {
+  if (intent && intent.status === 'EXECUTING') {
     const antes = { status: intent.status };
     await intent.update({ status: 'FAILED', failedAt: new Date(), uncertainSince: null, failureReason: 'Revisão humana: o valor confirmado pelo banco difere do aprovado e o pagamento foi rejeitado.' }, { transaction });
     await registrarAuditoria({
