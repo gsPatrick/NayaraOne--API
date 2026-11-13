@@ -6,7 +6,10 @@ const EXACT = new Set([
   'accesstoken', 'refreshtoken', 'idtoken', 'apikey', 'xapikey', 'clientsecret', 'webhooksecret', 'privatekey',
   'xsignature', 'signature', 'card', 'cardnumber', 'cvv', 'pan', 'mfacode', 'rawbody', 'providerpayload',
 ]);
-const SUFFIXES = ['token', 'secret', 'password', 'senha', 'apikey', 'privatekey', 'signature', 'authorization'];
+// DI-M9R-28: chaves de cifra, mestras, de assinatura e de HMAC (FILES_ENCRYPTION_KEY, MFA_ENCRYPTION_KEY, SECRET_STORE_MASTER_KEY…) e strings de conexão
+// também são segredo; `idempotencyKey`, `actionKey`, `sortKey` e afins continuam visíveis.
+const SUFFIXES = ['token', 'secret', 'password', 'senha', 'apikey', 'privatekey', 'signature', 'authorization',
+  'encryptionkey', 'masterkey', 'signingkey', 'hmackey', 'secretkey', 'databaseurl', 'connectionstring'];
 
 const normalizeKey = (key) => String(key).toLowerCase().replace(/[^a-z0-9]/g, '');
 
