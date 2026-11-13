@@ -19,8 +19,8 @@ const RAIZ = path.join(__dirname, '..', '..', '..');
 const MB = 1048576;
 
 /** Roda `corpo` (JS) num processo filho com prazo; o corpo imprime linhas "MS <rótulo> <milissegundos>". Devolve { status, linhas, stdout, morto }. */
-function medir(corpo, prazoMs = 60000) {
-  const r = spawnSync(process.execPath, ['-e', corpo], { cwd: RAIZ, encoding: 'utf8', timeout: prazoMs, maxBuffer: 16 * MB });
+function medir(corpo, prazoMs = 60000, env = process.env) {
+  const r = spawnSync(process.execPath, ['-e', corpo], { cwd: RAIZ, encoding: 'utf8', timeout: prazoMs, maxBuffer: 16 * MB, env });
   const linhas = (r.stdout || '').split('\n').filter((l) => l.startsWith('MS ')).map((l) => { const p = l.split(' '); return { rotulo: p.slice(1, -1).join(' '), ms: Number(p[p.length - 1]) }; });
   return { status: r.status, linhas, stdout: r.stdout || '', stderr: r.stderr || '', morto: r.signal === 'SIGTERM' || (r.error && r.error.code === 'ETIMEDOUT') };
 }
@@ -76,7 +76,12 @@ test('tempo: cada regra da biblioteca, com e sem caixa, em 24 entradas adversár
   conferirPrazo(r, 1500, Object.keys(SOURCES).length * 2 * 24);
 });
 
-test('tempo: os perfis inteiros (log, texto livre do fornecedor e IA) em 1 MB adversário ficam abaixo de 2 s', () => {
+// Rodada 8 da verificação (DI-M9R-26): desde a DI-M9R-22 o perfil da IA tem teto de tamanho na entrada (REDACTION_AI_MAX_CHARS, padrão 1.048.576), e
+// o 'rua' + 1 MB de espaços + 'x' (1.048.580 caracteres) passou a ser recusado com AI_TEXT_TOO_LARGE antes de começar. O contrato tem duas partes, e
+// as duas são provadas aqui, sem afrouxar nada: (a) a FUNÇÃO de redação continua linear: as mesmas seis entradas adversárias de 1 MB, nos três perfis,
+// com o teto do processo filho acima delas (2 MB), terminam abaixo de 2 s cada; (b) o TETO vale na entrada: com o teto padrão, a entrada de 1 MB + 4
+// é recusada antes de começar (em menos de 100 ms) e a maior entrada aceita (exatamente o teto) também termina abaixo de 2 s.
+test('tempo: os perfis inteiros (log, texto livre do fornecedor e IA) em 1 MB adversário ficam abaixo de 2 s (a função é linear)', () => {
   const r = medir(`
     const { redactText } = require('./src/shared/redaction');
     const { redactFreeText } = require('./src/shared/redaction/freeText');
@@ -90,8 +95,35 @@ test('tempo: os perfis inteiros (log, texto livre do fornecedor e IA) em 1 MB ad
         console.log('MS ' + perfil + ' ' + rotulo + ' ' + Number((process.hrtime.bigint() - t0) / 1000000n));
       }
     }
-  `, 60000);
+  `, 60000, { ...process.env, REDACTION_AI_MAX_CHARS: String(2 * MB) });
   conferirPrazo(r, 2000, 18);
+});
+
+test('teto da IA na entrada: com o teto padrão, 1 MB + 4 é recusado antes de começar e a maior entrada aceita (o teto exato) fica abaixo de 2 s', () => {
+  const env = { ...process.env };
+  delete env.REDACTION_AI_MAX_CHARS;
+  const r = medir(`
+    const { redactForAi } = require('./src/shared/redaction/aiProfile');
+    const { limiteDaRedacaoIa } = require('./src/shared/redaction/aiSize');
+    const N = ${MB};
+    if (limiteDaRedacaoIa() !== N) throw new Error('teto padrão diferente de 1 MB: ' + limiteDaRedacaoIa());
+    for (const [rotulo, texto] of Object.entries({ 'rua + espaços': 'rua' + ' '.repeat(N) + 'x', 'RG + espaços': 'RG' + ' '.repeat(N) + 'x' })) {
+      const t0 = process.hrtime.bigint();
+      let codigo = null;
+      try { redactForAi(texto); } catch (e) { codigo = e.code; }
+      if (codigo !== 'AI_TEXT_TOO_LARGE') throw new Error('acima do teto não foi recusado: ' + rotulo);
+      console.log('MS recusa ' + rotulo + ' ' + Number((process.hrtime.bigint() - t0) / 1000000n));
+    }
+    for (const [rotulo, texto] of Object.entries({ 'rua + espaços (teto)': 'rua' + ' '.repeat(N - 4) + 'x', 'RG + espaços (teto)': 'RG' + ' '.repeat(N - 3) + 'x', 'x (teto)': 'x'.repeat(N) })) {
+      if (texto.length !== N) throw new Error('entrada fora do teto: ' + texto.length);
+      const t0 = process.hrtime.bigint();
+      redactForAi(texto);
+      console.log('MS redactForAi ' + rotulo + ' ' + Number((process.hrtime.bigint() - t0) / 1000000n));
+    }
+  `, 60000, env);
+  conferirPrazo(r, 2000, 5);
+  const recusas = r.linhas.filter((l) => l.rotulo.startsWith('recusa ')).filter((l) => l.ms >= 100).map((l) => `${l.rotulo}: ${l.ms} ms`);
+  assert.deepEqual(recusas, [], 'a recusa acontece antes de começar a redação');
 });
 
 // Fontes ANTERIORES das regras reescritas (b4ad88d2), para provar que o que se redige não mudou.

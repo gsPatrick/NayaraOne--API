@@ -64,7 +64,7 @@
     "ci:ai": "bash scripts/ci-estagios-ai.sh",
     "test:contract": "node scripts/withDisposableDb.js -- env LOG_LEVEL=info CI_TENANT_USERS_PASSWORD=ci-tenant-users-password-not-for-production CLAMAV_HOST=127.0.0.1 CLAMAV_PORT=3310 bash -c \"node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node scripts/runContractTests.js\"",
     "test:ai:adversarial": "node scripts/withDisposableDb.js -- env LOG_LEVEL=info CI_TENANT_USERS_PASSWORD=ci-tenant-users-password-not-for-production CLAMAV_HOST=127.0.0.1 CLAMAV_PORT=3310 bash -c \"node scripts/seed-ci-two-tenants.js >/dev/null && NODE_ENV=test node scripts/ai-adversarial-report.js\"",
-    "test": "node --test test/*.test.js test/ai/invariantes.test.js test/ai/archGuard.test.js test/marco8/*.test.js test/integrations/*.test.js \"test/marco9/**/*.test.js\" \"test/analytics/**/*.test.js\""
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "ajv": "^6.12.6",
