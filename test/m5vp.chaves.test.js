@@ -100,7 +100,11 @@ test('M5-A0079: empresa no padrão antigo do checklist passa ao padrão novo (ve
     // Reproduz a política padrão anterior (sem o item da entrega) como a vigente da empresa.
     const old = JSON.parse(JSON.stringify(DEFAULT_ACTION));
     old.templates.LEASE = old.templates.LEASE.filter((i) => i.requirementCode !== 'LEASE_KEYS_LIST');
-    assert.equal(crypto.createHash('sha256').update(JSON.stringify(old)).digest('hex'), 'a222325e003107eeaa8a5e1f04a6319fbdcdcad34614e71645daa5f7ab90e683');
+    // Integração dos Marcos 3 a 6: o padrão atual tem também as características do imóvel (m5fix/contratos); sem o item da entrega ele é o
+    // padrão intermediário dos contratos, que está na lista de padrões antigos (requirementRules.defaults PREVIOUS_DEFAULT_HASHES).
+    const hashAntigo = crypto.createHash('sha256').update(JSON.stringify(old)).digest('hex');
+    assert.equal(hashAntigo, '54369817342bf5dbc8da7cd497465284752345eb0d09714a982a1cd4ce8bc0a0');
+    assert.ok(require('../src/modules/legal/contracts/application/requirementRules.defaults').PREVIOUS_DEFAULT_HASHES.includes(hashAntigo));
     const oldVersion = await requirementRules.publishRequirementRules(base(), old, tenant.userId, t);
     const fx = await leaseReady(t); // o checklist é gerado já pela política resolvida (padrão novo)
     const rule = await Rule.findOne({ where: { code: 'REG-JUR-001', ...base() }, transaction: t });
@@ -129,6 +133,8 @@ test('M5-A0079/§7: o checklist do termo de entrega vinculado (casa nova) precis
   await withRollbackTenantTransaction(tenant, async (t) => {
     const sfx = uniqueSuffix();
     const property = await propertiesService.createProperty({ ...base(), propertyType: 'RESIDENTIAL', title: `M5VP casa nova ${sfx}`, internalCode: `M5VP-N-${sfx}` }, tenant.userId, t);
+    // Casa nova = imóvel que nasceu de obra da empresa (fato property.isNew, DI-M5CT-3 do m5fix/contratos); sem obra, é imóvel usado.
+    await require('../src/features/construction/projects.service').createProject({ ...base(), propertyId: property.id, name: `M5VP obra da casa nova ${sfx}` }, tenant.userId, t);
     const sale = await contractsService.createContract({ ...base(), contractType: 'SALE_CASH', propertyId: property.id, totalValue: 500000 }, tenant.userId, t);
     const buyer = await peopleService.createPerson({ ...base(), personType: 'PF', legalName: `M5VP Comprador ${sfx}` }, tenant.userId, t);
     await contractsService.addContractParty(sale.id, { personId: buyer.id, partyRole: 'BUYER' }, tenant.userId, t);
