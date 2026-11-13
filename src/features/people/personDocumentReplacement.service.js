@@ -4,7 +4,8 @@ const { PersonDocument, File } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { getFileContent } = require('../files/files.service');
-const { resolveAntivirusAdapter, resolveOcrAdapter } = require('./adapters/resolveDocumentAdapters');
+const { resolvePersonDocumentEngines, READING_UNAVAILABLE } = require('./personDocumentEngines');
+const { readDocumentParams } = require('./personDocument.settings');
 
 const UNAVAILABLE = ['FILE_CONTENT_NOT_FOUND', 'FILE_NOT_FOUND'];
 
@@ -16,7 +17,8 @@ const UNAVAILABLE = ['FILE_CONTENT_NOT_FOUND', 'FILE_NOT_FOUND'];
  * nunca vira versão. Sem o binário não há o que examinar: só segue se o arquivo já tiver sido liberado (scan CLEAN).
  * A leitura nunca herda a do arquivo anterior: sem binário, a versão nasce sem campos lidos, nunca com dado inventado.
  */
-async function scanAndReadReplacementFile(file, documentType, tenant, actorUserId, transaction) {
+async function scanAndReadReplacementFile(file, documentType, tenant, actorUserId, transaction, params) {
+  const engines = resolvePersonDocumentEngines(params); // mesmos motores e a mesma trava do envio (CAD-05, DI-M3PE-6)
   let content = null;
   try {
     const withContent = await getFileContent(file.id, transaction, actorUserId, file);
@@ -26,7 +28,7 @@ async function scanAndReadReplacementFile(file, documentType, tenant, actorUserI
   }
   let antivirus;
   if (content) {
-    const scan = await (await resolveAntivirusAdapter(tenant, transaction)).scan(content);
+    const scan = await engines.antivirus.scan(content);
     if (!scan.clean) {
       throw AppError.unprocessable('O arquivo novo foi rejeitado pelo antivírus: assinatura de malware detectada. A troca não foi feita e o documento original continua valendo.', 'PERSON_DOCUMENT_FILE_MALWARE_DETECTED', { signature: scan.signature });
     }
@@ -36,9 +38,8 @@ async function scanAndReadReplacementFile(file, documentType, tenant, actorUserI
   } else {
     antivirus = { clean: true, scannedAt: file.scannedAt ? new Date(file.scannedAt).toISOString() : null, engine: 'upload', checksumSha256: file.checksumSha256 || null };
   }
-  const extraction = content
-    ? await (await resolveOcrAdapter(tenant, transaction)).extract(content, documentType)
-    : { fields: {}, confidence: 0, illegible: false, raw: { unavailable: true } };
+  let extraction = { fields: {}, confidence: 0, illegible: false, raw: { unavailable: true } };
+  if (content) extraction = engines.leitor ? await engines.leitor.extract(content, documentType) : READING_UNAVAILABLE;
   return {
     fields: extraction.fields || {},
     sourceFileId: file.id,
@@ -51,11 +52,12 @@ async function scanAndReadReplacementFile(file, documentType, tenant, actorUserI
 
 // Mesma régua do envio (documentIngestion.service.js): ilegível, baixa confiança ou campo crítico ausente/inválido
 // abrem pendência de revisão do arquivo novo. Carregado aqui por causa da dependência circular entre os services.
-function pendingReasonFor(reading, documentType) {
+function pendingReasonFor(reading, documentType, params) {
+  if (reading.extractionMeta && reading.extractionMeta.reason === 'LEITURA_INDISPONIVEL') return 'Leitura automática indisponível neste servidor: confira os dados do arquivo novo no original.';
   if (reading.extractionMeta && reading.extractionMeta.unavailable) return 'Conteúdo do arquivo novo indisponível para leitura automática: confira os dados no original.';
   const { reviewPendingReason } = require('./documentIngestion.service');
   try {
-    return reviewPendingReason(reading, documentType);
+    return reviewPendingReason(reading, documentType, params);
   } catch (err) {
     if (err instanceof AppError) return `Campos críticos inválidos na leitura do arquivo novo: ${err.message}`;
     throw err;
@@ -83,7 +85,8 @@ async function replaceDocumentFile(original, payload, actorUserId, transaction) 
   const { nextVersionNo } = require('./personDocuments.service');
   const documentType = String(payload.documentType || original.documentType).toUpperCase();
   const tenant = { groupId: original.groupId, companyId: original.companyId };
-  const reading = await scanAndReadReplacementFile(file, documentType, tenant, actorUserId, transaction);
+  const params = await readDocumentParams(tenant, transaction);
+  const reading = await scanAndReadReplacementFile(file, documentType, tenant, actorUserId, transaction, params);
 
   const created = await PersonDocument.create(
     {
@@ -103,7 +106,7 @@ async function replaceDocumentFile(original, payload, actorUserId, transaction) 
     { transaction }
   );
 
-  const pendingReason = pendingReasonFor(reading, documentType);
+  const pendingReason = pendingReasonFor(reading, documentType, params);
   if (pendingReason) {
     const { openReviewTask } = require('./documentIngestion.service');
     await openReviewTask({ ...tenant, personId: original.personId, actorUserId, title: `Revisar nova versão ${created.versionNo} do documento ${documentType} (arquivo trocado)`, reason: pendingReason }, transaction);

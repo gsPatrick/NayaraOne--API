@@ -79,4 +79,19 @@ function isValidTaxIdDigits(digits) {
   return false;
 }
 
-module.exports = { DOCUMENT_TYPE_PATTERNS, onlyDigits, validateDocumentFormat, hashTaxId, hashPiiValue, isValidTaxIdDigits };
+/**
+ * assertValidTaxId — M3-01 (DI-M3PE-1): CPF/CNPJ da pessoa só é gravado com os dígitos verificadores certos. Livro §5: "CPF/CNPJ ... exigem
+ * validação antes de persistir". Formato errado (quantidade de dígitos) continua 400 PERSON_DOCUMENT_INVALID_FORMAT; quantidade certa com
+ * dígito verificador errado (ou sequência repetida) é 422 PERSON_TAX_ID_INVALID, com o campo apontado para a tela.
+ */
+function assertValidTaxId(personType, taxIdDigits) {
+  if (!taxIdDigits) return;
+  const label = String(personType || 'PF').toUpperCase() === 'PJ' ? 'CNPJ' : 'CPF';
+  validateDocumentFormat(label, taxIdDigits);
+  if (!isValidTaxIdDigits(taxIdDigits)) {
+    const message = `${label} inválido: os dígitos verificadores não conferem. Confira o número digitado.`;
+    throw AppError.unprocessable(message, 'PERSON_TAX_ID_INVALID', { fields: [{ field: 'taxIdNormalized', message }] });
+  }
+}
+
+module.exports = { DOCUMENT_TYPE_PATTERNS, onlyDigits, validateDocumentFormat, hashTaxId, hashPiiValue, isValidTaxIdDigits, assertValidTaxId };

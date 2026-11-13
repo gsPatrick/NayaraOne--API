@@ -2,6 +2,7 @@
 
 const { PersonAddress, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { sessionCompanyId } = require('./personView');
 
 async function assertPersonExists(personId, transaction) {
   const person = await Person.findByPk(personId, { transaction });
@@ -36,7 +37,7 @@ async function createAddress(personId, payload, actorUserId, transaction) {
     return await PersonAddress.create(
       {
         groupId: person.groupId,
-        companyId: person.companyId,
+        companyId: await sessionCompanyId(person, transaction), // DI-M9I-3: o dado é da empresa da sessão (vinculada ou responsável)
         personId,
         zipCode: payload.zipCode || null,
         street: payload.street || null,

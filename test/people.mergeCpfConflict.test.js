@@ -12,6 +12,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
+const { randomCpf } = require('./helpers/pessoasVinculo');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const mergeService = require('../src/features/people/personMerge.service');
@@ -28,8 +29,8 @@ after(async () => {
 
 test('CRM-TS-002: merge de duas pessoas com CPF preenchido e DIFERENTE é bloqueado (conflito de identidade)', async () => {
   const suffix = uniqueSuffix();
-  const taxIdA = `111${suffix}`.slice(0, 11).padEnd(11, '1');
-  const taxIdB = `222${suffix}`.slice(0, 11).padEnd(11, '2');
+  const taxIdA = randomCpf(); // M3-01: CPF com dígito verificador certo
+  const taxIdB = randomCpf();
 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const canonical = await peopleService.createPerson(
@@ -56,7 +57,7 @@ test('CRM-TS-002: merge de duas pessoas com CPF preenchido e DIFERENTE é bloque
 
 test('CRM-TS-002 (controle): merge de duas pessoas onde só UMA tem CPF preenchido NÃO é bloqueado por conflito de CPF', async () => {
   const suffix = uniqueSuffix();
-  const taxIdA = `333${suffix}`.slice(0, 11).padEnd(11, '3');
+  const taxIdA = randomCpf(); // M3-01: CPF com dígito verificador certo
 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const canonical = await peopleService.createPerson(

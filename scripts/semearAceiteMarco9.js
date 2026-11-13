@@ -16,12 +16,16 @@
  *   HOMO_<PERFIL>_MFA_SECRET      opcional: segredo TOTP do usuário de TESTE; o código é gerado na hora em que a API pede
  *                                 MFA recente (POST /users/me/mfa/verify). MFA nunca é contornado: é o mesmo código que o
  *                                 aplicativo mostraria. Segredo e código nunca são impressos nem gravados.
+ *   HOMO_SEGREDOS_ARQUIVO         recomendado: arquivo HOMO_NOME=valor FORA de qualquer repositório e com chmod 600, com as senhas
+ *                                 e os segredos TOTP (HOMO_*_PASSWORD, HOMO_*_MFA_SECRET). Assim nenhum segredo vai para a linha de
+ *                                 comando nem para o histórico do shell. O que vier do ambiente vale primeiro.
  *   HOMO_SAIDA_JSON               opcional: caminho de um arquivo JSON com as conferências (data/hora, rota, status HTTP,
  *                                 código de erro). Sem senha, token, segredo nem código MFA.
  * Saída: 0 = tudo conferido; 1 = alguma conferência falhou; 2 = parada de segurança ou configuração.
  */
 const fs = require('fs');
 const { Sessao, PararScript, lerBase } = require('./homo/lib/cliente');
+const { carregarSegredos } = require('./homo/lib/segredos');
 const { Relato } = require('./homo/lib/relato');
 const optOut = require('./homo/cenarios/optOutCampanha');
 const automacao = require('./homo/cenarios/automacao');
@@ -49,7 +53,7 @@ function gravarSaida(caminho, base, ctx, rel, inicio) {
 }
 
 async function principal() {
-  const env = process.env;
+  const env = carregarSegredos(process.env); // senhas e segredos TOTP vêm de um arquivo fora do repositório, nunca da linha de comando
   const base = lerBase(env);
   const inicio = new Date().toISOString();
   if (!env.HOMO_ADMIN_EMAIL || !env.HOMO_ADMIN_PASSWORD) throw new PararScript('Informe HOMO_ADMIN_EMAIL e HOMO_ADMIN_PASSWORD (administrador da empresa A).');

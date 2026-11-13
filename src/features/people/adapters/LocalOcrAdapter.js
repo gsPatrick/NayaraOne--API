@@ -198,7 +198,8 @@ class LocalOcrAdapter {
       }
 
       const { fields, sources } = extractFields(text);
-      return { fields, confidence: Number(confidence.toFixed(3)), illegible: false, raw: { ...raw, fieldSources: sources } };
+      // `text` serve à etapa de classificação do documento de Pessoas (personDocumentClassifier.js) e não é gravado.
+      return { fields, confidence: Number(confidence.toFixed(3)), illegible: false, text, raw: { ...raw, fieldSources: sources } };
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

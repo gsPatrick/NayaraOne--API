@@ -5123,6 +5123,16 @@
    "valid_until",
    "zip_code"
   ],
+  "people.person_company_links": [
+   "end_reason",
+   "ended_at",
+   "ended_by",
+   "linked_at",
+   "linked_by",
+   "origin",
+   "person_id",
+   "status"
+  ],
   "people.person_contacts": [
    "consent_status",
    "contact_type",

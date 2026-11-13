@@ -4,8 +4,10 @@ const { Person, PersonDocument, Task } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { uploadFile } = require('../files/files.service');
-const { resolveAntivirusAdapter, resolveOcrAdapter } = require('./adapters/resolveDocumentAdapters');
-const { validateDocumentFormat, onlyDigits } = require('./personDocumentFormat.service');
+const { onlyDigits, validateDocumentFormat, assertValidTaxId } = require('./personDocumentFormat.service');
+const { readDocumentParams, defaultDocumentParams } = require('./personDocument.settings');
+const { resolvePersonDocumentEngines, READING_UNAVAILABLE } = require('./personDocumentEngines');
+const { classifyBeforeReading, confirmWithText } = require('./personDocumentClassifier');
 const { nextVersionNo } = require('./personDocuments.service');
 
 /**
@@ -38,35 +40,26 @@ const { nextVersionNo } = require('./personDocuments.service');
  * pessoa (related_entity_type='people.persons').
  */
 
-const CONFIDENCE_THRESHOLD = 0.7;
+// Padrões (comportamento anterior): os valores vigentes são parâmetros da empresa (personDocument.settings.js, CAD-05 / DI-M3PE-6).
+const DEFAULT_PARAMS = defaultDocumentParams();
+const CONFIDENCE_THRESHOLD = DEFAULT_PARAMS.confiancaMinima;
+// Campos "críticos" por tipo de documento — Caderno: "CPF/CNPJ, nome, renda, conta e datas críticas exigem validação antes de persistir
+// quando não houver fonte confiável estruturada." O mapa vigente é o parâmetro people.documentos.campos_criticos.
+const CRITICAL_FIELDS_BY_TYPE = DEFAULT_PARAMS.camposCriticos;
 
-// Campos "críticos" por tipo de documento — Caderno: "CPF/CNPJ, nome, renda, conta e datas
-// críticas exigem validação antes de persistir quando não houver fonte confiável estruturada."
-const CRITICAL_FIELDS_BY_TYPE = {
-  RG: ['name'],
-  CIN: ['name'],
-  CNH: ['name', 'issuedAt', 'expiresAt'],
-  IR: ['name', 'taxId', 'income'],
-  HOLERITE: ['name', 'income'],
-  BANK_STATEMENT: ['name', 'accountNumber'],
-  CPF: ['name', 'taxId'],
-  RG_CPF: ['name', 'taxId'],
-  CNPJ: ['taxId'],
-};
-
-function validateCriticalFields(documentType, fields) {
-  const requiredFields = CRITICAL_FIELDS_BY_TYPE[documentType] || [];
+function validateCriticalFields(documentType, fields, camposCriticos = CRITICAL_FIELDS_BY_TYPE) {
+  const requiredFields = camposCriticos[documentType] || [];
   const missing = requiredFields.filter((field) => fields[field] === undefined || fields[field] === null || fields[field] === '');
   if (missing.length > 0) {
     return { valid: false, missing };
   }
 
   if (fields.taxId) {
+    // Lança AppError (400 formato, 422 dígito verificador) — fail fast, nunca persiste CPF/CNPJ malformado ou com dígito verificador
+    // errado sugerido pela IA como se fosse confirmado (M3-01: a mesma regra do cadastro).
     const digits = onlyDigits(String(fields.taxId));
-    const taxIdType = digits.length === 14 ? 'CNPJ' : 'CPF';
-    // Lança AppError 400 se o formato for inválido — fail fast, nunca persiste CPF/CNPJ malformado
-    // sugerido pela IA como se fosse confirmado.
-    validateDocumentFormat(taxIdType, digits);
+    validateDocumentFormat(digits.length === 14 ? 'CNPJ' : 'CPF', digits);
+    assertValidTaxId(digits.length === 14 ? 'PJ' : 'PF', digits);
   }
 
   if (fields.income !== undefined && (typeof fields.income !== 'number' || Number.isNaN(fields.income) || fields.income < 0)) {
@@ -85,14 +78,15 @@ function validateCriticalFields(documentType, fields) {
 
 /**
  * Motivo de pendência de revisão de uma leitura (null quando a leitura está completa). Usado no envio do documento e na
- * troca do arquivo (personDocumentReplacement.service.js): o arquivo novo passa pela mesma régua.
+ * troca do arquivo (personDocumentReplacement.service.js): o arquivo novo passa pela mesma régua. `params` = parâmetros da empresa.
  */
-function reviewPendingReason(extraction, documentType) {
+function reviewPendingReason(extraction, documentType, params = DEFAULT_PARAMS) {
+  if (extraction.unavailable) return 'Leitura automática indisponível neste servidor: confira os dados no documento original.';
   if (extraction.illegible) return 'Documento ilegível: OCR/IA não conseguiu extrair dados suficientes.';
-  if (extraction.confidence < CONFIDENCE_THRESHOLD) {
-    return `Confiança da extração (${extraction.confidence}) abaixo do mínimo exigido (${CONFIDENCE_THRESHOLD}).`;
+  if (extraction.confidence < params.confiancaMinima) {
+    return `Confiança da extração (${extraction.confidence}) abaixo do mínimo exigido (${params.confiancaMinima}).`;
   }
-  const validation = validateCriticalFields(documentType, extraction.fields || {});
+  const validation = validateCriticalFields(documentType, extraction.fields || {}, params.camposCriticos);
   return validation.valid ? null : `Campos críticos ausentes ou inválidos: ${validation.missing.join(', ')}.`;
 }
 
@@ -136,11 +130,12 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
   }
 
   const tenant = { groupId: groupId || person.groupId, companyId: companyId || person.companyId };
+  const params = await readDocumentParams(tenant, transaction);
+  const engines = resolvePersonDocumentEngines(params); // laboratório só em teste ou com o parâmetro ligado (DI-M3PE-6)
 
   // 1. Antivírus — ANTES de qualquer persistência. Infectado nunca chega a ser gravado
   // (quarentena real, não um aviso depois do fato).
-  const antivirusAdapter = await resolveAntivirusAdapter(tenant, transaction);
-  const scanResult = await antivirusAdapter.scan(buffer);
+  const scanResult = await engines.antivirus.scan(buffer);
   if (!scanResult.clean) {
     throw AppError.unprocessable(
       'Arquivo rejeitado pelo antivírus: assinatura de malware detectada.',
@@ -163,18 +158,18 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
     transaction
   );
 
-  // 3. Classificação — usa o tipo declarado pelo chamador quando informado; sem IA de
-  // classificação de verdade contratada ainda, o fallback é "OTHER" (nunca inventa um tipo).
-  const classifiedType = documentType ? String(documentType).toUpperCase() : 'OTHER';
+  // 3. Classificação (personDocumentClassifier.js): tipo declarado e nome do arquivo antes da leitura, confirmado pelo texto do documento.
+  const previa = classifyBeforeReading({ documentType, fileName }, params.classificacao);
 
-  // 4. OCR/IA — dados sugeridos com source_file_id e confidence.
-  const ocrAdapter = await resolveOcrAdapter(tenant, transaction);
-  const extraction = await ocrAdapter.extract(buffer, classifiedType);
+  // 4. OCR/IA — dados sugeridos com source_file_id e confidence. Sem motor de leitura: nenhum dado, pendência.
+  const extraction = engines.leitor ? await engines.leitor.extract(buffer, previa.tipo) : READING_UNAVAILABLE;
+  const classification = confirmWithText(previa, extraction.text, params.classificacao);
+  const classifiedType = classification.tipo;
 
   // "IA nunca sobrescreve cadastro existente silenciosamente": a versão nasce sempre PENDING; a confirmação humana é
-  // exigida antes de VERIFIED. Ilegível, baixa confiança ou campo crítico ausente abrem pendência de revisão.
+  // exigida antes de VERIFIED. Ilegível, baixa confiança, campo crítico ausente ou tipo não decidido abrem pendência de revisão.
   const verificationStatus = 'PENDING';
-  const pendingReason = reviewPendingReason(extraction, classifiedType);
+  const pendingReason = [classification.pendencia, reviewPendingReason(extraction, classifiedType, params)].filter(Boolean).join(' ') || null;
 
   const personDocument = await PersonDocument.create(
     {
@@ -191,6 +186,8 @@ async function ingestPersonDocument(payload, actorUserId, transaction) {
         confidence: extraction.confidence,
         illegible: !!extraction.illegible,
         extractionMeta: extraction.raw || null,
+        classification: { ...classification, pendencia: classification.pendencia || null },
+        engines: engines.motores,
       },
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,

@@ -1,27 +1,11 @@
 'use strict';
 
 const legalHold = require('../core-governance/data-quality/legalHold.guard');
-const {
-  Person,
-  PersonRole,
-  PersonContact,
-  PersonDocument,
-  PersonAddress,
-  CommunicationConsent,
-  PropertyOwner,
-  Opportunity,
-  Visit,
-  PropertyRadar,
-  Message,
-  ContractParty,
-  Signature,
-  BankAccount,
-  OwnerRepass,
-  MaintenanceCase,
-  AuditLog,
-  Contract: ContractModel,
-} = require('../../models');
+const { Person, ContractParty, AuditLog, Contract: ContractModel } = require('../../models');
+const { remapAllPersonReferences } = require('./personMerge.references');
+const { tenantOf } = require('./personDedup.service');
 const AppError = require('../../utils/AppError');
+const { assertBaseOwner, isLinkedElsewhereError, linkedElsewhereError } = require('./personView');
 const { publishPersonMerged } = require('./personEvents.service');
 
 /**
@@ -73,16 +57,12 @@ const { publishPersonMerged } = require('./personEvents.service');
  * action distinta (`person.merge.reversed_supervised`) para nunca ser confundida com uma
  * operação de usuário comum.
  *
- * Remapeamento de FKs — cobre TODA tabela do schema físico atual com uma coluna apontando para
- * people.persons (auditado em src/models/*.js, não só os módulos com feature/CRUD já
- * construído): person_roles, person_contacts, person_documents, person_addresses,
- * communication_consents, real_estate.property_owners, crm.opportunities, crm.visits,
- * crm.property_radars, crm.messages, legal.contract_parties, legal.signatures,
- * finance.bank_accounts (owner_person_id), finance.owner_repasses (owner_person_id),
- * construction.maintenance_cases (opened_by_person_id). A coluna existir no banco já obriga o
- * remapeamento, independente de já existir uma rota HTTP para aquele módulo — senão o merge
- * deixa dado órfão apontando para a pessoa MERGED. Se um módulo novo adicionar uma FK de pessoa
- * no futuro, ela precisa ser adicionada aqui também.
+ * Remapeamento (M3-04, DI-M3PE-5): personMerge.references.js lê no CATÁLOGO do banco toda chave estrangeira que aponta para
+ * people.persons(id) e remapeia cada uma, mais as referências sem FK da lista fechada e os vínculos de arquivo; a política de cada coluna
+ * está revisada em personMerge.catalog.js e o teste people.merge.referencias falha quando o banco ganha uma FK de pessoa que não está lá.
+ *
+ * Tentativa bloqueada (conflito de CPF/CNPJ, contrato ativo em comum, já mesclada, vínculo em outra empresa, retenção legal, base de
+ * outra empresa): a recusa fica na auditoria (`person.merge.blocked`), gravada mesmo com o rollback da requisição.
  */
 async function assertNoIncompatibleActiveContracts(canonicalId, absorbedId, transaction) {
   if (!ContractModel) return; // modelo ainda não carregado neste ambiente — não bloqueia por omissão de dependência técnica.
@@ -112,10 +92,33 @@ async function assertNoIncompatibleActiveContracts(canonicalId, absorbedId, tran
 }
 
 async function mergePersons(canonicalId, absorbedId, actorUserId, transaction) {
+  const tenant = await tenantOf(transaction);
+  try {
+    return await mergePersonsGuarded(canonicalId, absorbedId, actorUserId, transaction);
+  } catch (err) {
+    auditarBloqueio(err, tenant, { canonicalId, absorbedId, actorUserId }, transaction);
+    throw err;
+  }
+}
+
+/** Recusa de negócio (4xx) do merge: entra na auditoria depois do rollback (tenant.middleware, afterRollbackAudits). */
+function auditarBloqueio(err, tenant, { canonicalId, absorbedId, actorUserId }, transaction) {
+  if (!err || !err.statusCode || err.statusCode >= 500 || !tenant.companyId) return;
+  transaction.afterRollbackAudits = [...(transaction.afterRollbackAudits || []), {
+    groupId: tenant.groupId, companyId: tenant.companyId, actorUserId, action: 'person.merge.blocked', entityType: 'Person', entityId: canonicalId || null,
+    afterJson: { canonicalId, absorbedId, codigo: err.code }, reason: `Mesclagem recusada: ${err.message}`,
+  }];
+}
+
+async function mergePersonsGuarded(canonicalId, absorbedId, actorUserId, transaction) {
   await legalHold.assertNoneOnHold('PERSON', [canonicalId, absorbedId].filter(Boolean), transaction); // M9-D912: união destrutiva recusada em registro sob retenção legal
+  // DI-M9I-3: mesclar altera o cadastro base; só a empresa responsável pelas DUAS bases mescla (a vinculada recebe 403 claro).
+  const vistas = await Person.findAll({ where: { id: [canonicalId, absorbedId].filter(Boolean) }, attributes: ['id', 'companyId'], transaction });
+  for (const pessoa of vistas) await assertBaseOwner(pessoa, transaction);
   try {
     return await mergePersonsInner(canonicalId, absorbedId, actorUserId, transaction);
   } catch (err) {
+    if (isLinkedElsewhereError(err)) throw linkedElsewhereError();
     // Rede de segurança (auditoria externa, 14/10/2026): qualquer violação de unicidade do
     // Postgres NÃO prevista pelas checagens específicas acima (ex.: uma constraint nova
     // adicionada no futuro em alguma das tabelas remapeadas) não deve nunca vazar como "erro
@@ -123,7 +126,8 @@ async function mergePersons(canonicalId, absorbedId, actorUserId, transaction) {
     if (err?.name === 'SequelizeUniqueConstraintError' || err?.original?.code === '23505') {
       throw AppError.unprocessable(
         'Não foi possível concluir a mesclagem: um dos dados vinculados às duas pessoas entra em conflito ao ser unificado (ex.: mais de um endereço atual ou documento na mesma versão). Revise os cadastros e tente novamente.',
-        'PERSON_MERGE_UNIQUE_CONFLICT'
+        'PERSON_MERGE_UNIQUE_CONFLICT',
+        { constraint: (err.original && err.original.constraint) || (err.parent && err.parent.constraint) || null }
       );
     }
     throw err;
@@ -193,93 +197,9 @@ async function mergePersonsInner(canonicalId, absorbedId, actorUserId, transacti
   // ambas, não só os ids/status.
   const beforeJson = { canonical: canonical.toJSON(), absorbed: absorbed.toJSON() };
 
-  // Remapeamento de FKs — todas as linhas do absorvido passam a apontar para o canônico.
-  // `remappedReferences` acumula quantas linhas foram afetadas por tabela — é o "mapa de
-  // referências" exigido pelo passo 8 do Caderno.
-  const remappedReferences = {};
-
-  async function remapAndCount(key, Model, where) {
-    if (!Model) return;
-    const [count] = await Model.update({ personId: canonicalId }, { where, transaction });
-    remappedReferences[key] = count;
-  }
-
-  await remapAndCount('people.person_roles', PersonRole, { personId: absorbedId });
-  await remapAndCount('people.person_contacts', PersonContact, { personId: absorbedId });
-
-  // BUG REAL CORRIGIDO (auditoria externa, 14/10/2026): mesclar dois cadastros GENUINAMENTE
-  // duplicados (ambos com documentos/endereço reais, caso para o qual o merge existe) falhava
-  // com "violação de restrição de unicidade" crua do Postgres. Causa raiz: duas constraints
-  // únicas parciais/compostas que o remapeamento ingênuo (só trocar person_id) não respeitava:
-  //   - person_addresses_one_current_per_person_uk: no máximo 1 endereço is_current=true por
-  //     pessoa (migration 20260101000174). Se as duas pessoas tinham endereço atual, o
-  //     remapeamento criava 2 linhas is_current=true para o mesmo canônico.
-  //   - person_documents_person_id_document_type_version_no_key: unique(person_id,
-  //     document_type, version_no) (migration 20260101000086). Se as duas pessoas tinham
-  //     documento do mesmo tipo na mesma versão (ex.: ambas na v1), o remapeamento colidia.
-  // Fix: antes de remapear, resolver o conflito (demover o endereço atual duplicado; renumerar
-  // a versão do documento duplicado) em vez de deixar o banco recusar a operação inteira.
-  if (PersonDocument) {
-    const absorbedDocs = await PersonDocument.findAll({ where: { personId: absorbedId }, transaction });
-    for (const doc of absorbedDocs) {
-      const clash = await PersonDocument.findOne({
-        where: { personId: canonicalId, documentType: doc.documentType, versionNo: doc.versionNo },
-        transaction,
-      });
-      if (clash) {
-        const maxVersion = await PersonDocument.max('versionNo', {
-          where: { personId: canonicalId, documentType: doc.documentType },
-          transaction,
-        });
-        doc.versionNo = (maxVersion || 0) + 1;
-        await doc.save({ transaction });
-      }
-    }
-  }
-  await remapAndCount('people.person_documents', PersonDocument, { personId: absorbedId });
-
-  if (PersonAddress) {
-    const canonicalHasCurrent = await PersonAddress.findOne({
-      where: { personId: canonicalId, isCurrent: true },
-      transaction,
-    });
-    if (canonicalHasCurrent) {
-      // O canônico já tem um endereço "atual" — o do absorvido não pode continuar marcado
-      // como atual depois do remapeamento (violaria o índice único parcial). Mantém o
-      // histórico (não apaga a linha), só deixa de ser o endereço corrente.
-      await PersonAddress.update(
-        { isCurrent: false },
-        { where: { personId: absorbedId, isCurrent: true }, transaction }
-      );
-    }
-  }
-  await remapAndCount('people.person_addresses', PersonAddress, { personId: absorbedId });
-  await remapAndCount('people.communication_consents', CommunicationConsent, { personId: absorbedId });
-  await remapAndCount('real_estate.property_owners', PropertyOwner, { personId: absorbedId });
-  // crm.opportunities / crm.visits / crm.property_radars já existem e referenciam person_id
-  // diretamente (Marco 3, não é módulo futuro) — remapear é obrigatório para o merge não deixar
-  // oportunidades/visitas/radares órfãos apontando para a pessoa MERGED.
-  await remapAndCount('crm.opportunities', Opportunity, { personId: absorbedId });
-  await remapAndCount('crm.visits', Visit, { personId: absorbedId });
-  await remapAndCount('crm.property_radars', PropertyRadar, { personId: absorbedId });
-  await remapAndCount('crm.messages', Message, { personId: absorbedId });
-  // Tabelas com FK de pessoa já existentes no schema físico (Marco 1&2), ainda sem
-  // feature/CRUD próprio construído — a coluna existe no banco, então precisa ser remapeada
-  // igual, senão o merge deixa dado órfão silenciosamente.
-  await remapAndCount('legal.contract_parties', ContractParty, { personId: absorbedId });
-  await remapAndCount('legal.signatures', Signature, { personId: absorbedId });
-  if (BankAccount) {
-    const [count] = await BankAccount.update({ ownerPersonId: canonicalId }, { where: { ownerPersonId: absorbedId }, transaction });
-    remappedReferences['finance.bank_accounts'] = count;
-  }
-  if (OwnerRepass) {
-    const [count] = await OwnerRepass.update({ ownerPersonId: canonicalId }, { where: { ownerPersonId: absorbedId }, transaction });
-    remappedReferences['finance.owner_repasses'] = count;
-  }
-  if (MaintenanceCase) {
-    const [count] = await MaintenanceCase.update({ openedByPersonId: canonicalId }, { where: { openedByPersonId: absorbedId }, transaction });
-    remappedReferences['construction.maintenance_cases'] = count;
-  }
+  // Passo 5: TODAS as referências do absorvido passam ao canônico (FKs do catálogo do banco, as sem FK da lista fechada e os arquivos),
+  // com o "mapa de referências" do passo 8. Ver personMerge.references.js e a lista revisada em personMerge.catalog.js (M3-04, DI-M3PE-5).
+  const { remapeadas: remappedReferences, naoRevisadas } = await remapAllPersonReferences(canonicalId, absorbedId, actorUserId, transaction);
 
   absorbed.status = 'MERGED';
   absorbed.mergedIntoId = canonicalId;
@@ -300,7 +220,7 @@ async function mergePersonsInner(canonicalId, absorbedId, actorUserId, transacti
       entityType: 'Person',
       entityId: canonicalId,
       beforeJson,
-      afterJson: { canonicalId, absorbedId, absorbedStatus: 'MERGED', remappedReferences },
+      afterJson: { canonicalId, absorbedId, absorbedStatus: 'MERGED', remappedReferences, ...(naoRevisadas.length ? { naoRevisadas } : {}) },
       occurredAt: new Date(),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,

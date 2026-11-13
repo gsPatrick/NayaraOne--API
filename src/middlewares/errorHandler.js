@@ -148,6 +148,10 @@ async function tratarErro(err, req, res) {
   const marketingMapped = mapMarketingDatabaseError(err);
   if (marketingMapped) return failure(res, marketingMapped);
 
+  // DI-M9I-6/7: base de pessoa com vínculo em outra empresa (409) e dado filho de pessoa não vinculada à empresa (403).
+  const peopleLinkMapped = require('../features/people/personView').mapPeopleLinkDatabaseError(err);
+  if (peopleLinkMapped) return failure(res, peopleLinkMapped);
+
   const rlsMapped = mapRlsViolation(err);
   if (rlsMapped) {
     logger.warn({ ...context, code: rlsMapped.code, statusCode: rlsMapped.statusCode, table: err.parent.table || null }, '[RLS] gravação fora do escopo da empresa recusada');
