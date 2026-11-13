@@ -9,7 +9,7 @@ const auditRouter = Router();
 
 auditRouter.use(authMiddleware, tenantMiddleware);
 
-auditRouter.get('/audit-log', requirePermission('audit:read'), auditController.list);
+auditRouter.get('/audit-log', requirePermission('audit:read'), require('./audit.query.schema').validarListagemDaAuditoria, auditController.list);
 auditRouter.get('/audit-log/:id', requirePermission('audit:read'), auditController.getOne);
 
 module.exports = auditRouter;

@@ -19,7 +19,7 @@ function parseDate(value, field) {
 function parsePositive(value, field) {
   if (value === undefined || value === null || value === '') return null;
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 1) throw filterInvalid(`Informe ${field} como número inteiro maior que zero.`, { field });
+  if (!Number.isSafeInteger(n) || n < 1) throw filterInvalid(`Informe ${field} como número inteiro maior que zero.`, { field });
   return n;
 }
 

@@ -46,7 +46,7 @@ const checkRejectReason = catchAsync(async (req, res, next) => {
 
 /** GET /v1/ai/recommendations[/:id] e a conferência do motivo em POST .../reject (no router de /v1/ai, que já autentica e abre o tenant). */
 function registerRecommendationRoutes(router) {
-  router.get('/ai/recommendations', anyOf('ai:read', 'ai:audit'), gate, list);
+  router.get('/ai/recommendations', anyOf('ai:read', 'ai:audit'), gate, require('./recommendation.query.schema').validarListagemDeRecomendacoes, list);
   router.get('/ai/recommendations/:id', anyOf('ai:read', 'ai:audit'), gate, getOne);
   router.post('/ai/recommendations/:id/reject', requirePermission('ai:approve'), gate, checkRejectReason);
 }

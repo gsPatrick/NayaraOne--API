@@ -9,7 +9,7 @@ const c = require('./releaseGates.controller');
  * (aiGate): as aprovações existem ANTES de a NAY ser ligada em produção.
  */
 function registerReleaseGateRoutes(router) {
-  router.get('/ai/release-gates', requirePermission(PERMISSION), c.list);
+  router.get('/ai/release-gates', requirePermission(PERMISSION), require('./releaseGates.query.schema').validarListagemDeAprovacoes, c.list);
   router.post('/ai/release-gates', requirePermission(PERMISSION), c.create);
 }
 

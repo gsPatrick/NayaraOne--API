@@ -145,4 +145,8 @@ router.use('/v1', billingRouter);
 router.use('/v1', settingsRouter);
 router.use('/v1', filesRouter);
 
+// Rodada 8 da verificação do Marco 9 (DI-M9R-24): contrato da consulta em TODAS as rotas montadas acima (valores em texto, lista só onde a rota
+// declara, paginação inteira numa faixa segura), conferido logo antes do controller de cada rota.
+require('../shared/validation/queryContract.apply').aplicarContratoDaConsulta(router);
+
 module.exports = router;

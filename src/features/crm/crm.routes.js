@@ -25,11 +25,11 @@ crmRouter.get('/crm/proposals/:id', requirePermission('crm:proposals:read'), crm
 crmRouter.patch('/crm/proposals/:id/status', requirePermission('crm:proposals:update'), crmController.updateProposalStatus);
 
 // --- Painel de indicadores (M3-17) ---
-crmRouter.get('/crm/dashboard', requirePermission('crm:dashboard:read'), crmController.getDashboard);
+crmRouter.get('/crm/dashboard', requirePermission('crm:dashboard:read'), require('./dashboard.query.schema').validarConsultaDoPainel, crmController.getDashboard);
 
 // --- Reclamações, elogios e conflitos (M3-20) ---
 crmRouter.post('/crm/feedback-cases', requirePermission('crm:feedback:create'), crmController.createFeedbackCase);
-crmRouter.get('/crm/feedback-cases', requirePermission('crm:feedback:read'), crmController.listFeedbackCases);
+crmRouter.get('/crm/feedback-cases', requirePermission('crm:feedback:read'), require('./feedbackCases.schema').validarListagemDeCasos, crmController.listFeedbackCases);
 crmRouter.get('/crm/feedback-cases/:id', requirePermission('crm:feedback:read'), crmController.getFeedbackCase);
 crmRouter.patch('/crm/feedback-cases/:id/resolve', requirePermission('crm:feedback:update'), crmController.resolveFeedbackCase);
 crmRouter.patch('/crm/feedback-cases/:id/escalate', requirePermission('crm:feedback:update'), crmController.escalateFeedbackCase);

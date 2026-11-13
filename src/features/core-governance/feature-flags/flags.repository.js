@@ -96,6 +96,8 @@ const listVersions = (tenant, kind, id, transaction) => q(
 
 /** Lista as chaves da empresa nas duas tabelas, com filtros opcionais. */
 async function list(tenant, filter, transaction) {
+  // Rodada 8 (DI-M9R-24): tipo fora da lista branca é recusado aqui também (antes virava o nome `undefined` da tabela no SQL).
+  if (filter.kind && !Object.prototype.hasOwnProperty.call(TABLES, filter.kind)) throw require('./flags.errors').inputInvalid('O tipo da chave deve ser FLAG ou CONFIG.', { fields: ['kind'] });
   const kinds = filter.kind ? [filter.kind] : Object.keys(TABLES);
   const out = [];
   for (const kind of kinds) {

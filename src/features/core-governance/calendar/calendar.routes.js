@@ -4,6 +4,7 @@ const { buildModuleRouter } = require('../governance.module');
 const { GOVERNANCE_MODULES } = require('../governance.settings');
 const controller = require('./calendar.controller');
 const commitments = require('./commitments.controller');
+const { declararConsulta } = require('../../../shared/validation/queryContract');
 
 const MODULE = GOVERNANCE_MODULES.find((item) => item.code === 'calendar');
 const READ = 'governance:calendar:read';
@@ -11,7 +12,8 @@ const READ = 'governance:calendar:read';
 // GET /calendar e compromissos avulsos (origem do tipo COMMITMENT). PATCH, PUT e DELETE em /calendar/items/:id viram 404 padronizado:
 // item do calendário é derivado, não editável (M9-D801 §4).
 const router = buildModuleRouter(MODULE, [
-  { method: 'get', path: '/calendar', permission: READ, handler: controller.list },
+  // M9-D801 §3.5: sourceType e status aceitam o parâmetro repetido (lista), declarado no contrato da consulta (DI-M9R-24).
+  { method: 'get', path: '/calendar', permission: READ, after: [declararConsulta({ listas: ['sourceType', 'status'] })], handler: controller.list },
   { method: 'post', path: '/calendar/commitments', permission: READ, handler: commitments.create },
   { method: 'get', path: '/calendar/commitments/:id', permission: READ, handler: commitments.get },
   { method: 'patch', path: '/calendar/commitments/:id', permission: READ, handler: commitments.patch },

@@ -41,8 +41,8 @@ function parseListFilters(raw, limits = { standard: 50, max: 200 }) {
   if (f.channel && !TEMPLATE_CHANNELS.includes(f.channel)) throw invalidInput(`O canal deve ser um de: ${TEMPLATE_CHANNELS.join(', ')}.`);
   const page = f.page === undefined ? 1 : Number(f.page);
   const requested = f.pageSize === undefined ? limits.standard : Number(f.pageSize);
-  if (!Number.isInteger(page) || page < 1) throw invalidInput('A página deve ser um inteiro maior que zero.');
-  if (!Number.isInteger(requested) || requested < 1) throw invalidInput('O tamanho da página deve ser um inteiro maior que zero.');
+  if (!Number.isSafeInteger(page) || page < 1) throw invalidInput('A página deve ser um inteiro maior que zero.');
+  if (!Number.isSafeInteger(requested) || requested < 1) throw invalidInput('O tamanho da página deve ser um inteiro maior que zero.');
   const pageSize = Math.min(requested, limits.max); // como a lista de publicações: acima do máximo vale o máximo
   return { code: f.code || null, status: f.status || null, channel: f.channel || null, page, pageSize };
 }

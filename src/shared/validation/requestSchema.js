@@ -3,6 +3,7 @@
 const Ajv = require('ajv');
 const AppError = require('../../utils/AppError');
 const { isStorableText } = require('../../utils/storableText');
+const { dataIsoValida } = require('../../utils/isoDate');
 
 /**
  * Validação de TIPO na porta de uma rota, pelo esquema da rota (verificação independente do Marco 9, rodada 7, 12/11/2026; DI-M9R-21).
@@ -29,6 +30,14 @@ ajv.addKeyword('maxCaracteres', {
   errors: false,
 });
 
+/**
+ * Data em texto que o servidor e o banco leem do mesmo jeito (rodada 8, DI-M9R-25). O Sequelize converte o texto do campo de data num objeto Date;
+ * texto que não é data vira "Invalid date" no comando, e o banco recusa um valor que NÃO está no pedido (sem prova de que é do cliente, o erro seria
+ * 500). Por isso a data é conferida na porta: vazio ('') passa (o serviço trata como "sem data"); o resto tem de ser ISO 8601 válida
+ * (src/utils/isoDate.js).
+ */
+ajv.addKeyword('dataLegivel', { type: 'string', metaSchema: { type: 'boolean' }, validate: (ativo, valor) => !ativo || valor.trim() === '' || dataIsoValida(valor), errors: false });
+
 const UUID_PATTERN = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
 const NOME_DA_PARTE = Object.freeze({ body: 'corpo do pedido', query: 'consulta', params: 'caminho' });
 
@@ -48,10 +57,11 @@ function descrever(erro, schema, parte) {
 }
 
 /** Esquema compilado de cada parte. `codigo` é o código de erro do módulo. */
-function compilarRota(partes, codigo) {
+function compilarRota(partes, codigo, { status = 400 } = {}) {
   if (!codigo) throw new Error('Esquema de rota sem código de erro');
   return {
     codigo,
+    status,
     partes: Object.fromEntries(Object.entries(partes).map(([parte, schema]) => [parte, { schema, valida: ajv.compile(schema) }])),
   };
 }
@@ -66,17 +76,20 @@ function conferirPedido(rota, req) {
     const problemas = item.valida.errors.map((e) => descrever(e, item.schema, parte));
     const vistos = new Map();
     for (const p of problemas) if (!vistos.has(p.campo)) vistos.set(p.campo, p.mensagem);
-    throw AppError.badRequest(problemas[0].mensagem, rota.codigo, {
+    throw new AppError(problemas[0].mensagem, rota.status || 400, rota.codigo, {
       fields: [...vistos.keys()],
       problems: [...vistos.entries()].map(([field, message]) => ({ field, message })),
     });
   }
 }
 
-/** Middleware: `router.post('/people', requirePermission(...), validarEntrada({ body: ESQUEMA }, 'PERSON_VALIDATION'), controller)`. */
-function validarEntrada(partes, codigo) {
-  const rota = compilarRota(partes, codigo);
-  return (req, _res, next) => {
+/**
+ * Middleware: `router.post('/people', requirePermission(...), validarEntrada({ body: ESQUEMA }, 'PERSON_VALIDATION'), controller)`. `opcoes.status`:
+ * o status da recusa quando o módulo usa outro que não 400 (o registro de flags da governança usa 422).
+ */
+function validarEntrada(partes, codigo, opcoes) {
+  const rota = compilarRota(partes, codigo, opcoes);
+  const middleware = (req, _res, next) => {
     try {
       conferirPedido(rota, req);
       return next();
@@ -84,7 +97,23 @@ function validarEntrada(partes, codigo) {
       return next(err);
     }
   };
+  // Rodada 8 (DI-M9R-24): os campos da consulta do tipo `array` são os que o contrato da consulta (queryContract.js) aceita como lista nesta rota.
+  const props = (partes.query && partes.query.properties) || {};
+  middleware.listasDaConsulta = Object.keys(props).filter((k) => [].concat(props[k].type || []).includes('array'));
+  return middleware;
 }
+
+/** Parâmetro de consulta em texto: `opcoes` = { max, enum, pattern, descricao } (a consulta chega sempre como texto, nunca número). */
+const textoDaConsulta = ({ max = 200, valores = null, padrao = null, descricao = null } = {}) => ({
+  type: 'string',
+  textoGravavel: true,
+  maxCaracteres: max,
+  ...(valores ? { enum: valores } : {}),
+  ...(padrao ? { pattern: padrao } : {}),
+  descricao: descricao || (valores ? `um destes valores: ${valores.join(', ')}` : `um texto de até ${max} caracteres`),
+});
+/** Inteiro em texto (paginação e tamanhos): só dígitos, até `maxDigitos`. */
+const inteiroDaConsulta = ({ maxDigitos = 9 } = {}) => ({ type: 'string', pattern: `^\\d{1,${maxDigitos}}$`, descricao: 'um número inteiro (só dígitos)' });
 
 // --- Peças dos esquemas ---
 
@@ -103,7 +132,7 @@ const identificador = ({ nulo = true, vazio = true } = {}) => ({
   descricao: 'um identificador (UUID) em texto',
 });
 /** Data ou data e hora em texto (o banco confere o formato; aqui só o tipo e um tamanho razoável). */
-const dataEmTexto = ({ nulo = true } = {}) => ({ type: nulo ? ['string', 'null'] : 'string', maxLength: 64, textoGravavel: true, descricao: 'uma data em texto (AAAA-MM-DD ou data e hora ISO)' });
+const dataEmTexto = ({ nulo = true } = {}) => ({ type: nulo ? ['string', 'null'] : 'string', maxLength: 64, textoGravavel: true, dataLegivel: true, descricao: 'uma data em texto (AAAA-MM-DD ou data e hora ISO)' });
 const numeroOuTexto = ({ nulo = true } = {}) => ({ type: nulo ? ['number', 'string', 'null'] : ['number', 'string'], maxLength: 64, descricao: 'um número' });
 const booleano = ({ nulo = true } = {}) => ({ type: nulo ? ['boolean', 'null'] : 'boolean', descricao: 'verdadeiro ou falso' });
 const objeto = ({ nulo = true } = {}) => ({ type: nulo ? ['object', 'null'] : 'object', descricao: 'um objeto JSON' });
@@ -125,4 +154,5 @@ ajv.addKeyword('coluna', { metaSchema: { type: 'string' } });
 module.exports = {
   validarEntrada, compilarRota, conferirPedido,
   objetoAberto, texto, textoDoModelo, tamanhoDaColuna, identificador, dataEmTexto, numeroOuTexto, booleano, objeto, lista, UUID_PATTERN,
+  textoDaConsulta, inteiroDaConsulta,
 };

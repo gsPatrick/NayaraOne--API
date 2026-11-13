@@ -16,7 +16,7 @@ const writers = anyOf('ai:use', 'ai:admin');
  */
 function registerMemoryRoutes(router) {
   const base = '/ai/memories';
-  router.get(base, readers, gate, c.list);
+  router.get(base, readers, gate, require('./memory.query.schema').validarListagemDeMemorias, c.list);
   router.post(base, writers, gate, c.create);
   router.get(`${base}/:id`, readers, gate, c.getOne);
   router.post(`${base}/:id/invalidate`, writers, gate, c.invalidate);

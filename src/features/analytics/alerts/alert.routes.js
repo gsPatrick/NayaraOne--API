@@ -9,13 +9,15 @@ const catchAsync = require('../../../utils/catchAsync');
 const { success } = require('../../../utils/httpResponse');
 const { P } = require('../security/permissionCatalog');
 const { requireAnalyticsPermission } = require('../security/permissionGuard');
+const { declararConsulta } = require('../../../shared/validation/queryContract');
 const { listAlerts } = require('./list.service');
 const { acknowledgeAlert } = require('./ack.service');
 
 const ctxOf = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId, actorUserId: req.auth.userId, permissions: req.auth.permissions });
 
 function registerAlertRoutes(router) {
-  router.get('/analytics/alerts', requireAnalyticsPermission(P.READ), catchAsync(async (req, res) => {
+  // M9-D703: `status` aceita o parâmetro repetido (lista), declarado no contrato da consulta (DI-M9R-24).
+  router.get('/analytics/alerts', requireAnalyticsPermission(P.READ), declararConsulta({ listas: ['status'] }), catchAsync(async (req, res) => {
     const data = await req.withTenantTransaction((tx) => listAlerts(ctxOf(req), req.query, tx));
     return success(res, { data });
   }));
