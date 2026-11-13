@@ -24,7 +24,7 @@ const { revokeMatviewSql } = require('./lib/runtimeNoMatview');
 const ROLE = 'nayara_runtime';
 const SIMULAR = process.argv.includes('--simular');
 
-// Mesmos revokes das migrations 490, 640, 641, 643 e 644. TRUNCATE/TRIGGER/REFERENCES (282-284) nunca são concedidos aqui.
+// Mesmos revokes das migrations 490, 640, 641, 643, 644 e 10311. TRUNCATE/TRIGGER/REFERENCES (282-284) nunca são concedidos aqui.
 const REVOKES = [
   'REVOKE UPDATE, DELETE, TRUNCATE ON "audit"."audit_log" FROM %ROLE%',
   'REVOKE UPDATE, DELETE ON "correspondent"."provider_status_history" FROM %ROLE%',
@@ -32,6 +32,8 @@ const REVOKES = [
   'REVOKE UPDATE, DELETE ON "correspondent"."accounting_export_lines", "correspondent"."dimob_records", "correspondent"."invoice_events" FROM %ROLE%',
   'REVOKE DELETE ON "correspondent"."commission_entitlements" FROM %ROLE%',
   'REVOKE DELETE ON "correspondent"."dimob_batches", "correspondent"."accounting_export_batches", "correspondent"."accounting_return_imports", "correspondent"."invoice_requests" FROM %ROLE%',
+  // Marco 3, M3-08: histórico de preço append-only (migration 20260101010311).
+  'REVOKE UPDATE, DELETE, TRUNCATE ON "real_estate"."property_price_history" FROM %ROLE%',
 ];
 
 (async () => {

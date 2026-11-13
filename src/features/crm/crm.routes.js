@@ -9,6 +9,7 @@ const { requireOpportunityInScope } = require('./opportunityScope.guard');
 const carteira = require('./carteira/carteira.guard');
 const ownerChange = require('./carteira/ownerChange.controller');
 require('./financingStatus.consumer'); // CAD-09: status do financiamento atualiza a oportunidade por evento
+const cartsView = require('./cartsView.controller');
 
 const crmRouter = Router();
 
@@ -87,6 +88,7 @@ crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update')
 // opportunities (sem permissão nova 'crm:carts:*' — migrations de DDL/seed bloqueadas nesta
 // sessão, ver nota em carts.service.js/propertyMerge.service.js).
 crmRouter.post('/opportunities/:id/carts', requirePermission('crm:opportunities:update'), crmController.createCart);
+crmRouter.get('/opportunities/:id/carts', requirePermission('crm:opportunities:read'), cartsView.listCarts); // tela do carrinho (§14)
 crmRouter.patch('/carts/:cartId/items', requirePermission('crm:opportunities:update'), crmController.updateCartItems);
 crmRouter.post('/carts/:cartId/share-link', requirePermission('crm:opportunities:update'), crmController.generateCartShareLink);
 

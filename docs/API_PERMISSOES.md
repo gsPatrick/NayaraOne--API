@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 869. Rotas só com login ou públicas: 44.
+Rotas com permissão exigida: 870. Rotas só com login ou públicas: 44.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -723,6 +723,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/migration/rollback-report` | `governance:migration:admin` | não |
 | `POST` | `/api/v1/migration/runs` | `governance:migration:run` | não |
 | `POST` | `/api/v1/offers/:id/publish` | `properties:update` | não |
+| `GET` | `/api/v1/opportunities/:id/carts` | `crm:opportunities:read` | não |
 | `POST` | `/api/v1/opportunities/:id/carts` | `crm:opportunities:update` | não |
 | `GET` | `/api/v1/opportunities/:id/tasks` | `crm:tasks:read` | não |
 | `POST` | `/api/v1/opportunities/:id/tasks` | `crm:tasks:create` | não |

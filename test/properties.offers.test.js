@@ -6,48 +6,15 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
-const { PropertyPriceHistory, PropertyMedia, PropertyDocument } = require('../src/models');
+const { PropertyPriceHistory } = require('../src/models');
 
-// seedVideo também satisfaz REG-IMO-PHOTO-MIN (3 fotos aprovadas) e REG-IMO-DOCS-001
-// (matrícula + IPTU) além do vídeo — os três gates de publish.service.js/properties.service.js.
+// seedVideo deixa o imóvel cumprindo o gate de publicação inteiro (verificação de 11/11/2026): vídeo e 3 fotos com arquivo e
+// APROVADOS, matrícula e IPTU com arquivo, endereço completo e proprietário (test/helpers/m3imPublicavel.js).
+const { tornarPublicavel, ENDERECO } = require('./helpers/m3imPublicavel');
+
 async function seedVideo(property, tenant, transaction) {
-  await PropertyMedia.create(
-    {
-      groupId: property.groupId,
-      companyId: property.companyId,
-      propertyId: property.id,
-      mediaType: 'VIDEO',
-      storageKey: `offers-test-video-${property.id}.mp4`,
-      originalName: 'video.mp4',
-      createdBy: tenant.userId,
-      updatedBy: tenant.userId,
-    },
-    { transaction }
-  );
-  for (let i = 0; i < 3; i += 1) {
-    await PropertyMedia.create(
-      {
-        groupId: property.groupId,
-        companyId: property.companyId,
-        propertyId: property.id,
-        mediaType: 'PHOTO',
-        qualityStatus: 'APPROVED',
-        storageKey: `offers-test-photo-${property.id}-${i}.jpg`,
-        originalName: `foto-${i}.jpg`,
-        createdBy: tenant.userId,
-        updatedBy: tenant.userId,
-      },
-      { transaction }
-    );
-  }
-  await PropertyDocument.create(
-    { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'REGISTRY', valueNumber: `MAT-${property.id}`, createdBy: tenant.userId, updatedBy: tenant.userId },
-    { transaction }
-  );
-  await PropertyDocument.create(
-    { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'IPTU', valueNumber: `IPTU-${property.id}`, createdBy: tenant.userId, updatedBy: tenant.userId },
-    { transaction }
-  );
+  await property.update(ENDERECO, { transaction });
+  await tornarPublicavel(tenant, transaction, property, { oferta: false });
 }
 
 let tenant;
@@ -219,9 +186,13 @@ test('offers: publicar um imóvel que ainda tem outra offer ACTIVE do mesmo tipo
     await seedVideo(property, tenant, transaction);
     await propertiesService.updateProperty(property.id, { publicationStatus: 'PUBLISHED' }, tenant.userId, transaction, tenant);
 
-    // Tentar "reencerrar" a offer1 (já SUPERSEDED, nunca foi a ACTIVE vigente nesta chamada)
-    // não pode mexer na publicação, porque offer2 continua ACTIVE sustentando ela.
-    await offersService.updateOffer(property.id, offer1.id, { status: 'CLOSED' }, tenant.userId, transaction);
+    // Tentar "reencerrar" a offer1 (já SUPERSEDED, nunca foi a ACTIVE vigente nesta chamada) não pode mexer na publicação,
+    // porque offer2 continua ACTIVE sustentando ela. Desde a verificação de 11/11/2026 (M3-07) a SUPERSEDED é final: a
+    // alteração é recusada e nada muda.
+    await assert.rejects(
+      () => offersService.updateOffer(property.id, offer1.id, { status: 'CLOSED' }, tenant.userId, transaction),
+      (err) => { assert.equal(err.code, 'PROPERTY_OFFER_SUPERSEDED_FINAL'); return true; }
+    );
 
     const propertyAfter = await propertiesService.getProperty(property.id, transaction);
     assert.equal(propertyAfter.publicationStatus, 'PUBLISHED', 'não pode despublicar enquanto ainda existe outra offer ACTIVE (offer2)');

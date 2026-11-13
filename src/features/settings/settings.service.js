@@ -68,6 +68,8 @@ const { QUARANTINE_SETTINGS_SCHEMA } = require('../files/quarantine/quarantine.s
 const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
+const { PROPERTY_PUBLICATION_SETTINGS_SCHEMA } = require('../properties/propertyPublication.settings');
+const { CART_SETTINGS_SCHEMA } = require('../crm/carts.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
 const { MESSAGING_SETTINGS_SCHEMA } = require('../crm/messaging/messaging.settings');
 const { CARTEIRA_SETTINGS_SCHEMA } = require('../crm/carteira/carteira.settings');
@@ -344,6 +346,9 @@ const SETTINGS_SCHEMA = {
   ...MINIMIZATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D231 — publicação do site e dos portais: raio da coordenada aproximada (até 300 m).
   ...PUBLICATION_SETTINGS_SCHEMA,
+  // Marco 3 §7 e §14 (verificação de 11/11/2026): documentos e campos obrigatórios do gate de publicação e validade do link do carrinho.
+  ...PROPERTY_PUBLICATION_SETTINGS_SCHEMA,
+  ...CART_SETTINGS_SCHEMA,
   // Marco 9, M9-D209 — contrato de adapters: tempo do teste de saúde e das chamadas de leitura e escrita ao fornecedor.
   ...ADAPTERS_SETTINGS_SCHEMA,
   // Marco 9, M9-D229 — mensageria do CRM: código do país do telefone E.164 e prazo da primeira ação do lead provisório.

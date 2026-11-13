@@ -13,6 +13,14 @@ const documentsService = require('./propertyDocuments.service');
 const priceHistoryService = require('./propertyPriceHistory.service');
 const publishService = require('./publish.service');
 
+// Preço mínimo confidencial da oferta: só com a permissão específica (M3-07, DI-M3IM-4).
+const confidentialOptions = (req) => {
+  const canSee = (req.auth.permissions || []).includes(offersService.CONFIDENTIAL_PERMISSION);
+  return { revealConfidential: canSee, canSeeConfidential: canSee };
+};
+// Quem age: o vínculo de arquivo confere a leitura do arquivo com as permissões da sessão (fileAccess.assertCanAttachFiles).
+const actorOf = (req) => ({ auth: req.auth, actorUserId: req.auth.userId });
+
 // --- Properties ---
 
 // CRMX-010 ("imóvel semelhante exige revisão"): a checagem de endereço parecido NÃO bloqueia
@@ -27,7 +35,7 @@ const create = catchAsync(async (req, res) => {
       { groupId: payload.groupId, ...addressInput },
       transaction
     );
-    const createdProperty = await propertiesService.createProperty(payload, req.auth.userId, transaction);
+    const createdProperty = await propertiesService.createProperty(payload, req.auth.userId, transaction, req.auth);
     return { property: createdProperty, similarPropertyWarnings: warnings };
   });
   return success(res, { statusCode: 201, data: property, meta: { similarPropertyWarnings } });
@@ -42,19 +50,19 @@ const list = catchAsync(async (req, res) => {
       propertyType: req.query.propertyType,
       publicationStatus: req.query.publicationStatus,
       availabilityStatus: req.query.availabilityStatus,
-    })
+    }, confidentialOptions(req))
   );
   return success(res, { data: properties });
 });
 
 const getOne = catchAsync(async (req, res) => {
-  const property = await req.withTenantTransaction((transaction) => propertiesService.getProperty(req.params.id, transaction));
+  const property = await req.withTenantTransaction((transaction) => propertiesService.getProperty(req.params.id, transaction, confidentialOptions(req)));
   return success(res, { data: property });
 });
 
 const update = catchAsync(async (req, res) => {
   const property = await req.withTenantTransaction((transaction) =>
-    propertiesService.updateProperty(req.params.id, req.body, req.auth.userId, transaction, req.auth)
+    propertiesService.updateProperty(req.params.id, req.body, req.auth.userId, transaction, req.auth, confidentialOptions(req))
   );
   return success(res, { data: property });
 });
@@ -89,7 +97,7 @@ const updateOwner = catchAsync(async (req, res) => {
 
 const removeOwner = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((transaction) =>
-    ownersService.deleteOwner(req.params.id, req.params.ownerId, req.auth.userId, transaction, req.body && req.body.changeEvidence)
+    ownersService.deleteOwner(req.params.id, req.params.ownerId, req.auth.userId, transaction, req.body && req.body.changeEvidence, req.auth)
   );
   return success(res, { data: result });
 });
@@ -98,21 +106,21 @@ const removeOwner = catchAsync(async (req, res) => {
 
 const createOffer = catchAsync(async (req, res) => {
   const offer = await req.withTenantTransaction((transaction) =>
-    offersService.createOffer(req.params.id, req.body, req.auth.userId, transaction)
+    offersService.createOffer(req.params.id, req.body, req.auth.userId, transaction, confidentialOptions(req))
   );
   return success(res, { statusCode: 201, data: offer });
 });
 
 const listOffers = catchAsync(async (req, res) => {
   const offers = await req.withTenantTransaction((transaction) =>
-    offersService.listOffers(req.params.id, transaction, { status: req.query.status, offerType: req.query.offerType })
+    offersService.listOffers(req.params.id, transaction, { status: req.query.status, offerType: req.query.offerType }, confidentialOptions(req))
   );
   return success(res, { data: offers });
 });
 
 const updateOffer = catchAsync(async (req, res) => {
   const offer = await req.withTenantTransaction((transaction) =>
-    offersService.updateOffer(req.params.id, req.params.offerId, req.body, req.auth.userId, transaction)
+    offersService.updateOffer(req.params.id, req.params.offerId, req.body, req.auth.userId, transaction, confidentialOptions(req))
   );
   return success(res, { data: offer });
 });
@@ -135,7 +143,7 @@ const listOccurrences = catchAsync(async (req, res) => {
 
 const createMedia = catchAsync(async (req, res) => {
   const media = await req.withTenantTransaction((transaction) =>
-    mediaService.createMedia(req.params.id, req.body, req.auth.userId, transaction)
+    mediaService.createMedia(req.params.id, req.body, actorOf(req), transaction)
   );
   return success(res, { statusCode: 201, data: media });
 });
@@ -147,7 +155,7 @@ const listMedia = catchAsync(async (req, res) => {
 
 const removeMedia = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((transaction) =>
-    mediaService.deleteMedia(req.params.id, req.params.mediaId, transaction)
+    mediaService.deleteMedia(req.params.id, req.params.mediaId, actorOf(req), transaction)
   );
   return success(res, { data: result });
 });
@@ -155,7 +163,7 @@ const removeMedia = catchAsync(async (req, res) => {
 // Livro §6/§7: revisão de qualidade da foto (aprovar/recusar com motivo); só foto aprovada conta para publicar.
 const reviewMediaQuality = catchAsync(async (req, res) => {
   const media = await req.withTenantTransaction((transaction) =>
-    mediaQuality.reviewMediaQuality(req.params.id, req.params.mediaId, req.body, req.auth.userId, transaction)
+    mediaQuality.reviewMediaQuality(req.params.id, req.params.mediaId, req.body, req.auth.userId, transaction, req.auth)
   );
   return success(res, { data: media });
 });
@@ -164,7 +172,7 @@ const reviewMediaQuality = catchAsync(async (req, res) => {
 
 const createDocument = catchAsync(async (req, res) => {
   const document = await req.withTenantTransaction((transaction) =>
-    documentsService.createDocument(req.params.id, req.body, req.auth.userId, transaction)
+    documentsService.createDocument(req.params.id, req.body, actorOf(req), transaction)
   );
   return success(res, { statusCode: 201, data: document });
 });
@@ -178,7 +186,7 @@ const listDocuments = catchAsync(async (req, res) => {
 
 const removeDocument = catchAsync(async (req, res) => {
   const result = await req.withTenantTransaction((transaction) =>
-    documentsService.deleteDocument(req.params.id, req.params.documentId, transaction)
+    documentsService.deleteDocument(req.params.id, req.params.documentId, actorOf(req), transaction)
   );
   return success(res, { data: result });
 });

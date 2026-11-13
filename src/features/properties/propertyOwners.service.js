@@ -4,6 +4,7 @@ const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PropertyOwner, Property, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, propertyOwnerEntity } = require('../core-governance/data-quality/evidence');
+const { revalidatePublication } = require('./publicationGate.service');
 
 const ROLE_CODES = ['OWNER', 'USUFRUCTUARY'];
 
@@ -79,7 +80,7 @@ async function updateOwner(propertyId, ownerId, payload, actorUserId, transactio
   return owner;
 }
 
-async function deleteOwner(propertyId, ownerId, actorUserId, transaction, changeEvidence) {
+async function deleteOwner(propertyId, ownerId, actorUserId, transaction, changeEvidence, tenant) {
   await legalHold.assertNotOnHold('PROPERTY', propertyId, transaction); // M9-D912
   const owner = await getOwner(propertyId, ownerId, transaction);
   const entity = propertyOwnerEntity(owner, { owner: ownerState(owner) });
@@ -88,6 +89,8 @@ async function deleteOwner(propertyId, ownerId, actorUserId, transaction, change
   owner.deletedBy = actorUserId || null;
   await owner.save({ transaction });
   await owner.destroy({ transaction });
+  // "Ao menos um proprietário" pode ser campo obrigatório do gate (real_estate.publication.required_fields): reconfere o publicado.
+  await revalidatePublication(propertyId, tenant || owner, actorUserId, transaction, 'proprietário removido');
   return { id: ownerId };
 }
 

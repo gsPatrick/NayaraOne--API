@@ -4,6 +4,7 @@ const { PropertyMedia, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
+const { revalidatePublication } = require('./publicationGate.service');
 
 /**
  * Qualidade da mídia do imóvel (livro do Marco 3 §6 "Media: arquivo, ordem, classificação, qualidade" e §7 "Publicação usa
@@ -19,7 +20,7 @@ const { publishPropertyPublicSourceChanged } = require('./propertyEvents.service
 const PHOTO_MEDIA_TYPES = ['IMAGE', 'PHOTO'];
 const REVIEW_STATUSES = ['APPROVED', 'REJECTED', 'PENDING'];
 
-async function reviewMediaQuality(propertyId, mediaId, payload, actorUserId, transaction) {
+async function reviewMediaQuality(propertyId, mediaId, payload, actorUserId, transaction, tenant) {
   const status = String((payload && payload.qualityStatus) || '').toUpperCase();
   if (!REVIEW_STATUSES.includes(status)) {
     throw AppError.badRequest(`O campo "qualityStatus" deve ser um de: ${REVIEW_STATUSES.join(', ')}.`, 'PROPERTY_MEDIA_VALIDATION');
@@ -48,6 +49,10 @@ async function reviewMediaQuality(propertyId, mediaId, payload, actorUserId, tra
     },
     transaction
   );
+  // Vídeo ou foto aprovada que passa a recusada (ou volta a pendente) pode tirar o imóvel publicado do gate: reconfere.
+  if (beforeJson.qualityStatus === 'APPROVED' && status !== 'APPROVED') {
+    await revalidatePublication(propertyId, tenant || media, actorUserId, transaction, `mídia ${media.mediaType} saiu de APROVADA para ${status}`);
+  }
   await publishPropertyPublicSourceChanged(await Property.findByPk(propertyId, { transaction }), transaction);
   return media;
 }

@@ -80,6 +80,12 @@ module.exports = (sequelize) => {
         field: 'quality_status',
         comment: 'PENDING|APPROVED|REJECTED',
       },
+      // Arquivo real (mídia do imóvel) em people.files, conferido pelo antivírus no vínculo (migration 20260101010310).
+      fileId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'file_id',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

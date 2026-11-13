@@ -43,8 +43,8 @@ test('m9d912 exclusão manual de registro em hold é recusada em todas as rotas 
     await blocked(documentsService.deleteDocument(person.id, noId, A().userId, tx));
     await blocked(rolesService.deleteRole(person.id, noId, A().userId, tx));
     await blocked(propertiesService.deleteProperty(property.id, A().userId, tx));
-    await blocked(mediaService.deleteMedia(property.id, noId, tx));
-    await blocked(propertyDocsService.deleteDocument(property.id, noId, tx));
+    await blocked(mediaService.deleteMedia(property.id, noId, { actorUserId: A().userId }, tx));
+    await blocked(propertyDocsService.deleteDocument(property.id, noId, { actorUserId: A().userId }, tx));
     await blocked(ownersService.deleteOwner(property.id, noId, A().userId, tx));
     assert.equal((await env.query('SELECT deleted_at FROM people.persons WHERE id = :id', { id: person.id }, tx))[0].deleted_at, null, 'a pessoa em hold continua');
     assert.equal((await env.query('SELECT deleted_at FROM real_estate.properties WHERE id = :id', { id: property.id }, tx))[0].deleted_at, null);
