@@ -97,7 +97,11 @@ function thirdPartyBalance(origin, receivedCents, releases) {
   };
 }
 
-/** Baixa parcial: NOVO lançamento SETTLED filho do original, com o valor aplicado. */
+/**
+ * Baixa parcial: NOVO lançamento SETTLED filho do original, com o valor aplicado.
+ * @param {any} entry
+ * @param {{ appliedCents: number, settledAt?: any, idempotencyKey?: string|null, settlementInfo?: any, actorUserId?: string|null, movementKind?: string }} args
+ */
 function buildPartialSettlementValues(entry, { appliedCents, settledAt, idempotencyKey, settlementInfo, actorUserId, movementKind = MOVEMENT_KINDS.PARTIAL }) {
   return {
     groupId: entry.groupId,

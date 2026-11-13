@@ -41,7 +41,12 @@ function caseRefFor(original, options, isPartial, ordinal) {
   return isPartial ? `parcial-${ordinal}` : 'total';
 }
 
-/** Estorna UM movimento realizado: total (o que falta estornar) ou parcial (`partialCents`). */
+/**
+ * Estorna UM movimento realizado: total (o que falta estornar) ou parcial (`partialCents`).
+ * @param {any} movement
+ * @param {{ partialCents?: number|null, actorUserId?: string|null, options?: any }} args
+ * @param {any} transaction
+ */
 async function reverseMovement(movement, { partialCents = null, actorUserId, options = {} }, transaction) {
   const reversedBefore = (await ledger.reversedCentsByMovement([movement.id], transaction)).get(movement.id) || 0;
   const standingCents = toCents(movement.amount) - reversedBefore;
@@ -70,6 +75,9 @@ async function reverseMovement(movement, { partialCents = null, actorUserId, opt
 /**
  * applyReversal — decide e lança o estorno de `original` (já travado). Devolve:
  *   { kind: 'NOT_REALIZED' | 'MOVEMENT' | 'PARENT_WITH_SETTLEMENTS', reversal, reversals, isPartial, partialCents }.
+ * @param {any} original
+ * @param {{ partialAmount?: any, actorUserId?: string|null, reasonText?: string|null, options?: any }} args
+ * @param {any} transaction
  */
 async function applyReversal(original, { partialAmount, actorUserId, reasonText, options = {} }, transaction) {
   const partialCents = partialAmount !== undefined && partialAmount !== null ? toCents(partialAmount) : null;

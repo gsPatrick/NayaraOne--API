@@ -19,7 +19,7 @@ const RISK_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
 
 /** Risco pelas faixas de valor (centavos inteiros, sem ponto flutuante). */
 function riskFromBands(amountCents, bands) {
-  const limit = (v) => toCents(Number(v).toFixed(2));
+  const limit = (v) => /** @type {number} */ (toCents(Number(v).toFixed(2)));
   if (amountCents <= limit(bands.lowUpTo)) return 'LOW';
   if (amountCents <= limit(bands.mediumUpTo)) return 'MEDIUM';
   if (amountCents <= limit(bands.highUpTo)) return 'HIGH';

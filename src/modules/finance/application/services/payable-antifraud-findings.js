@@ -94,7 +94,7 @@ async function newSupplierFinding(entry, amount, prior, t, transaction) {
 async function safely(control, caseType, transaction, fn) {
   try {
     return transaction ? await sequelize.transaction({ transaction }, (savepoint) => fn(savepoint)) : await fn(undefined);
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     return {
       caseType, riskLevel: 'HIGH', blocking: true, failSafe: true,
       reason: `Não foi possível conferir "${control}" (${err && err.message ? err.message : 'erro desconhecido'}). Por segurança o pagamento fica retido e bloqueado até a revisão.`,

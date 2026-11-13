@@ -20,7 +20,7 @@ async function reevaluateInOwnTransaction({ entryId, groupId, companyId, actorUs
       if (!entry) return;
       await require('./payment-anomaly-gate').evaluatePayableAnomaly(entry, tx, 'prepare');
     });
-  } catch (err) {
+  } catch (/** @type {any} */ err) {
     logger.error({ err: err && err.message, entryId }, 'finance.antifraud.after_rollback_failed');
   }
 }

@@ -238,8 +238,8 @@ async function confirmBankPayment(externalSubmissionId, externalStatus, transact
   intent.externalStatus = status;
   if (status === 'CONFIRMED') {
     const entry = await entries.findByIdForUpdate(intent.financialEntryId, transaction);
-    const remainingCents = entry ? domain.toCents(await computeRemainingAmount(entry, transaction)) : 0;
-    if (!entry || !OPEN_FOR_SETTLEMENT_STATUSES.includes(entry.status) || remainingCents < domain.toCents(String(intent.snapshotJson.amount))) {
+    const remainingCents = entry ? /** @type {number} */ (domain.toCents(await computeRemainingAmount(entry, transaction))) : 0;
+    if (!entry || !OPEN_FOR_SETTLEMENT_STATUSES.includes(entry.status) || remainingCents < /** @type {number} */ (domain.toCents(String(intent.snapshotJson.amount)))) {
       // A2 — o lançamento já foi liquidado por outro caminho: o banco pagou de novo.
       intent.status = 'CONFIRMED';
       intent.executedAt = new Date();

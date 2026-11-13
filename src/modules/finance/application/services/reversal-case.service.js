@@ -29,7 +29,7 @@ const reversalKey = (originalId, caseId) => `reversal:${originalId}:${caseId}`;
 function assertCanReverse(original, amountCents) {
   if (original.status === 'REVERSED') throw AppError.conflict('Este lançamento já foi estornado.', 'FINANCE_ENTRY_ALREADY_REVERSED');
   if (original.status === 'CANCELLED') throw AppError.conflict('Lançamento cancelado não pode ser estornado.', 'FINANCE_ENTRY_INVALID_STATUS');
-  if (amountCents !== null && (amountCents <= 0 || amountCents > toCents(String(original.amount)))) {
+  if (amountCents !== null && (amountCents <= 0 || amountCents > /** @type {number} */ (toCents(String(original.amount))))) {
     throw AppError.badRequest('O valor do estorno precisa ser maior que zero e no máximo o valor do lançamento.', 'FINANCE_ENTRY_VALIDATION');
   }
 }
