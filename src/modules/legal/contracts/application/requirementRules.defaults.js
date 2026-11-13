@@ -20,6 +20,17 @@ const sale = (prefix) => [
 const pjDocs = (prefix) => ({ requirementCode: `${prefix}_PJ_DOCS`, requirementType: 'PJ_DOCUMENT', description: 'Documentos da pessoa jurídica (contrato social e poderes de quem assina).', when: { fact: 'parties.anyPJ', op: '==', value: true } });
 const procuracao = (prefix) => ({ requirementCode: `${prefix}_POWER_OF_ATTORNEY`, requirementType: 'POWER_OF_ATTORNEY', description: 'Procuração, quando alguma parte for representada por terceiro.', when: { fact: 'parties.anyRepresented', op: '==', value: true } });
 
+// Fluxo "Entrega de casa nova" (§7) e a característica do imóvel que o seleciona (requirementRules.facts.js).
+const NEW_ITEMS = {
+  NEW_DELIVERY_TERM: { requirementCode: 'NEW_DELIVERY_TERM', requirementType: 'DELIVERY_TERM', description: 'Termo de entrega.' },
+  NEW_FINAL_INSPECTION: { requirementCode: 'NEW_FINAL_INSPECTION', requirementType: 'FINAL_INSPECTION', description: 'Vistoria final.' },
+  NEW_OWNER_MANUAL: { requirementCode: 'NEW_OWNER_MANUAL', requirementType: 'OWNER_MANUAL', description: 'Manual do proprietário.' },
+  NEW_PHOTOS: { requirementCode: 'NEW_PHOTOS', requirementType: 'PHOTOS', description: 'Fotos.' },
+  NEW_KEYS: { requirementCode: 'NEW_KEYS', requirementType: 'KEYS', description: 'Chaves.' },
+};
+const IS_NEW = { fact: 'property.isNew', op: '==', value: true };
+const IS_USED = { fact: 'property.isNew', op: '==', value: false };
+
 const TEMPLATES = {
   LEASE: [
     { requirementCode: 'LEASE_PF_PJ_DOCS', requirementType: 'PF_DOCUMENT', description: 'Documentos PF/PJ das partes (locador/locatário).' },
@@ -60,15 +71,15 @@ const TEMPLATES = {
     { requirementCode: 'CONSTR_BUDGET_SCHEDULE', requirementType: 'BUDGET_SCHEDULE', description: 'Orçamento e cronograma físico-financeiro.' },
     procuracao('CONSTR'),
   ],
-  NEW_PROPERTY_DELIVERY: [
-    { requirementCode: 'NEW_DELIVERY_TERM', requirementType: 'DELIVERY_TERM', description: 'Termo de entrega.' },
-    { requirementCode: 'NEW_FINAL_INSPECTION', requirementType: 'FINAL_INSPECTION', description: 'Vistoria final.' },
-    { requirementCode: 'NEW_OWNER_MANUAL', requirementType: 'OWNER_MANUAL', description: 'Manual do proprietário.' },
-    { requirementCode: 'NEW_PHOTOS', requirementType: 'PHOTOS', description: 'Fotos.' },
-    { requirementCode: 'NEW_KEYS', requirementType: 'KEYS', description: 'Chaves.' },
-  ],
+  NEW_PROPERTY_DELIVERY: Object.values(NEW_ITEMS),
   USED_PROPERTY_DELIVERY: [
     { requirementCode: 'USED_PROPERTY_TERM', requirementType: 'USED_PROPERTY_TERM', description: 'Termo específico deixando clara a natureza/estado do imóvel usado, conforme modelo jurídico aprovado.' },
+  ],
+  // Termo de entrega de chaves (Caderno §3 KEY_DELIVERY): o checklist depende da característica do IMÓVEL (§7) — casa nova
+  // (imóvel que nasceu de obra da empresa) segue o fluxo "Entrega de casa nova"; imóvel usado exige o termo específico.
+  KEY_DELIVERY: [
+    ...['NEW_DELIVERY_TERM', 'NEW_FINAL_INSPECTION', 'NEW_OWNER_MANUAL', 'NEW_PHOTOS', 'NEW_KEYS'].map((code) => ({ ...NEW_ITEMS[code], when: IS_NEW })),
+    { requirementCode: 'USED_PROPERTY_TERM', requirementType: 'USED_PROPERTY_TERM', description: 'Termo específico deixando clara a natureza/estado do imóvel usado, conforme modelo jurídico aprovado.', when: IS_USED },
   ],
   ADDENDUM: [
     { requirementCode: 'ADDENDUM_PARTIES_DOCS', requirementType: 'PF_DOCUMENT', description: 'Documentos das partes que assinam o aditivo.' },
@@ -82,9 +93,13 @@ const TYPE_TO_TEMPLATE = {
   LEASE: 'LEASE', LEASE_RESIDENTIAL: 'LEASE', LEASE_COMMERCIAL: 'LEASE', LEASE_SEASONAL: 'LEASE', PROPERTY_ADMIN: 'LEASE',
   SALE: 'SALE', SALE_CASH: 'SALE_CASH', SALE_FINANCED: 'SALE_FINANCED', SALE_TRADE: 'SALE_TRADE', SALE_INSTALLMENTS: 'SALE_INSTALLMENTS',
   SERVICE: 'SERVICE', CONSTRUCTION: 'CONSTRUCTION',
-  ADDENDUM: 'ADDENDUM', KEY_DELIVERY: 'NEW_PROPERTY_DELIVERY', USED_PROPERTY_DELIVERY: 'USED_PROPERTY_DELIVERY',
+  ADDENDUM: 'ADDENDUM', KEY_DELIVERY: 'KEY_DELIVERY', USED_PROPERTY_DELIVERY: 'USED_PROPERTY_DELIVERY',
 };
 
 const DEFAULT_ACTION = Object.freeze({ templates: TEMPLATES, typeToTemplate: TYPE_TO_TEMPLATE });
 
-module.exports = { DEFAULT_ACTION, TEMPLATES, TYPE_TO_TEMPLATE };
+// sha256 do JSON das sementes anteriores (a versão sem as características do imóvel, commits 52740c89 a 41addaa2). Empresa
+// cuja versão vigente é exatamente uma delas nunca mexeu na política e recebe a semente atual (requirementRules.service.js).
+const PREVIOUS_SEED_HASHES = Object.freeze(['a222325e003107eeaa8a5e1f04a6319fbdcdcad34614e71645daa5f7ab90e683']);
+
+module.exports = { DEFAULT_ACTION, TEMPLATES, TYPE_TO_TEMPLATE, PREVIOUS_SEED_HASHES };

@@ -105,7 +105,9 @@ function clauseIdsOf(list) {
  * Sem `templateId` a versão é um documento avulso (ex.: arquivo enviado pela tela "Nova versão")
  * — não há cláusula de biblioteca envolvida, e `clauseVersionIds` não pode ser informado.
  */
-async function createContractVersion(contractId, payload, actorUserId, transaction) {
+// `internal` só vem de código do servidor (nunca do corpo HTTP): a minuta aceita da NAY (cases/nayDraft) informa as versões de
+// cláusula homologadas que ELA montou, para a versão do contrato guardar clause_version_ids (Caderno §6).
+async function createContractVersion(contractId, payload, actorUserId, transaction, internal = {}) {
   assertUuidFields(payload, ['documentFileId', 'templateId']);
   const contract = await getContract(contractId, transaction);
   if (!EDITABLE_STATES.includes(contract.status)) {
@@ -213,6 +215,10 @@ async function createContractVersion(contractId, payload, actorUserId, transacti
       reason: c.reason,
       condition: c.condition,
     }));
+  }
+
+  if (!templateId && Array.isArray(internal.clauseVersionIds) && internal.clauseVersionIds.length) {
+    clauseVersionIds = internal.clauseVersionIds.map((c) => ({ contractClauseId: c.contractClauseId, code: c.code, versionNumber: c.versionNumber }));
   }
 
   const lastVersion = await ContractVersion.findOne({

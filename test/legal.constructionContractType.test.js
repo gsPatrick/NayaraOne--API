@@ -75,7 +75,7 @@ test('contrato CONSTRUCTION com constructionProjectId é criado e vinculado à o
 test('outros tipos de contrato continuam não exigindo constructionProjectId', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const contract = await contractsService.createContract(
-      { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'SERVICE', totalValue: 5000 },
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE_RESIDENTIAL', totalValue: 5000 },
       tenant.userId,
       transaction
     );

@@ -6,7 +6,7 @@ const { getContract, transitionContractStatus } = require('./contract.service');
 const { getContractVersion } = require('./contractVersions.service');
 const { markVersionApproved, assertApprovedCurrentVersion } = require('./contractVersionApproval');
 const { assertRequirementsSatisfied } = require('./requirement.service');
-const { publishCadernoEvent } = require('../../shared/legalEvents.service');
+const { publishVersionApproved } = require('./contractStatusEvents');
 const { initiateSignature } = require('../../signatures/signature.service');
 const { assertUuidList } = require('../../shared/legalIds');
 
@@ -51,7 +51,7 @@ async function approveContractVersion(versionId, actorUserId, transaction) {
     await markVersionApproved(contract, version, actorUserId, transaction);
     contract.updatedBy = actorUserId || null;
     await contract.save({ transaction });
-    await publishCadernoEvent('contract.version.approved', 'Contract', contract, { id: contract.id, fromStatus: 'APPROVED', contractVersionId: version.id, contentHash: version.contentHash }, `${contract.lockVersion}-${version.id}`, transaction);
+    await publishVersionApproved(contract, version, 'APPROVED', transaction);
     return { contract, contractVersionId: version.id, contentHash: version.contentHash };
   }
   throw AppError.conflict(

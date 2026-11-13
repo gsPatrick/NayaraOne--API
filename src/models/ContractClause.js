@@ -28,6 +28,10 @@ module.exports = (sequelize) => {
       conditionStatus: { type: DataTypes.STRING(32), allowNull: true, field: 'condition_status' },
       conditionApprovedBy: { type: DataTypes.UUID, allowNull: true, field: 'condition_approved_by' },
       conditionApprovedAt: { type: DataTypes.DATE, allowNull: true, field: 'condition_approved_at' },
+      // Verificação M5 linha 124 (Caderno §4 "Versões homologadas"): homologação do texto por outra pessoa (migration 20260101015104).
+      homologationStatus: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'PENDING', field: 'homologation_status' },
+      homologatedBy: { type: DataTypes.UUID, allowNull: true, field: 'homologated_by' },
+      homologatedAt: { type: DataTypes.DATE, allowNull: true, field: 'homologated_at' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
     },
     {

@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 878. Rotas só com login ou públicas: 44.
+Rotas com permissão exigida: 886. Rotas só com login ou públicas: 44.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -264,7 +264,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/construction/stages/:id` | `construction:read` | não |
 | `PATCH` | `/api/v1/construction/stages/:id` | `construction:update` | não |
 | `POST` | `/api/v1/construction/warranty-cases` | `construction:create` | não |
-| `POST` | `/api/v1/contract-versions/:id/approve` | `legal:approve` | não |
+| `POST` | `/api/v1/contract-versions/:id/approve` | `contracts.version.approve` | não |
 | `POST` | `/api/v1/contract-versions/:id/send-signature` | `legal:sign` | não |
 | `POST` | `/api/v1/contracts/:contractId/guarantees` | `legal:create` | não |
 | `POST` | `/api/v1/contracts/:id/key-delivery` | `legal:create`, `lease.keys.deliver` | não |
@@ -585,6 +585,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/clauses/:code/versions` | `legal:create` | não |
 | `POST` | `/api/v1/legal/clauses/:id/approve-condition` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/clauses/:id/deactivate` | `legal:update` | não |
+| `POST` | `/api/v1/legal/clauses/:id/homologate` | `legal:approve` | não |
 | `GET` | `/api/v1/legal/clauses` | `legal:read` | não |
 | `POST` | `/api/v1/legal/clauses` | `legal:create` | não |
 | `POST` | `/api/v1/legal/contract-templates/:id/clauses/:clauseId/upgrade` | `legal:create` | não |
@@ -613,7 +614,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/contracts/:id/suspend` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/contracts/:id/terminate` | `legal:approve` | não |
 | `GET` | `/api/v1/legal/contracts/:id/timeline` | `legal:read` | não |
-| `POST` | `/api/v1/legal/contracts/:id/transition` | `legal:approve` | não |
+| `POST` | `/api/v1/legal/contracts/:id/transition` | `legal:approve`; `contracts.version.approve` quando targetStatus = APPROVED | não |
 | `GET` | `/api/v1/legal/contracts/:id/versions/:versionId/generate-pdf` | `legal:read` | não |
 | `GET` | `/api/v1/legal/contracts/:id/versions` | `legal:read` | não |
 | `POST` | `/api/v1/legal/contracts/:id/versions` | `legal:create` | não |
@@ -656,8 +657,12 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/nay/cases/:id/summary` | `legal:read` | não |
 | `GET` | `/api/v1/legal/nay/clause-suggestions` | `legal:read` | não |
 | `GET` | `/api/v1/legal/nay/contracts/:id/compare` | `legal:read` | não |
+| `GET` | `/api/v1/legal/nay/contracts/:id/draft-suggestions` | `legal:read` | não |
+| `POST` | `/api/v1/legal/nay/contracts/:id/draft-suggestions` | `legal:create` | não |
 | `GET` | `/api/v1/legal/nay/contracts/:id/summary` | `legal:read` | não |
 | `POST` | `/api/v1/legal/nay/deadline-suggestions` | `legal:read` | não |
+| `POST` | `/api/v1/legal/nay/draft-suggestions/:id/accept` | `legal:create` | não |
+| `POST` | `/api/v1/legal/nay/draft-suggestions/:id/discard` | `legal:create` | não |
 | `POST` | `/api/v1/legal/notices/:id/approve` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/notices/:id/delivery-evidence` | `legal:update` | não |
 | `POST` | `/api/v1/legal/notices/:id/reject` | `legal:approve` | não |
@@ -668,6 +673,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/notices/:id` | `legal:read` | não |
 | `GET` | `/api/v1/legal/notices` | `legal:read` | não |
 | `POST` | `/api/v1/legal/notices` | `legal:create` | não |
+| `GET` | `/api/v1/legal/requirement-rules/versions` | `legal:read` | não |
+| `GET` | `/api/v1/legal/requirement-rules` | `legal:read` | não |
+| `POST` | `/api/v1/legal/requirement-rules` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/requirements/:requirementId/waive` | `legal:waive` | não |
 | `PATCH` | `/api/v1/legal/requirements/:requirementId` | `legal:update` | não |
 | `POST` | `/api/v1/legal/signature-envelopes/:id/switch-provider` | `legal:sign` | sim |

@@ -35,7 +35,9 @@ function gerar() {
     const permissions = [...new Set(handlers.map((h) => h.requiredPermission).filter(Boolean))];
     const mfa = handlers.some((h) => h.name === 'requireRecentMfa');
     const scope = handlers.map((h) => h.requiredScope).find(Boolean) || null; // rota da API externa (M9-D844): scope exigido do token de cliente
-    out.push({ method, path: rota, permissions, mfaRecente: mfa, ...(scope ? { scope } : {}) });
+    // Permissão exigida só em certos pedidos (ex.: /transition para APPROVED exige contracts.version.approve): fica fora de `permissions`.
+    const condicionais = handlers.map((h) => h.conditionalPermission).filter(Boolean);
+    out.push({ method, path: rota, permissions, mfaRecente: mfa, ...(scope ? { scope } : {}), ...(condicionais.length ? { condicionais } : {}) });
   });
   return out.sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
 }
@@ -73,7 +75,8 @@ if (require.main === module) {
       if (/^\/api\/v1\/files/.test(r.path)) return 'só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo';
       return 'só login';
     };
-    const linha = (r) => `| \`${r.method}\` | \`${r.path}\` | ${r.permissions.length ? r.permissions.map((p) => `\`${p}\``).join(', ') : categoria(r)} | ${r.mfaRecente ? 'sim' : 'não'} |`;
+    const extra = (r) => (r.condicionais || []).map((c) => `; \`${c.code}\` quando ${c.when}`).join('');
+    const linha = (r) => `| \`${r.method}\` | \`${r.path}\` | ${r.permissions.length ? r.permissions.map((p) => `\`${p}\``).join(', ') + extra(r) : categoria(r)} | ${r.mfaRecente ? 'sim' : 'não'} |`;
     const md = [
       '# Matriz de permissões da API',
       '',

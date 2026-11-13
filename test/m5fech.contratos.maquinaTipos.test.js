@@ -54,7 +54,11 @@ test('Guia §3/§5: DRAFT -> LEGAL_REVIEW direto com checklist completo; LEGAL_R
   assert.equal((await transicao(id, 'LEGAL_REVIEW')).status, 200, 'DRAFT -> LEGAL_REVIEW direto');
   assert.equal((await transicao(id, 'DOCUMENTS_PENDING')).code, 'LEGAL_CONTRACT_INVALID_TRANSITION', 'LEGAL_REVIEW -> DOCUMENTS_PENDING não existe no livro');
   assert.equal((await transicao(id, 'CANCELLED')).code, 'LEGAL_CONTRACT_INVALID_TRANSITION', 'CANCELLED não é alvo');
-  const nova = await h.http('A:gestor', 'POST', `/legal/contracts/${id}/requirements/generate`, { templateKey: 'NEW_PROPERTY_DELIVERY' });
+  // Característica nova da parte (fiador representado por procurador) gera exigência nova pendente.
+  const fiador = await h.pessoa('A:gestor', 'Fiador representado');
+  const procurador = await h.pessoa('A:gestor', 'Procurador do fiador');
+  await h.http('A:gestor', 'POST', `/legal/contracts/${id}/parties`, { personId: fiador, partyRole: 'GUARANTOR', representedByPersonId: procurador });
+  const nova = await h.http('A:gestor', 'POST', `/legal/contracts/${id}/requirements/generate`, {});
   assert.ok(nova.data.length > 0, 'exigências novas pendentes');
   assert.equal((await transicao(id, 'DRAFT')).status, 200, 'devolver para DRAFT não é bloqueado por documento');
 });
@@ -63,10 +67,12 @@ test('Guia §5: exigência com etapa SIGNING não bloqueia a revisão jurídica,
   if (pular) return t.skip(pular);
   const { DEFAULT_ACTION } = require('../src/modules/legal/contracts/application/requirementRules.defaults');
   const { publishRequirementRules } = require('../src/modules/legal/contracts/application/requirementRules.service');
-  const templates = { ...DEFAULT_ACTION.templates, SERVICE: [{ requirementCode: 'SERVICE_SIGNING_ONLY', requirementType: 'SERVICE_SCOPE', description: 'Exigência só para a assinatura.', stage: 'SIGNING' }] };
+  // Aditivo (tipo do livro sem papéis obrigatórios) com um modelo de checklist só de assinatura.
+  const templates = { ...DEFAULT_ACTION.templates, ADDENDUM: [{ requirementCode: 'ADDENDUM_SIGNING_ONLY', requirementType: 'PF_DOCUMENT', description: 'Exigência só para a assinatura.', stage: 'SIGNING' }] };
   await h.comTenant('A:gestor', (tx, tn) => publishRequirementRules(tn, { templates, typeToTemplate: DEFAULT_ACTION.typeToTemplate }, tn.userId, tx));
   try {
-    const c = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'SERVICE', totalValue: 1000 });
+    const principal = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'LEASE_RESIDENTIAL', totalValue: 1000 });
+    const c = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'ADDENDUM', parentContractId: principal.data.id, totalValue: 1000 });
     assert.equal((await transicao(c.data.id, 'LEGAL_REVIEW')).status, 200, 'pendência de SIGNING não bloqueia LEGAL_REVIEW');
     const [req] = await h.sql('A:gestor', 'SELECT required_stage, rule_version_id IS NOT NULL AS da_regra FROM legal.contract_requirements WHERE contract_id = :id', { id: c.data.id });
     assert.deepEqual(req, { required_stage: 'SIGNING', da_regra: true });

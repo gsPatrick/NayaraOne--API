@@ -30,6 +30,8 @@ const TEMPLATE_CONTRACT_TYPES = [
   'SALE', 'SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS',
   'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL',
   'PROPERTY_ADMIN', 'SERVICE',
+  // Verificação M5 linha 69: o termo do imóvel usado é modelo jurídico aprovado (leasing/usedPropertyTermModel.js).
+  'USED_PROPERTY_DELIVERY',
 ];
 
 async function createTemplate(payload, actorUserId, transaction) {

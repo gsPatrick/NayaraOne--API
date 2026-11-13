@@ -4386,6 +4386,9 @@
    "condition_json",
    "condition_status",
    "created_by",
+   "homologated_at",
+   "homologated_by",
+   "homologation_status",
    "is_active",
    "title",
    "version_number"
@@ -4612,6 +4615,7 @@
    "term_signature_method",
    "term_signed_at",
    "term_signed_by_person_id",
+   "term_template_version_id",
    "term_text",
    "term_type",
    "term_version",
@@ -4686,6 +4690,25 @@
    "source_file_id",
    "status",
    "task_id",
+   "updated_by"
+  ],
+  "legal.nay_draft_suggestions": [
+   "ai_run_id",
+   "clause_version_ids",
+   "content",
+   "content_hash",
+   "contract_id",
+   "contract_version_id",
+   "created_by",
+   "decided_at",
+   "decided_by",
+   "decision_reason",
+   "grounding_json",
+   "method",
+   "mode_reason",
+   "model_code",
+   "provider_code",
+   "status",
    "updated_by"
   ],
   "legal.notice_versions": [
@@ -4763,6 +4786,7 @@
   "legal.template_versions": [
    "created_by",
    "legal_responsible_user_id",
+   "origin",
    "published_at",
    "published_by",
    "status",

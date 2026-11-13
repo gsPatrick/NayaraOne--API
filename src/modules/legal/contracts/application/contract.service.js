@@ -5,7 +5,8 @@ const { publishContractRenewalChange } = require('../../cases/legalDeadlineCalen
 const { countingSignatures } = require('../../signatures/signatureRows');
 const AppError = require('../../../../utils/AppError');
 const { registrarAuditoria } = require('../../../../engines/audit/auditLog.service');
-const { publishContractStatusChanged, publishContractActivated, publishContractTerminated, publishCadernoEvent } = require('../../shared/legalEvents.service');
+const { publishCadernoEvent } = require('../../shared/legalEvents.service');
+const { publishStatusEvents } = require('./contractStatusEvents');
 const { assertContractClosureAllowed, CLOSURE_TARGET_STATUSES } = require('../domain/contractClosureGate');
 const { assertUuidFields } = require('../../shared/legalIds');
 
@@ -27,14 +28,10 @@ const { assertUuidFields } = require('../../shared/legalIds');
 // quebram), e ADICIONADOS os subtipos específicos que a auditora cobrou de verdade —
 // locação residencial/comercial/temporada e administração de imóvel (sem contrato de
 // locação por trás, só gestão) são o uso real do dia a dia da imobiliária.
-const CONTRACT_TYPES = [
-  'SALE', 'SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS',
-  'LEASE', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL',
-  'PROPERTY_ADMIN',
-  'SERVICE', 'CONSTRUCTION',
-  // Matriz M5 (Caderno §3): tipos VINCULADOS ao contrato principal (exigem parentContractId).
-  'ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY',
-];
+// Correção da verificação do Marco 5 (DI-M5CT-2): contrato NOVO só com os 12 códigos do Caderno §3; os legados SALE/LEASE
+// entram só pela conversão explícita e auditada e SERVICE é recusado (contracts/domain/contractTypes.js). CONTRACT_TYPES
+// continua listando todo código que pode estar GRAVADO (linhas antigas seguem legíveis).
+const { STORED_CONTRACT_TYPES: CONTRACT_TYPES, resolveNewContractType } = require('../domain/contractTypes');
 const LINKED_CONTRACT_TYPES = ['ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY'];
 
 // Subtipos de LOCAÇÃO/VENDA usam exatamente as mesmas regras de negócio (gate de partes,
@@ -323,15 +320,15 @@ async function assertActivationGate(contract, transaction) {
 }
 
 async function createContract(payload, actorUserId, transaction) {
-  const { groupId, companyId, opportunityId, contractType, contractNumber, totalValue, startsAt, endsAt, constructionProjectId, parentContractId } = payload;
+  const { groupId, companyId, opportunityId, contractNumber, totalValue, startsAt, endsAt, constructionProjectId, parentContractId } = payload;
   let { propertyId } = payload;
   assertUuidFields(payload, ['propertyId', 'opportunityId', 'constructionProjectId', 'parentContractId']);
-  if (!groupId || !companyId || !contractType) {
+  if (!groupId || !companyId || !payload.contractType) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "contractType" são obrigatórios.', 'LEGAL_CONTRACT_VALIDATION');
   }
-  if (!CONTRACT_TYPES.includes(contractType)) {
-    throw AppError.badRequest(`"contractType" deve ser um de: ${CONTRACT_TYPES.join(', ')}.`, 'LEGAL_CONTRACT_VALIDATION');
-  }
+  // Caderno §3: contrato novo só com os 12 códigos do livro; SALE/LEASE legados só pela conversão explícita e auditada
+  // (contracts/domain/contractTypes.js); SERVICE não existe no livro e é recusado.
+  const { contractType, convertedFrom } = resolveNewContractType(payload.contractType);
   // M6-104: contrato de empreitada (CONSTRUCTION) precisa nascer já vinculado à obra —
   // sem isso não há como o Marco 6 amarrar o contrato à execução física da obra.
   if (contractType === 'CONSTRUCTION' && !constructionProjectId) {
@@ -394,8 +391,10 @@ async function createContract(payload, actorUserId, transaction) {
       action: 'legal.contract.create',
       entityType: 'Contract',
       entityId: contract.id,
-      afterJson: contract.toJSON(),
-      reason: `Contrato do tipo "${contractType}" criado em DRAFT.`,
+      afterJson: convertedFrom ? { ...contract.toJSON(), conversaoDeTipo: { contractTypeInformado: convertedFrom, contractTypeGravado: contractType } } : contract.toJSON(),
+      reason: convertedFrom
+        ? `Contrato do tipo "${contractType}" criado em DRAFT (código legado "${convertedFrom}" convertido para o código do Caderno §3).`
+        : `Contrato do tipo "${contractType}" criado em DRAFT.`,
     },
     transaction
   );
@@ -458,6 +457,7 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   // mudou) não são bloqueados por documento. Aprovação = aprovação da versão vigente (Guia §6).
   const { ensureRequirementsGenerated } = require('./requirement.service');
   const { approveLatestVersion, assertApprovedCurrentVersion } = require('./contractVersionApproval');
+  let approvedVersion = null; // só a transição LEGAL_REVIEW -> APPROVED aprova uma versão (DI-M5CT-1)
   if (targetStatus === 'DOCUMENTS_PENDING') {
     await assertRequirementsGate(contract, transaction);
     await ensureRequirementsGenerated(contract.id, actorUserId, transaction);
@@ -466,7 +466,7 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
     if (fromStatus === 'DRAFT') await assertRequirementsGate(contract, transaction);
   } else if (targetStatus === 'APPROVED' && fromStatus === 'LEGAL_REVIEW') {
     await assertDocumentRequirementsGate(contract, 'APPROVED', transaction);
-    await approveLatestVersion(contract, actorUserId, transaction);
+    approvedVersion = await approveLatestVersion(contract, actorUserId, transaction);
   } else if (targetStatus === 'SIGNING') {
     await assertDocumentRequirementsGate(contract, 'SIGNING', transaction);
     await assertDocumentGate(contract, transaction);
@@ -488,24 +488,8 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
   contract.updatedBy = actorUserId || null;
   await contract.save({ transaction });
 
-  await publishContractStatusChanged(contract, fromStatus, transaction);
-  await publishContractRenewalChange(contract, transaction);
-  if (targetStatus === 'ACTIVE') {
-    await publishContractActivated(contract, transaction);
-  }
-  // M45 (Caderno M5 §18): eventos nomeados do ciclo de assinatura.
-  const cadernoEventByTarget = { APPROVED: 'contract.version.approved', SIGNING: 'contract.sent_for_signature', SIGNED: 'contract.signed' };
-  if (cadernoEventByTarget[targetStatus]) {
-    const currentVersion = await ContractVersion.findOne({ where: { contractId: contract.id }, order: [['version_number', 'DESC']], transaction });
-    await publishCadernoEvent(
-      cadernoEventByTarget[targetStatus],
-      'Contract',
-      contract,
-      { id: contract.id, fromStatus, contractVersionId: currentVersion ? currentVersion.id : null, contentHash: currentVersion ? currentVersion.contentHash : null },
-      contract.lockVersion,
-      transaction
-    );
-  }
+  // Eventos do livro por status de destino (contractStatusEvents.js): o mesmo conjunto em todo caminho.
+  await publishStatusEvents(contract, fromStatus, { approvedVersion }, transaction);
 
   await registrarAuditoria(
     {
@@ -571,11 +555,8 @@ async function applyGatedTransition(contract, targetStatus, actorUserId, reason,
   contract.updatedBy = actorUserId || null;
   await contract.save({ transaction });
 
-  await publishContractStatusChanged(contract, fromStatus, transaction);
-  await publishContractRenewalChange(contract, transaction);
-  if (targetStatus === 'TERMINATED') {
-    await publishContractTerminated(contract, transaction);
-  }
+  // Mesmos eventos da transição genérica: reativar publica contract.activated e encerrar, contract.terminated.
+  await publishStatusEvents(contract, fromStatus, {}, transaction);
 
   await registrarAuditoria(
     {

@@ -42,10 +42,27 @@ test('§7 Venda financiada: documentos de comprador e vendedor, matrícula, cert
 
 test('§7 Entrega de casa nova e imóvel usado: termo, vistoria final, manual do proprietário, fotos, chaves; termo específico do usado', async (t) => {
   if (pular) return t.skip(pular);
-  const nova = await gerar('SALE_CASH', { templateKey: 'NEW_PROPERTY_DELIVERY' });
+  // Verificação M5 linha 65: o modelo vem da regra pelo tipo do contrato (KEY_DELIVERY) e a característica do imóvel decide
+  // o fluxo — imóvel que nasceu de obra da empresa é casa nova; sem obra, é usado. O corpo não escolhe o modelo.
+  const principal = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'SALE_CASH', totalValue: 1000 });
+  const termo = async (comObra) => {
+    const im = await h.http('A:gestor', 'POST', '/properties', { title: `Imóvel ${comObra ? 'novo' : 'usado'} ${h.sfx()}`, internalCode: `CK-${h.sfx()}`, propertyType: 'RESIDENTIAL' });
+    if (comObra) {
+      await h.comTenant('A:gestor', (tx, tn) => require('../src/models').Project.create({ groupId: tn.groupId, companyId: tn.companyId, name: `Obra ${h.sfx()}`, propertyId: im.data.id, createdBy: tn.userId }, { transaction: tx }));
+    }
+    const c = await h.http('A:gestor', 'POST', '/contracts', { contractType: 'KEY_DELIVERY', parentContractId: principal.data.id, propertyId: im.data.id });
+    assert.equal(c.status, 201, JSON.stringify(c.body));
+    const g = await h.http('A:gestor', 'POST', `/legal/contracts/${c.data.id}/requirements/generate`, {});
+    assert.equal(g.status, 201, JSON.stringify(g.body));
+    return { id: c.data.id, itens: g.data.map((r) => [r.requirementCode, r.requirementType]) };
+  };
+  const nova = await termo(true);
   assert.deepEqual(nova.itens.map((i) => i[1]), ['DELIVERY_TERM', 'FINAL_INSPECTION', 'OWNER_MANUAL', 'PHOTOS', 'KEYS']);
-  const usado = await gerar('SALE_CASH', { templateKey: 'USED_PROPERTY_DELIVERY' });
+  const usado = await termo(false);
   assert.deepEqual(usado.itens.map((i) => i[0]), ['USED_PROPERTY_TERM']);
+  const corpo = await h.http('A:gestor', 'POST', `/legal/contracts/${usado.id}/requirements/generate`, { templateKey: 'NEW_PROPERTY_DELIVERY' });
+  assert.equal(corpo.status, 400);
+  assert.equal(corpo.code, 'LEGAL_REQUIREMENT_TEMPLATE_KEY_NOT_ACCEPTED');
 });
 
 test('JUR-003/JUR-TS-003: com exigência obrigatória pendente o contrato não avança por HTTP; com a exigência satisfeita por arquivo real, avança', async (t) => {

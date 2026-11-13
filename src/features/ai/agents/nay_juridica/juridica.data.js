@@ -19,6 +19,9 @@ async function loadContract(contractId, transaction) {
   return contract;
 }
 
+// clause_version_ids é gravado como [{ contractClauseId, code, versionNumber }] (versão gerada de modelo); aceita também id solto.
+const clauseIdsOf = (list) => (Array.isArray(list) ? list.map((x) => (x && typeof x === 'object' ? x.contractClauseId : x)).filter((x) => typeof x === 'string' && x.length === 36) : []);
+
 /** Diferenças entre duas versões: cada linha removida/incluída cita a versão e o trecho; cláusulas incluídas/excluídas citam código e versão. */
 async function compareVersions(contractId, fromNumber, toNumber, transaction, now = new Date(), max = 50) {
   const contract = await loadContract(contractId, transaction);
@@ -26,8 +29,8 @@ async function compareVersions(contractId, fromNumber, toNumber, transaction, no
   const a = versions.find((v) => v.versionNumber === fromNumber);
   const b = versions.find((v) => v.versionNumber === toNumber);
   if (!a || !b) throw AppError.notFound('Versão do contrato não encontrada.', 'LEGAL_CONTRACT_VERSION_NOT_FOUND');
-  const ca = Array.isArray(a.clauseVersionIds) ? a.clauseVersionIds : [];
-  const cb = Array.isArray(b.clauseVersionIds) ? b.clauseVersionIds : [];
+  const ca = clauseIdsOf(a.clauseVersionIds);
+  const cb = clauseIdsOf(b.clauseVersionIds);
   const ids = [...new Set([...ca, ...cb])];
   const clauses = ids.length ? await ContractClause.findAll({ where: { id: ids }, attributes: ['id', 'code', 'title', 'versionNumber'], transaction }) : [];
   const ref = new Map(clauses.map((c) => [c.id, { id: c.id, code: c.code, title: c.title, version: c.versionNumber }]));
@@ -83,7 +86,7 @@ const plain = (v) => (v === undefined || v === null ? v : JSON.parse(JSON.string
 async function contractSummary(contractId, transaction, now = new Date(), max = 50) {
   const contract = plain(await contractsService.getContract(contractId, transaction));
   const current = await ContractVersion.findOne({ where: { contractId }, order: [['versionNumber', 'DESC']], transaction });
-  const ids = current && Array.isArray(current.clauseVersionIds) ? current.clauseVersionIds : [];
+  const ids = current ? clauseIdsOf(current.clauseVersionIds) : [];
   const library = ids.length ? await ContractClause.findAll({ where: { id: ids }, attributes: ['id', 'code', 'title', 'versionNumber'], transaction }) : [];
   const title = `Contrato ${contract.contractNumber || contract.id}`;
   const lines = current ? contentLines(current.content).slice(0, max) : [];

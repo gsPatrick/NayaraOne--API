@@ -85,8 +85,15 @@ function resolveTemplateKey(contractType) {
  * módulo jurídico).
  */
 async function generateRequirementsForContract(contractId, options, actorUserId, transaction) {
+  // Verificação M5 linha 65 (Caderno §7 "gerados por tipo de contrato + regras + características"): o modelo do checklist
+  // é resolvido pela regra REG-JUR-001 a partir do tipo do contrato; quem chama não escolhe o modelo.
+  if (options && typeof options === 'object' && Object.prototype.hasOwnProperty.call(options, 'templateKey')) {
+    throw AppError.badRequest(
+      'O modelo do checklist não é escolhido na requisição: ele vem da regra do checklist documental (tipo do contrato + características das partes e do imóvel).',
+      'LEGAL_REQUIREMENT_TEMPLATE_KEY_NOT_ACCEPTED'
+    );
+  }
   const contract = await getContract(contractId, transaction);
-  const { templateKey } = options || {};
 
   // BUG REAL CORRIGIDO (varredura completa Marco 5, 12/10/2026, achado por teste HTTP novo):
   // esta tabela só tinha a chave literal "LEASE", mas os subtipos LEASE_RESIDENTIAL/
@@ -97,12 +104,12 @@ async function generateRequirementsForContract(contractId, options, actorUserId,
   // JUR-015) que esses subtipos deveriam estar protegidos por. Mesmo padrão de bug já corrigido
   // em rentAdvance.service.js/billingScheduleAutoGenerateJob — usar isLeaseLikeContractType()
   // em vez de comparar contractType literalmente.
-  // Matriz M5 (Caderno §7): itens = política vigente do Motor de Regras (REG-JUR-001) para o tipo (ou o fluxo
-  // `templateKey`), filtrados pelas características das partes/imóvel lidas do cadastro (não do corpo da requisição).
-  const { key, items: template, ruleVersionId } = await resolveRequirementItems(contract, { templateKey }, actorUserId, transaction);
+  // Matriz M5 (Caderno §7): itens = política vigente do Motor de Regras (REG-JUR-001) para o tipo do contrato,
+  // filtrados pelas características das partes/imóvel lidas do cadastro (não do corpo da requisição).
+  const { key, items: template, ruleVersionId } = await resolveRequirementItems(contract, actorUserId, transaction);
   if (!template) {
     throw AppError.badRequest(
-      `Não há modelo de checklist configurado para "${contract.contractType}" na regra do checklist documental (ou informe "templateKey").`,
+      `Não há modelo de checklist configurado para "${contract.contractType}" na regra do checklist documental.`,
       'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND'
     );
   }

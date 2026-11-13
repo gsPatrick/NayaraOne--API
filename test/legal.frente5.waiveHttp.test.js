@@ -66,13 +66,13 @@ test('dispensa sem legal:waive -> 403 (PATCH e rota dedicada); com legal:waive -
   const withWaive = tokenWith([...base, 'legal:waive']);
   const onlyWaive = tokenWith(['legal:waive']);
 
-  const contract = await http(noWaive, 'POST', '/legal/contracts', { contractType: 'SERVICE', totalValue: 500 });
+  const contract = await http(noWaive, 'POST', '/legal/contracts', { contractType: 'LEASE_RESIDENTIAL', totalValue: 500 });
   assert.equal(contract.status, 201, JSON.stringify(contract.body));
   createdContractIds.push(contract.body.data.id);
   const generated = await http(noWaive, 'POST', `/legal/contracts/${contract.body.data.id}/requirements/generate`, {});
   assert.equal(generated.status, 201, JSON.stringify(generated.body));
   const [r1, r2] = generated.body.data;
-  assert.ok(r1 && r2, 'SERVICE agora tem checklist com 2 itens');
+  assert.ok(r1 && r2, 'a locação tem checklist com ao menos 2 itens');
 
   const patchDenied = await http(noWaive, 'PATCH', `/legal/requirements/${r1.id}`, { waivedReason: `F5 ${uniqueSuffix()}` });
   assert.equal(patchDenied.status, 403, JSON.stringify(patchDenied.body));

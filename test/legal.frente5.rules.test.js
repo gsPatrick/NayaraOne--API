@@ -243,8 +243,11 @@ test('checklist documental: tipo SEM modelo bloqueia (falha fechado)', async () 
   const { publishRequirementRules } = require('../src/modules/legal/contracts/application/requirementRules.service');
   const templates = { ...DEFAULT_ACTION.templates };
   delete templates.SERVICE;
+  // A política só publica referências fechadas: o tipo sem modelo sai também do mapa tipo -> modelo.
+  const typeToTemplate = { ...DEFAULT_ACTION.typeToTemplate };
+  delete typeToTemplate.SERVICE;
   await withRollbackTenantTransaction(tenant, async (t) => {
-    await publishRequirementRules(tenant, { templates, typeToTemplate: DEFAULT_ACTION.typeToTemplate }, tenant.userId, t);
+    await publishRequirementRules(tenant, { templates, typeToTemplate }, tenant.userId, t);
     const contract = await makeContract(t, { status: 'DRAFT', contractType: 'SERVICE' });
     await assert.rejects(
       contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, t),

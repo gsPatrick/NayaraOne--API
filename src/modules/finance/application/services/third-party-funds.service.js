@@ -38,6 +38,13 @@ async function assertThirdPartyReleaseStillCovered(entry, transaction) {
   }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+async function assertContractOfCompany(contractId, companyId, transaction) {
+  if (typeof contractId !== 'string' || !UUID_RE.test(contractId) || !(await entries.findContractOfCompany(contractId, companyId, transaction))) {
+    throw AppError.badRequest('O contrato informado não existe nesta empresa: o lançamento só se vincula a contrato da própria empresa.', 'FINANCE_ENTRY_CONTRACT_NOT_IN_COMPANY');
+  }
+}
+
 // D2 (revisão independente): o titular podia ser qualquer parte do contrato (o proprietário foi
 // aceito como "dono" da caução).
 async function assertThirdPartyHolderIsContractParty(holderPersonId, contractId, transaction) {
@@ -157,6 +164,10 @@ async function resolveThirdPartyRelease({ companyId, contractId, holderPersonId,
 async function resolveThirdPartyLinks(payload, normalizedNature, options, transaction) {
   const { companyId, bankAccountId, contractId, amount, isThirdPartyFunds, thirdPartyReference } = payload;
   const { thirdPartyOriginEntryId, thirdPartyHolderPersonId, thirdPartyReleaseType, thirdPartyCompensatedEntryId } = payload;
+
+  // Caderno M5 JUR-013 ("Contrato pertence à empresa correta e não mistura documentos/financeiro"; verificação M5 linha 14): a FK
+  // do Postgres ignora a RLS, então o contrato informado é conferido na empresa do lançamento antes de qualquer vínculo.
+  if (contractId !== undefined && contractId !== null && contractId !== '') await assertContractOfCompany(contractId, companyId, transaction);
 
   // M4-16 — dinheiro de terceiro (caução, depósito de garantia, valores que só transitam pela
   // imobiliária) só pode ser marcado como tal se vier com a referência de a QUEM pertence.
