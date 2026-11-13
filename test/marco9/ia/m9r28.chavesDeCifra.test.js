@@ -8,7 +8,7 @@ const { redactDeep, isSensitiveKey } = require('../../../src/shared/redaction');
 
 const SEGREDO = 'SECRET-CANARY-7f3a-cifra';
 const SENSIVEIS = ['FILES_ENCRYPTION_KEY', 'MFA_ENCRYPTION_KEY', 'SECRET_STORE_MASTER_KEY', 'encryptionKey', 'masterKey', 'signingKey',
-  'WEBHOOK_HMAC_KEY', 'AWS_SECRET_KEY', 'DLP_TOKEN_KEY', 'DATABASE_URL', 'DATABASE_ADMIN_URL', 'connectionString'];
+  'WEBHOOK_HMAC_KEY', 'AWS_SECRET_KEY', 'DLP_TOKEN_KEY', 'DATABASE_URL', 'DATABASE_ADMIN_URL', 'connectionString', 'HOMO_ADMIN_MFA_CODE', 'HOMO_AUDITOR_A_MFA_CODE'];
 const VISIVEIS = ['idempotencyKey', 'actionKey', 'sortKey', 'personKey', 'key', 'monkey', 'CLICKSIGN_BASE_URL', 'DEV_API_BASE_URL', 'SECRET_STORE_DRIVER'];
 
 test('chaves de cifra, mestras, de assinatura e strings de conexão são segredo por nome', () => {

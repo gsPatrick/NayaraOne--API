@@ -9,7 +9,7 @@ const EXACT = new Set([
 // DI-M9R-28: chaves de cifra, mestras, de assinatura e de HMAC (FILES_ENCRYPTION_KEY, MFA_ENCRYPTION_KEY, SECRET_STORE_MASTER_KEY…) e strings de conexão
 // também são segredo; `idempotencyKey`, `actionKey`, `sortKey` e afins continuam visíveis.
 const SUFFIXES = ['token', 'secret', 'password', 'senha', 'apikey', 'privatekey', 'signature', 'authorization',
-  'encryptionkey', 'masterkey', 'signingkey', 'hmackey', 'secretkey', 'tokenkey', 'databaseurl', 'connectionstring'];
+  'encryptionkey', 'masterkey', 'signingkey', 'hmackey', 'secretkey', 'tokenkey', 'databaseurl', 'connectionstring', 'mfacode'];
 // String de conexão com nome composto (DATABASE_ADMIN_URL, DATABASE_REPLICA_URL…): contém "database" e termina em "url".
 const conexaoDoBanco = (k) => k.includes('database') && k.endsWith('url');
 
