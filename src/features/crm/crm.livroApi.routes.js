@@ -19,12 +19,13 @@ const scoped = [authMiddleware, tenantMiddleware];
 
 // §18: troca de responsável em massa com permissão específica (antes de '/crm/opportunities/:id/...').
 crmLivroRouter.post('/crm/opportunities/reassign', scoped, requirePermission('crm:opportunities:reassign'), livro.reassignOwners);
-crmLivroRouter.post('/crm/opportunities', scoped, requirePermission('crm:opportunities:create'), crmController.createOpportunity);
+// Mesmo esquema de entrada (Marco 9, DI-M9R-21) das rotas de sempre que estas delegam: tipo errado é 400 na porta, nunca 500.
+crmLivroRouter.post('/crm/opportunities', scoped, requirePermission('crm:opportunities:create'), require('./opportunities.schema').validarCriacaoDeOportunidade, crmController.createOpportunity);
 crmLivroRouter.get('/crm/outcome-reasons', scoped, requirePermission('crm:opportunities:read'), livro.listOutcomeReasons);
 crmLivroRouter.post('/crm/opportunities/:id/interactions', scoped, requireOpportunityInScope, requirePermission('crm:messages:create'), livro.recordInteraction);
 crmLivroRouter.post('/crm/opportunities/:id/visits', scoped, requireOpportunityInScope, requirePermission('crm:visits:create'), livro.scheduleVisit);
 crmLivroRouter.post('/crm/opportunities/:id/lost', scoped, requireOpportunityInScope, requirePermission('crm:opportunities:update'), livro.markLost);
-crmLivroRouter.post('/crm/radars', scoped, requirePermission('radar:create'), carteira.requireBodyOpportunityInScope, radarController.create);
+crmLivroRouter.post('/crm/radars', scoped, requirePermission('radar:create'), require('../radar/radar.schema').validarCriacaoDeRadar, carteira.requireBodyOpportunityInScope, radarController.create);
 crmLivroRouter.get('/crm/radars/:id/matches', scoped, requirePermission('radar:read'), carteira.requireRecordInScope('radar'), radarController.matches);
 crmLivroRouter.post('/crm/occurrences', scoped, requirePermission('crm:feedback:create'), carteira.requireBodyOpportunityInScope, crmController.createFeedbackCase);
 crmLivroRouter.delete('/crm/occurrences/:id', scoped, requirePermission('crm:feedback:update'), livro.refuseOccurrenceDeletion);

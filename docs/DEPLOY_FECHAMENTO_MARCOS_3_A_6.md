@@ -1,11 +1,11 @@
 # Deploy do fechamento dos Marcos 3 a 6 — migrations depois do Marco 9
 
-Este roteiro vale para a versão da integração dos Marcos 3 a 6 sobre o Marco 9 entregue (`9863bee2`). São 56 migrations novas sobre a
+Este roteiro vale para a versão da integração dos Marcos 3 a 6 sobre o Marco 9 entregue (`9863bee2`). São 57 migrations novas sobre a
 homologação de hoje (que já tem o plano do Marco 9 inteiro, `docs/DEPLOY_MARCO_9.md`). Elas foram ensaiadas de duas formas em 13/11/2026:
 
-1. Banco descartável com as migrations do Marco 9 e, por cima, as da integração (mesma ordem da homologação): as 56 aplicam e nada fica pendente.
+1. Banco descartável com as migrations do Marco 9 e, por cima, as da integração (mesma ordem da homologação): as 57 aplicam e nada fica pendente.
 2. **Com os dados da homologação**: o backup de 13/11/2026 08:14 (`backups/homolog-antes-marco9-20261113-0814.dump`, SHA-256 `a3b253f2…`) restaurado num
-   PostgreSQL local, as 7 migrations do Marco 9 (como no deploy do Marco 9) e então as 56 da integração, com o usuário dono das tabelas com os
+   PostgreSQL local, as 7 migrations do Marco 9 (como no deploy do Marco 9) e então as 57 da integração, com o usuário dono das tabelas com os
    mesmos atributos da homologação (superusuário e BYPASSRLS, conferido por consulta somente leitura). Todas aplicam, em cerca de 4 s.
 
 A API anterior (Marco 9 sem os Marcos 3 a 6) NÃO funciona depois destas migrations (nomes de tabela do livro do Marco 5, colunas novas). Elas sobem
@@ -29,9 +29,10 @@ junto com a API e o Front da integração, com a API parada, como no `docs/DEPLO
 - `20260101010520` (ledger do Marco 4, M4LR): corrige o ledger antigo, cada correção numa linha de `finance.ledger_m4lr_migration_log` e no `audit.audit_log`, nada
   apagado e o `down` desfaz pelo log. No ensaio: 634 chaves `legado:<id>`, 109 tipos de movimento, 37 estornos de previsto nunca realizado tirados do ledger,
   2 estornos do valor cheio de pai com baixas parciais substituídos por 4 estornos corretos das baixas (4 lançamentos novos, `reversal:<id>:correcao-m4lr`), 5 autores.
-- `20260101006603` (evidência da medição, Marco 6): 33 medições PAYABLE antigas sem a conta a pagar ligada; 4 recebem o vínculo com a conta que o fluxo antigo
-  criou (`measurement.payable:<id>`) e **29 ficam sem conta**. Por isso a CHECK `stage_measurements_payable_has_entry` fica criada SEM validar (vale para toda
-  medição nova ou alterada). Decisão do Patrick, caso a caso (gerar a conta a pagar ou reverter a medição); depois:
+- `20260101006603` (evidência da medição, Marco 6) e `20260101006608` (Financeiro): 33 medições PAYABLE antigas sem a conta a pagar ligada.
+  A 6603 cria a CHECK `stage_measurements_payable_has_entry` sem validar (vale para toda medição nova ou alterada); a 6608 liga 4 delas à
+  conta que o fluxo antigo criou (`measurement.payable:<id>`) e, como **29 ficam sem conta**, a CHECK continua sem validar. Decisão do
+  Patrick, caso a caso (gerar a conta a pagar ou reverter a medição); depois:
   `ALTER TABLE construction.stage_measurements VALIDATE CONSTRAINT stage_measurements_payable_has_entry;`. Consulta somente leitura para listar:
 
   ```sql
@@ -52,9 +53,9 @@ Em outro ambiente em que o dono NÃO tenha BYPASSRLS, as cargas que leem tabelas
 Restaurar o backup do passo 1 e reimplantar a API e o Front do Marco 9 (`9863bee2` / Front `a26d3da`). As migrations têm `down`, mas várias renomeiam tabelas e
 corrigem dados; o caminho seguro de volta é o backup.
 
-## Migrations (56, na ordem em que aplicam sobre a homologação)
+## Migrations (57, na ordem em que aplicam sobre a homologação)
 
-**Marco 6 (Obras: verificação)** (8)
+**Marco 6 (Obras: verificação)** (9)
 
 - `20260101006600-m6v-tipo-de-obra-e-checklist-por-etapa`
 - `20260101006601-m6v-responsavel-da-etapa`
@@ -64,6 +65,7 @@ corrigem dados; o caminho seguro de volta é o backup.
 - `20260101006605-m6v-alcada-permissao-propria-e-quem-propoe`
 - `20260101006606-finance-indices-da-obra-no-ledger`
 - `20260101006607-m6v-indices-da-saude-da-obra`
+- `20260101006608-finance-liga-medicao-antiga-a-conta`
 
 **Marco 3 (Pessoas, Imóveis e CRM)** (19)
 
