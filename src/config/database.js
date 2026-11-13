@@ -51,8 +51,9 @@ const commonOptions = {
     useUTC: true,
     // Rodada 8 (DI-M9R-23): transação parada e comando longo têm tempo máximo na sessão (DB_IDLE_IN_TRANSACTION_TIMEOUT_MS, DB_STATEMENT_TIMEOUT_MS).
     ...opcoesDeTempoDaSessao(),
-    // Nome da aplicação nas sessões do banco (pg_stat_activity): separa as conexões da API das de scripts e jobs externos na investigação.
-    application_name: process.env.DB_APPLICATION_NAME || 'nayaraone-api',
+    // Nome da aplicação nas sessões do banco (pg_stat_activity): separa as conexões da API das de scripts e jobs externos na investigação. O
+    // PGAPPNAME padrão do Postgres continua valendo quando definido (a sonda de carga do BI, M9-D699, identifica as sessões dela por ele).
+    application_name: process.env.DB_APPLICATION_NAME || process.env.PGAPPNAME || 'nayaraone-api',
   },
 };
 

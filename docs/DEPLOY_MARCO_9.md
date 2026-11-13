@@ -145,7 +145,7 @@ Sem migration. Muda o comportamento do processo, a imagem (HEALTHCHECK) e alguma
 | `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` | 300000 (5 min) | 0 a 86400000 (0 desliga) | `idle_in_transaction_session_timeout` de cada conexão da API: a sessão parada no meio de uma transação é encerrada pelo banco, que desfaz a transação e solta as travas. 5 min cobre a maior espera legítima dentro de uma transação (leitura automática de documento por OCR local, até 60 s por página). Vale também para as migrations. |
 | `DB_STATEMENT_TIMEOUT_MS` | 120000 (2 min) | 0 a 86400000 (0 desliga) | `statement_timeout` de cada conexão da API. As consultas do BI e o refresh dos read models continuam com os limites locais deles (menores). |
 | `DB_MIGRATION_STATEMENT_TIMEOUT_MS` | 0 (desligado) | 0 a 86400000 | `statement_timeout` das migrations (`sequelize-cli`): desligado por padrão, porque índice e cópia de dados podem demorar. |
-| `DB_APPLICATION_NAME` | `nayaraone-api` | texto | Nome das sessões da API no `pg_stat_activity`. |
+| `DB_APPLICATION_NAME` | `PGAPPNAME` ou `nayaraone-api` | texto | Nome das sessões da API no `pg_stat_activity` (sem a variável vale o `PGAPPNAME` padrão do Postgres, se houver). |
 | `HEALTH_POOL_TIMEOUT_MS` | 5000 | 500 a 60000 | Prazo do `GET /api/health/pool` (pedir uma conexão ao pool e rodar `SELECT 1`). |
 | `HEALTHCHECK_TIMEOUT_MS` | 8000 | maior que 0 | Prazo do `scripts/healthcheck.js` (fica abaixo do `--timeout=10s` do Dockerfile). |
 | `QUERY_POSITION_MAX` | 100000000 | 1000 a 10^12 | Maior `page`, `offset` ou `skip` aceito na consulta de qualquer rota. |
