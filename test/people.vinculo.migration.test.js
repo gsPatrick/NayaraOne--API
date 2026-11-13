@@ -31,6 +31,11 @@ test('migrations do vínculo: dados existentes, linha cruzada preservada com aud
     await M944.down(qi);
     await M941.down(qi);
     await M940.down(qi);
+    // Banco ANTERIOR à 9966 do Marco 9 (é onde podia existir linha cruzada): o down da 0941 devolve a chave "filho só da empresa da
+    // pessoa" da 9966; aqui ela sai para o cenário de dados antigos (a 0941 a remove de novo no up, como em qualquer banco com a 9966).
+    for (const t of ['person_contacts', 'person_addresses', 'person_documents', 'person_roles', 'communication_consents']) {
+      await aq(`ALTER TABLE people.${t} DROP CONSTRAINT IF EXISTS ${t}_person_same_company_fkey`);
+    }
     const antes = await politicaSelect();
     assert.ok(!/person_company_links/.test(antes), 'o down volta à leitura só por empresa');
     assert.equal((await aq("SELECT to_regclass('people.person_company_links') AS r"))[0].r, null, 'o down remove a tabela de vínculo');

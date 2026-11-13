@@ -94,4 +94,8 @@ async function listRoleCatalog(tenant, transaction) {
   return readRoleCatalog({ groupId: tenant.groupId, companyId }, transaction);
 }
 
-module.exports = { createRole, listRoles, getRole, updateRole, deleteRole, assertRoleInCatalog, listRoleCatalog };
+// Nome de antes do M3-02 (lista fixa), mantido para quem já o usava (ex.: teste ISO-8 do Marco 9): os papéis do livro, que estão no catálogo
+// padrão da empresa (personRoles.settings DEFAULT_ROLES). A lista que vale para gravar é a do catálogo (assertRoleInCatalog).
+const VALID_ROLES = require('./personRoles.settings').BOOK_ROLES;
+
+module.exports = { createRole, listRoles, getRole, updateRole, deleteRole, assertRoleInCatalog, listRoleCatalog, VALID_ROLES };
