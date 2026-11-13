@@ -57,6 +57,11 @@ module.exports = {
       const texto = relatorio.map((r) => `${r.tabela}: ${r.linhasSemVinculo} linha(s) sem vínculo em ${r.pares} par(es) pessoa/empresa`).join('; ');
       console.log(`[20260101010941] conferência antes das chaves compostas: ${texto}`);
 
+      // Integração com o Marco 9: a migration 20260101009966 (ISO-8 do Marco 9) criou <filho>_person_same_company_fkey, a chave composta
+      // para people.persons (id, company_id) — o filho só da empresa da pessoa. O vínculo SUBSTITUI essa chave pela chave para o vínculo
+      // (a empresa vinculada grava os próprios filhos da pessoa); a 9966 deixou os nomes estáveis para isso. A UNIQUE (id, company_id) de
+      // people.persons fica (id já é a chave primária: não recusa nada e não quebra quem dependa dela).
+      for (const t of FILHOS) await q(`ALTER TABLE people.${t} DROP CONSTRAINT IF EXISTS ${t}_person_same_company_fkey`);
       for (const t of FILHOS) {
         await q(`ALTER TABLE people.${t} ADD CONSTRAINT ${t}_person_company_link_fkey FOREIGN KEY (person_id, company_id)
           REFERENCES people.person_company_links (person_id, company_id) ON UPDATE NO ACTION ON DELETE RESTRICT NOT VALID`);
@@ -79,6 +84,24 @@ module.exports = {
         await q(`ALTER TABLE people.${t} DROP CONSTRAINT IF EXISTS ${t}_person_company_link_fkey`);
       }
       // Os vínculos ENCERRADOS criados na conferência ficam na tabela de vínculos, que a migration anterior remove no down dela.
+      // Volta a chave do Marco 9 (9966) quando ela está aplicada (a UNIQUE alvo existe): criada NOT VALID e validada se nenhum filho de
+      // outra empresa ficou de quando o vínculo valia; senão fica sem validar (o dado não é apagado pela migration).
+      const [[alvo]] = await q("SELECT count(*)::int AS n FROM pg_constraint WHERE conname = 'persons_id_company_same_company_key'");
+      if (alvo.n) {
+        for (const t of FILHOS) {
+          const [[existe]] = await q(`SELECT count(*)::int AS n FROM pg_constraint WHERE conname = '${t}_person_same_company_fkey'`);
+          if (existe.n) continue;
+          // Mesma ação de exclusão da FK simples (person_id) -> people.persons, como na 9966.
+          const [[simples]] = await q(`SELECT con.confdeltype AS tipo FROM pg_constraint con JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
+            WHERE con.contype = 'f' AND con.conrelid = 'people.${t}'::regclass AND con.confrelid = 'people.persons'::regclass
+              AND array_length(con.conkey, 1) = 1 AND a.attname = 'person_id'`);
+          const acao = ({ a: 'NO ACTION', r: 'RESTRICT', c: 'CASCADE', n: 'SET NULL', d: 'SET DEFAULT' })[simples && simples.tipo] || 'NO ACTION';
+          await q(`ALTER TABLE people.${t} ADD CONSTRAINT ${t}_person_same_company_fkey FOREIGN KEY (person_id, company_id)
+            REFERENCES people.persons (id, company_id) ON UPDATE NO ACTION ON DELETE ${acao} NOT VALID`);
+          const [[cruzadas]] = await q(`SELECT count(*)::int AS n FROM people.${t} f JOIN people.persons p ON p.id = f.person_id WHERE p.company_id IS DISTINCT FROM f.company_id`);
+          if (!cruzadas.n) await q(`ALTER TABLE people.${t} VALIDATE CONSTRAINT ${t}_person_same_company_fkey`);
+        }
+      }
     });
   },
 };

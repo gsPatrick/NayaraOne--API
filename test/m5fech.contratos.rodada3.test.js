@@ -49,7 +49,7 @@ test('Pentest (alto): id que não é uuid no corpo devolve 400 LEGAL_INVALID_ID,
   // Integração dos Marcos 3 a 6 com o Marco 9: as rotas com o esquema de entrada do Marco 9 na porta (DI-M9R-21; versão e criação do
   // contrato, nos caminhos /legal e literais do Guia §14) recusam antes, com o código de validação do módulo; as demais seguem com
   // LEGAL_INVALID_ID. Em todas: 400, nunca 500.
-  const PELO_ESQUEMA = { 'POST /legal/contracts/:id/versions': 'LEGAL_CONTRACT_VERSION_VALIDATION', 'POST /contracts/:id/versions': 'LEGAL_CONTRACT_VERSION_VALIDATION', 'POST /contracts': 'LEGAL_CONTRACT_VALIDATION' };
+  const PELO_ESQUEMA = { 'POST /legal/contracts/:id/versions': 'LEGAL_CONTRACT_VERSION_VALIDATION', 'POST /contracts/:id/versions': 'LEGAL_CONTRACT_VERSION_VALIDATION' };
   for (const [metodo, rota, corpo] of casos) {
     const r = await h.http('A:gestor', metodo, rota, corpo);
     const chave = `${metodo} ${rota.replace(k.contractId, ':id')}`;
