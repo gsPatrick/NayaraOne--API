@@ -504,7 +504,8 @@ test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno e
        
       const entry = await createEntry(transaction, { bankAccountId: account.id, amount: 100 + i, description: `estorno frequente ${i}` });
        
-      lastReversal = await receiptService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction);
+      // M4LR (Caderno §6): lançamento nunca realizado — o estorno anula o previsto (sem ledger), a pedido explícito.
+      lastReversal = await receiptService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction, { voidNotRealized: true });
     }
 
     const alert = await antifraudService.checkFrequentReversalAlert(tenant.companyId, transaction);
@@ -954,7 +955,12 @@ test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de tercei
     const freeDelta = Math.round((after.freeCash.value - before.freeCash.value) * 100) / 100;
     assert.equal(grossDelta, 700, 'extrato: +1000 -300 = +700 de saldo bruto');
     assert.equal(heldDelta, 400, 'caução SETTLED recebida fica retida como dinheiro de terceiro');
-    assert.equal(freeDelta, 300, 'caixa livre = bruto (700) - retido de terceiro (400)');
+    // Caderno §19 "Caixa disponível — saldos conciliados próprios" (M4LR, DI-M4LR-7): o extrato importado sem conciliação não é
+    // caixa disponível, e o terceiro retido só sai do caixa na parte que está no conciliado. O cenário conciliado está em
+    // test/m4lr.relatorioRecebivelParcial.test.js (sonda P12).
+    const conciliatedDelta = Math.round((after.freeCash.conciliatedBankBalance - before.freeCash.conciliatedBankBalance) * 100) / 100;
+    assert.equal(conciliatedDelta, 0, 'nada conciliado neste cenário');
+    assert.equal(freeDelta, 0, 'caixa disponível = conciliado próprio (nada conciliado)');
 
     const sector = after.marginBySector.find((s) => s.resultCenterId === resultCenter.id);
     assert.ok(sector, 'centro de resultado aparece em marginBySector');

@@ -9,8 +9,13 @@ const sql = require('../quality.sql');
 const t = require('../types');
 const { latestRow, boundsOf } = require('./finance.shared');
 
+// M4LR: regra do saldo e da linha do ledger nas funções do banco (migration 20260101010520), a mesma do Financeiro — sem importar o módulo.
+const OPEN_AMOUNT = (alias) => `(${alias}.amount - finance.entry_realized_by_children(${alias}.id))`;
+const IS_LEDGER_ROW = (alias) => `(${alias}.ledger_exclusion_reason IS NULL AND NOT finance.entry_has_settlement_children(${alias}.id))`;
+
 const MODEL = 'rm_finance_health';
-const OWN_LIVE = 'NOT is_third_party_funds AND reversal_of_entry_id IS NULL';
+// M4LR: o liquidado conta só linha do ledger (o pai quitado em baixas parciais não soma com as baixas); o previsto é o saldo em aberto.
+const OWN_LIVE = `NOT is_third_party_funds AND reversal_of_entry_id IS NULL AND ${IS_LEDGER_ROW('financial_entries')}`;
 
 async function ledgerValue(ctx, asOf, where) {
   return sql.value(ctx, `SELECT COALESCE(SUM(CASE WHEN nature = 'RECEIVABLE' THEN amount ELSE -amount END), 0)::text AS v FROM finance.financial_entries WHERE company_id = :companyId AND ${where}`,
@@ -52,8 +57,9 @@ function horizonReconciliation(code, nature, column, metric) {
       const row = await latestRow(ctx, [column]);
       if (!row) return null;
       const b = boundsOf(row.as_of_date);
-      return sql.value(ctx, `SELECT COALESCE(SUM(amount), 0)::text AS v FROM finance.financial_entries WHERE company_id = :companyId AND status = 'PENDING' AND nature = '${nature}' AND ${OWN_LIVE}
-        AND due_at >= :from AND due_at < :to`, { from: b.today.toISOString(), to: b.horizon30.toISOString() });
+      return sql.value(ctx, `SELECT COALESCE(SUM(${OPEN_AMOUNT('e')}), 0)::text AS v FROM finance.financial_entries e WHERE e.company_id = :companyId
+        AND e.status IN ('PENDING', 'PARTIALLY_SETTLED') AND e.nature = '${nature}' AND NOT e.is_third_party_funds AND e.reversal_of_entry_id IS NULL
+        AND e.ledger_exclusion_reason IS NULL AND e.due_at >= :from AND e.due_at < :to`, { from: b.today.toISOString(), to: b.horizon30.toISOString() });
     },
   });
 }
@@ -77,7 +83,7 @@ const cashSplit = t.consistency({
   async evaluate(ctx) {
     const row = await latestRow(ctx, ['free_cash', 'third_party_cash']);
     if (!row) return { ok: true, expected: { rule: 'caixa livre + terceiros = caixa total' }, observed: {} };
-    const ledgerTotal = await ledgerValue(ctx, row.as_of_date, `status = 'SETTLED' AND reversal_of_entry_id IS NULL AND nature IN ('RECEIVABLE', 'PAYABLE') AND settled_at < :dayEnd`);
+    const ledgerTotal = await ledgerValue(ctx, row.as_of_date, `status = 'SETTLED' AND reversal_of_entry_id IS NULL AND ${IS_LEDGER_ROW('financial_entries')} AND nature IN ('RECEIVABLE', 'PAYABLE') AND settled_at < :dayEnd`);
     const total = await sql.value(ctx, 'SELECT (CAST(:a AS numeric) + CAST(:b AS numeric))::text AS v', { a: ledgerTotal, b: await cashAdjustments(ctx, row) }); // M9-D620: caixa total = ledger + abertura + transferências
     const [{ sum }] = await sql.rows(ctx, 'SELECT (CAST(:free AS numeric) + CAST(:third AS numeric))::text AS sum', { free: row.free_cash, third: row.third_party_cash });
     const [{ equal }] = await sql.rows(ctx, 'SELECT CAST(:a AS numeric) = CAST(:b AS numeric) AS equal', { a: sum, b: total });

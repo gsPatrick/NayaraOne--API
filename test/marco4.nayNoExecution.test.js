@@ -114,9 +114,10 @@ test('FIN-TS-014: não existe nenhum módulo de execução financeira acessível
   // Guia §13 (DI-M4CC-4): os números vêm do read model (repositório de leitura do analytics) e a montagem das seções é pura; nada de serviço que escreve.
   // DEC-007 (DI-DEC007-2): a fonte dos limiares do antifraude é a tela de Configurações; a NAY Financeira não lê o resolvedor.
   assert.deepEqual(requires, ['../../../../models', '../../../../features/ai/orchestrator/runs', '../../../../utils/businessDate', 
-    '../../infrastructure/repositories/finance-health-read-model.repository', './finance-nay-sections', '../../domain/money', '../../../../features/analytics/metrics/freshness.settings'].sort());
+    '../../infrastructure/repositories/finance-health-read-model.repository', './finance-nay-sections', '../../domain/money', '../../../../features/analytics/metrics/freshness.settings',
+    '../../infrastructure/repositories/ledger-sql'].sort()); // M4LR: saldo em aberto da fila de trabalho (fragmentos de SQL, só leitura)
   assert.match(nay, /const \{ sequelize \} = require\('\.\.\/\.\.\/\.\.\/\.\.\/models'\)/);
-  for (const file of ['infrastructure/repositories/finance-health-read-model.repository.js', 'application/services/finance-nay-sections.js']) {
+  for (const file of ['infrastructure/repositories/finance-health-read-model.repository.js', 'application/services/finance-nay-sections.js', 'infrastructure/repositories/ledger-sql.js']) {
     const src = fs.readFileSync(path.join(financeDir, file), 'utf8');
     assert.doesNotMatch(src, /\b(INSERT|UPDATE|DELETE)\b|\.(create|update|destroy|save|bulkCreate)\(/, `${file} só lê`);
   }

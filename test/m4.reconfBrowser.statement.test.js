@@ -85,8 +85,11 @@ test('A1: o banco recusa valor NaN em finance.bank_transactions (CHECK da migrat
     const sfx = uniqueSuffix();
     const ba = await account(t, sfx);
     const r = await importCsv(t, ba.id, `${HEADER}\nN-${sfx}-1,2026-10-05,a,10.00`);
+    assert.equal(r.imported.length, 1);
     await assert.rejects(
-      sequelize.query('UPDATE finance.bank_transactions SET amount = \'NaN\' WHERE id = :id', { replacements: { id: r.imported[0].id }, transaction: t }),
+      // M4LR (Caderno §5): a linha importada é imutável (gatilho); o CHECK do NaN é provado na gravação de uma linha nova.
+      sequelize.query(`INSERT INTO finance.bank_transactions (id, group_id, company_id, bank_account_id, external_transaction_id, amount, transaction_date, description, created_at, updated_at)
+                       VALUES (gen_random_uuid(), :g, :c, :a, :x, 'NaN', now(), 'NaN', now(), now())`, { replacements: { g: tenant.groupId, c: tenant.companyId, a: ba.id, x: `NAN-${sfx}` }, transaction: t }),
       (e) => /bank_transactions_amount_not_nan|check constraint|restrição de verificação/i.test(String(e.message) + String(e.parent && e.parent.message))
     );
   });

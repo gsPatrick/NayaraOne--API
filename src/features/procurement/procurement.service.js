@@ -1027,7 +1027,8 @@ async function reconcileGoodsReceiptPayable(goodsReceipt, actor, transaction, tr
       currentActive.id,
       `Valor a pagar do recebimento recalculado após decisão de divergência (de ${formatBRLText(Number(currentActive.amount))} para ${formatBRLText(due)}).`,
       actor.userId,
-      transaction
+      transaction,
+      { voidNotRealized: true } // Caderno M4 §6: conta ainda não paga é anulada sem lançamento no ledger
     );
   }
   let newEntryId = null;
@@ -1368,7 +1369,8 @@ async function cancelPurchaseOrder(id, groupId, companyId, payload, actor, trans
         entry.id,
         `Pedido de compra ${order.id} cancelado — estorno do payable gerado no recebimento ${goodsReceipt.id}.`,
         actor.userId,
-        transaction
+        transaction,
+        { voidNotRealized: true } // Caderno M4 §6: conta ainda não paga é anulada sem lançamento no ledger
       );
       reversedFinancialEntryIds.push(entry.id);
     }

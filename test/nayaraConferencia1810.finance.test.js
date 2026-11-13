@@ -564,13 +564,14 @@ test('F03-8 (HTTP): POST /finance/entries/:id/settle recusa sem comprovante e ac
   });
   const token = tokenFor(mfaUser.id, ['finance:read', 'finance:settle']);
 
-  const refused = await http('POST', `/finance/entries/${entryId}/settle`, token, {});
+  const refused = await http('POST', `/finance/entries/${entryId}/settle`, token, { idempotencyKey: `f03-recusada-${entryId}` });
   assert.equal(refused.status, 409, JSON.stringify(refused.body));
   assert.equal(refused.body.error.code, 'FINANCE_ENTRY_BANK_SETTLEMENT_REQUIRES_CONFIRMATION');
 
   // Revisão 18/10/2026 (A4): comprovante informado só na baixa é recusado — precisa ser anexado
   // antes, e a aprovação anterior ao anexo fica inválida.
   const notAttached = await http('POST', `/finance/entries/${entryId}/settle`, token, {
+    idempotencyKey: `f03-sem-anexo-${entryId}`,
     settlementEvidenceFileId: evidenceId,
     settlementReason: 'TED feita no internet banking — comprovante anexado',
   });
@@ -582,12 +583,12 @@ test('F03-8 (HTTP): POST /finance/entries/:id/settle recusa sem comprovante e ac
     settlementReason: 'TED feita no internet banking — comprovante anexado',
   });
   assert.equal(attached.status, 200, JSON.stringify(attached.body));
-  const staleApproval = await http('POST', `/finance/entries/${entryId}/settle`, token, {});
+  const staleApproval = await http('POST', `/finance/entries/${entryId}/settle`, token, { idempotencyKey: `f03-aprovacao-velha-${entryId}` });
   assert.equal(staleApproval.status, 409, JSON.stringify(staleApproval.body));
   assert.equal(staleApproval.body.error.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
   await withCommitted((t) => approveFinancialEntryForSettlement(tenant, entryId, tenant.userId, t));
 
-  const accepted = await http('POST', `/finance/entries/${entryId}/settle`, token, {});
+  const accepted = await http('POST', `/finance/entries/${entryId}/settle`, token, { idempotencyKey: `f03-aceita-${entryId}` }); // FIN-004: chave obrigatória (M4LR)
   assert.equal(accepted.status, 200, JSON.stringify(accepted.body));
   assert.equal(accepted.body.data.status, 'SETTLED');
   assert.equal(accepted.body.data.settlementMethod, 'MANUAL_WITH_EVIDENCE');

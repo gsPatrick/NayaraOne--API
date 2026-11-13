@@ -6,6 +6,7 @@ const { startOfBusinessDay, businessDateKey } = require('../../../../utils/busin
 const readModel = require('../../infrastructure/repositories/finance-health-read-model.repository');
 const { buildExplanations, buildSectorGrowth } = require('./finance-nay-sections');
 const { toCents } = require('../../domain/money');
+const { REALIZED_BY_CHILDREN } = require('../../infrastructure/repositories/ledger-sql'); // saldo em aberto = valor - realizado pelas baixas (M4LR)
 
 /**
  * NAY Financeira — Caderno Marco 4 §18 ("NAY Financeira"), Guia §13 ("Relatório semanal da NAY": FinanceHealthReport { freeCash, thirdPartyCash,
@@ -39,11 +40,13 @@ function monthBounds(now) {
 // Fila de trabalho (itens em aberto) para as sugestões que citam um lançamento específico.
 async function openEntries(transaction, nature, startToday) {
   return sequelize.query(
-    `SELECT id, description, amount::text AS amount, due_at
-       FROM finance.financial_entries
-      WHERE status = 'PENDING' AND is_third_party_funds = false AND nature = :nature
-        ${nature === 'RECEIVABLE' ? 'AND due_at < :startToday' : ''}
-      ORDER BY due_at ASC NULLS LAST
+    `SELECT o.id, o.description, o.amount::text AS amount, o.due_at FROM (
+       SELECT e.id, e.description, (e.amount - ${REALIZED_BY_CHILDREN('e')})::numeric AS amount, e.due_at
+         FROM finance.financial_entries e
+        WHERE e.status IN ('PENDING', 'PARTIALLY_SETTLED') AND e.is_third_party_funds = false AND e.nature = :nature AND e.ledger_exclusion_reason IS NULL
+          ${nature === 'RECEIVABLE' ? 'AND e.due_at < :startToday' : ''}) o
+      WHERE o.amount > 0
+      ORDER BY o.due_at ASC NULLS LAST
       LIMIT 200`,
     { transaction, type: sequelize.QueryTypes.SELECT, replacements: { nature, startToday } }
   );

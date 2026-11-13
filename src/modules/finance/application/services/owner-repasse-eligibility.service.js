@@ -3,6 +3,9 @@
 const { Op } = require('sequelize');
 const { OwnerRepass, FinancialEntry, AuditLog, Contract } = require('../../../../models');
 const AppError = require('../../../../utils/AppError');
+const ledger = require('../../infrastructure/repositories/ledger-movement.repository');
+const { toCents } = require('../../domain/ledger-movement');
+const { realizedChildrenCents } = require('./ledger-balance.service');
 
 // Elegibilidade dos recebimentos que compõem um repasse ao proprietário (§12): saldo já
 // alocado, escopo, lista de elegíveis e composição lida do rastro de auditoria.
@@ -49,6 +52,14 @@ function sourceIneligibility(entry) {
     return {
       code: 'FINANCE_OWNER_REPASSE_SOURCE_NOT_RECEIVED',
       message: `O lançamento ${entry.id} ainda não foi recebido (status=${entry.status}) — só recebimento REAL pode compor o teto elegível.`,
+    };
+  }
+  // M4LR (verificação 11/11/2026, sonda P8): a baixa parcial é PARTE do recebimento — o recebimento (pai) é a fonte e o
+  // teto dele é a soma do que as baixas realizaram. Usar o pai e as filhas contava o aluguel de 1.500 em 750+750 como 3.000.
+  if (entry.parentEntryId && entry.movementKind !== 'EXCESS') {
+    return {
+      code: 'FINANCE_OWNER_REPASSE_SOURCE_IS_PARTIAL_SETTLEMENT',
+      message: `O lançamento ${entry.id} é uma baixa parcial do recebimento ${entry.parentEntryId} — escolha o recebimento: o teto dele já soma o que as baixas receberam.`,
     };
   }
   if (entry.isThirdPartyFunds) {
@@ -121,14 +132,15 @@ async function listEligibleRepasseSources(transaction, filters = {}) {
     contractIds = (await Contract.findAll({ where: { propertyId }, attributes: ['id'], transaction })).map((c) => c.id);
   }
   if (contractIds.length === 0) return [];
-  const where = { contractId: contractIds, nature: 'RECEIVABLE', status: ['SETTLED', 'PARTIALLY_SETTLED'], isThirdPartyFunds: false };
+  const where = { contractId: contractIds, nature: 'RECEIVABLE', status: ['SETTLED', 'PARTIALLY_SETTLED'], isThirdPartyFunds: false, [Op.or]: [{ parentEntryId: null }, { movementKind: 'EXCESS' }] };
   if (referenceMonth) where.competenceMonth = { [Op.lte]: referenceMonth };
   const entries = await FinancialEntry.findAll({ where, order: [['settledAt', 'DESC'], ['created_at', 'DESC']], transaction });
   const allocated = await allocatedAmountsByEntry(transaction);
   const out = [];
   for (const entry of entries) {
     if (sourceIneligibility(entry)) continue;
-    const availableCents = Math.max(0, Math.round(eligibleAmountOf(entry) * 100) - (allocated.get(entry.id) || 0));
+    const allocatedCents = await allocatedCentsOfSource(entry, allocated, transaction);
+    const availableCents = Math.max(0, (await realizedCentsOf(entry, transaction)) - allocatedCents);
     if (availableCents <= 0) continue;
     out.push({
       id: entry.id,
@@ -137,7 +149,7 @@ async function listEligibleRepasseSources(transaction, filters = {}) {
       competenceMonth: entry.competenceMonth,
       settledAt: entry.settledAt,
       amount: Number(entry.amount),
-      alreadyAllocatedAmount: (allocated.get(entry.id) || 0) / 100,
+      alreadyAllocatedAmount: allocatedCents / 100,
       availableAmount: availableCents / 100,
     });
   }
@@ -174,10 +186,33 @@ async function assertEligibleSources(companyId, sourceEntryIds, transaction) {
 }
 
 function eligibleAmountOf(entry) {
-  // Recebimento SETTLED: todo o amount é elegível. PARTIALLY_SETTLED: só a parte já realmente
-  // recebida (soma das baixas filhas SETTLED) entra no teto — nunca o saldo ainda não recebido.
+  // Recebimento SETTLED sem baixas parciais: todo o amount (sem estornos) — o cálculo completo é realizedCentsOf.
   if (entry.status === 'SETTLED') return Number(entry.amount);
-  return 0; // PARTIALLY_SETTLED tratado via computeRemainingAmount pelo chamador quando necessário.
+  return 0;
+}
+
+/**
+ * Teto do recebimento = o que ele REALIZOU no ledger: recebido em baixas parciais = soma das baixas (menos estornos de cada
+ * uma), também quando ainda está PARTIALLY_SETTLED; recebido de uma vez = valor menos estornos parciais.
+ */
+async function realizedCentsOf(entry, transaction) {
+  if (await ledger.hasSettlementChildren(entry.id, transaction)) return (await realizedChildrenCents(entry.id, transaction)).realizedCents;
+  if (entry.status !== 'SETTLED') return 0;
+  const reversed = (await ledger.reversedCentsByMovement([entry.id], transaction)).get(entry.id) || 0;
+  return Math.max(0, toCents(entry.amount) - reversed);
+}
+
+/** Já alocado a repasses não cancelados: o próprio recebimento e, no legado, as baixas parciais dele usadas como fonte. */
+async function allocatedCentsOfSource(entry, allocatedMap, transaction) {
+  const map = allocatedMap || (await allocatedAmountsByEntry(transaction));
+  let cents = map.get(entry.id) || 0;
+  for (const child of await ledger.findSettlementChildren(entry.id, transaction)) cents += map.get(child.id) || 0;
+  return cents;
+}
+
+/** Saldo ainda disponível para repasse deste recebimento (teto realizado menos o já alocado), em centavos. */
+async function availableCentsOf(entry, transaction) {
+  return Math.max(0, (await realizedCentsOf(entry, transaction)) - (await allocatedCentsOfSource(entry, null, transaction)));
 }
 
 /**
@@ -208,5 +243,7 @@ module.exports = {
   listEligibleRepasseSources,
   assertEligibleSources,
   eligibleAmountOf,
+  realizedCentsOf,
+  availableCentsOf,
   getOwnerRepasseComposition,
 };

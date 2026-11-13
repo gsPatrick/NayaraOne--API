@@ -40,6 +40,32 @@ function remainingAmount(amount, settledChildren) {
   return fromCents(toCents(amount) - sumCents(settledChildren));
 }
 
+// Tipo do movimento gravado na linha (coluna movement_kind, migration 20260101010520): a baixa parcial, o complemento
+// (quitação do saldo de um lançamento que já tem movimento — Caderno §6 "pagamento parcial, estorno, complemento"), o
+// excedente em pendência de classificação (§10) e o estorno (REVERSAL apontando o movimento original, §6/Guia §8).
+const MOVEMENT_KINDS = Object.freeze({ PARTIAL: 'PARTIAL', COMPLEMENT: 'COMPLEMENT', EXCESS: 'EXCESS', REVERSAL: 'REVERSAL' });
+// Movimentos que baixam o saldo do lançamento pai (o excedente não baixa: é dinheiro a mais, §10).
+const SETTLEMENT_CHILD_KINDS = Object.freeze([MOVEMENT_KINDS.PARTIAL, MOVEMENT_KINDS.COMPLEMENT]);
+
+/**
+ * Realizado de cada baixa filha = valor da baixa - estornos que apontam para ela (estorno total ou parcial).
+ * `children`: [{ id, amount }]; `reversedCentsById`: Map id -> centavos já estornados.
+ */
+function realizedCentsOfChildren(children, reversedCentsById) {
+  return children.reduce((acc, child) => acc + Math.max(0, toCents(child.amount) - (reversedCentsById.get(child.id) || 0)), 0);
+}
+
+/** Status derivado do pai (Caderno §6 "Estorno: mantém histórico/status derivado"): nada realizado, parte ou tudo. */
+function derivedParentStatus(amountCents, realizedCents) {
+  if (realizedCents <= 0) return 'PENDING';
+  return realizedCents >= amountCents ? 'SETTLED' : 'PARTIALLY_SETTLED';
+}
+
+/** Chave de idempotência do estorno (Guia §8: `reversal:${original.id}:${approvedCaseId}`). */
+function reversalIdempotencyKey(movementId, caseRef) {
+  return `reversal:${movementId}:${caseRef}`;
+}
+
 /** Recebimento é sempre aceito: o que passa do saldo vira excedente (pendência de classificação, §10). */
 function splitReceipt(partialCents, remainingCents) {
   const appliedCents = Math.min(partialCents, remainingCents);
@@ -72,7 +98,7 @@ function thirdPartyBalance(origin, receivedCents, releases) {
 }
 
 /** Baixa parcial: NOVO lançamento SETTLED filho do original, com o valor aplicado. */
-function buildPartialSettlementValues(entry, { appliedCents, settledAt, idempotencyKey, settlementInfo, actorUserId }) {
+function buildPartialSettlementValues(entry, { appliedCents, settledAt, idempotencyKey, settlementInfo, actorUserId, movementKind = MOVEMENT_KINDS.PARTIAL }) {
   return {
     groupId: entry.groupId,
     companyId: entry.companyId,
@@ -83,7 +109,7 @@ function buildPartialSettlementValues(entry, { appliedCents, settledAt, idempote
     entryType: entry.entryType,
     nature: entry.nature,
     amount: fromCents(appliedCents),
-    description: `Baixa parcial de ${toBRLDisplay(fromCents(appliedCents))} — ${entry.description || 'lançamento financeiro'}`,
+    description: `${movementKind === MOVEMENT_KINDS.COMPLEMENT ? 'Complemento (quitação do saldo)' : 'Baixa parcial'} de ${toBRLDisplay(fromCents(appliedCents))} — ${entry.description || 'lançamento financeiro'}`,
     dueAt: entry.dueAt,
     // A baixa parcial pertence à MESMA competência do lançamento original (a obrigação é a
     // mesma; o que mudou foi só o momento do caixa).
@@ -93,6 +119,7 @@ function buildPartialSettlementValues(entry, { appliedCents, settledAt, idempote
     idempotencyKey,
     reversalOfEntryId: null,
     parentEntryId: entry.id,
+    movementKind,
     settlementMethod: settlementInfo ? settlementInfo.method : null,
     settlementEvidenceFileId: settlementInfo ? settlementInfo.evidenceFileId : null,
     settlementReason: settlementInfo ? settlementInfo.reason : null,
@@ -132,13 +159,18 @@ function buildExcessPendingValues(entry, { excessCents, idempotencyKey, actorUse
     idempotencyKey: idempotencyKey ? `${idempotencyKey}:excedente` : null,
     reversalOfEntryId: null,
     parentEntryId: entry.id,
+    movementKind: MOVEMENT_KINDS.EXCESS,
     createdBy: actorUserId || null,
     updatedBy: actorUserId || null,
   };
 }
 
-/** Estorno (FIN-010): lançamento compensatório com o tipo invertido, apontando o original. */
-function buildReversalValues(original, { isPartial, partialCents, actorUserId }) {
+/**
+ * Estorno (FIN-010; Guia §8 reverseLedger): movimento REVERSAL com a direção invertida, apontando o movimento original
+ * realizado, na conta do original e com chave `reversal:<movimento>:<caso>`. `amountCents` é o valor estornado (total
+ * = o que ainda não foi estornado do movimento; parcial = o informado).
+ */
+function buildReversalValues(original, { isPartial, amountCents, idempotencyKey, actorUserId }) {
   return {
     groupId: original.groupId,
     companyId: original.companyId,
@@ -148,15 +180,16 @@ function buildReversalValues(original, { isPartial, partialCents, actorUserId })
     contractId: original.contractId,
     entryType: compensatingEntryType(original.entryType),
     nature: 'ADJUSTMENT',
-    amount: isPartial ? fromCents(partialCents) : original.amount,
-    description: isPartial ? `Estorno parcial de ${toBRLDisplay(fromCents(partialCents))} — ${original.description || 'lançamento financeiro'}` : null,
+    amount: fromCents(amountCents),
+    description: isPartial ? `Estorno parcial de ${toBRLDisplay(fromCents(amountCents))} — ${original.description || 'lançamento financeiro'}` : null,
     dueAt: null,
     // O estorno pertence à mesma competência do lançamento estornado.
     competenceMonth: original.competenceMonth,
     settledAt: new Date(),
     status: 'SETTLED',
-    idempotencyKey: null,
+    idempotencyKey,
     reversalOfEntryId: original.id,
+    movementKind: MOVEMENT_KINDS.REVERSAL,
     // As dimensões contábeis do original acompanham o compensatório (plano de contas e obra).
     chartOfAccountId: original.chartOfAccountId || null,
     chartOfAccountVersionId: original.chartOfAccountVersionId || null,
@@ -173,6 +206,11 @@ module.exports = {
   formatBRLText,
   sumCents,
   remainingAmount,
+  MOVEMENT_KINDS,
+  SETTLEMENT_CHILD_KINDS,
+  realizedCentsOfChildren,
+  derivedParentStatus,
+  reversalIdempotencyKey,
   splitReceipt,
   statusAfterPartialSettlement,
   receivedCentsOf,

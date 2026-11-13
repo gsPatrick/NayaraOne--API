@@ -4,8 +4,10 @@
  * Idempotência das baixas (Caderno M4 §2 FIN-004: "Pagamento, recebimento, importação e baixa
  * crítica possuem chave idempotente"; Guia §16 "Recebimento parcial deixa saldo correto").
  *
- * - A rota HTTP de baixa parcial EXIGE a chave (`idempotencyKey` no corpo ou cabeçalho
- *   `Idempotency-Key`, 8 a 180 caracteres); a rota de baixa integral aceita e grava quando vem.
+ * - As rotas HTTP de baixa parcial, complemento e baixa integral EXIGEM a chave (`idempotencyKey` no corpo ou cabeçalho
+ *   `Idempotency-Key`, 8 a 180 caracteres) — verificação 11/11/2026: a integral aceitava sem chave (M4-FIN-004).
+ * - O movimento do ledger nunca fica sem chave: sem chave do cliente (chamada interna), a chave é a da intenção de
+ *   pagamento ou uma interna (movementKeyForSettle / movementKeyForPartial).
  * - A coluna finance.financial_entries.idempotency_key é UNIQUE global (varchar 128). Para que
  *   duas empresas possam usar a mesma chave de cliente e para caber no tamanho, a chave gravada é
  *   derivada: `<tipo>:` + sha256(companyId + ':' + chave do cliente).
@@ -103,4 +105,21 @@ async function findSettleReplay(entry, derivedKey, transaction) {
   return { ...plain, idempotentReplay: true };
 }
 
-module.exports = { readClientKey, validateClientKey, deriveKey, findPartialReplay, findSettleReplay, reused, MIN, MAX };
+/**
+ * Chave do MOVIMENTO da baixa integral (Caderno §7 idempotency_key NOT NULL; Guia §7 `idempotencyKey: locked.idempotencyKey`):
+ * a chave do cliente (derivada, obrigatória na rota HTTP), a da intenção de pagamento confirmada pelo banco, ou a interna
+ * desta baixa — um lançamento só é baixado por inteiro uma vez, então `baixa-integral:interna:<id>` é única.
+ */
+function movementKeyForSettle(entry, derivedKey, options = {}) {
+  if (derivedKey) return derivedKey;
+  const intent = options.paymentIntent;
+  if (intent && intent.idempotencyKey) return intent.idempotencyKey;
+  return `baixa-integral:interna:${entry.id}`;
+}
+
+/** Chave do movimento da baixa parcial sem chave do cliente (chamada interna): a compensação de caução é única por saída. */
+function movementKeyForPartial(compensationOf) {
+  return compensationOf ? `compensacao:${compensationOf}` : `baixa-parcial:interna:${crypto.randomUUID()}`;
+}
+
+module.exports = { readClientKey, validateClientKey, deriveKey, findPartialReplay, findSettleReplay, movementKeyForSettle, movementKeyForPartial, reused, MIN, MAX };

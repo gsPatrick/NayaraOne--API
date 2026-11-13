@@ -35,6 +35,11 @@ function findInCompanyForUpdate(id, companyId, transaction) {
   return FinancialEntry.findOne({ where: { id, companyId }, transaction, lock: forUpdate(transaction) });
 }
 
+/** Movimento já gravado com esta chave (replay do complemento). */
+function findByIdempotencyKey(idempotencyKey, transaction) {
+  return FinancialEntry.findOne({ where: { idempotencyKey }, transaction });
+}
+
 function create(values, transaction) {
   return FinancialEntry.create(values, { transaction });
 }
@@ -125,6 +130,7 @@ module.exports = {
   findResultCenter,
   findByIdForUpdate,
   findInCompanyForUpdate,
+  findByIdempotencyKey,
   create,
   save,
   list,

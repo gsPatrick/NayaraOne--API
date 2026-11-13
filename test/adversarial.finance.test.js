@@ -321,7 +321,8 @@ test('ADV-F12 baixa parcial em lançamento REVERSED/CANCELLED é recusada (não 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 300, bankAccountId: account.id });
-    await receiptService.reverseFinancialEntry(entry.id, 'QA ADV', tenant.userId, transaction);
+    // M4LR (Caderno §6): lançamento nunca realizado — o estorno só anula o previsto (sem ledger), a pedido explícito.
+    await receiptService.reverseFinancialEntry(entry.id, 'QA ADV', tenant.userId, transaction, { voidNotRealized: true });
 
     await assert.rejects(
       () => receiptService.settleFinancialEntryPartial(entry.id, 10, tenant.userId, transaction),

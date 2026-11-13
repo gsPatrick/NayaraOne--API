@@ -1179,7 +1179,7 @@ async function cancelPolicy(policyId, payload, actor, transaction) {
     }
     if (entry && !['REVERSED', 'CANCELLED'].includes(entry.status)) {
        
-      await reverseFinancialEntry(entry.id, `Apólice ${policy.externalPolicyNumber || policy.id} cancelada — parcela de prêmio em aberto estornada.`, actor.userId, transaction);
+      await reverseFinancialEntry(entry.id, `Apólice ${policy.externalPolicyNumber || policy.id} cancelada — parcela de prêmio em aberto estornada.`, actor.userId, transaction, { voidNotRealized: true });
       reversedFinancialEntryIds.push(entry.id);
     }
     installment.status = 'CANCELED';

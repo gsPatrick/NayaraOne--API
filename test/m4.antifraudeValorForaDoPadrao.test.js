@@ -103,7 +103,7 @@ test('M4-§17.5 pagamento retido não liquida (409 FINANCE_ENTRY_REQUIRES_MANUAL
   await settledHistory(account.id, ['200.00', '220.00', '210.00', '205.00', '215.00']);
   const entry = (await payable(30000, { bankAccountId: account.id })).body.data;
   assert.equal(entry.requiresManualReview, true);
-  const settle = await http('POST', `/finance/entries/${entry.id}/settle`, tk.maker, {});
+  const settle = await http('POST', `/finance/entries/${entry.id}/settle`, tk.maker, { idempotencyKey: `m4-retido-${entry.id}` });
   assert.equal(settle.status, 409, JSON.stringify(settle.body));
   assert.equal(settle.code, 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW');
   const noMfa = await http('POST', `/finance/entries/${entry.id}/clear-manual-review`, tk.noMfa, { reviewNote: 'Conferido com o fornecedor.' });

@@ -56,6 +56,8 @@ financeRouter.post('/finance/reversal-cases/:id/approve', requirePermission('fin
 financeRouter.post('/finance/reversal-cases/:id/reject', requirePermission('finance:approve'), requireRecentMfa, authz.rejectReversalCase);
 financeRouter.post('/finance/entries/:id/clear-manual-review', requirePermission('finance:approve'), requireRecentMfa, financeController.clearFinancialEntryManualReview);
 financeRouter.post('/finance/entries/:id/settle-partial', requirePermission('finance:settle'), requireRecentMfa, cents('partialAmount'), financeController.settleFinancialEntryPartial);
+// Caderno §6 "complemento": quita o saldo em aberto de um lançamento que já tem movimento (chave obrigatória, MFA como a baixa parcial).
+financeRouter.post('/finance/entries/:id/settle-complement', requirePermission('finance:settle'), requireRecentMfa, cents('expectedAmount'), require('./finance-ledger.controller').settleFinancialEntryComplement);
 
 // Bank transactions (extrato)
 financeRouter.post('/finance/bank-transactions', requirePermission('finance:create'), entrada.validarTransacaoBancaria, cents('amount'), financeController.createBankTransaction);

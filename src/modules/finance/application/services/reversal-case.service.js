@@ -98,6 +98,14 @@ async function approveReversalCase(caseId, actorUserId, transaction) {
   if (reversalCase.status === 'APPROVED') {
     const existing = await FinancialEntry.findOne({ where: { idempotencyKey: key }, transaction });
     if (existing) return { case: reversalCase, reversal: existing, replayed: true };
+    // Integração M4PG x M4LR: estorno de lançamento quitado em baixas parciais grava uma REVERSAL por baixa (chave de cada baixa), e o
+    // previsto não realizado é anulado sem ledger (Caderno §6). A repetição devolve o que a primeira aprovação gravou no caso.
+    const feito = reversalCase.payloadJson || {};
+    if (feito.reversalEntryId) {
+      const gravado = await FinancialEntry.findByPk(feito.reversalEntryId, { transaction });
+      if (gravado) return { case: reversalCase, reversal: gravado, replayed: true };
+    }
+    if (feito.voidedWithoutLedger) return { case: reversalCase, reversal: null, replayed: true };
   }
   const original = await entries.findByIdForUpdate(reversalCase.relatedEntityId, transaction);
   if (!original) throw AppError.notFound('Lançamento financeiro não encontrado.', 'FINANCE_ENTRY_NOT_FOUND');
@@ -115,14 +123,18 @@ async function approveReversalCase(caseId, actorUserId, transaction) {
     ...(partial ? { amount: partial } : {}),
     idempotencyKey: key,
     approvedCaseId: reversalCase.id,
+    // M4LR (Caderno §6): o pedido de estorno da tela anula o previsto não realizado, sem movimento no ledger.
+    voidNotRealized: true,
   });
-  reversalCase.payloadJson = { ...(reversalCase.payloadJson || {}), reversalEntryId: reversal.id, approvedByUserId: actorUserId };
+  reversalCase.payloadJson = {
+    ...(reversalCase.payloadJson || {}), reversalEntryId: reversal ? reversal.id : null, ...(reversal ? {} : { voidedWithoutLedger: true }), approvedByUserId: actorUserId,
+  };
   await reversalCase.save({ transaction });
   await registrarAuditoria(
     {
       groupId: reversalCase.groupId, companyId: reversalCase.companyId, actorUserId, action: 'finance.reversal_case.execute', entityType: 'ApprovalRequest', entityId: reversalCase.id,
       beforeJson: caseBefore,
-      afterJson: { case: reversalCase.toJSON(), reversalEntryId: reversal.id, idempotencyKey: key },
+      afterJson: { case: reversalCase.toJSON(), reversalEntryId: reversal ? reversal.id : null, idempotencyKey: key },
       reason: `Estorno lançado pelo caso aprovado (pedido de ${reversalCase.requestedByUserId}, aprovado por ${actorUserId}): ${reversalCase.reason}`,
     },
     transaction

@@ -133,7 +133,7 @@ const attachSettlementEvidence = catchAsync(async (req, res) => {
 });
 
 const settleFinancialEntry = catchAsync(async (req, res) => {
-  const idempotencyKey = validateClientKey(readClientKey(req), { required: false }); // FIN-004: aceita e grava quando vem
+  const idempotencyKey = validateClientKey(readClientKey(req), { required: true }); // FIN-004: chave obrigatória também na baixa integral (verificação 11/11/2026)
   const item = await req.withTenantTransaction((t) => receiptService.settleFinancialEntry(req.params.id, req.auth.userId, t, { manualSettlement: manualSettlementFromBody(req.body), idempotencyKey }));
   return success(res, { data: item });
 });
