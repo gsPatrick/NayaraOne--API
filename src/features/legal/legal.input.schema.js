@@ -10,7 +10,8 @@ const V = require('../../shared/validation/requestSchema');
  * (campo que o esquema não cita passa, como sempre passou); a regra de negócio continua no serviço, com o código de erro do módulo.
  */
 
-const CLAUSULA = V.objetoAberto({ code: V.texto(), title: V.texto(), bodyText: V.texto(), category: V.texto(), condition: V.objeto() });
+// `condition` fica fora: o módulo confere a condição inteira (inclusive o tipo) e responde LEGAL_CLAUSE_CONDITION_INVALID (Marco 5, F01).
+const CLAUSULA = V.objetoAberto({ code: V.texto(), title: V.texto(), bodyText: V.texto(), category: V.texto() });
 const VERSAO_DO_CONTRATO = V.objetoAberto({
   documentFileId: V.identificador(), templateId: V.identificador(), effectiveFrom: V.dataEmTexto(), variables: V.objeto(),
   clauseVersionIds: V.lista(V.identificador({ nulo: false, vazio: false })),
