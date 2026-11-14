@@ -31,8 +31,17 @@ const EXPECTED = [
   'integration.secret.cache_ttl_s', 'integration.secret.expiry_alert_days', 'integration.secret.grace_period_min', 'integration.secret.mfa_on_bank_secret_change',
   'integration.secret.rotation_max_age_days.BANK',
   'mfa.required_for_sensitive_roles', 'mfa.step_up_ttl_minutes',
+  // M4PG (DEC-003, DEC-004): autorização do pagamento, do estorno e da reabertura do período.
+  'fechamento.reabertura.aprovadores', 'financeiro.estorno.aprovador_distinto',
+  'pagamentos.aprovadores.alto', 'pagamentos.aprovadores.baixo', 'pagamentos.aprovadores.critico', 'pagamentos.aprovadores.medio',
+  'pagamentos.faixa.alto_ate', 'pagamentos.faixa.baixo_ate', 'pagamentos.faixa.medio_ate', 'pagamentos.mfa.aprovacao_medio', 'pagamentos.risco_sem_valor',
 ];
-const SAMPLE_OVERRIDES = { 'integration.secret.expiry_alert_days': '30,14,7', 'conciliacao.score_auto_minimo': 0.95 };
+const SAMPLE_OVERRIDES = {
+  'integration.secret.expiry_alert_days': '30,14,7', 'conciliacao.score_auto_minimo': 0.95,
+  // faixas e aprovadores do pagamento em ordem (as regras entre chaves recusam faixa fora de ordem)
+  'pagamentos.faixa.baixo_ate': 4000, 'pagamentos.faixa.medio_ate': 40000, 'pagamentos.faixa.alto_ate': 150000,
+  'pagamentos.aprovadores.baixo': 1, 'pagamentos.aprovadores.medio': 1, 'pagamentos.aprovadores.alto': 2, 'pagamentos.aprovadores.critico': 3,
+};
 function sample(key) {
   if (SAMPLE_OVERRIDES[key] !== undefined) return SAMPLE_OVERRIDES[key];
   const spec = settingsService.SETTINGS_SCHEMA[key];

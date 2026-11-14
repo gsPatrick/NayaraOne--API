@@ -53,6 +53,7 @@ test('mfa_catalogo_meta: toda chave do catálogo com MFA que existe no dicionár
   const sobrando = Object.keys(SETTINGS_SCHEMA).filter((key) => SETTINGS_SCHEMA[key].requiresMfa === true && !esperadas.has(key));
   assert.deepEqual(sobrando, [], `requiresMfa sem pedido do catálogo: ${sobrando.join(', ')}`);
   for (const [catalogo, codigo] of Object.entries(EQUIVALENTES)) assert.ok(comMfa.has(catalogo) && SETTINGS_SCHEMA[codigo], `equivalência ${catalogo} -> ${codigo} vigente`);
-  // 22: 20 do catálogo até a DEC-007 + exportacao.crm.exige_mfa (DEC-049, M3CB) + conciliacao.score_auto_minimo (regra AUTO_STRONG parametrizada, Guia M4 §9, DEC-006).
-  assert.equal(esperadas.size, 22);
+  // 33: 20 do catálogo até a DEC-007 + exportacao.crm.exige_mfa (DEC-049, M3CB) + conciliacao.score_auto_minimo (regra AUTO_STRONG parametrizada,
+  // Guia M4 §9, DEC-006) + as 11 da autorização do pagamento, do estorno e da reabertura (M4PG, DEC-003 e DEC-004).
+  assert.equal(esperadas.size, 33);
 });
