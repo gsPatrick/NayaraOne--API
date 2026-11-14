@@ -29,8 +29,13 @@ const PARES = [
   { antigo: 'legal.contract_amendments', livro: 'legal.addenda' },
   { antigo: 'legal.legal_case_parties', livro: 'legal.case_parties' },
   { antigo: 'finance.utility_obligations', livro: 'legal.lease_obligations' },
-  { antigo: 'legal.contract_clauses', livro: 'legal.clause_versions' },
+  // A migration 20260101015103 (termo do imóvel usado) grava, para cada empresa sem o modelo, a cláusula TERMO_IMOVEL_USADO sem autor; o
+  // down a apaga e o up a grava de novo. Num banco migrado do zero ela não grava nada (ainda não há empresa), no refeito grava uma por
+  // empresa: essas linhas são criadas pela migration, não copiadas. Ficam fora da contagem que prova "nada copiado nem perdido" e são
+  // contadas à parte (linhasSemeadas), com a assinatura exata da semente.
+  { antigo: 'legal.contract_clauses', livro: 'legal.clause_versions', semente: "code = 'TERMO_IMOVEL_USADO' AND created_by IS NULL" },
 ];
+const SEMENTE = Object.fromEntries(PARES.flatMap((p) => (p.semente ? [[p.antigo, p.semente], [p.livro, p.semente]] : [])));
 
 async function foto(c, nome) {
   const r = await c.query(`
@@ -43,8 +48,11 @@ async function foto(c, nome) {
       (SELECT count(*)::int FROM pg_trigger t WHERE t.tgrelid = c.oid AND NOT t.tgisinternal) AS gatilhos
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.oid = to_regclass($1)`, [nome]);
   if (!r.rows[0]) return null;
-  const linhas = await c.query(`SELECT count(*)::int AS n FROM ${nome}`);
-  return { nome, ...r.rows[0], linhas: linhas.rows[0].n };
+  const semente = SEMENTE[nome];
+  const linhas = await c.query(semente
+    ? `SELECT count(*) FILTER (WHERE NOT (${semente}))::int AS n, count(*) FILTER (WHERE ${semente})::int AS s FROM ${nome}`
+    : `SELECT count(*)::int AS n FROM ${nome}`);
+  return { nome, ...r.rows[0], linhas: linhas.rows[0].n, ...(semente ? { linhasSemeadas: linhas.rows[0].s } : {}) };
 }
 
 function cli(...args) {

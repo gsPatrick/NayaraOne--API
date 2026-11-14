@@ -11,6 +11,7 @@ const { publishPersonCreated, publishPersonUpdated } = require('./personEvents.s
 const { scorePersonDataQuality } = require('./personDataQuality.service');
 const { projectForSession, assertBaseOwner, isLinkedElsewhereError, linkedElsewhereError } = require('./personView');
 const { registrarTentativa } = require('./personLinks.service');
+const { findStrongInCompany } = require('./personDedup.service');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, personEntity } = require('../core-governance/data-quality/evidence');
 
 /**
@@ -62,7 +63,8 @@ async function createPerson(payload, actorUserId, transaction, options = {}) {
   const plano = await assertCreationAllowed({ ...payload, taxIdDigits, contacts }, ctx, transaction);
   let person;
   try {
-    person = await Person.create(
+    // Em savepoint: se a unicidade do banco recusar (corrida), a transação continua utilizável para saber de quem é o CPF/CNPJ.
+    person = await transaction.sequelize.transaction({ transaction }, (savepoint) => Person.create(
       {
         groupId,
         companyId,
@@ -77,12 +79,18 @@ async function createPerson(payload, actorUserId, transaction, options = {}) {
         createdBy: actorUserId || null,
         updatedBy: actorUserId || null,
       },
-      { transaction }
-    );
+      { transaction: savepoint }
+    ));
   } catch (error) {
     // UNIQUE(group_id, tax_id_normalized) é a identidade rígida do banco (TAB-0100) e nada a contorna. O portão já recusou o CPF/CNPJ
-    // desta empresa e o das outras empresas do grupo; chegar aqui é corrida com um cadastro gravado ao mesmo tempo: o caminho é o vínculo.
+    // desta empresa e o das outras empresas do grupo; chegar aqui é corrida com um cadastro gravado ao mesmo tempo. Gravado NESTA empresa:
+    // a mesma resposta do portão (match forte, abrir o existente). Gravado em OUTRA empresa do grupo: o caminho é o vínculo.
     if (error.name === 'SequelizeUniqueConstraintError' && /tax_id_normalized/.test(error.parent?.detail || error.parent?.message || '')) {
+      const forte = await findStrongInCompany(taxIdDigits, transaction);
+      if (forte) {
+        throw AppError.conflict('Já existe uma pessoa cadastrada com este CPF/CNPJ. Abra o cadastro existente em vez de criar outro.', 'PERSON_DUPLICATE',
+          { nivel: 'FORTE', existingPersonId: forte.id, existente: { id: forte.id, legalName: forte.legalName } });
+      }
       registrarTentativa(transaction, { groupId, companyId }, actorUserId, 'CPF_CNPJ_JA_NO_GRUPO');
       throw AppError.conflict(
         'Este CPF/CNPJ já tem cadastro em outra empresa do grupo. Para usar esse cadastro aqui, vincule-o a esta empresa informando o CPF/CNPJ e o nome como está no documento.',

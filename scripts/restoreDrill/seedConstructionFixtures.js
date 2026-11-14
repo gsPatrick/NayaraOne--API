@@ -80,6 +80,8 @@ async function main() {
     const nc = await svc('nonconformities').createNonconformity(f.projectId, W({ severity: 'HIGH', description: 'Desaprumo de pilar', responsibleUserId: tenant.userId, beforeEvidenceFileIds: [await foto(t, 'nc-antes')] }), tenant.userId, t);
     await svc('nonconformities').closeNonconformity(nc.id, { afterEvidenceFileIds: [await foto(t, 'nc-depois')] }, tenant.userId, t);
     const loss = await svc('lossRecords').createLossRecord(f.projectId, W({ materialDescription: 'Cimento empedrado', quantity: 4, estimatedValue: 128, reason: 'Umidade no depósito', idempotencyKey: `drill-loss-${s}` }), tenant.userId, t);
+    // Empresa sem alçada configurada não autoaprova nada (DI-M6V-6): a perda passa pela aprovação explícita, como no fluxo real.
+    if (loss.status === 'PENDING_APPROVAL') await svc('lossRecords').approveLossRecord(loss.id, tenant.userId, t);
     const est = await svc('lossRecords').returnLossRecord(loss.id, { quantity: 1, idempotencyKey: `drill-loss-ret-${s}` }, tenant.userId, t);
     Object.assign(f, { nonconformityId: nc.id, lossRecordId: loss.id, lossReturnId: est.id });
   });
