@@ -79,3 +79,22 @@ test('união de imóveis com match do radar: o rastro fica no imóvel absorvido 
     assert.equal((await env.query('SELECT property_id FROM crm.radar_matches WHERE id = :id', { id: match }, tx))[0].property_id, absorvido.id);
   });
 });
+
+test('união com tabela que o papel da aplicação não pode alterar (só SELECT e INSERT): sem linha do absorvido a união segue, nunca erro de permissão', { skip: skip() }, async () => {
+  const { adminQuery } = require('./m9d801.helpers');
+  const papel = (await env.sequelize.query('SELECT current_user AS u', { plain: true })).u;
+  const [{ pode }] = (await adminQuery(`SELECT has_table_privilege('${papel}', 'marketing.campaign_audience_members', 'UPDATE') AS pode`)).rows;
+  await adminQuery(`REVOKE UPDATE ON marketing.campaign_audience_members FROM "${papel}"`);
+  try {
+    await env.withRollbackTenantTransaction(A(), async (tx) => {
+      const first = await env.person(A(), tx, { legalName: 'Rui Prado Lima' });
+      const second = await env.person(A(), tx, { legalName: 'Rui Prado Lima' });
+      const item = await env.candidate(A(), tx, 'PERSON', first.id, second.id);
+      const { actor } = await env.steward(A(), tx);
+      const done = await mergeService.decide(A(), actor, item.id, { decision: 'MERGED', survivorId: item.primary_id, note: 'Mesma pessoa.' }, tx);
+      assert.equal(done.status, 'MERGED');
+    });
+  } finally {
+    if (pode) await adminQuery(`GRANT UPDATE ON marketing.campaign_audience_members TO "${papel}"`);
+  }
+});
