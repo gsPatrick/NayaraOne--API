@@ -16,6 +16,10 @@
 const R = Object.freeze({ politica: 'REMAPEAR' });
 const E = Object.freeze({ politica: 'ESPECIAL' });
 const fora = (motivo) => Object.freeze({ politica: 'FORA', motivo });
+/** REMAPEAR só as linhas que casam `somenteOnde` (condição SQL); as demais ficam com a absorvida, com o motivo. */
+const remapearOnde = (somenteOnde, motivo) => Object.freeze({ politica: 'REMAPEAR', somenteOnde, motivo });
+const GARANTIA_VIGENTE = remapearOnde('replaced_by_guarantee_id IS NULL',
+  'A garantia SUBSTITUÍDA é histórico imutável do contrato (gatilho guarantees_substituida_imutavel, migration 15600): fica com a absorvida; a vigente segue a canônica.');
 
 const REFERENCIAS_REVISADAS = Object.freeze({
   // Pessoas (os filhos da própria pessoa).
@@ -48,8 +52,8 @@ const REFERENCIAS_REVISADAS = Object.freeze({
   'legal.signatures.person_id': R,
   'legal.addendum_signatures.person_id': fora('Assinatura de aditivo é imutável (gatilho addendum_signatures_immutable).'),
   'legal.case_parties.person_id': R,
-  'legal.guarantees.guarantor_person_id': R,
-  'legal.guarantees.holder_person_id': R,
+  'legal.guarantees.guarantor_person_id': GARANTIA_VIGENTE,
+  'legal.guarantees.holder_person_id': GARANTIA_VIGENTE,
   'legal.key_deliveries.delivered_to_person_id': R,
   // Compras, correspondente e obras.
   'procurement.supplier_qualifications.supplier_person_id': R,
@@ -59,7 +63,7 @@ const REFERENCIAS_REVISADAS = Object.freeze({
   // Marketing.
   'marketing.attribution_events.person_id': R,
   'marketing.campaign_audience_members.person_id': R,
-  'marketing.campaign_step_deliveries.person_id': R,
+  'marketing.campaign_step_deliveries.person_id': fora('A identidade da entrega da campanha não muda (gatilho do Marco 9 mkt_campaign_step_deliveries_guard, MKT_DELIVERY_IDENTITY): o envio fica registrado para quem recebeu.'),
   'marketing.reminder_pendings.person_id': R,
   'marketing.review_requests.person_id': R,
   'marketing.suppression_list.person_id': R,

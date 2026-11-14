@@ -4,7 +4,7 @@ const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../models');
 const { govError } = require('../governance.errors');
 const { TABLE_OF } = require('./merge.repository');
-const { SUPPLIER_EXTRA_REFERENCES, FILE_LINK_TYPES, DERIVED_TABLES } = require('./merge.constants');
+const { SUPPLIER_EXTRA_REFERENCES, FILE_LINK_TYPES, DERIVED_TABLES, HISTORY_REFERENCES } = require('./merge.constants');
 
 const ident = (value) => `"${String(value).replace(/"/g, '""')}"`;
 const qualified = (name) => name.split('.').map(ident).join('.');
@@ -45,7 +45,10 @@ async function countReferences(entityType, otherId, transaction) {
 }
 
 async function update(table, column, survivorId, otherId, transaction) {
-  const [, meta] = await sequelize.query(`UPDATE ${qualified(table)} SET ${ident(column)} = :survivorId WHERE ${ident(column)} = :otherId`, { transaction, replacements: { survivorId, otherId } });
+  const frozen = HISTORY_REFERENCES[`${table}.${column}`];
+  if (frozen === 'true') return 0; // histórico imutável: fica no cadastro absorvido (merge.constants)
+  const keep = frozen ? ` AND NOT (${frozen})` : '';
+  const [, meta] = await sequelize.query(`UPDATE ${qualified(table)} SET ${ident(column)} = :survivorId WHERE ${ident(column)} = :otherId${keep}`, { transaction, replacements: { survivorId, otherId } });
   return meta && meta.rowCount ? meta.rowCount : 0;
 }
 

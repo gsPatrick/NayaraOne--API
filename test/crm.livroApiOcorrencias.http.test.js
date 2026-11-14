@@ -102,6 +102,9 @@ test('LIVRO §10/§12: POST /crm/opportunities/:id/interactions grava canal SITE
   assert.equal(semResumo.status, 400);
   const canalLivre = await http('POST', `/crm/opportunities/${op.id}/interactions`, { channel: 'TELEPATIA', direction: 'OUT', summary: 'x' });
   assert.equal(canalLivre.status, 400);
+  // o mesmo limite do registro de POST /messages (DI-M9R-16, integration.messaging.record_body_max_chars, padrão 65536)
+  const longo = await http('POST', `/crm/opportunities/${op.id}/interactions`, { channel: 'PHONE', direction: 'OUT', summary: 's'.repeat(65537) });
+  assert.deepEqual([longo.status, longo.body.error.code, longo.body.error.details.maxChars], [400, 'MESSAGE_VALIDATION', 65536]);
   assert.equal((await outbox('crm.interaction.recorded', i1.body.data.id)).length, 1);
 });
 

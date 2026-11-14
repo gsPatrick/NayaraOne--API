@@ -116,3 +116,17 @@ test('linha 69: o banco só aceita publicação sem publicador para a versão 1 
     );
   });
 });
+
+test('linha 69: o papel de runtime não usa a exceção da semente — versão 1 gravada com origin CODE_SEED pela aplicação não publica sem publicador', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const tpl = await ContractTemplate.create({ ...base(), name: `Modelo forjado ${uniqueSuffix()}`, contractType: 'USED_PROPERTY_DELIVERY', isActive: true }, { transaction: t });
+    const [[forjada]] = await sequelize.query(
+      `INSERT INTO legal.template_versions (id, group_id, company_id, template_id, version_number, status, origin, created_at, updated_at)
+       VALUES (gen_random_uuid(), :g, :c, :t, 1, 'DRAFT', 'CODE_SEED', now(), now()) RETURNING id`,
+      { replacements: { g: tenant.groupId, c: tenant.companyId, t: tpl.id }, transaction: t });
+    await assert.rejects(
+      sequelize.query("UPDATE legal.template_versions SET status = 'PUBLISHED', published_at = now() WHERE id = :id", { replacements: { id: forjada.id }, transaction: t }),
+      /só vai de DRAFT para PUBLISHED/
+    );
+  });
+});

@@ -10,6 +10,7 @@ const feedbackCasesService = require('./feedbackCases.service');
 const { refuseDeletion } = require('./feedbackCaseOpening');
 const { bulkReassign } = require('./opportunityReassign.service');
 const { readOutcomeReasonCatalog } = require('./crm.params');
+const { assertRecordBodyLimit } = require('./messaging/messaging.textLimits');
 
 /**
  * Endpoints com o caminho do Guia do Marcelo §13 ("APIs mínimas") que o sistema atendia por outro caminho
@@ -27,6 +28,8 @@ const recordInteraction = catchAsync(async (req, res) => {
   if (!body.summary || !String(body.summary).trim()) throw AppError.badRequest('O campo "summary" (resumo do contato) é obrigatório.', 'MESSAGE_VALIDATION');
   const message = await req.withTenantTransaction(async (transaction) => {
     const opportunity = await opportunitiesService.getOpportunity(req.params.id, transaction);
+    // O mesmo limite do registro de POST /messages (DI-M9R-16, integration.messaging.record_body_max_chars).
+    await assertRecordBodyLimit(req.auth, String(body.summary).trim(), transaction);
     return messagesService.createMessage(
       {
         groupId: req.auth.groupId,

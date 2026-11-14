@@ -103,7 +103,7 @@ async function remapAllPersonReferences(canonicalId, absorbedId, actorUserId, tr
       // Papel que o canônico já tem (a linha do absorvido foi encerrada acima): a linha encerrada fica com o absorvido, como histórico.
       ? `UPDATE people.person_roles o SET person_id = :canonicalId WHERE o.person_id = :absorbedId
            AND NOT EXISTS (SELECT 1 FROM people.person_roles s WHERE s.person_id = :canonicalId AND s.role_code = o.role_code AND s.company_id = o.company_id)`
-      : `UPDATE ${qualified(table)} SET ${ident(column)} = :canonicalId WHERE ${ident(column)} = :absorbedId`;
+      : `UPDATE ${qualified(table)} SET ${ident(column)} = :canonicalId WHERE ${ident(column)} = :absorbedId${politica && politica.somenteOnde ? ` AND (${politica.somenteOnde})` : ''}`;
     const n = await update(sql, { canonicalId, absorbedId }, transaction);
     if (n) remapeadas[chave] = n;
   }
@@ -116,7 +116,8 @@ async function remapAllPersonReferences(canonicalId, absorbedId, actorUserId, tr
   const fiadores = await update(
     `UPDATE legal.guarantees SET additional_guarantor_person_ids = (SELECT jsonb_agg(DISTINCT CASE WHEN e = to_jsonb(CAST(:absorbedId AS text))
         THEN to_jsonb(CAST(:canonicalId AS text)) ELSE e END) FROM jsonb_array_elements(additional_guarantor_person_ids) e)
-      WHERE jsonb_typeof(additional_guarantor_person_ids) = 'array' AND additional_guarantor_person_ids @> to_jsonb(ARRAY[CAST(:absorbedId AS text)])`,
+      WHERE jsonb_typeof(additional_guarantor_person_ids) = 'array' AND additional_guarantor_person_ids @> to_jsonb(ARRAY[CAST(:absorbedId AS text)])
+        AND replaced_by_guarantee_id IS NULL`,
     { canonicalId, absorbedId }, transaction
   );
   if (fiadores) remapeadas['legal.guarantees.additional_guarantor_person_ids'] = fiadores;

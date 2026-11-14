@@ -41,6 +41,26 @@ const FILE_LINK_TYPES = Object.freeze({ PERSON: ['Person', 'Supplier'], SUPPLIER
 /** Tabelas que o reapontamento genérico não toca: leitura derivada (a linha do absorvido é removida) e papéis (tratados por retireSharedRoles; a chave é pessoa+papel+empresa). */
 const DERIVED_TABLES = Object.freeze(['real_estate.public_property_read_model', 'people.person_roles']);
 
+/**
+ * Histórico imutável dos Marcos 3 e 5 (gatilhos do banco): a linha guarda o cadastro como era no fato e NÃO é reapontada; continua no cadastro
+ * absorvido, que segue existindo com merged_into_id para o sobrevivente (nada se perde e o histórico não é reescrito). Chave 'tabela.coluna';
+ * valor: condição SQL das linhas congeladas (as demais seguem o sobrevivente).
+ *   crm.radar_matches (migration 9972, Guia M3 §9) e crm.cart_events (10313): rastro append-only;
+ *   legal.addendum_signatures (9986): assinatura do aditivo;
+ *   legal.guarantees (15600): só a garantia SUBSTITUÍDA, que faz parte do histórico do contrato; a vigente segue o sobrevivente;
+ *   marketing.campaign_step_deliveries (Marco 9, 0757): a identidade da entrega não muda. A mesma política está no catálogo do merge de
+ *   Pessoas (people/personMerge.catalog.js), que roda antes deste reapontamento genérico.
+ */
+const HISTORY_REFERENCES = Object.freeze({
+  'crm.radar_matches.property_id': 'true',
+  'crm.cart_events.property_id': 'true',
+  'legal.addendum_signatures.person_id': 'true',
+  'legal.guarantees.holder_person_id': 'replaced_by_guarantee_id IS NOT NULL',
+  'legal.guarantees.guarantor_person_id': 'replaced_by_guarantee_id IS NOT NULL',
+  // Marco 9 (mkt_campaign_step_deliveries_guard): a pessoa da entrega da campanha não muda; o envio fica com quem recebeu.
+  'marketing.campaign_step_deliveries.person_id': 'true',
+});
+
 /** Identificadores dos impedimentos de união (os mesmos dos serviços de pessoa e de imóvel) devolvidos por /impact. */
 const BLOCKERS = Object.freeze({
   PERSON_TAX_ID: 'PERSON_MERGE_CONFLICT',
@@ -49,5 +69,5 @@ const BLOCKERS = Object.freeze({
 });
 
 module.exports = {
-  BLOCKERS, ENTITY_TYPES, KINDS, STATUS, FINAL_STATUSES, DECISIONS, DOMAIN_BY_ENTITY, REASONS, SUPPLIER_ROLE, SUPPLIER_EXTRA_REFERENCES, FILE_LINK_TYPES, DERIVED_TABLES,
+  BLOCKERS, ENTITY_TYPES, KINDS, STATUS, FINAL_STATUSES, DECISIONS, DOMAIN_BY_ENTITY, REASONS, SUPPLIER_ROLE, SUPPLIER_EXTRA_REFERENCES, FILE_LINK_TYPES, DERIVED_TABLES, HISTORY_REFERENCES,
 };

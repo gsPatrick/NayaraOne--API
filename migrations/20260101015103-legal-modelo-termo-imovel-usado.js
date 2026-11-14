@@ -34,7 +34,16 @@ const guard = (seedClause) => `
     END IF;
     RETURN NEW;
   END; $$ LANGUAGE plpgsql;`;
-const SEED_CLAUSE = " OR (OLD.origin = 'CODE_SEED' AND OLD.version_number = 1 AND NEW.published_by IS NULL)";
+// Publicação sem publicador (DI-M5CT-4): SÓ a versão 1 de origem CODE_SEED do modelo do termo do imóvel usado cujas cláusulas são todas a
+// TERMO_IMOVEL_USADO com o texto da semente (hash do BODY) ou uma versão dela escrita por pessoa (created_by). A semente é gravada também em
+// runtime (usedPropertyTermModel.seedModel, empresa criada depois desta migration); uma versão CODE_SEED forjada com outro texto ou outro tipo
+// de modelo cai na regra de sempre: publicação com quem publicou (JUR-002).
+const SEED_BODY_MD5 = '337c79781a1c14b0d915798b4ebeef67';
+const SEED_CLAUSE = ` OR (OLD.origin = 'CODE_SEED' AND OLD.version_number = 1 AND NEW.published_by IS NULL
+          AND EXISTS (SELECT 1 FROM legal.contract_templates t WHERE t.id = OLD.template_id AND t.contract_type = 'USED_PROPERTY_DELIVERY')
+          AND EXISTS (SELECT 1 FROM legal.contract_template_clauses tc WHERE tc.template_version_id = OLD.id)
+          AND NOT EXISTS (SELECT 1 FROM legal.contract_template_clauses tc JOIN legal.clause_versions cv ON cv.id = tc.contract_clause_id
+            WHERE tc.template_version_id = OLD.id AND NOT (cv.code = '${CODE}' AND (cv.created_by IS NOT NULL OR md5(cv.body_text) = '${SEED_BODY_MD5}'))))`;
 
 module.exports = {
   async up(queryInterface) {
