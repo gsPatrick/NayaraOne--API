@@ -32,10 +32,11 @@ const bankTransactions = {
 
 const opportunities = {
   table: 'crm.opportunities', count: 'opportunities',
-  sql: `INSERT INTO crm.opportunities (id, group_id, company_id, person_id, owner_user_id, stage, lead_source, next_action, created_at, updated_at)
+  // Etapa final (WON/LOST, as do livro desde a DI-M3CA-3) nasce com a data de fechamento, como no fluxo real; o BI exige closed_at nelas.
+  sql: `INSERT INTO crm.opportunities (id, group_id, company_id, person_id, owner_user_id, stage, lead_source, next_action, created_at, updated_at, closed_at)
     SELECT ${ID('opp')}, :gid, :cid, ${ID('person')}, CAST(md5(CAST(:seed AS text) || ':broker:' || CAST(:cid AS text) || ':' || (g % 5)) AS uuid),
            (ARRAY['NEW', 'CONTACTED', 'VISIT', 'PROPOSAL', 'WON', 'LOST'])[1 + g % 6], (ARRAY['SITE', 'PORTAL', 'INDICACAO', 'WHATSAPP'])[1 + g % 4], 'Ligar para o cliente',
-           ${AT('(g % :days)')}, ${AT('(g % :days)')}
+           ${AT('(g % :days)')}, ${AT('(g % :days)')}, CASE WHEN g % 6 IN (4, 5) THEN ${AT('(g % :days)')} END
       FROM generate_series(1, :n) g`,
 };
 
