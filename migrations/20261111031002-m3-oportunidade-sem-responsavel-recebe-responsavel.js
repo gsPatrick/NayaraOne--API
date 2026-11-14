@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../src/shared/db/forceRestaurado');
 /**
  * DI-M3CA-1 (livro do Marco 3 §2 CRMX-006 "Oportunidade aberta precisa de responsável"; Guia §7 assertResponsibleUser; matriz
  * M3-11 e CRMX-006). Oportunidade gravada sem responsável recebe um, pela mesma ordem da aplicação (crmUsers.resolveOwnerUserId),
@@ -25,11 +26,11 @@ async function withoutForcedRls(sequelize, transaction, fn) {
   );
   const forced = rows.map((r) => r.t);
   for (const t of forced) await sequelize.query(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`, { transaction });
-  try {
+  return await forceRestaurado(async () => {
     return await fn();
-  } finally {
+  }, async () => {
     for (const t of forced) await sequelize.query(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`, { transaction });
-  }
+  });
 }
 
 const ACTIVE = `SELECT um.user_id, um.created_at FROM core.user_memberships um

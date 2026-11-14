@@ -1,6 +1,5 @@
 'use strict';
 
-const AppError = require('../../../utils/AppError');
 const { rawBodyMiddleware } = require('../../../features/integrations/webhooks/webhooks.rawBody');
 const { receiveWebhook } = require('../../../features/integrations/webhooks/webhooks.handler');
 const catchAsync = require('../../../utils/catchAsync');
@@ -13,7 +12,9 @@ const catchAsync = require('../../../utils/catchAsync');
  *    fornecedor + id externo do evento — duplicado não reaplica);
  *  - Clicksign sem canal: o webhook público do Clicksign (HMAC Content-Hmac do corpo bruto; tenant pela tabela de
  *    roteamento; assinatura já SIGNED não reaplica efeito) — mesmo de POST /v1/legal/webhooks/clicksign.
- * Fornecedor fora da lista: 404 LEGAL_SIGNATURE_WEBHOOK_PROVIDER_UNKNOWN.
+ * Fornecedor fora da lista, ou fornecedor sem canal que não é o Clicksign: segue para a rota única do Marco 9 (M9-D211), que já
+ * atendia /v1/webhooks/signature/<x> antes desta rota existir — o mesmo 404 genérico INTEGRATION_WEBHOOK_UNKNOWN_CHANNEL, com o limite
+ * de chamadas e o contador de webhook desconhecido (sem revelar quais fornecedores existem).
  */
 const PROVIDER_CODES = Object.freeze({ clicksign: 'signature-clicksign', zapsign: 'signature-zapsign', sandbox: 'signature-sandbox', 'sandbox-alt': 'signature-alt-sandbox' });
 
@@ -38,7 +39,7 @@ function signatureWebhookRoute({ webhookPreflight, legacyAlias }, clicksignPubli
   return (req, res, next) => {
     const key = String(req.params.provider || '').toLowerCase();
     const code = PROVIDER_CODES[key];
-    if (!code) return next(AppError.notFound('Fornecedor de assinatura desconhecido para o webhook.', 'LEGAL_SIGNATURE_WEBHOOK_PROVIDER_UNKNOWN'));
+    if (!code) return next();
     const channel = (req.query && req.query.channel) || req.headers['x-webhook-channel'];
     if (channel) {
       req.params.provider = code;
@@ -46,7 +47,7 @@ function signatureWebhookRoute({ webhookPreflight, legacyAlias }, clicksignPubli
       return run(framework, req, res, next);
     }
     if (key === 'clicksign') return run(legacy, req, res, next);
-    return next(AppError.notFound('Informe o canal do webhook (?channel=) para este fornecedor de assinatura.', 'LEGAL_SIGNATURE_WEBHOOK_CHANNEL_REQUIRED'));
+    return next();
   };
 }
 

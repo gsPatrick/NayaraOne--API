@@ -11,10 +11,10 @@ const { readPurposeLists } = require('../marketing/suppression/suppression.setti
  *   - com o parâmetro crm.mensagens.finalidade_obrigatoria LIGADO, toda mensagem SAÍDA para pessoa identificada declara a finalidade
  *     (422 MESSAGE_PURPOSE_REQUIRED). DESLIGADO (o padrão, comportamento do Marco 9 entregue): sem finalidade, a mensagem segue e o
  *     consentimento é conferido como TRANSACTIONAL;
- *   - a finalidade precisa estar na lista única da empresa (`marketing.consent.exige_opt_in_para` / `marketing.consent.sem_opt_in_para`,
- *     M9-D418, aba Marketing de Configurações); fora dela, com o parâmetro ligado, 422 MESSAGE_PURPOSE_UNKNOWN e nada é gravado nem
- *     enviado; com o parâmetro desligado vale a regra do Marco 9 (só MARKETING, CADENCE e CAMPAIGN exigem OPT_IN);
- *   - a mesma lista diz se a finalidade exige OPT_IN no `canContact` (porta registrada abaixo), sem lista fixa no código.
+ *   - LIGADO, a finalidade precisa estar na lista única da empresa (`marketing.consent.exige_opt_in_para` / `marketing.consent.sem_opt_in_para`,
+ *     M9-D418, aba Marketing de Configurações): fora dela, 422 MESSAGE_PURPOSE_UNKNOWN e nada é gravado nem enviado; e a mesma lista diz
+ *     se a finalidade exige OPT_IN no `canContact` (porta registrada abaixo);
+ *   - DESLIGADO, tudo como no Marco 9: qualquer finalidade é aceita e só MARKETING, CADENCE e CAMPAIGN exigem OPT_IN no `canContact`.
  */
 const PURPOSE_RE = /^[A-Z0-9_]{2,40}$/;
 
@@ -23,11 +23,12 @@ const MARCO9_OPT_IN = new Set(['MARKETING', 'CADENCE', 'CAMPAIGN']);
 const purposeRequired = (tenant, transaction) => require('./crm.params').readPurposeRequired(tenant, transaction);
 
 async function classify(purpose, tenant, transaction) {
+  // Parâmetro crm.mensagens.finalidade_obrigatoria desligado (padrão): exatamente o Marco 9 entregue (só MARKETING, CADENCE e CAMPAIGN
+  // exigem OPT_IN; toda finalidade é aceita). As listas da empresa passam a valer no CRM junto com a finalidade obrigatória (M3-18).
+  if (!(await purposeRequired(tenant, transaction))) return { known: true, requiresOptIn: MARCO9_OPT_IN.has(purpose) };
   const { requireOptIn, noOptIn } = await readPurposeLists(tenant, transaction);
   if (requireOptIn.includes(purpose)) return { known: true, requiresOptIn: true };
   if (noOptIn.includes(purpose)) return { known: true, requiresOptIn: false };
-  // Parâmetro crm.mensagens.finalidade_obrigatoria desligado (padrão): finalidade fora das listas segue a regra do Marco 9.
-  if (!(await purposeRequired(tenant, transaction))) return { known: true, requiresOptIn: MARCO9_OPT_IN.has(purpose) };
   return { known: false, requiresOptIn: true, known_purposes: [...requireOptIn, ...noOptIn] };
 }
 

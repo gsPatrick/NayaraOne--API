@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../src/shared/db/forceRestaurado');
 const { randomUUID } = require('crypto');
 
 /**
@@ -69,7 +70,7 @@ module.exports = {
     );
     await sequelize.query('ALTER TABLE core.companies NO FORCE ROW LEVEL SECURITY');
     await sequelize.query('ALTER TABLE core.roles NO FORCE ROW LEVEL SECURITY');
-    try {
+    await forceRestaurado(async () => {
       await sequelize.query(`
         INSERT INTO core.role_permissions (id, role_id, permission_id, created_at, updated_at)
         SELECT gen_random_uuid(), r.id, p.id, now(), now()
@@ -77,10 +78,10 @@ module.exports = {
         WHERE r.name = 'ADMIN' AND p.code = :code
           AND NOT EXISTS (SELECT 1 FROM core.role_permissions rp WHERE rp.role_id = r.id AND rp.permission_id = p.id)
       `, { replacements: { code: CODE } });
-    } finally {
+    }, async () => {
       await sequelize.query('ALTER TABLE core.companies FORCE ROW LEVEL SECURITY');
       await sequelize.query('ALTER TABLE core.roles FORCE ROW LEVEL SECURITY');
-    }
+    });
   },
 
   async down(queryInterface) {

@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../../../../../shared/db/forceRestaurado');
 /**
  * Guia M4 §10 "Importação bancária idempotente": `UNIQUE(bank_account_id, fingerprint)` — sem condição. A migration 20260101009985 criou o índice
  * PARCIAL (só linhas com id externo): a mesma linha sem id externo entrava duas vezes (sonda V2-P4 do verificador). Esta migration troca pelo índice
@@ -25,7 +26,7 @@ async function withoutForcedRls(q, fn) {
                            WHERE c.relforcerowsecurity AND (n.nspname || '.' || c.relname) IN (:t)`, { t: TABLES });
   const forced = rows.map((r) => r.t);
   for (const t of forced) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-  try { return await fn(); } finally { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); }
+  return await forceRestaurado(async () => { return await fn(); }, async () => { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); });
 }
 
 /** Desliga os gatilhos de UPDATE (não internos) de bank_transactions durante `fn` e os religa no mesmo modo. */
@@ -33,10 +34,10 @@ async function withoutUpdateTriggers(q, fn) {
   const [triggers] = await q(`SELECT tgname, tgenabled FROM pg_trigger
                                WHERE tgrelid = 'finance.bank_transactions'::regclass AND NOT tgisinternal AND tgenabled <> 'D' AND (tgtype & 16) <> 0`);
   for (const t of triggers) await q(`ALTER TABLE finance.bank_transactions DISABLE TRIGGER "${t.tgname}"`);
-  try { return await fn(); } finally {
+  return forceRestaurado(fn, async () => {
     const modo = { O: 'ENABLE', A: 'ENABLE ALWAYS', R: 'ENABLE REPLICA' };
     for (const t of triggers) await q(`ALTER TABLE finance.bank_transactions ${modo[t.tgenabled] || 'ENABLE'} TRIGGER "${t.tgname}"`);
-  }
+  });
 }
 
 async function counts(q) {

@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../src/shared/db/forceRestaurado');
 /**
  * DI-M3CA-2 e DI-M3CA-3 (livro do Marco 3 §10 e §3; matriz CAD-10 e M3-12).
  *  1. Estágios terminais gravados com o código do livro: CLOSED_WON -> WON, CLOSED_LOST -> LOST e WITHDRAWN -> LOST (a desistência
@@ -31,11 +32,11 @@ async function withoutForcedRls(sequelize, transaction, fn) {
   );
   const forced = rows.map((r) => r.t);
   for (const t of forced) await sequelize.query(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`, { transaction });
-  try {
+  return await forceRestaurado(async () => {
     return await fn();
-  } finally {
+  }, async () => {
     for (const t of forced) await sequelize.query(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`, { transaction });
-  }
+  });
 }
 
 async function audit(q, row, before, after, reason) {

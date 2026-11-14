@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../src/shared/db/forceRestaurado');
 /**
  * DI-M3-FUNIL-1 (livro do Marco 3 §10): oportunidades gravadas antes do catálogo fechado do funil com códigos fora do livro
  * passam para a etapa do livro. Leitura da homologação em 10/11/2026 (somente leitura): NEGOTIATION (44), NOVO (3) e LOST
@@ -25,7 +26,7 @@ module.exports = {
       const q = (sql, replacements) => sequelize.query(sql, { transaction, replacements });
       await q('ALTER TABLE crm.opportunities NO FORCE ROW LEVEL SECURITY');
       await q('ALTER TABLE audit.audit_log NO FORCE ROW LEVEL SECURITY');
-      try {
+      await forceRestaurado(async () => {
         for (const [antigo, livro] of Object.entries(MAPA)) {
           const terminal = livro === 'WON' || livro === 'LOST';
           const [linhas] = await q(
@@ -48,10 +49,10 @@ module.exports = {
             );
           }
         }
-      } finally {
+      }, async () => {
         await q('ALTER TABLE crm.opportunities FORCE ROW LEVEL SECURITY');
         await q('ALTER TABLE audit.audit_log FORCE ROW LEVEL SECURITY');
-      }
+      });
     });
   },
   async down() {

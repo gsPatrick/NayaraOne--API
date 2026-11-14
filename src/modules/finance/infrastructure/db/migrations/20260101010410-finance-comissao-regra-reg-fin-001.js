@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../../../../../shared/db/forceRestaurado');
 /**
  * DEC-005 (Maturacao/demandas/decisoes.md) e Guia M4 §11 — a comissão usa a regra REG-FIN-001 do Motor de Regras (`rules.evaluate('REG-FIN-001', ...)`);
  * REG-FIN-002 é o limite de aprovação de pagamento (Guia §4). Até aqui o código gravava a regra de comissão como REG-FIN-002.
@@ -25,7 +26,7 @@ async function withoutForcedRls(q, fn) {
                            WHERE c.relforcerowsecurity AND (n.nspname || '.' || c.relname) IN (:t)`, { t: TABLES });
   const forced = rows.map((r) => r.t);
   for (const t of forced) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-  try { return await fn(); } finally { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); }
+  return await forceRestaurado(async () => { return await fn(); }, async () => { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); });
 }
 
 /** Retrato de uma regra: versões (id, número) e quantas comissões apontam para elas. */

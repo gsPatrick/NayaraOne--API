@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../src/shared/db/forceRestaurado');
 const { randomUUID } = require('crypto');
 
 /**
@@ -24,7 +25,7 @@ const VALOR_VIGENTE_ATE_AQUI = '1000.00'; // o que o código usava quando a empr
 async function semearAlcadas(q) {
   const tabelas = ['construction.approval_thresholds', 'core.companies', 'audit.audit_log'];
   for (const t of tabelas) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-  try {
+  await forceRestaurado(async () => {
     for (const contexto of CONTEXTOS) {
       const [linhas] = await q(
         `INSERT INTO construction.approval_thresholds (id, group_id, company_id, context, max_auto_approve_amount, created_at, updated_at)
@@ -41,9 +42,9 @@ async function semearAlcadas(q) {
         );
       }
     }
-  } finally {
+  }, async () => {
     for (const t of tabelas) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`);
-  }
+  });
   await q('ALTER TABLE construction.approval_thresholds ALTER COLUMN max_auto_approve_amount DROP DEFAULT');
 }
 
@@ -70,16 +71,16 @@ module.exports = {
         ADD COLUMN IF NOT EXISTS resolution_proposed_by_user_id uuid NULL REFERENCES core.users(id) ON UPDATE CASCADE ON DELETE RESTRICT`);
       await q('ALTER TABLE construction.maintenance_cases NO FORCE ROW LEVEL SECURITY');
       await q('ALTER TABLE audit.audit_log NO FORCE ROW LEVEL SECURITY');
-      try {
+      await forceRestaurado(async () => {
         await q(`UPDATE construction.maintenance_cases mc SET resolution_proposed_by_user_id = a.user_id
                    FROM (SELECT DISTINCT ON (entity_id) entity_id, user_id FROM audit.audit_log
                           WHERE action = 'construction.maintenance_case.resolution_proposed' AND user_id IS NOT NULL
                           ORDER BY entity_id, occurred_at DESC) a
                   WHERE a.entity_id = mc.id AND mc.resolution_proposed_by_user_id IS NULL AND mc.resolution_status IS NOT NULL`);
-      } finally {
+      }, async () => {
         await q('ALTER TABLE construction.maintenance_cases FORCE ROW LEVEL SECURITY');
         await q('ALTER TABLE audit.audit_log FORCE ROW LEVEL SECURITY');
-      }
+      });
       await semearAlcadas(q);
     });
   },

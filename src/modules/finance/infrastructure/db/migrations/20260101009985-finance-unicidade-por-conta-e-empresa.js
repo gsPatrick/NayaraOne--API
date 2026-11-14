@@ -33,12 +33,12 @@ const fingerprintSql = (p) => `encode(sha256(convert_to(concat_ws('|',
     ), 'UTF8')), 'hex')`;
 const FINGERPRINT_SQL = fingerprintSql('');
 
-async function runtimeRoleExists(queryInterface) {
-  const [[{ exists }]] = await queryInterface.sequelize.query("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;");
+async function runtimeRoleExists(queryInterface, transaction) {
+  const [[{ exists }]] = await queryInterface.sequelize.query("SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'nayara_runtime') AS exists;", { transaction });
   return exists;
 }
 
-async function singleColumnUniques(queryInterface, table, column) {
+async function singleColumnUniques(queryInterface, table, column, transaction) {
   const [rows] = await queryInterface.sequelize.query(`
     SELECT c.conname
       FROM pg_constraint c
@@ -46,11 +46,11 @@ async function singleColumnUniques(queryInterface, table, column) {
       JOIN pg_namespace n ON n.oid = t.relnamespace
      WHERE n.nspname = 'finance' AND t.relname = :table AND c.contype = 'u'
        AND array_length(c.conkey, 1) = 1
-       AND c.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = t.oid AND attname = :column)`, { replacements: { table, column } });
+       AND c.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = t.oid AND attname = :column)`, { replacements: { table, column }, transaction });
   return rows.map((r) => r.conname);
 }
 
-async function globalExternalIdConstraints(queryInterface) {
+async function globalExternalIdConstraints(queryInterface, transaction) {
   const [rows] = await queryInterface.sequelize.query(`
     SELECT c.conname
       FROM pg_constraint c
@@ -58,14 +58,16 @@ async function globalExternalIdConstraints(queryInterface) {
       JOIN pg_namespace n ON n.oid = t.relnamespace
      WHERE n.nspname = 'finance' AND t.relname = 'bank_transactions' AND c.contype = 'u'
        AND array_length(c.conkey, 1) = 1
-       AND c.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = t.oid AND attname = 'external_transaction_id')`);
+       AND c.conkey[1] = (SELECT attnum FROM pg_attribute WHERE attrelid = t.oid AND attname = 'external_transaction_id')`, { transaction });
   return rows.map((r) => r.conname);
 }
 
 module.exports = {
+  // Numa transação só (verificador independente, 14/11/2026): uma falha no meio não deixa as UNIQUE antigas removidas sem as novas.
   async up(queryInterface) {
-    const q = (sql) => queryInterface.sequelize.query(sql);
-    for (const name of await globalExternalIdConstraints(queryInterface)) {
+    await queryInterface.sequelize.transaction(async (transaction) => {
+    const q = (sql) => queryInterface.sequelize.query(sql, { transaction });
+    for (const name of await globalExternalIdConstraints(queryInterface, transaction)) {
       await q(`ALTER TABLE finance.bank_transactions DROP CONSTRAINT "${name}"`);
     }
     await q('ALTER TABLE finance.bank_transactions ADD COLUMN IF NOT EXISTS fingerprint varchar(64) NULL');
@@ -89,25 +91,27 @@ module.exports = {
                ON finance.bank_transactions (bank_account_id, external_transaction_id) WHERE external_transaction_id IS NOT NULL`);
     await q(`CREATE UNIQUE INDEX IF NOT EXISTS bank_transactions_account_fingerprint_uk
                ON finance.bank_transactions (bank_account_id, fingerprint) WHERE external_transaction_id IS NOT NULL`);
-    for (const name of await singleColumnUniques(queryInterface, 'financial_entries', 'idempotency_key')) {
+    for (const name of await singleColumnUniques(queryInterface, 'financial_entries', 'idempotency_key', transaction)) {
       await q(`ALTER TABLE finance.financial_entries DROP CONSTRAINT "${name}"`);
     }
     await q(`CREATE UNIQUE INDEX IF NOT EXISTS financial_entries_company_idempotency_uk
                ON finance.financial_entries (company_id, idempotency_key) WHERE idempotency_key IS NOT NULL`);
-    for (const name of await singleColumnUniques(queryInterface, 'owner_repasses', 'idempotency_key')) {
+    for (const name of await singleColumnUniques(queryInterface, 'owner_repasses', 'idempotency_key', transaction)) {
       await q(`ALTER TABLE finance.owner_repasses DROP CONSTRAINT "${name}"`);
     }
     await q(`CREATE UNIQUE INDEX IF NOT EXISTS owner_repasses_company_idempotency_uk
                ON finance.owner_repasses (company_id, idempotency_key) WHERE idempotency_key IS NOT NULL`);
-    if (await runtimeRoleExists(queryInterface)) {
+    if (await runtimeRoleExists(queryInterface, transaction)) {
       await q('GRANT SELECT, INSERT ON finance.bank_transactions TO nayara_runtime');
       await q('GRANT SELECT, INSERT ON finance.financial_entries TO nayara_runtime');
       await q('GRANT SELECT, INSERT ON finance.owner_repasses TO nayara_runtime');
     }
+    });
   },
 
   async down(queryInterface) {
-    const q = (sql) => queryInterface.sequelize.query(sql);
+    await queryInterface.sequelize.transaction(async (transaction) => {
+    const q = (sql) => queryInterface.sequelize.query(sql, { transaction });
     await q('DROP INDEX IF EXISTS finance.owner_repasses_company_idempotency_uk');
     await q('ALTER TABLE finance.owner_repasses ADD CONSTRAINT owner_repasses_idempotency_key_key UNIQUE (idempotency_key)');
     await q('DROP INDEX IF EXISTS finance.financial_entries_company_idempotency_uk');
@@ -119,5 +123,6 @@ module.exports = {
     await q('ALTER TABLE finance.bank_transactions DROP COLUMN IF EXISTS fingerprint');
     // Volta a unicidade global antiga (falha se já houver o mesmo id externo em contas diferentes — é o dado que a correção passou a aceitar).
     await q('ALTER TABLE finance.bank_transactions ADD CONSTRAINT bank_transactions_external_transaction_id_key UNIQUE (external_transaction_id)');
+    });
   },
 };

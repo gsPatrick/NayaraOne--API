@@ -1,5 +1,6 @@
 'use strict';
 
+const { nextWithDeferredFileAttach } = require('../../middlewares/deferredFileAttach');
 const { Router } = require('express');
 const catchAsync = require('../../utils/catchAsync');
 const logger = require('../../utils/logger');
@@ -18,7 +19,7 @@ function requireMarketingPermission(permissionCode) {
     if (!req.auth || !Array.isArray(req.auth.permissions) || !req.auth.permissions.includes(permissionCode)) {
       return next(mktForbidden({ required: permissionCode }));
     }
-    return next();
+    return nextWithDeferredFileAttach(req, next);
   };
   // Marca a permissão exigida para a matriz de permissões gerada do código (scripts/gerarMatrizPermissoes.js).
   middleware.requiredPermission = permissionCode;

@@ -152,6 +152,9 @@ function registerPurposePolicy(fn) {
 
 /** A finalidade exige OPT_IN? true/false; null quando a finalidade não é conhecida (ou não há política registrada). */
 async function purposeRequiresConsent(purpose, tenant, transaction) {
+  // A política mora no CRM (crm/messagePurpose.js registra ao carregar). Processo que ainda não carregou o CRM (um worker, por exemplo)
+  // carrega aqui: sem isso toda finalidade viraria "desconhecida" e nenhum contato seria autorizado.
+  if (!purposePolicy) require('../crm/messagePurpose');
   if (!purposePolicy) return null;
   const policy = await purposePolicy(String(purpose || '').toUpperCase(), tenant, transaction);
   return policy && policy.known ? Boolean(policy.requiresOptIn) : null;

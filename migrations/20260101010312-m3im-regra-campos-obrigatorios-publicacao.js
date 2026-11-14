@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../src/shared/db/forceRestaurado');
 const crypto = require('crypto');
 
 /**
@@ -28,7 +29,7 @@ module.exports = {
     await sequelize.transaction(async (transaction) => {
       const q = (sql, replacements) => sequelize.query(sql, { transaction, replacements });
       for (const t of TABLES) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-      try {
+      await forceRestaurado(async () => {
         const [empresas] = await q(
           `SELECT r.group_id, r.company_id, v.published_by_user_id AS autor
              FROM core.rules r
@@ -61,9 +62,9 @@ module.exports = {
             r: `Migration ${MIGRATION} (livro do Marco 3 §7): regra ${CODE} publicada para a empresa que já tinha o catálogo de Imóveis.`,
           });
         }
-      } finally {
+      }, async () => {
         for (const t of TABLES) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`);
-      }
+      });
     });
   },
 
@@ -72,7 +73,7 @@ module.exports = {
     await sequelize.transaction(async (transaction) => {
       const q = (sql, replacements) => sequelize.query(sql, { transaction, replacements });
       for (const t of TABLES) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-      try {
+      await forceRestaurado(async () => {
         const [criadas] = await q(
           `SELECT (after_json->>'ruleId')::uuid AS rule_id, (after_json->>'ruleVersionId')::uuid AS version_id
              FROM audit.audit_log WHERE action = 'rule.seeded_by_migration' AND after_json->>'createdByMigration' = :m`, { m: MIGRATION }
@@ -88,9 +89,9 @@ module.exports = {
           await q('DELETE FROM core.rule_versions WHERE id = :v', { v: c.version_id });
           await q('DELETE FROM core.rules WHERE id = :r', { r: c.rule_id });
         }
-      } finally {
+      }, async () => {
         for (const t of TABLES) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`);
-      }
+      });
     });
   },
 };

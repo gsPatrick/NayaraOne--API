@@ -4,6 +4,7 @@
  * M9-D700 — guarda de permissão do BI, usada por serviço, rota, exportação e ferramentas da NAY (um só caminho).
  * `ctx.permissions` é Array ou Set. Falta de permissão: 403 PERMISSION_DENIED com o código ausente (regra única de status).
  */
+const { nextWithDeferredFileAttach } = require('../../../middlewares/deferredFileAttach');
 const AppError = require('../../../utils/AppError');
 
 function has(ctx, code) {
@@ -28,7 +29,7 @@ function requireAnalyticsPermission(code) {
   const middleware = function requireAnalyticsPermissionMiddleware(req, res, next) {
     if (!req.auth) return next(AppError.unauthorized('Contexto de autenticação ausente.', 'AUTH_CONTEXT_MISSING'));
     if (!has({ permissions: req.auth.permissions }, code)) return next(denied(code));
-    return next();
+    return nextWithDeferredFileAttach(req, next);
   };
   middleware.requiredPermission = code;
   return middleware;

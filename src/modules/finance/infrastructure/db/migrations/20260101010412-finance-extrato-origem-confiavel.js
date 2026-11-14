@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../../../../../shared/db/forceRestaurado');
 /**
  * Caderno M4 §11 "Exato — ID externo/fingerprint + valor + data — Auto confirmado se fonte confiável" e FIN-009 "confirmação conforme risco"
  * (verificação do Marco 4, parte 1: uma linha digitada à mão era conciliada sozinha). A linha de extrato passa a guardar a ORIGEM e se ela é fonte
@@ -19,7 +20,7 @@ async function withoutForcedRls(q, fn) {
                            WHERE c.relforcerowsecurity AND (n.nspname || '.' || c.relname) IN (:t)`, { t: TABLES });
   const forced = rows.map((r) => r.t);
   for (const t of forced) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-  try { return await fn(); } finally { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); }
+  return await forceRestaurado(async () => { return await fn(); }, async () => { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); });
 }
 
 const perCompany = (q) => q('SELECT group_id, company_id, count(*)::int AS n FROM finance.bank_transactions GROUP BY group_id, company_id ORDER BY company_id');

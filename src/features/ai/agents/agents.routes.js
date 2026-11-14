@@ -1,5 +1,6 @@
 'use strict';
 
+const { nextWithDeferredFileAttach } = require('../../../middlewares/deferredFileAttach');
 const AppError = require('../../../utils/AppError');
 const { requirePermission } = require('../../../middlewares/auth.middleware');
 const { aiGate } = require('../aiGate.middleware');
@@ -17,7 +18,7 @@ function anyOf(...codes) {
     if (!codes.some((code) => req.auth.permissions.includes(code))) {
       return next(AppError.forbidden('Você não tem permissão para realizar esta ação. Peça o acesso a quem administra o seu perfil.', 'PERMISSION_DENIED', { required: codes.join('|'), alternatives: codes }));
     }
-    return next();
+    return nextWithDeferredFileAttach(req, next);
   };
   middleware.requiredPermission = codes.join('|');
   return middleware;

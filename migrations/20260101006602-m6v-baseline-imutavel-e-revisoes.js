@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../src/shared/db/forceRestaurado');
 const { applyLegalTenantRls } = require('./_helpers/legalTenantTable');
 
 /**
@@ -98,11 +99,11 @@ module.exports = {
       await applyLegalTenantRls(q, REV, 'SELECT, INSERT');
 
       for (const t of TABLES_NO_FORCE) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-      try {
+      await forceRestaurado(async () => {
         await corrigirDados(q);
-      } finally {
+      }, async () => {
         for (const t of TABLES_NO_FORCE) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`);
-      }
+      });
 
       await q(`CREATE OR REPLACE FUNCTION construction.budget_revisions_append_only() RETURNS trigger LANGUAGE plpgsql AS $f$
         BEGIN

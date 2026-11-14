@@ -1,5 +1,6 @@
 'use strict';
 
+const { forceRestaurado } = require('../../../../../shared/db/forceRestaurado');
 const { randomUUID } = require('crypto');
 
 /**
@@ -38,7 +39,7 @@ async function withRlsOpen(q, tables, fn) {
                            WHERE (n.nspname || '.' || c.relname) IN (:tables)`, { tables });
   const forced = rows.filter((r) => r.f).map((r) => r.t);
   for (const t of forced) await q(`ALTER TABLE ${t} NO FORCE ROW LEVEL SECURITY`);
-  try { return await fn(); } finally { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); }
+  return await forceRestaurado(async () => { return await fn(); }, async () => { for (const t of forced) await q(`ALTER TABLE ${t} FORCE ROW LEVEL SECURITY`); });
 }
 
 async function convertStatuses(q, pairs, reason, action) {

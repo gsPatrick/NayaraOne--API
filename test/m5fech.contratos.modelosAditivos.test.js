@@ -141,6 +141,10 @@ test('Guia §14: POST /webhooks/signature/:provider — Clicksign pelo webhook p
   assert.deepEqual([existente.status, existente.code, existente.body.error.message], [401, 'LEGAL_WEBHOOK_HMAC_INVALID', desconhecido.body.error.message], 'sem oráculo: signatário existente e inexistente recebem a mesma resposta');
   const canalErrado = await h.http(null, 'POST', '/webhooks/signature/sandbox?channel=canal-inexistente', { id: 'x' });
   assert.equal(canalErrado.code, 'INTEGRATION_WEBHOOK_UNKNOWN_CHANNEL', 'com canal, a rota única do framework valida o canal');
-  assert.equal((await h.http(null, 'POST', '/webhooks/signature/zapsign', { id: 'x' })).code, 'LEGAL_SIGNATURE_WEBHOOK_CHANNEL_REQUIRED');
-  assert.equal((await h.http(null, 'POST', '/webhooks/signature/inventado', {})).code, 'LEGAL_SIGNATURE_WEBHOOK_PROVIDER_UNKNOWN');
+  // Sem canal (fora o Clicksign) ou fornecedor inventado: a rota única do Marco 9 responde, como antes desta rota existir (M9-D211):
+  // o mesmo 404 genérico, sem dizer quais fornecedores existem.
+  for (const caminho of ['/webhooks/signature/zapsign', '/webhooks/signature/inventado']) {
+    const r = await h.http(null, 'POST', caminho, { id: 'x' });
+    assert.deepEqual([r.status, r.code], [404, 'INTEGRATION_WEBHOOK_UNKNOWN_CHANNEL'], caminho);
+  }
 });
