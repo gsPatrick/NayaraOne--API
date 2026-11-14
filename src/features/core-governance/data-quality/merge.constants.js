@@ -59,6 +59,9 @@ const HISTORY_REFERENCES = Object.freeze({
   'legal.guarantees.guarantor_person_id': 'replaced_by_guarantee_id IS NOT NULL',
   // Marco 9 (mkt_campaign_step_deliveries_guard): a pessoa da entrega da campanha não muda; o envio fica com quem recebeu.
   'marketing.campaign_step_deliveries.person_id': 'true',
+  // Marco 4 (gatilho append-only do lançamento, FIN-003/010): o titular de terceiro do lançamento não muda depois de criado (a mesma
+  // política FORA do catálogo de Pessoas).
+  'finance.financial_entries.third_party_holder_person_id': 'true',
 });
 
 /** Identificadores dos impedimentos de união (os mesmos dos serviços de pessoa e de imóvel) devolvidos por /impact. */

@@ -24,6 +24,7 @@ let tenant;
 before(async () => { tenant = await getSeedTenant(); });
 after(async () => { await sequelize.close(); });
 const base = () => ({ groupId: tenant.groupId, companyId: tenant.companyId });
+const q = (t, sql) => sequelize.query(sql, { transaction: t });
 const upload = (t, fileName, mimeType) => filesService.uploadFile({ ...base(), fileName, mimeType, contentBase64: Buffer.from(`${fileName} ${uniqueSuffix()}`).toString('base64'), category: 'generic' }, tenant.userId, t);
 
 /** Entrega de imóvel usado pronta para liberar (locação ACTIVE, vistoria de entrada assinada, checklist dispensado). */
@@ -117,16 +118,35 @@ test('linha 69: o banco só aceita publicação sem publicador para a versão 1 
   });
 });
 
-test('linha 69: o papel de runtime não usa a exceção da semente — versão 1 gravada com origin CODE_SEED pela aplicação não publica sem publicador', async () => {
+test('linha 69: versão CODE_SEED forjada não publica sem publicador — sem cláusula, com cláusula de outro código ou com a TERMO_IMOVEL_USADO sem autor e outro texto', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const tpl = await ContractTemplate.create({ ...base(), name: `Modelo forjado ${uniqueSuffix()}`, contractType: 'USED_PROPERTY_DELIVERY', isActive: true }, { transaction: t });
-    const [[forjada]] = await sequelize.query(
-      `INSERT INTO legal.template_versions (id, group_id, company_id, template_id, version_number, status, origin, created_at, updated_at)
-       VALUES (gen_random_uuid(), :g, :c, :t, 1, 'DRAFT', 'CODE_SEED', now(), now()) RETURNING id`,
-      { replacements: { g: tenant.groupId, c: tenant.companyId, t: tpl.id }, transaction: t });
-    await assert.rejects(
-      sequelize.query("UPDATE legal.template_versions SET status = 'PUBLISHED', published_at = now() WHERE id = :id", { replacements: { id: forjada.id }, transaction: t }),
-      /só vai de DRAFT para PUBLISHED/
-    );
+    const r = { g: tenant.groupId, c: tenant.companyId };
+    const forjar = async (clausula) => {
+      const tpl = await ContractTemplate.create({ ...base(), name: `Modelo forjado ${uniqueSuffix()}`, contractType: 'USED_PROPERTY_DELIVERY', isActive: true }, { transaction: t });
+      const [[v]] = await sequelize.query(
+        `INSERT INTO legal.template_versions (id, group_id, company_id, template_id, version_number, status, origin, created_at, updated_at)
+         VALUES (gen_random_uuid(), :g, :c, :t, 1, 'DRAFT', 'CODE_SEED', now(), now()) RETURNING id`, { replacements: { ...r, t: tpl.id }, transaction: t });
+      if (clausula) {
+        // A cláusula aponta para a biblioteca do MESMO código (chave composta); a da semente pode já existir na empresa.
+        const [[existente]] = await sequelize.query('SELECT id FROM legal.clause_library WHERE company_id = :c AND code = :code', { replacements: { ...r, code: clausula.code }, transaction: t });
+        const [[lib]] = existente ? [[existente]] : await sequelize.query(`INSERT INTO legal.clause_library (id, group_id, company_id, code, created_at, updated_at)
+          VALUES (gen_random_uuid(), :g, :c, :code, now(), now()) RETURNING id`, { replacements: { ...r, code: clausula.code }, transaction: t });
+        const [[cv]] = await sequelize.query(`INSERT INTO legal.clause_versions (id, group_id, company_id, clause_library_id, code, title, body_text, category, version_number, is_active, created_at)
+          VALUES (gen_random_uuid(), :g, :c, :lib, :code, 'Forjada', :body, 'GENERAL', 100 + floor(random() * 100000)::int, true, now()) RETURNING id`, { replacements: { ...r, lib: lib.id, code: clausula.code, body: clausula.body }, transaction: t });
+        await sequelize.query(`INSERT INTO legal.contract_template_clauses (id, group_id, company_id, contract_template_id, contract_clause_id, template_version_id, sort_order, created_at)
+          VALUES (gen_random_uuid(), :g, :c, :t, :cv, :v, 0, now())`, { replacements: { ...r, t: tpl.id, cv: cv.id, v: v.id }, transaction: t });
+      }
+      return v.id;
+    };
+    const casos = [null, { code: `OUTRA_CLAUSULA_${uniqueSuffix()}`, body: SEED.bodyText }, { code: SEED.clauseCode, body: 'Texto que ninguém aprovou.' }];
+    for (const clausula of casos) {
+      const id = await forjar(clausula);
+      await q(t, 'SAVEPOINT forjada');
+      await assert.rejects(
+        sequelize.query("UPDATE legal.template_versions SET status = 'PUBLISHED', published_at = now() WHERE id = :id", { replacements: { id }, transaction: t }),
+        /só vai de DRAFT para PUBLISHED/, JSON.stringify(clausula)
+      );
+      await q(t, 'ROLLBACK TO SAVEPOINT forjada');
+    }
   });
 });

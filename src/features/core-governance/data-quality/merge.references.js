@@ -30,11 +30,20 @@ const extraReferences = (entityType) => (entityType === 'SUPPLIER' ? SUPPLIER_EX
 
 const allReferences = async (entityType, transaction) => [...(await foreignReferences(entityType, transaction)), ...extraReferences(entityType)];
 
-/** Quantas linhas apontam para o cadastro que sai, por tabela (só as que têm linha). Usado pela rota /impact. */
+/** Condição SQL das linhas que a união MOVE (as de histórico imutável ficam no cadastro absorvido, HISTORY_REFERENCES); null = nenhuma. */
+function movedRowsFilter(table, column) {
+  const frozen = HISTORY_REFERENCES[`${table}.${column}`];
+  if (frozen === 'true') return null;
+  return frozen ? ` AND NOT (${frozen})` : '';
+}
+
+/** Quantas linhas a união vai mover do cadastro que sai, por tabela (só as que têm linha). Usado pela rota /impact. */
 async function countReferences(entityType, otherId, transaction) {
   const counts = {};
   for (const { table, column } of await allReferences(entityType, transaction)) {
-    const [{ n }] = await sequelize.query(`SELECT count(*)::int AS n FROM ${qualified(table)} WHERE ${ident(column)} = :otherId`, { type: QueryTypes.SELECT, transaction, replacements: { otherId } });
+    const keep = movedRowsFilter(table, column);
+    if (keep === null) continue;
+    const [{ n }] = await sequelize.query(`SELECT count(*)::int AS n FROM ${qualified(table)} WHERE ${ident(column)} = :otherId${keep}`, { type: QueryTypes.SELECT, transaction, replacements: { otherId } });
     if (n > 0) counts[`${table}.${column}`] = n;
   }
   const [{ n: links }] = await sequelize.query(
@@ -45,9 +54,8 @@ async function countReferences(entityType, otherId, transaction) {
 }
 
 async function update(table, column, survivorId, otherId, transaction) {
-  const frozen = HISTORY_REFERENCES[`${table}.${column}`];
-  if (frozen === 'true') return 0; // histórico imutável: fica no cadastro absorvido (merge.constants)
-  const keep = frozen ? ` AND NOT (${frozen})` : '';
+  const keep = movedRowsFilter(table, column);
+  if (keep === null) return 0; // histórico imutável: fica no cadastro absorvido (merge.constants)
   const [, meta] = await sequelize.query(`UPDATE ${qualified(table)} SET ${ident(column)} = :survivorId WHERE ${ident(column)} = :otherId${keep}`, { transaction, replacements: { survivorId, otherId } });
   return meta && meta.rowCount ? meta.rowCount : 0;
 }

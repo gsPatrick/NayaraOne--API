@@ -62,9 +62,13 @@ async function createPerson(payload, actorUserId, transaction, options = {}) {
   const ctx = { groupId, companyId, actorUserId, podeForcarDuplicidade: options.podeForcarDuplicidade, modoSemelhante: options.modoSemelhante || 'FILA' };
   const plano = await assertCreationAllowed({ ...payload, taxIdDigits, contacts }, ctx, transaction);
   let person;
+  // SAVEPOINT por SQL (não transação aninhada do Sequelize): a gravação e os ganchos da pessoa (avaliação de qualidade do Marco 9,
+  // M9-D806, anotada na transação) ficam na transação da requisição; se a unicidade do banco recusar (corrida), ela continua utilizável
+  // para saber de quem é o CPF/CNPJ.
+  const sp = (sql) => transaction.sequelize.query(sql, { transaction });
+  await sp('SAVEPOINT pessoa_cadastro');
   try {
-    // Em savepoint: se a unicidade do banco recusar (corrida), a transação continua utilizável para saber de quem é o CPF/CNPJ.
-    person = await transaction.sequelize.transaction({ transaction }, (savepoint) => Person.create(
+    person = await Person.create(
       {
         groupId,
         companyId,
@@ -79,9 +83,11 @@ async function createPerson(payload, actorUserId, transaction, options = {}) {
         createdBy: actorUserId || null,
         updatedBy: actorUserId || null,
       },
-      { transaction: savepoint }
-    ));
+      { transaction }
+    );
+    await sp('RELEASE SAVEPOINT pessoa_cadastro');
   } catch (error) {
+    await sp('ROLLBACK TO SAVEPOINT pessoa_cadastro');
     // UNIQUE(group_id, tax_id_normalized) é a identidade rígida do banco (TAB-0100) e nada a contorna. O portão já recusou o CPF/CNPJ
     // desta empresa e o das outras empresas do grupo; chegar aqui é corrida com um cadastro gravado ao mesmo tempo. Gravado NESTA empresa:
     // a mesma resposta do portão (match forte, abrir o existente). Gravado em OUTRA empresa do grupo: o caminho é o vínculo.

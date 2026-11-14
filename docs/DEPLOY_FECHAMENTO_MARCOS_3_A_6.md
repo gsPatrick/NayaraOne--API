@@ -56,8 +56,9 @@ Na homologação o dono das tabelas é superusuário com BYPASSRLS (conferido em
 As migrations precisam rodar com o MESMO usuário dono das tabelas: as políticas `*_checagem_do_dono` (10940 e 10960) valem `TO CURRENT_USER`, o papel que roda a
 migration e é dono das funções `SECURITY DEFINER` criadas no mesmo comando (as funções leem com o papel de quem as criou).
 Quando uma migration falha no meio, o erro mostrado é o ORIGINAL (`src/shared/db/forceRestaurado.js`); antes, o "transaction is aborted" da devolução do FORCE o escondia.
-Em outro ambiente em que o dono NÃO tenha BYPASSRLS, as cargas que leem tabelas com RLS forçado não enxergam linha nenhuma; as migrations 9966, 9971, 10940 e
-6603 já tiram o FORCE só durante a carga, as demais precisam do mesmo cuidado antes de rodar nesse ambiente.
+Em outro ambiente em que o dono NÃO tenha BYPASSRLS, as cargas que leem tabelas com RLS forçado não enxergam linha nenhuma. Tiram o FORCE só durante a carga (e o
+devolvem): 9966 e 9971 (Marco 9) e, da integração, 6602, 6603, 6604, 6605, 9973, 9975, 9999, 10312, 10410, 10411, 10412, 10940, 10942, 10960, 11400, 15103,
+31001 e 31002. Uma migration nova com carga de dados precisa do mesmo cuidado antes de rodar nesse ambiente (os bancos descartáveis do CI rodam assim e as 57 passam).
 
 ## Plano de reversão
 

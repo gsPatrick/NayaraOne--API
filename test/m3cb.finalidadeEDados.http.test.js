@@ -127,3 +127,36 @@ test('M3-18 com o parâmetro no padrão (desligado) vale o Marco 9: saída sem f
     await ligarFinalidade();
   }
 });
+
+test('M3-18 com o parâmetro desligado a lista da empresa NÃO vale no canContact (Marco 9): finalidade da lista sem OPT_IN segue; MARKETING continua exigindo OPT_IN', { skip: H.SKIP }, async () => {
+  const lista = await env.call('PUT', `/settings/${OPT_IN_KEY}`, as('gestor'), { value: 'MARKETING, NUTRICAO, RADAR, AVALIACAO, POS_VENDA' });
+  assert.equal(lista.status, 200, JSON.stringify(lista.body));
+  await desligarFinalidade();
+  try {
+    const { personId } = await H.oportunidadeDe(env, env.ids.maker, 'Lista desligada');
+    const nutricao = await env.call('POST', '/messages', as('gestor'), saida(personId, { purpose: 'NUTRICAO' }));
+    assert.equal(nutricao.status, 201, `desligado, NUTRICAO não exige OPT_IN (só MARKETING, CADENCE e CAMPAIGN, como no Marco 9): ${JSON.stringify(nutricao.body)}`);
+    const marketing = await env.call('POST', '/messages', as('gestor'), saida(personId, { purpose: 'MARKETING' }));
+    assert.deepEqual([marketing.status, marketing.body.error && marketing.body.error.code], [422, 'MESSAGE_BLOCKED_BY_CONSENT']);
+    const inventada = await env.call('POST', '/messages', as('gestor'), saida(personId, { purpose: 'QUALQUER_UMA' }));
+    assert.equal(inventada.status, 201, 'desligado, finalidade fora das listas é aceita (Marco 9)');
+  } finally {
+    await ligarFinalidade();
+  }
+});
+
+test('canContact num processo que ainda não carregou o CRM carrega a política sozinho (antes, sem ela, nenhum contato era autorizado)', () => {
+  const { spawnSync } = require('node:child_process');
+  const codigo = `
+    const path = require('path');
+    const consents = require(path.resolve('src/features/people/personConsents.service'));
+    const alvo = require.resolve(path.resolve('src/features/crm/messagePurpose'));
+    const antes = Boolean(require.cache[alvo]);
+    consents.purposeRequiresConsent('MARKETING', { groupId: null, companyId: null }, undefined).catch(() => null).finally(() => {
+      process.stdout.write(JSON.stringify({ antes, depois: Boolean(require.cache[alvo]) }));
+      process.exit(0);
+    });`;
+  const r = spawnSync(process.execPath, ['-e', codigo], { cwd: require('node:path').join(__dirname, '..'), encoding: 'utf8', env: { ...process.env, NODE_ENV: 'test' }, timeout: 60000 });
+  const saidaJson = JSON.parse(r.stdout.slice(r.stdout.lastIndexOf('{')));
+  assert.deepEqual(saidaJson, { antes: false, depois: true }, r.stderr);
+});

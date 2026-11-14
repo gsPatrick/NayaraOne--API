@@ -13,7 +13,7 @@ const { randomUUID } = require('crypto');
  *   - people.documento_no_grupo(cpf_cnpj): há cadastro com este CPF/CNPJ em OUTRA empresa do grupo;
  *   - people.contato_no_grupo(tipo, chave, ddi): há contato com esta chave (e-mail em minúsculas e sem espaço; telefone com DDI) no
  *     cadastro de uma pessoa de OUTRA empresa do grupo. A chave do lado do banco é a mesma de src/features/people/personContactKey.js.
- * As duas são SECURITY DEFINER com search_path fixo. Como as tabelas têm FORCE RLS e o dono não tem BYPASSRLS na homologação, o dono
+ * As duas são SECURITY DEFINER com search_path fixo. Como as tabelas têm FORCE RLS e o dono pode não ter BYPASSRLS (bancos do CI; na homologação ele é superusuário), o dono
  * ganha a leitura das duas tabelas SÓ para si (TO CURRENT_USER, mesmo padrão de person_company_links_checagem_do_dono da 0940); o
  * runtime continua com as políticas por empresa.
  *

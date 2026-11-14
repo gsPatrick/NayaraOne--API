@@ -15,10 +15,11 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./t
 const { q, usarEmpresa, tentar, cenario } = require('./helpers/pessoasVinculo');
 const peopleService = require('../src/features/people/people.service');
 const dedup = require('../src/features/people/personDedup.service');
+const { installQualityHooks } = require('../src/features/core-governance/data-quality/quality.hooks');
 
 let tenant;
 const originais = { findStrongInCompany: dedup.findStrongInCompany, taxIdInOtherCompany: dedup.taxIdInOtherCompany };
-before(async () => { tenant = await getSeedTenant(); });
+before(async () => { tenant = await getSeedTenant(); installQualityHooks(); });
 afterEach(() => Object.assign(dedup, originais));
 after(async () => { await sequelize.close(); });
 
@@ -27,6 +28,13 @@ function portaoNaoVe() {
   dedup.findStrongInCompany = async () => null;
   dedup.taxIdInOtherCompany = async () => false;
 }
+
+test('cadastro pelo serviço (com o savepoint da corrida) fica anotado para a avaliação de qualidade na transação da requisição (M9-D806 §3.3)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const pessoa = await peopleService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: 'Pessoa sem contato nem endereço' }, tenant.userId, t);
+    assert.ok(t.qualityPending && t.qualityPending.has(`PERSON:${pessoa.id}`), 'a anotação da pessoa está na transação de fora (é ela que o tenant.middleware avalia)');
+  });
+});
 
 test('corrida na MESMA empresa: a UNIQUE recusa e a resposta é a do portão (409 PERSON_DUPLICATE FORTE com o cadastro existente)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
