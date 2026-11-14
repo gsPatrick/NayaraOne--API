@@ -8,7 +8,10 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, prepareManualSettlement } = require('./testHelpers');
+const receipt = require('../src/modules/finance/application/services/receipt.service');
+const { OutboxEvent } = require('../src/models');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const budgetsService = require('../src/features/construction/budgets.service');
@@ -117,11 +120,12 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     // Etapa (revisão Marco 7, A7: a baixa de estoque para a obra exige a etapa)
     const stage = await projectStagesService.createProjectStage(
       project.id,
-      withTenant({ name: 'Fundação', stageCode: 'FUND-01', sequence: 1, plannedPct: 100, plannedCost: 20000 }),
+      withTenant({ name: 'Fundação', stageCode: 'FUND-01', sequence: 1, plannedPct: 100, plannedCost: 20000, responsibleUserId: tenant.userId }),
       tenant.userId,
       transaction
     );
     assert.equal(stage.stageCode, 'FUND-01');
+    assert.equal(stage.responsibleUserId, tenant.userId, 'etapa com responsável (Caderno §2)');
     const receivedRequest = await materialRequestsService.receiveMaterialRequest(materialRequest.id, tenant.groupId, tenant.companyId, tenant.userId, transaction, {
       inventoryItemId: stockItem.id,
       sourceLocationId: stockLocation.id,
@@ -153,11 +157,12 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     // 7. Medição: criar (DRAFT) -> submeter -> revisar -> aprovar (dispara pagamento real)
     const measurement = await stageMeasurementsService.createStageMeasurement(
       stage.id,
-      withTenant({ measuredPct: 100, measuredAt: '2026-09-30', items: [{ description: 'Fundação concluída', quantity: 1, unitPrice: 18000 }] }),
+      withTenant({ measuredPct: 100, measuredAt: '2026-09-30', evidenceFileIds: await evidenceIds(tenant, transaction, 1, 'medicao'), items: [{ description: 'Fundação concluída', quantity: 1, unitPrice: 18000 }] }),
       tenant.userId,
       transaction
     );
     assert.equal(measurement.status, 'DRAFT');
+    assert.equal(measurement.evidenceFileIds.length, 1, 'medição com evidência (Guia §6)');
     const submitted = await stageMeasurementsService.submitStageMeasurement(measurement.id, tenant.userId, transaction);
     assert.equal(submitted.status, 'SUBMITTED');
     const reviewed = await stageMeasurementsService.reviewStageMeasurement(measurement.id, { notes: 'Conferido em campo' }, tenant.userId, transaction);
@@ -169,6 +174,25 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     const payable = await FinancialEntry.findByPk(approved.payableFinancialEntryId, { transaction });
     assert.ok(payable, 'o lançamento financeiro tem que existir de verdade no banco');
     assert.equal(payable.constructionProjectId, project.id, 'lançamento carrega a dimensão project_id (M6-97)');
+    // Verificação independente do Marco 6 (M6-21): a conta nasce do consumidor do Financeiro para measurement.approved.
+    const approvedEvent = await OutboxEvent.findOne({ where: { eventType: 'measurement.approved', aggregateId: measurement.id }, transaction });
+    assert.equal(payable.sourceEventId, approvedEvent.id, 'source_event_id = evento measurement.approved');
+    assert.equal(Number(payable.amount), 18000);
+    assert.equal(payable.status, 'PENDING');
+
+    // 7b. Pagamento: baixa PARCIAL (carrega a obra, M6-97) e depois a quitação — o custo realizado acompanha sem dobrar.
+    const ms1 = await prepareManualSettlement(tenant, payable.id, tenant.userId, transaction);
+    await receipt.settleFinancialEntryPartial(payable.id, 8000, tenant.userId, transaction, { manualSettlement: ms1, idempotencyKey: `e2e-p1-${suffix}` });
+    const partialChild = await FinancialEntry.findOne({ where: { parentEntryId: payable.id }, transaction });
+    assert.equal(partialChild.constructionProjectId, project.id, 'baixa parcial carrega a obra');
+    const healthPartial = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthPartial.actualFinancialCost, 8000, 'pago até aqui: 8.000');
+    const ms2 = await prepareManualSettlement(tenant, payable.id, tenant.userId, transaction);
+    await receipt.settleFinancialEntryPartial(payable.id, 10000, tenant.userId, transaction, { manualSettlement: ms2, idempotencyKey: `e2e-p2-${suffix}` });
+    assert.equal((await FinancialEntry.findByPk(payable.id, { transaction })).status, 'SETTLED');
+    const healthPaid = await projectHealthService.getProjectHealth(project.id, transaction);
+    assert.equal(healthPaid.actualFinancialCost, 18000, 'quitada: 18.000, sem contar a obrigação e as baixas duas vezes');
+    assert.equal(healthPaid.kpis.payablePendingTotal, 0);
 
     // 8. Qualidade: item OK
     const qualityItem = await qualityChecklistService.createQualityItem(
@@ -197,12 +221,13 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     // `actualFinancialCost` só soma o que já foi liquidado (SETTLED), então o valor esperado
     // aqui é `payablePendingTotal`, não `actualFinancialCost`.
     const health = await projectHealthService.getProjectHealth(project.id, transaction);
-    assert.ok(health.kpis.payablePendingTotal > 0, 'valor a pagar pendente deve refletir a medição aprovada');
+    assert.equal(health.baselineBudget, 20000);
+    assert.equal(health.actualFinancialCost, 18000, 'custo realizado = medição paga');
 
     // 12. Pós-obra: abrir caso de garantia vinculado à obra ENTREGUE, registrar atendimento, fechar
     const property = await createProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
-      withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração pós-entrega', severity: 'MEDIUM' }),
+      withTenant({ propertyId: property.id, projectId: project.id, description: 'Infiltração pós-entrega', severity: 'MEDIUM', beforeMediaFileIds: await evidenceIds(tenant, transaction) }),
       tenant.userId,
       transaction
     );
@@ -220,8 +245,8 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
       {
         status: 'CLOSED',
         rootCauseCode: 'WORKMANSHIP',
-        beforeMediaFileIds: ['99999999-9999-9999-9999-999999999999'],
-        afterMediaFileIds: ['aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'],
+        beforeMediaFileIds: await evidenceIds(tenant, transaction),
+        afterMediaFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction

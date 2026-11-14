@@ -28,7 +28,7 @@ process.env.PORT = process.env.MARCO4_GROUP2_HTTP_TEST_PORT || '21598';
 require('../app');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 const { CostCenter } = require('../src/models');
 
 let tenant;

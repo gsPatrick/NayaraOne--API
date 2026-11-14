@@ -69,30 +69,47 @@ module.exports = (sequelize) => {
         type: DataTypes.TEXT,
         allowNull: true,
         field: 'lost_reason',
-        comment: 'Motivo estruturado de PERDA (enum LOST) — obrigatório ao entrar em CLOSED_LOST (M3-12).',
+        comment: 'Motivo estruturado de PERDA (enum LOST) — obrigatório ao entrar em LOST (M3-12).',
       },
       wonReason: {
         type: DataTypes.STRING(32),
         allowNull: true,
         field: 'won_reason',
-        comment: 'Motivo estruturado de GANHO (enum WON) — obrigatório ao entrar em CLOSED_WON (M3-12).',
+        comment: 'Motivo estruturado de GANHO (enum WON) — obrigatório ao entrar em WON (M3-12).',
       },
       withdrawnReason: {
         type: DataTypes.STRING(32),
         allowNull: true,
         field: 'withdrawn_reason',
-        comment: 'Motivo estruturado de DESISTÊNCIA (enum WITHDRAWN) — obrigatório ao entrar no stage WITHDRAWN (M3-12).',
+        comment: 'Motivo estruturado de DESISTÊNCIA (categoria desistência de crm.motivos.desistencia) — preenchido quando a perda (LOST) é desistência (M3-12).',
       },
       nextAction: {
         type: DataTypes.TEXT,
         allowNull: true,
         field: 'next_action',
-        comment: "Obrigatório na aplicação enquanto a opportunity está em estágio ativo (não CLOSED_WON/CLOSED_LOST).",
+        comment: "Obrigatório na aplicação enquanto a opportunity está em estágio ativo (não WON/LOST).",
       },
       nextActionDueAt: {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'next_action_due_at',
+      },
+      // CAD-09 (Marco 3 §9): retrato do financiamento vinculado, escrito só pelo consumidor do evento do Correspondente
+      // (crm/financingStatus.consumer.js). Só referência, status e data — nenhum dado bancário no CRM.
+      financingCaseId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'financing_case_id',
+      },
+      financingStatus: {
+        type: DataTypes.STRING(32),
+        allowNull: true,
+        field: 'financing_status',
+      },
+      financingStatusAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'financing_status_at',
       },
       lockVersion: {
         type: DataTypes.INTEGER,

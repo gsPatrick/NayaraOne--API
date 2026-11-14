@@ -12,7 +12,7 @@ const { COLD_INACTIVITY_KEY, readLeadInt } = require('../leadParams');
  * com o sujeito e o payload que o runner lembra. Quem decide se a mensagem sai (consentimento, silêncio, cap, kill switch) é o runner, no canSend.
  */
 const q = (sql, replacements, transaction) => sequelize.query(sql, { replacements, transaction, type: QueryTypes.SELECT });
-const CLOSED_STAGES = Object.freeze(['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN']);
+const { CLOSED_STAGE_CODES: CLOSED_STAGES } = require('../../../crm/opportunityStages');
 /** Mensagens do funil que contam como "contato" do lado da empresa na cadência: as de pessoa e as de acompanhamento ou transacionais da automação. */
 const FOLLOW_UP_PURPOSES = Object.freeze(['TRANSACTIONAL', 'ACOMPANHAMENTO']);
 const DAY_MS = 24 * 60 * 60 * 1000;

@@ -10,7 +10,7 @@ const env = require('../_helpers/m9d803Env');
 const projectsService = require('../../../src/features/construction/projects.service');
 const stagesService = require('../../../src/features/construction/projectStages.service');
 const casesService = require('../../../src/features/construction/maintenanceCases.service');
-const guaranteesService = require('../../../src/features/legal/guarantees.service');
+const guaranteesService = require('../../../src/modules/legal/leasing/guarantee.service');
 const calendarEvents = require('../../../src/features/construction/constructionCalendarEvents.service');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const { dateKeyInZone, addMonthsToDateKey } = require('../../../src/features/core-governance/calendar/sources/time');
@@ -53,7 +53,7 @@ test('m9d803 project.stage.updated é publicado uma vez por mudança', { skip: s
     await calendarEvents.publishProjectStageUpdated(await stagesService.getProjectStage(stage.id, tx), tx);
     assert.equal((await list()).length, 2);
 
-    await stagesService.updateProjectStage(stage.id, { status: 'IN_PROGRESS', stageCode: 'REB', plannedCost: 100, startsAt: '2026-11-01T12:00:00Z' }, tenant.userId, tx);
+    await stagesService.updateProjectStage(stage.id, { status: 'IN_PROGRESS', stageCode: 'REB', plannedCost: 100, startsAt: '2026-11-01T12:00:00Z', responsibleUserId: tenant.userId }, tenant.userId, tx);
     await stagesService.updateProjectStage(stage.id, { status: 'DONE' }, tenant.userId, tx);
     rows = await list();
     assert.equal(rows.length, 4, 'IN_PROGRESS e DONE publicam um evento cada');
@@ -72,7 +72,12 @@ test('m9d803 etapa sem prazo e mudança de responsável da obra reemitem a etapa
     assert.equal(created.payloadJson.responsibleUserId, tenant.userId);
     assert.ok(created.payloadJson.endsAtPlanned, 'project.created leva o prazo final');
 
-    const [other] = await env.sequelize.query('SELECT id FROM core.users WHERE id <> :id LIMIT 1', { replacements: { id: tenant.userId }, transaction: tx, type: 'SELECT' });
+    // Verificação do Marco 6: o responsável da obra é membro ATIVO da empresa (companyRefs.js) — outro membro da mesma empresa.
+    const [other] = await env.sequelize.query(
+      `SELECT m.user_id AS id FROM core.user_memberships m JOIN core.users u ON u.id = m.user_id
+        WHERE m.company_id = :c AND m.user_id <> :id AND m.status = 'ACTIVE' AND u.status = 'ACTIVE' AND m.deleted_at IS NULL AND u.deleted_at IS NULL LIMIT 1`,
+      { replacements: { id: tenant.userId, c: tenant.companyId }, transaction: tx, type: 'SELECT' }
+    );
     await projectsService.updateProject(project.id, { responsibleUserId: other ? other.id : null }, tenant.userId, tx);
     assert.equal((await env.events(project.id, 'project.schedule.updated', tx)).length, 1);
     const rows = await env.events(stage.id, 'project.stage.updated', tx);
@@ -86,7 +91,7 @@ test('m9d803 etapa sem prazo e mudança de responsável da obra reemitem a etapa
 test('m9d803 legal.guarantee.updated e legal.guarantee.ended são publicados e idempotentes', { skip: skip() }, async () => {
   await run(async (tx) => {
     const contract = await env.leaseContract(tenant, tx);
-    const g = await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'DEPOSIT', value: 1000, status: 'ACTIVE', endsAt: '2026-11-30' }, tenant.userId, tx);
+    const g = await guaranteesService.createGuarantee(contract.id, await require('../../m5fech.locacao.helpers').completeInsurance(tenant, tx, { value: 1000, status: 'ACTIVE', startsAt: '2026-01-01', endsAt: '2026-11-30', renewalDueAt: '2026-11-01' }), tenant.userId, tx);
     const created = (await env.events(g.id, 'legal.guarantee.created', tx))[0];
     assert.equal(created.payloadJson.endsAt, '2026-11-30');
     assert.equal(created.payloadJson.status, 'ACTIVE');

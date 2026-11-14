@@ -1,0 +1,105 @@
+name: Esteira do Marco 3
+
+# Guia do Marcelo do Marco 3, §16 (CI/CD): lint, typecheck, migrations, people_dedup_tests, merge_tests, property_offer_tests, publication_gate_tests,
+# crm_invariant_tests, radar_idempotency_tests, consent_tests, ai_grounding_tests, multi_company_tests, security_scan, deploy_DEV, deploy_LAB, load_tests e
+# production_approval, nesta ordem (scripts/ci-marco3/etapas.js recusa outra ordem ou outro nome), parando na primeira etapa vermelha. Todo push e pull
+# request roda as etapas de código e banco (1 a 13 e 16); deploy_DEV, deploy_LAB e production_approval só em tag m3-release-* (fora dela saem
+# NAO_APLICAVEL, ditas no relatório). Banco: sempre o cluster descartável (scripts/withDisposableDb.js). O CI NÃO faz deploy em produção:
+# production_approval só confere o portão e roda depois da aprovação do environment "marco3-aprovacao" (revisor obrigatório: o Patrick).
+on:
+  push:
+    branches: [main, marco-6-e-7-homologado-nayara, marco-9]
+    tags: ['m3-release-*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  esteira-marco3:
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      CLAMAV_HOST: 127.0.0.1
+      CLAMAV_PORT: '3310'
+    services:
+      clamav:
+        image: clamav/clamav:stable
+        ports:
+          - 3310:3310
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: PostgreSQL 17 (binarios para o cluster descartavel)
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-17
+          echo "DRILL_PG_BIN=/usr/lib/postgresql/17/bin" >> "$GITHUB_ENV"
+      - run: npm ci
+      - name: Etapas 1 a 17 (para na primeira vermelha; deploy_DEV, deploy_LAB e production_approval saem NAO_APLICAVEL aqui)
+        run: bash scripts/ci-estagios-marco3.sh docs/evidencias/ci/esteira-marco3.json --ate 17
+      - name: Arquivar o relatorio por etapa
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-marco3-${{ github.sha }}
+          path: |
+            docs/evidencias/ci/esteira-marco3*.json
+            docs/evidencias/m3/carga/
+            reports/m3-ci/
+          if-no-files-found: warn
+          retention-days: 90
+
+  release-marco3:
+    # Tag m3-release-*: deploy_DEV e deploy_LAB (hook do environment + conferencia do commit em /api/version).
+    if: ${{ startsWith(github.ref, 'refs/tags/m3-release-') }}
+    needs: esteira-marco3
+    runs-on: ubuntu-latest
+    environment: lab
+    env:
+      M3_CI_DEV_DEPLOY_HOOK: ${{ secrets.DEV_API_DEPLOY_HOOK_URL }}
+      M3_CI_DEV_URL: ${{ secrets.DEV_API_URL }}
+      M3_CI_LAB_DEPLOY_HOOK: ${{ secrets.LAB_API_DEPLOY_HOOK_URL }}
+      M3_CI_LAB_URL: ${{ secrets.LAB_API_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Etapas 14 e 15 (deploy_DEV e deploy_LAB)
+        run: node scripts/ci-marco3/executar.js --release --de 14 --ate 15 --relatorio docs/evidencias/ci/esteira-marco3-release.json
+      - name: Arquivar o relatorio do release
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-marco3-release-${{ github.sha }}
+          path: docs/evidencias/ci/esteira-marco3-release.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  aprovacao-marco3:
+    # Etapa 17 (production_approval): o environment tem revisor obrigatorio e pausa o job ate a aprovacao. Este job NAO executa deploy.
+    if: ${{ startsWith(github.ref, 'refs/tags/m3-release-') }}
+    needs: release-marco3
+    runs-on: ubuntu-latest
+    environment: marco3-aprovacao
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Etapa 17 (production_approval, depois da aprovacao da pessoa)
+        run: node scripts/ci-marco3/executar.js --release --de 17 --ate 17 --relatorio docs/evidencias/ci/esteira-marco3-aprovacao.json
+      - name: Arquivar o relatorio da aprovacao
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: esteira-marco3-aprovacao-${{ github.sha }}
+          path: docs/evidencias/ci/esteira-marco3-aprovacao.json
+          if-no-files-found: warn
+          retention-days: 90

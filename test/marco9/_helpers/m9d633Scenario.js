@@ -44,7 +44,7 @@ async function seedRadar(env, t, brokerA, brokerB) {
   await src.insert(env, 'crm.visits', t, { property_id: props[3], person_id: winner, scheduled_at: iso('2026-10-16'), status: 'SCHEDULED', created_at: iso('2026-10-14') });
   const winner2 = src.uuid();
   await add(rB, props[2], iso('2026-10-13'), 'PUBLISHED', winner2);
-  await src.opportunity(env, t, { owner: brokerB, person: winner2, property: props[2], stage: 'CLOSED_WON', closedAt: iso('2026-09-21'), created: iso('2026-10-15') });
+  await src.opportunity(env, t, { owner: brokerB, person: winner2, property: props[2], stage: 'WON', closedAt: iso('2026-09-21'), created: iso('2026-10-15') });
   return { rA, rB, props, events };
 }
 
@@ -63,15 +63,15 @@ async function seedCapture(env, t, ana, bruno) {
 
 /** Fechadas do mês: Ana 7 ganhas e 13 perdidas, Bruno 1 e 2; mais desistência, setembro e excluída (fora). */
 async function seedClosed(env, t, ana, bruno) {
-  const mk = (owner, stage, extra = {}) => src.opportunity(env, t, { owner, stage, created: iso('2026-09-01'), closedAt: iso('2026-10-15'), lostReason: stage === 'CLOSED_LOST' ? 'PRICE' : null, ...extra });
+  const mk = (owner, stage, extra = {}) => src.opportunity(env, t, { owner, stage, created: iso('2026-09-01'), closedAt: iso('2026-10-15'), lostReason: stage === 'LOST' ? 'PRICE' : null, ...extra });
   const ids = [];
-  for (let i = 0; i < 7; i += 1) ids.push(await mk(ana, 'CLOSED_WON'));
-  for (let i = 0; i < 13; i += 1) ids.push(await mk(ana, 'CLOSED_LOST'));
-  ids.push(await mk(bruno, 'CLOSED_WON'));
-  for (let i = 0; i < 2; i += 1) ids.push(await mk(bruno, 'CLOSED_LOST'));
+  for (let i = 0; i < 7; i += 1) ids.push(await mk(ana, 'WON'));
+  for (let i = 0; i < 13; i += 1) ids.push(await mk(ana, 'LOST'));
+  ids.push(await mk(bruno, 'WON'));
+  for (let i = 0; i < 2; i += 1) ids.push(await mk(bruno, 'LOST'));
   await mk(ana, 'WITHDRAWN');
-  await mk(ana, 'CLOSED_WON', { closedAt: iso('2026-09-15') });
-  const gone = await mk(ana, 'CLOSED_LOST');
+  await mk(ana, 'WON', { closedAt: iso('2026-09-15') });
+  const gone = await mk(ana, 'LOST');
   await src.update(env, 'crm.opportunities', gone, { deleted_at: iso('2026-10-16') });
   return ids;
 }

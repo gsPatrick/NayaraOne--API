@@ -2,6 +2,7 @@
 
 const { Visit, Property, Person, Opportunity } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('./carteira/carteira.scope');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { publishVisitScheduled, publishVisitCancelled, visitPayload } = require('./crmCalendarEvents.service');
 
@@ -36,24 +37,23 @@ function assertNotScheduledInThePast(scheduledAt, status) {
 }
 
 async function createVisit(payload, actorUserId, transaction) {
-  const { groupId, companyId, propertyId, opportunityId, personId, agentUserId, scheduledAt, status, feedback } = payload;
-  if (!groupId || !companyId || !propertyId || !personId || !scheduledAt) {
+  const { groupId, companyId, propertyId, opportunityId, agentUserId, scheduledAt, status, feedback } = payload;
+  // M3-13 (contrato: "visitas ligadas à oportunidade e ao imóvel"): toda visita pertence a uma oportunidade e a um imóvel.
+  if (!groupId || !companyId || !propertyId || !opportunityId || !scheduledAt) {
     throw AppError.badRequest(
-      'Os campos "groupId", "companyId", "propertyId", "personId" e "scheduledAt" são obrigatórios.',
+      'Os campos "groupId", "companyId", "propertyId", "opportunityId" e "scheduledAt" são obrigatórios: a visita é sempre de uma oportunidade e de um imóvel.',
       'VISIT_VALIDATION'
     );
   }
+  const linkedOpportunity = await Opportunity.findByPk(opportunityId, { transaction });
+  if (!linkedOpportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
+  const personId = payload.personId || linkedOpportunity.personId;
 
   const property = await Property.findByPk(propertyId, { transaction });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
 
   const person = await Person.findByPk(personId, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
-
-  if (opportunityId) {
-    const opportunity = await Opportunity.findByPk(opportunityId, { transaction });
-    if (!opportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
-  }
 
   const normalizedStatus = status ? String(status).toUpperCase() : 'SCHEDULED';
   if (!VISIT_STATUSES.includes(normalizedStatus)) {
@@ -67,7 +67,7 @@ async function createVisit(payload, actorUserId, transaction) {
       groupId,
       companyId,
       propertyId,
-      opportunityId: opportunityId || null,
+      opportunityId,
       personId,
       agentUserId: agentUserId || null,
       scheduledAt,
@@ -109,7 +109,8 @@ async function listVisits(transaction, filters = {}) {
   if (filters.opportunityId) where.opportunityId = filters.opportunityId;
   if (filters.personId) where.personId = filters.personId;
   if (filters.status) where.status = String(filters.status).toUpperCase();
-  return Visit.findAll({ where, order: [['scheduled_at', 'DESC']], transaction });
+  // CRM-TS-012: o corretor de escopo próprio só lista visitas da carteira (filters.carteira vem da rota).
+  return Visit.findAll({ where: withScope(where, 'visit', filters.carteira), order: [['scheduled_at', 'DESC']], transaction });
 }
 
 async function getVisit(id, transaction) {

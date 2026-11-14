@@ -7,8 +7,8 @@ const { uniqueCpf } = require('./exportsEnv');
 const { uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('../../testHelpers');
 const peopleService = require('../../../src/features/people/people.service');
 const propertiesService = require('../../../src/features/properties/properties.service');
-const contractsService = require('../../../src/features/legal/contracts.service');
-const inspectionsService = require('../../../src/features/legal/inspections.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const inspectionsService = require('../../../src/modules/legal/inspections/inspection.service');
 const projectsService = require('../../../src/features/construction/projects.service');
 
 async function person(tenant, tx, label, cpf = uniqueCpf()) {
@@ -33,6 +33,8 @@ function createBase(tenant) {
     await inspectionsService.completeInspection(inspection.id, tenant.userId, tx);
     await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'bcp-qa-locador' }, tenant.userId, tx);
     await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'bcp-qa-locatario' }, tenant.userId, tx);
+    // Fechamento M5 (Caderno §10): a entrega de chaves exige o checklist da etapa KEY_DELIVERY cumprido.
+    await require('../../testHelpers').waiveAllContractRequirements(contract.id, tenant.userId, tx);
     const costCenter = await createTestCostCenter(tenant, tx, suffix);
     const resultCenter = await createTestResultCenter(tenant, tx, suffix);
     const project = await projectsService.createProject({ ...common, name: `Obra BCP ${suffix}`, code: `OBRA-${suffix}` }, tenant.userId, tx);

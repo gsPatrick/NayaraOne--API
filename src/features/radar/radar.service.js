@@ -1,13 +1,18 @@
 'use strict';
 
-const { PropertyRadar, Person, Opportunity, Property, PropertyOffer } = require('../../models');
+const { PropertyRadar, Person, Opportunity, Property, PropertyOffer, PropertyAddress } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('../crm/carteira/carteira.scope');
 const { matchRadarToProperties, explainMatch } = require('./radarMatching.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { validateCriteria } = require('./radarCriteria');
+const { listStoredMatches } = require('./radarMatchStore.service');
+const { publishRadarCreated, publishRadarUpdated } = require('./radarEvents.service');
 
 // CRUD de PropertyRadar — o matching determinístico contra properties/offers vive em
-// radarMatching.service.js; este service apenas orquestra o CRUD e aciona o matching quando
-// o radar é criado/atualizado ou consultado explicitamente.
+// radarMatching.service.js; este service orquestra o CRUD, devolve os matches do momento (leitura)
+// e publica crm.radar.created/updated no outbox: o matching que GRAVA (crm.radar_matches +
+// crm.radar.match.created + radar.matched) roda no consumidor do Radar (radarEventConsumers.js, CRMX-007).
 
 async function createRadar(payload, actorUserId, transaction) {
   const { groupId, companyId, personId, opportunityId, criteriaJson, status } = payload;
@@ -18,6 +23,7 @@ async function createRadar(payload, actorUserId, transaction) {
     );
   }
 
+  validateCriteria(criteriaJson);
   const person = await Person.findByPk(personId, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
 
@@ -41,6 +47,7 @@ async function createRadar(payload, actorUserId, transaction) {
   );
 
   const matches = await matchRadarToProperties(radar, transaction);
+  await publishRadarCreated(radar, transaction);
 
   await registrarAuditoria(
     {
@@ -63,7 +70,7 @@ async function listRadars(transaction, filters = {}) {
   const where = {};
   if (filters.personId) where.personId = filters.personId;
   if (filters.status) where.status = filters.status;
-  return PropertyRadar.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return PropertyRadar.findAll({ where: withScope(where, 'radar', filters.carteira), order: [['created_at', 'DESC']], transaction }); // CRM-TS-012
 }
 
 async function getRadar(id, transaction) {
@@ -76,12 +83,14 @@ async function updateRadar(id, payload, actorUserId, transaction) {
   const radar = await getRadar(id, transaction);
   const beforeJson = radar.toJSON();
   const { criteriaJson, status } = payload;
+  if (criteriaJson !== undefined) validateCriteria(criteriaJson);
   if (criteriaJson !== undefined) radar.criteriaJson = criteriaJson;
   if (status !== undefined) radar.status = status;
   radar.updatedBy = actorUserId || null;
   await radar.save({ transaction });
 
   const matches = await matchRadarToProperties(radar, transaction);
+  await publishRadarUpdated(radar, transaction);
 
   await registrarAuditoria(
     {
@@ -138,15 +147,22 @@ async function getRadarMatches(id, transaction) {
 async function explainRadarMatch(radarId, propertyId, transaction) {
   const radar = await getRadar(radarId, transaction);
   const property = await Property.findByPk(propertyId, {
-    include: [{ model: PropertyOffer, as: 'offers', required: false }],
+    include: [{ model: PropertyOffer, as: 'offers', required: false }, { model: PropertyAddress, as: 'address', required: false }],
     transaction,
   });
   if (!property) throw AppError.notFound('Imóvel não encontrado.', 'PROPERTY_NOT_FOUND');
   return explainMatch(radar, property);
 }
 
+/** Matches gravados do radar (crm.radar_matches), mais recente primeiro. */
+async function getStoredRadarMatches(id, transaction) {
+  const radar = await getRadar(id, transaction);
+  return listStoredMatches(radar.id, transaction);
+}
+
 module.exports = {
   createRadar,
+  getStoredRadarMatches,
   explainRadarMatch,
   listRadars,
   getRadar,

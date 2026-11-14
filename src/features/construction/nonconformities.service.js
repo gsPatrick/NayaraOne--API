@@ -7,6 +7,8 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishNonconformityOpened, publishNonconformityClosed } = require('./constructionEvents.service');
 const { getActiveSlaDaysMap } = require('./slaRules.service');
 const { resolveSameContentFileIds } = require('./evidenceReuse.service');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
+const { assertRouteProjectInCompany, assertStageInProject, assertActiveMember } = require('./companyRefs');
 
 /**
  * detectEvidenceReuse — M6-59: verifica se algum arquivo de evidência (before/after) já foi
@@ -100,6 +102,12 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
     throw AppError.badRequest('Pelo menos uma evidência "antes" ("beforeEvidenceFileIds") é obrigatória para abrir uma não conformidade.', 'NONCONFORMITY_BEFORE_EVIDENCE_REQUIRED');
   }
 
+  // Verificação independente do Marco 6 (varredura de referências): obra, etapa e responsável da MESMA empresa — a obra
+  // nem era consultada; FK ignora RLS (companyRefs.js).
+  await assertRouteProjectInCompany(projectId, companyId, transaction);
+  await assertStageInProject(projectStageId, projectId, companyId, transaction);
+  await assertActiveMember(responsibleUserId, companyId, transaction);
+  await assertEvidenceFilesExist(beforeEvidenceFileIds, companyId, transaction, 'beforeEvidenceFileIds');
   const resolvedBeforeEvidence = beforeEvidenceFileIds;
   const reuse = await detectEvidenceReuse(resolvedBeforeEvidence, companyId, null, transaction);
 
@@ -111,7 +119,7 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
   if (!resolvedSlaDueAt) {
     const { slaDays } = await getActiveSlaDaysMap(groupId, companyId, transaction, actorUserId);
     const days = slaDays[normalizedSeverity] != null ? slaDays[normalizedSeverity] : slaDays.MEDIUM;
-    resolvedSlaDueAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    resolvedSlaDueAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000); // scanner:allow — conversão de unidade de tempo (milissegundos), não regra de negócio
   }
 
   const nonconformity = await Nonconformity.create(
@@ -199,7 +207,10 @@ async function closeNonconformity(id, payload, actorUserId, transaction) {
     );
   }
 
+  await assertEvidenceFilesExist(resolvedAfterEvidence, nonconformity.companyId, transaction, 'afterEvidenceFileIds');
+
   const resolvedAcceptedBy = acceptedByUserId !== undefined ? acceptedByUserId : nonconformity.acceptedByUserId;
+  if (acceptedByUserId) await assertActiveMember(acceptedByUserId, nonconformity.companyId, transaction, 'acceptedByUserId');
   if (nonconformity.requiresAcceptance && !resolvedAcceptedBy) {
     throw AppError.unprocessable(
       'Esta NC exige aceite ("requiresAcceptance=true") — "acceptedByUserId" é obrigatório para fechar.',

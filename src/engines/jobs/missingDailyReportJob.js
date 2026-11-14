@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { sequelize, Group, Company, Project, DailyReport, DailyWorker, Task } = require('../../models');
 const { toDateOnlyString, previousBusinessDay } = require('./businessDays.helper');
+const { resolveMissingReportRule, previousRequiredDay } = require('../../features/construction/missingDailyReportRule');
 
 /**
  * missingDailyReportJob — achado numa rodada de verificação de integrações (30/09/2026): a
@@ -20,17 +21,23 @@ const { toDateOnlyString, previousBusinessDay } = require('./businessDays.helper
  * não duplica a tarefa.
  */
 
-const ACTIVE_STATUS = 'ACTIVE';
 
 // GAP 1 (auditoria externa Nayara, Marco 6/NAY Obras): `toDateOnlyString`/`previousBusinessDay`
 // foram extraídos para `businessDays.helper.js` porque `nayObras.service.js#summarizeProject`
 // precisa da MESMA definição de "dia útil" para contar dias sem RDO no resumo da NAY — nunca
 // duas implementações divergentes da mesma regra.
 
-async function detectMissingDailyReports(transaction, now = new Date()) {
-  const checkDate = toDateOnlyString(previousBusinessDay(now));
+// M6-108 (verificação independente do Marco 6): "ausência de diário gera tarefa conforme regra" — a regra é a da
+// empresa (missingDailyReportRule.js / construction.settings.js): ligada ou não, situações de obra, dias exigidos,
+// feriados e prioridade. Padrões = o comportamento anterior (obra ACTIVE, segunda a sexta, sem feriado, HIGH).
+async function detectMissingDailyReports(transaction, now = new Date(), tenant = null) {
+  const rule = await resolveMissingReportRule(tenant, transaction);
+  const checkDate = previousRequiredDay(now, rule);
+  if (!rule.enabled || !checkDate || !rule.statuses.length) {
+    return { projectsChecked: 0, checkDate, tasksCreated: 0, ruleEnabled: rule.enabled };
+  }
 
-  const activeProjects = await Project.findAll({ where: { status: ACTIVE_STATUS }, transaction });
+  const activeProjects = await Project.findAll({ where: { status: { [Op.in]: rule.statuses } }, transaction });
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 19, Frente A, 09/10/2026): cada projeto era
   // verificado/criava sua Task direto na transação da empresa, sem savepoint — diferente do
@@ -83,7 +90,7 @@ async function detectMissingDailyReports(transaction, now = new Date()) {
             relatedEntityType: 'construction.projects',
             relatedEntityId: project.id,
             status: 'OPEN',
-            priority: 'HIGH',
+            priority: rule.priority,
           },
           { transaction: nested }
         );
@@ -104,16 +111,17 @@ async function detectMissingDailyReports(transaction, now = new Date()) {
 // a MESMA infraestrutura (janela de dias úteis, lock advisory por projeto+chave, dedupe por
 // Task aberta) em vez de duplicar o mecanismo — só muda O QUE é verificado e o
 // `relatedEntityType` da Task gerada, para não se confundir com a tarefa de "RDO ausente".
-const MISSING_WORKER_DOCUMENTS_WINDOW_DAYS = 7;
 const MISSING_WORKER_DOCUMENTS_ENTITY_TYPE = 'construction.daily_workers';
 
-async function detectMissingWorkerDocuments(transaction, now = new Date()) {
-  const windowEnd = toDateOnlyString(previousBusinessDay(now));
+async function detectMissingWorkerDocuments(transaction, now = new Date(), tenant = null) {
+  const rule = await resolveMissingReportRule(tenant, transaction);
+  const windowEnd = previousRequiredDay(now, rule) || toDateOnlyString(previousBusinessDay(now));
   const windowStartDate = new Date(`${windowEnd}T00:00:00.000Z`);
-  windowStartDate.setUTCDate(windowStartDate.getUTCDate() - MISSING_WORKER_DOCUMENTS_WINDOW_DAYS);
+  windowStartDate.setUTCDate(windowStartDate.getUTCDate() - rule.docsWindowDays);
   const windowStart = toDateOnlyString(windowStartDate);
+  if (!rule.docsEnabled || !rule.statuses.length) return { projectsChecked: 0, windowStart, windowEnd, tasksCreated: 0, ruleEnabled: false };
 
-  const activeProjects = await Project.findAll({ where: { status: ACTIVE_STATUS }, transaction });
+  const activeProjects = await Project.findAll({ where: { status: { [Op.in]: rule.statuses } }, transaction });
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 19, Frente A, 09/10/2026): mesmo problema de
   // detectMissingDailyReports acima — cada projeto precisa de savepoint próprio pra UM projeto
@@ -168,7 +176,7 @@ async function detectMissingWorkerDocuments(transaction, now = new Date()) {
             relatedEntityType: MISSING_WORKER_DOCUMENTS_ENTITY_TYPE,
             relatedEntityId: project.id,
             status: 'OPEN',
-            priority: 'MEDIUM',
+            priority: rule.docsPriority,
           },
           { transaction: nested }
         );
@@ -187,8 +195,9 @@ async function processCompany(group, company) {
   return sequelize.transaction(async (transaction) => {
     await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: group.id }, transaction });
     await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: company.id }, transaction });
-    const missingReports = await detectMissingDailyReports(transaction);
-    const missingDocuments = await detectMissingWorkerDocuments(transaction);
+    const tenant = { groupId: group.id, companyId: company.id };
+    const missingReports = await detectMissingDailyReports(transaction, new Date(), tenant);
+    const missingDocuments = await detectMissingWorkerDocuments(transaction, new Date(), tenant);
     return {
       projectsChecked: missingReports.projectsChecked,
       tasksCreated: missingReports.tasksCreated + missingDocuments.tasksCreated,

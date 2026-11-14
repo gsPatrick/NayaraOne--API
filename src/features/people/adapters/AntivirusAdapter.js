@@ -6,7 +6,7 @@
 //   "Documentos/OCR — Upload → malware scan → hash → OCR/IA → sugestão → validação."
 //     (caderno físico, linha ~9562)
 //
-// Mesmo padrão duck-typed de BankAdapter.js/InsuranceAdapter.js/SignatureAdapter.js: interface
+// Mesmo padrão duck-typed de bank-adapter.port.js/InsuranceAdapter.js/SignatureAdapter.js: interface
 // comum, resolvida por resolveAntivirusAdapter.js com fallback seguro para o Sandbox quando não
 // há provedor real configurado (ausência de configuração NUNCA quebra o fluxo nem,
 // pior, finge "limpo" por omissão — ver SandboxAntivirusAdapter.scan abaixo, que detecta pelo

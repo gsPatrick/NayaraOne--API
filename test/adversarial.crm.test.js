@@ -17,6 +17,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { createTestProperty } = require('./helpers/m3caCrm');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
@@ -25,7 +26,7 @@ const proposalsService = require('../src/features/crm/proposals.service');
 const visitsService = require('../src/features/crm/visits.service');
 const messagesService = require('../src/features/crm/messages.service');
 const feedbackCasesService = require('../src/features/crm/feedbackCases.service');
-const exportService = require('../src/features/crm/opportunitiesExport.service');
+const { decideExport } = require('./helpers/m3cbExportGuard');
 const opportunityTasksService = require('../src/features/crm/opportunityTasks.service');
 const { getOpportunityTimeline } = require('../src/features/crm/opportunityTimeline.service');
 const radarService = require('../src/features/radar/radar.service');
@@ -73,9 +74,11 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
-      stage: 'QUALIFYING',
+      stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
+      // M3-13: proposta e visita são sempre da oportunidade e de um imóvel; a oportunidade de teste já nasce com o imóvel de interesse.
+      propertyId: extra.propertyId !== undefined ? extra.propertyId : (await createTestProperty(tenant, transaction)).id,
       ...extra,
     },
     tenant.userId,
@@ -126,7 +129,8 @@ test('ADV-C02 forjar companyId no payload da oportunidade (plantar lead na empre
     await assert.rejects(
       () => createActiveOpportunity(transaction, person.id, { companyId: vizinha.id }),
       (err) => {
-        assert.match(String(err.message), /row-level security|política|policy/i);
+        // Barrado antes do banco quando o responsável (quem cria) não é membro da empresa vizinha (CRMX-006, DI-M3CA-1); senão, pelo RLS.
+        assert.match(String(err.message), /row-level security|política|policy|responsável/i);
         return true;
       }
     );
@@ -492,10 +496,12 @@ test('ADV-C13 visita agendada para o PASSADO é recusada, mas registrar uma visi
       tenant.userId,
       transaction
     );
+    const opportunity = await createActiveOpportunity(transaction, person.id, { propertyId: property.id });
     const base = {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       propertyId: property.id,
+      opportunityId: opportunity.id, // M3-13: visita é sempre de uma oportunidade
       personId: person.id,
     };
 
@@ -527,7 +533,7 @@ test('ADV-C13 visita agendada para o PASSADO é recusada, mas registrar uma visi
   });
 });
 
-test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho errado) não passa', async () => {
+test('ADV-C14 fechar como WON enviando lostReason (motivo do desfecho errado) não passa', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await createLead(transaction, `ADV C14 ${suffix}`);
@@ -537,7 +543,7 @@ test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho err
       () =>
         opportunitiesService.updateOpportunity(
           opportunity.id,
-          { stage: 'CLOSED_WON', lostReason: 'PRICE' },
+          { stage: 'WON', lostReason: 'PRICE' },
           tenant.userId,
           transaction
         ),
@@ -549,7 +555,7 @@ test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho err
     );
 
     const persisted = await opportunitiesService.getOpportunity(opportunity.id, transaction);
-    assert.equal(persisted.stage, 'QUALIFYING', 'a oportunidade não pode ter sido fechada pela tentativa recusada');
+    assert.equal(persisted.stage, 'QUALIFIED', 'a oportunidade não pode ter sido fechada pela tentativa recusada');
     assert.equal(persisted.closedAt, null);
   });
 });
@@ -557,33 +563,14 @@ test('ADV-C14 fechar como CLOSED_WON enviando lostReason (motivo do desfecho err
 // --- Permissão, identidade e Radar ---------------------------------------------------------
 
 test('ADV-C15 exportar a base com apenas crm:opportunities:read (sem a permissão dedicada) é 403', async () => {
-  const suffix = uniqueSuffix();
-  await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const person = await createLead(transaction, `ADV C15 ${suffix}`);
-    await createActiveOpportunity(transaction, person.id);
-
-    for (const permissions of [[], ['crm:opportunities:read'], ['crm:opportunities:update', 'crm:proposals:read'], undefined]) {
-      await assert.rejects(
-        () =>
-          exportService.exportOpportunities(
-            {
-              groupId: tenant.groupId,
-              companyId: tenant.companyId,
-              actorUserId: tenant.userId,
-              actorPermissions: permissions,
-              format: 'csv',
-            },
-            transaction
-          ),
-        (err) => {
-          assert.equal(err.statusCode, 403);
-          assert.equal(err.code, 'PERMISSION_DENIED');
-          return true;
-        },
-        `permissões=${JSON.stringify(permissions)} não deveriam permitir exportar`
-      );
-    }
-  });
+  // Caminho vivo (POST /exports, guard do DLP): sem crm:opportunities:export nenhuma combinação exporta, nem com MFA recente.
+  for (const permissions of [[], ['crm:opportunities:read'], ['crm:opportunities:update', 'crm:proposals:read'], ['governance:dlp:export', 'crm:opportunities:read']]) {
+    const { decision, error } = await decideExport(tenant, { permissions, mfaOk: true });
+    assert.equal(decision.decision, 'DENY', `permissões=${JSON.stringify(permissions)} não deveriam permitir exportar`);
+    assert.equal(decision.blockReason, 'PERMISSION');
+    assert.equal(error.statusCode, 403);
+    assert.equal(error.code, 'GOV_DLP_PERMISSION');
+  }
 });
 
 test('ADV-C16 usuário SUSPENSO não pode ser escalado como responsável por tarefa de oportunidade', async () => {
@@ -765,33 +752,26 @@ test('ADV-C20 temperature inventada é recusada e estágio desconhecido nunca vi
       }
     );
 
-    // `stage` é livre POR DECISÃO (funil configurável por tenant — ver
-    // opportunityNextAction.validator.js), então um estágio inventado não é recusado. O que
-    // NÃO pode acontecer é ele virar um atalho para "fechar" a oportunidade: o validador é
-    // fail-closed e trata qualquer estágio desconhecido como ATIVO — ou seja, continua
-    // exigindo próxima ação e nunca carimba closedAt/motivo de desfecho.
+    // Livro do Marco 3 §10: o funil é um catálogo fechado. Estágio inventado é recusado na criação e na atualização,
+    // então nunca vira atalho para "fechar" a oportunidade nem grava etapa fora do funil.
     await assert.rejects(
-      () =>
-        opportunitiesService.createOpportunity(
-          {
-            groupId: tenant.groupId,
-            companyId: tenant.companyId,
-            personId: person.id,
-            stage: 'ESTAGIO_INVENTADO',
-          },
-          tenant.userId,
-          transaction
-        ),
+      () => createActiveOpportunity(transaction, person.id, { stage: 'ESTAGIO_INVENTADO' }),
       (err) => {
-        assert.equal(err.code, 'OPPORTUNITY_NEXT_ACTION_REQUIRED');
+        assert.equal(err.statusCode, 400);
+        assert.equal(err.code, 'OPPORTUNITY_STAGE_INVALID');
         return true;
       }
     );
-
-    const inventada = await createActiveOpportunity(transaction, person.id, { stage: 'ESTAGIO_INVENTADO' });
-    assert.equal(inventada.closedAt, null, 'estágio desconhecido nunca pode fechar a oportunidade');
-    assert.equal(inventada.wonReason, null);
-    assert.equal(inventada.lostReason, null);
-    assert.equal(inventada.withdrawnReason, null);
+    const ativa = await createActiveOpportunity(transaction, person.id);
+    await assert.rejects(
+      () => opportunitiesService.updateOpportunity(ativa.id, { stage: 'ESTAGIO_INVENTADO' }, tenant.userId, transaction),
+      (err) => err.code === 'OPPORTUNITY_STAGE_INVALID'
+    );
+    const recarregada = await opportunitiesService.getOpportunity(ativa.id, transaction);
+    assert.equal(recarregada.stage, 'QUALIFIED');
+    assert.equal(recarregada.closedAt, null, 'estágio desconhecido nunca pode fechar a oportunidade');
+    assert.equal(recarregada.wonReason, null);
+    assert.equal(recarregada.lostReason, null);
+    assert.equal(recarregada.withdrawnReason, null);
   });
 });

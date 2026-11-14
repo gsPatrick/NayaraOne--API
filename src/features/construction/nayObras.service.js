@@ -9,6 +9,7 @@ const {
   DailyReport,
   DailyWorker,
   StageMeasurement,
+  FinancialEntry,
   Nonconformity,
 } = require('../../models');
 
@@ -41,15 +42,14 @@ const {
 //   - MEASUREMENT_PENDING_APPROVAL_DAYS: medição enviada (SUBMITTED) ou revisada (REVIEWED) mas
 //     ainda não decidida (nem APPROVED nem REJECTED) há tempo demais — sinaliza que falta
 //     alguém aprovar/rejeitar, a NAY NUNCA aprova nem rejeita sozinha.
-//   - MEASUREMENT_PAYABLE_WITHOUT_PAYMENT_DAYS: medição já em status PAYABLE (aprovada, pronta
-//     pra virar pagamento) mas sem `payableFinancialEntryId` preenchido há tempo demais —
-//     sinaliza que o lançamento financeiro do pagamento ainda não foi gerado/processado.
+//   - MEASUREMENT_PAYABLE_WITHOUT_PAYMENT_DAYS: medição já em status PAYABLE (aprovada, com a conta a
+//     pagar criada pelo Financeiro) cuja conta ainda não foi paga (não SETTLED) há tempo demais.
 const MEASUREMENT_PENDING_APPROVAL_DAYS = 10;
 const MEASUREMENT_PAYABLE_WITHOUT_PAYMENT_DAYS = 10;
 
 function daysSince(date) {
   if (!date) return null;
-  return Math.floor((Date.now() - new Date(date).getTime()) / (24 * 60 * 60 * 1000));
+  return Math.floor((Date.now() - new Date(date).getTime()) / (24 * 60 * 60 * 1000)); // scanner:allow — conversão de unidade de tempo (milissegundos), não regra de negócio
 }
 
 /**
@@ -71,13 +71,18 @@ async function getStaleMeasurementRisks(projectId, transaction) {
   const risks = [];
   let pendingApprovalCount = 0;
   let payableWithoutPaymentCount = 0;
+  // Verificação do Marco 6: medição PAYABLE sempre tem a conta (CHECK no banco); o risco é a conta ainda não paga.
+  const entryIds = measurements.map((m) => m.payableFinancialEntryId).filter(Boolean);
+  const paidIds = new Set(entryIds.length
+    ? (await FinancialEntry.findAll({ where: { id: { [Op.in]: entryIds }, status: 'SETTLED' }, attributes: ['id'], transaction })).map((e) => e.id)
+    : []);
 
   for (const measurement of measurements) {
     if (measurement.status === 'SUBMITTED' || measurement.status === 'REVIEWED') {
       const referenceDate = measurement.reviewedAt || measurement.submittedAt || measurement.createdAt;
       const age = daysSince(referenceDate);
       if (age !== null && age >= MEASUREMENT_PENDING_APPROVAL_DAYS) pendingApprovalCount += 1;
-    } else if (measurement.status === 'PAYABLE' && !measurement.payableFinancialEntryId) {
+    } else if (measurement.status === 'PAYABLE' && !paidIds.has(measurement.payableFinancialEntryId)) {
       const age = daysSince(measurement.approvedAt || measurement.decidedAt || measurement.createdAt);
       if (age !== null && age >= MEASUREMENT_PAYABLE_WITHOUT_PAYMENT_DAYS) payableWithoutPaymentCount += 1;
     }

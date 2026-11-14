@@ -43,7 +43,7 @@ test('m9d616 oportunidades em andamento por estágio, paradas e parâmetro de di
   const [n1, n2] = [await src.opportunity(env, env.cX, { owner: b, stage: 'NEW', created: fresh }), await src.opportunity(env, env.cX, { owner: b, stage: 'NEW', created: fresh })];
   const stalled = await src.opportunity(env, env.cX, { owner: b, stage: 'NEW', created: iso('2026-10-01') });
   await src.opportunity(env, env.cX, { owner: b, stage: 'QUALIFIED', created: fresh });
-  await src.opportunity(env, env.cX, { owner: b, stage: 'CLOSED_WON', created: fresh, closedAt: fresh });
+  await src.opportunity(env, env.cX, { owner: b, stage: 'WON', created: fresh, closedAt: fresh });
   await apply(env.cX, created(n1));
   let list = await rows(env, 'rm_crm_opportunity_stage', env.cX);
   assert.deepEqual(list.filter((r) => r.broker_id === b).map((r) => [r.stage, r.count, r.stalled_count]).sort(), [['NEW', 3, 1], ['QUALIFIED', 1, 0]], 'o estágio terminal não entra');
@@ -61,12 +61,12 @@ test('m9d616 oportunidades em andamento por estágio, paradas e parâmetro de di
 test('m9d616 desfechos por mês de São Paulo e motivos de perda', async () => {
   const b = src.uuid();
   const make = (stage, closedAt, lostReason) => src.opportunity(env, env.cX, { owner: b, stage, closedAt, lostReason, created: iso('2026-09-01') });
-  const won = await make('CLOSED_WON', iso('2026-10-10'));
-  await make('CLOSED_WON', iso('2026-11-01', '01:00:00')); // 22:00 de 31/10 em SP: ainda outubro
-  await make('CLOSED_LOST', iso('2026-10-12'), 'PRICE');
-  await make('CLOSED_LOST', iso('2026-10-13'), null);
+  const won = await make('WON', iso('2026-10-10'));
+  await make('WON', iso('2026-11-01', '01:00:00')); // 22:00 de 31/10 em SP: ainda outubro
+  await make('LOST', iso('2026-10-12'), 'PRICE');
+  await make('LOST', iso('2026-10-13'), null);
   await make('WITHDRAWN', iso('2026-10-14'));
-  await make('CLOSED_WON', iso('2026-11-02'));
+  await make('WON', iso('2026-11-02'));
   await apply(env.cX, makeEvent(env.cX, 'crm.opportunity.won', { id: won, closedAt: iso('2026-10-10') }));
   const list = (await rows(env, 'rm_crm_outcome', env.cX)).filter((r) => r.broker_id === b);
   const totals = pick(list, { month: '2026-10', lost_reason: '' });
@@ -80,8 +80,8 @@ test('m9d616 carteira sem próxima ação por corretor', async () => {
   const b = src.uuid();
   const a = await src.opportunity(env, env.cX, { owner: b, stage: 'NEW', nextAction: 'Ligar amanhã' });
   await src.opportunity(env, env.cX, { owner: b, stage: 'NEW' });
-  await src.opportunity(env, env.cX, { owner: b, stage: 'VISIT', nextAction: '   ' });
-  await src.opportunity(env, env.cX, { owner: b, stage: 'CLOSED_LOST', closedAt: iso('2026-10-10') });
+  await src.opportunity(env, env.cX, { owner: b, stage: 'VISIT_SCHEDULED', nextAction: '   ' });
+  await src.opportunity(env, env.cX, { owner: b, stage: 'LOST', closedAt: iso('2026-10-10') });
   await apply(env.cX, created(a));
   const r = pick(await rows(env, 'rm_crm_next_action', env.cX), { broker_id: b });
   assert.deepEqual([r.open_total, r.without_next_action], [3, 2], 'texto vazio ou só espaços é sem próxima ação; encerrada não conta');

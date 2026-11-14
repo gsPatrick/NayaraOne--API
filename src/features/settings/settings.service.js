@@ -6,8 +6,11 @@ const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { encryptSecret, decryptSecret } = require('../../utils/mfaCrypto');
 const { GOVERNANCE_SETTINGS_SCHEMA } = require('../../features/core-governance/governance.settings');
+const { PEOPLE_LINK_SETTINGS_SCHEMA } = require('../people/personLink.settings');
+const { PEOPLE_M3PE_SETTINGS_SCHEMA } = require('../people/people.settings');
 const { runSettingGuard } = require('./settingGuards');
 const { isPlatformOnly } = require('./settingPlatform');
+const { assertMfaForSettingWrite } = require('./settingMfa');
 require('./ambienteBi.guard'); // M9-D708: trava de PRODUCAO do ambiente do BI (aceite dos owners)
 require('./legadoEmpresa.guard'); // M9-D900: o código da empresa no sistema antigo é único no grupo
 require('../marketing/mass.settingGuard'); // M9-D402: o teto absoluto de destinatários nunca fica abaixo do limite sem aprovação
@@ -24,6 +27,7 @@ const { DRILL_SETTINGS_SCHEMA } = require('../../features/marketing/publications
 const { LEAD_PARAMS_SCHEMA } = require('../../features/marketing/automations/leadParams');
 const { AUTOPUBLISH_SETTINGS_SCHEMA } = require('../../features/marketing/content/autopublish.settings');
 const { RUNNER_SETTINGS_SCHEMA } = require('../../features/marketing/automations/runner/runner.settings');
+const { CONSTRUCTION_SETTINGS_SCHEMA } = require('../construction/construction.settings');
 const { URL_SETTINGS_SCHEMA } = require('../../features/marketing/security/url.settings');
 const { URL_LIMITS_SCHEMA } = require('../../features/marketing/security/urlText.limits');
 const { TYPES_SETTINGS_SCHEMA } = require('../../features/marketing/content/types/types.settings');
@@ -50,12 +54,16 @@ const { ERRORS_SETTINGS_SCHEMA } = require('../integrations/errors/errors.settin
 const { SYNC_SETTINGS_SCHEMA } = require('../integrations/sync/sync.settings');
 const { INBOX_SETTINGS_SCHEMA } = require('../integrations/inbox/inbox.settings');
 const { WEBHOOK_SETTINGS_SCHEMA } = require('../integrations/webhooks/webhooks.settings');
-const { SIGNATURE_SETTINGS_SCHEMA } = require('../legal/signature/signature.settings');
+const { SIGNATURE_SETTINGS_SCHEMA } = require('../../modules/legal/signatures/framework/signature.settings');
+const { LEGAL_RULES_SETTINGS_SCHEMA } = require('../../modules/legal/shared/legalRules.settings'); // Fechamento M5 (vistorias/prazos)
+const { LEASE_OBLIGATION_SETTINGS_SCHEMA } = require('../billing/obligations/leaseObligations.settings'); // Fechamento M5 (§12)
 const { DISPATCH_SETTINGS_SCHEMA } = require('../integrations/dispatch/dispatch.settings');
 const { INSURANCE_SETTINGS_SCHEMA } = require('../procurement/insurance/insurance.settings');
 const { NFSE_SETTINGS_SCHEMA } = require('../correspondent/fiscal/nfse/nfse.settings');
 const { CONTINGENCY_SETTINGS_SCHEMA } = require('../integrations/contingency/contingency.settings');
-const { BANK_SETTINGS_SCHEMA } = require('../finance/bank/bank.settings');
+const { BANK_SETTINGS_SCHEMA } = require('../../modules/finance/infrastructure/bank/hub/bank.settings');
+const { FINANCE_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/finance-settings');
+const { PAYMENT_APPROVAL_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/payment-approval-settings'); // M4PG: pagamento, estorno e reabertura
 const { PORTAL_SETTINGS_SCHEMA } = require('../integrations/portal/portal.settings');
 const { STORAGE_SETTINGS_SCHEMA } = require('../integrations/storage/storage.settings');
 const { IDENTITY_SETTINGS_SCHEMA } = require('../integrations/identity/identity.settings');
@@ -64,8 +72,14 @@ const { QUARANTINE_SETTINGS_SCHEMA } = require('../files/quarantine/quarantine.s
 const { ACTIONS_SETTINGS_SCHEMA } = require('../integrations/admin/actions/actions.settings');
 const { MINIMIZATION_SETTINGS_SCHEMA } = require('../integrations/minimization/minimization.settings');
 const { PUBLICATION_SETTINGS_SCHEMA } = require('../properties/publicReadModel/publicReadModel.settings');
+const { PROPERTY_PUBLICATION_SETTINGS_SCHEMA } = require('../properties/propertyPublication.settings');
+const { CART_SETTINGS_SCHEMA } = require('../crm/carts.settings');
 const { ADAPTERS_SETTINGS_SCHEMA } = require('../integrations/registry/adapters.settings');
 const { MESSAGING_SETTINGS_SCHEMA } = require('../crm/messaging/messaging.settings');
+const { CARTEIRA_SETTINGS_SCHEMA } = require('../crm/carteira/carteira.settings');
+const { CRM_EXPORT_SETTINGS_SCHEMA } = require('../crm/opportunitiesExport.settings');
+const { CRM_SETTINGS_SCHEMA } = require('../crm/crm.settings'); // DI-M3CA: motivos, SLA da ocorrência e escalonamento do CRM
+require('../crm/crm.settingGuards');
 const { CONTRACT_SETTINGS_SCHEMA } = require('../integrations/contract/contract.settings');
 const { DOMAIN_SETTINGS_SCHEMA } = require('../integrations/domain/domain.settings');
 const { DEPAUDIT_SETTINGS_SCHEMA } = require('../integrations/depaudit/depaudit.settings');
@@ -81,6 +95,8 @@ const { REBUILD_SETTINGS_SCHEMA } = require('../../features/analytics/read-model
 const { SOURCE_REFS_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/sourceRefs.settings');
 const { DRILLDOWN_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/drilldown.settings');
 const { FINANCE_HEALTH_SETTINGS_SCHEMA } = require('../../features/analytics/read-models/financeHealth.settings');
+const { FINANCE_HEALTH_REPORT_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/finance-health-settings'); // M4LR: pesos do relatório semanal (§19)
+const { LEDGER_SETTINGS_SCHEMA } = require('../../modules/finance/application/services/ledger-settings'); // M4LR: conta bancária na baixa (§7)
 const { FINANCE_KPI_SETTINGS_SCHEMA } = require('../analytics/read-models/financeKpi.settings');
 const { CASH_SETTINGS_SCHEMA } = require('../analytics/read-models/cash.settings');
 const { FINANCE_WINDOW_SETTINGS_SCHEMA } = require('../analytics/read-models/financeWindow.settings');
@@ -124,6 +140,9 @@ const { BRIEF_SETTINGS_SCHEMA } = require('../../features/analytics/briefSetting
 const { EXPORT_SETTINGS_SCHEMA } = require('../../features/analytics/exports/export.settings');
 const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics/acceptance.settings');
 
+// Gancho pós-gravação das chaves de multa/juros/carência (require tardio: o serviço de regras carrega os models).
+const publishPenaltyRule = (key, value, tenant, actorUserId, transaction) => require('../billing/penaltyRules.service').publishFromSetting(key, value, tenant, actorUserId, transaction);
+
 /**
  * SETTINGS_SCHEMA — dicionário fail-closed de chaves conhecidas do painel admin de
  * configurações por tenant. `upsertSetting` REJEITA (400) qualquer chave que não esteja aqui
@@ -135,26 +154,28 @@ const { ACCEPTANCE_SETTINGS_SCHEMA } = require('../../features/analytics/metrics
  * documentado — a confirmar com o cliente antes de produção.
  */
 const SETTINGS_SCHEMA = {
-  // FIN-005 (contrato bruto, Centro Financeiro §2 "Princípios constitucionais": "Limites vêm
-  // do Motor de Regras; aprovação usa snapshot/hash.") — o QUANTO (multiplicador/limiar em
-  // R$) é ajustável aqui, mas o SE a regra de antifraude está ativa para o tenant continua
-  // decidido pelo Motor de Regras (evaluateRule('FIN-005', ...), fail-closed) — mesmo padrão
-  // já usado em billing.late_fee_percentage/REG-LOC-001 (collectionCase.service.js).
-  'finance.antifraud_history_multiplier': { type: 'number', min: 1 },
-  'finance.antifraud_new_account_threshold': { type: 'number', min: 0 },
-  // FIN-TS-013 "Conta nova | Pagamento alto imediato | Controle extra" — período de
-  // resfriamento (em horas) de conta bancária nova/alterada, mesma regra FIN-005.
-  'finance.bank_account_cooldown_hours': { type: 'integer', min: 0 },
+  // Financeiro (aba "Financeiro" de Configurações): antifraude FIN-005, conciliação manual recorrente (§17) e política AUTO_STRONG (§11), com faixas.
+  ...FINANCE_SETTINGS_SCHEMA,
+  // Autorização financeira (DEC-004/DEC-003, DI-M4PG-4): faixas e aprovadores do pagamento, MFA no risco médio, estorno e reabertura de período.
+  ...PAYMENT_APPROVAL_SETTINGS_SCHEMA,
   // EST-013 / Guia §12 (NAY Estoque, inventoryNay.service.js): lead time padrão (dias) usado
   // pela sugestão de compra quando o item ainda não tem histórico real de reposição
   // (pedido de compra -> recebimento) para medir o prazo observado.
   'inventory.nay_default_lead_time_days': { type: 'integer', min: 0, max: 365 },
-  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100 },
-  'billing.interest_percentage': { type: 'number', min: 0, max: 100 },
-  'billing.grace_period_days': { type: 'integer', min: 0 },
+  // Marco 6 (matriz de fechamento, 10/11/2026): base do custo financeiro realizado das obras — lacuna do Caderno
+  // (Construção §5 actual_financial_cost). CAIXA = só o pago (padrão, comportamento anterior); COMPETENCIA = soma as
+  // medições aprovadas ainda a pagar (src/features/construction/costBasis.js). Gravação exige construction:approve.
+  'construction.custo_realizado.base': { type: 'string', enum: ['CAIXA', 'COMPETENCIA'] },
+  // Verificação independente do Marco 6: evidências mínimas da medição e regra de diário ausente (construction.settings.js).
+  ...CONSTRUCTION_SETTINGS_SCHEMA,
+  // parametros.csv exige_mfa_para_alterar = sim (settingMfa.js): multa, juros e carência só mudam com MFA recente de quem altera.
+  // Fechamento M5 (M5-A0330): multa, juros e carência valem pelo Motor de Regras; gravar aqui publica versão nova de REG-LOC-001/002.
+  'billing.late_fee_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true, afterWrite: publishPenaltyRule },
+  'billing.interest_percentage': { type: 'number', min: 0, max: 100, requiresMfa: true, afterWrite: publishPenaltyRule },
+  'billing.grace_period_days': { type: 'integer', min: 0, requiresMfa: true, afterWrite: publishPenaltyRule },
   'billing.default_index_code': { type: 'string' },
-  'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120 },
-  'mfa.required_for_sensitive_roles': { type: 'boolean' },
+  'mfa.step_up_ttl_minutes': { type: 'integer', min: 1, max: 120, requiresMfa: true },
+  'mfa.required_for_sensitive_roles': { type: 'boolean', requiresMfa: true },
   'legal.signature_provider': { type: 'string', enum: ['sandbox', 'sandbox-alt', 'clicksign', 'zapsign'] },
   // Campos abaixo são segredos de provedor externo — CRIPTOGRAFADOS em repouso (AES-256-GCM,
   // ver src/utils/mfaCrypto.js) seguindo o mesmo padrão já usado para o segredo TOTP
@@ -219,6 +240,10 @@ const SETTINGS_SCHEMA = {
   'correspondent.sandbox_webhook_secret': { type: 'string', encrypted: true },
   // Marco 9 — governança (M9-D800): liga/desliga dos 8 módulos, exceções ao prefixo GOV_ e perfis da concessão padrão.
   ...GOVERNANCE_SETTINGS_SCHEMA,
+  // Pessoas (DI-M9I-5): limite de tentativas de vínculo que não conferem por usuário e janela.
+  ...PEOPLE_LINK_SETTINGS_SCHEMA,
+  // Pessoas (DI-M3PE-2/3/6): catálogo de papéis, deduplicação (DDI, motivo mínimo da exceção, contato no grupo) e cadastro por documento.
+  ...PEOPLE_M3PE_SETTINGS_SCHEMA,
   // Marco 9, M9-D003 — chave geral da NAY (ia.habilitada, padrão Desligado) e chave por agente (ai.agents.enabled).
   ...AI_SETTINGS_SCHEMA,
   // Marco 9, M9-D402 — Marketing: tetos de mensagem em massa e nomes dos perfis da concessão padrão.
@@ -276,12 +301,12 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D200 — registro de integrações (integration.providers/connections). Tudo que o
   // livro deixa em aberto é decidido pelo administrador; o padrão é o valor de _parametros-bloco-B.csv.
   // INT-P091: mudança de conexão em PRODUÇÃO e teste de conexão em produção exigem MFA recente.
-  'integration.admin.mfa_on_prod_test_connection': { type: 'boolean' },
-  'integration.admin.mfa_on_prod_connection_change': { type: 'boolean' },
+  'integration.admin.mfa_on_prod_test_connection': { type: 'boolean', requiresMfa: true },
+  'integration.admin.mfa_on_prod_connection_change': { type: 'boolean', requiresMfa: true },
   // Tamanho mínimo (caracteres) de texto base64/hex sem espaço tratado como segredo embutido em config_json/policy_json.
-  'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256 },
+  'integration.registry.secret_scan_min_length': { type: 'integer', min: 24, max: 256, requiresMfa: true },
   // Resolução por domínio quando há mais de uma conexão ACTIVE no mesmo domínio e ambiente.
-  'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'] },
+  'integration.registry.domain_resolution': { type: 'string', enum: ['error_if_multiple', 'oldest_active', 'newest_active'], requiresMfa: true },
   // M9-D204: esperas (ms) entre as tentativas de publicação interna do outbox; o tamanho da lista é o limite de tentativas.
   'integration.outbox.backoff_ms': {
     type: 'string',
@@ -310,6 +335,10 @@ const SETTINGS_SCHEMA = {
   // Marco 9, M9-D211 — rota pública de webhooks: alias da raiz, limite por minuto (classe WEBHOOK) e tamanho do token do canal.
   ...WEBHOOK_SETTINGS_SCHEMA,
   ...SIGNATURE_SETTINGS_SCHEMA,
+  // Fechamento M5 — fotos da entrega por tipo, fuso e alertas dos prazos jurídicos, bases do recebível do processo.
+  ...LEGAL_RULES_SETTINGS_SCHEMA,
+  // Fechamento M5 — ciclo das obrigações da locação: carência do comprovante, alerta do reembolso e o que segura o encerramento.
+  ...LEASE_OBLIGATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D237 — pagamento bancário: página do extrato, tolerância de data da conciliação, idade mínima da consulta e confirmação sem valor informado.
   ...BANK_SETTINGS_SCHEMA,
   // Marco 9, M9-D232 — portais: intervalo da leitura de status dos anúncios e anúncios por página do sync.
@@ -335,10 +364,18 @@ const SETTINGS_SCHEMA = {
   ...MINIMIZATION_SETTINGS_SCHEMA,
   // Marco 9, M9-D231 — publicação do site e dos portais: raio da coordenada aproximada (até 300 m).
   ...PUBLICATION_SETTINGS_SCHEMA,
+  // Marco 3 §7 e §14 (verificação de 11/11/2026): documentos e campos obrigatórios do gate de publicação e validade do link do carrinho.
+  ...PROPERTY_PUBLICATION_SETTINGS_SCHEMA,
+  ...CART_SETTINGS_SCHEMA,
   // Marco 9, M9-D209 — contrato de adapters: tempo do teste de saúde e das chamadas de leitura e escrita ao fornecedor.
   ...ADAPTERS_SETTINGS_SCHEMA,
   // Marco 9, M9-D229 — mensageria do CRM: código do país do telefone E.164 e prazo da primeira ação do lead provisório.
   ...MESSAGING_SETTINGS_SCHEMA,
+  // Marco 3 §18 / CRM-TS-012 (DI-M3CB-1): política de equipe da carteira para registro do CRM sem oportunidade.
+  ...CARTEIRA_SETTINGS_SCHEMA,
+  // DEC-049 (X45-D018): teto de linhas e MFA da exportação de oportunidades do CRM.
+  ...CRM_EXPORT_SETTINGS_SCHEMA,
+  ...CRM_SETTINGS_SCHEMA,
   // Marco 9, M9-D222 — contract tests dos adapters: validade do relatório que libera a connection.
   ...CONTRACT_SETTINGS_SCHEMA,
   // Marco 9, M9-D220 — integridade do domínio: tempo que a ação do usuário espera o fornecedor antes de responder "aceito".
@@ -366,6 +403,10 @@ const SETTINGS_SCHEMA = {
   ...DRILLDOWN_SETTINGS_SCHEMA, // M9-D690: tamanho de página do detalhe (drill-down)
   // Marco 9, M9-D615 — read model financeiro: janela, em dias, do vencido que entra na taxa de inadimplência.
   ...FINANCE_HEALTH_SETTINGS_SCHEMA,
+  // Relatório semanal de saúde do Financeiro (Caderno M4 §19): pesos dos recebíveis por status (DI-M4LR-2).
+  ...FINANCE_HEALTH_REPORT_SETTINGS_SCHEMA,
+  // Ledger do Financeiro (Caderno M4 §7): exigir a conta bancária em toda baixa (DI-M4LR-1).
+  ...LEDGER_SETTINGS_SCHEMA,
   // Marco 9, M9-D624 — KPIs de conciliações pendentes e anomalias: idade máxima do extrato, faixas de idade e owner de cada KPI.
   ...FINANCE_KPI_SETTINGS_SCHEMA,
   // Marco 9, M9-D620 — KPIs de caixa livre e dinheiro de terceiros: saldo de abertura, termos de origem (caução, repasse), mapa de status do ledger e owners.
@@ -443,6 +484,13 @@ const SETTINGS_SCHEMA = {
   ...ACCEPTANCE_SETTINGS_SCHEMA,
   // M9-D002: guardar conversa inteira como memória da NAY (padrão Desligado; o Ligado vale só pela regra única de M9-D009).
   'ia.memoria.guardar_conversa_inteira': { type: 'boolean' },
+  // Fechamento M5 — Locação (o que o livro não fixa vira parâmetro; padrão = comportamento anterior/livro).
+  'legal.inspection_default_room_code': { type: 'string' },
+  'legal.guarantee_other_flows': { type: 'string' }, // JSON: [{ "code", "label", "requiredFields": [] }] — vazio = nenhuma "outra" homologada
+  'locacao.titularidade.prazo_dias': { type: 'integer', min: 1, max: 90 },
+  ...Object.fromEntries(['WATER', 'ELECTRICITY', 'GAS', 'CONDO', 'IPTU', 'SPU', 'OTHER'].map((t) => [
+    `locacao.obrigacoes.periodicidade.${t}`, { type: 'string', enum: ['MONTHLY', 'BIMONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'ANNUAL', 'ONE_TIME'] },
+  ])),
 };
 
 /** Tira de `details` o valor recebido (`value`) de uma recusa de configuração; o resto do erro fica igual. */
@@ -461,18 +509,12 @@ function validateAgainstSchema(key, value) {
   }
 
   if (spec.type === 'number' || spec.type === 'integer') {
-    if (typeof value !== 'number' || Number.isNaN(value)) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser numérico.`, 'SETTING_INVALID_VALUE', { key });
-    }
-    if (spec.type === 'integer' && !Number.isInteger(value)) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser um número inteiro.`, 'SETTING_INVALID_VALUE', { key });
-    }
-    if (spec.min !== undefined && value < spec.min) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser >= ${spec.min}.`, 'SETTING_INVALID_VALUE', { key });
-    }
-    if (spec.max !== undefined && value > spec.max) {
-      throw AppError.badRequest(`O valor de "${key}" deve ser <= ${spec.max}.`, 'SETTING_INVALID_VALUE', { key });
-    }
+    // Chave com `label`/`invalidStatus` (antifraude, DI-DEC007-2): frase com o rótulo e a faixa, e o status do dono (422); demais chaves: 400 de antes.
+    const { invalidNumberValue } = require('./settingInvalidValue');
+    if (typeof value !== 'number' || !Number.isFinite(value)) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser numérico.`);
+    if (spec.type === 'integer' && !Number.isInteger(value)) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser um número inteiro.`);
+    if (spec.min !== undefined && value < spec.min) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser >= ${spec.min}.`);
+    if (spec.max !== undefined && value > spec.max) throw invalidNumberValue(key, spec, value, `O valor de "${key}" deve ser <= ${spec.max}.`);
     return;
   }
 
@@ -569,6 +611,8 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction, optio
   if (isPlatformOnly(SETTINGS_SCHEMA[key]) && options.platform !== true) {
     throw AppError.forbidden('Este parâmetro só é alterado pela equipe da plataforma.', 'SETTING_PLATFORM_ONLY', { key });
   }
+  // Chave sensível (`requiresMfa`, settingMfa.js): MFA recente de quem altera, em todo caminho, antes de olhar o valor e de qualquer escrita.
+  await assertMfaForSettingWrite(key, SETTINGS_SCHEMA[key], actorUserId, transaction);
   // Rodada 7 (DI-M9R-19): a recusa nunca devolve o valor recebido (podia ser um segredo, ou uma estrutura enorme que derrubava a resposta de erro);
   // `details` leva só a chave. Vale para as regras próprias das chaves (whatsapp.settings.js, identity.settings.js ...) e para a trava do dono.
   try {
@@ -623,6 +667,8 @@ async function upsertSetting(key, value, tenant, actorUserId, transaction, optio
     },
     transaction
   );
+  // Efeito da chave depois de gravada (ex.: publicar a versão nova da regra que ela alimenta), na mesma transação.
+  if (spec && typeof spec.afterWrite === 'function') await spec.afterWrite(key, value, tenant, actorUserId, transaction);
 
   return row;
 }
@@ -745,7 +791,7 @@ async function getIntegrationsStatus(tenant, transaction) {
 
   // Santander (PROVIDER_BANCARIO.md): autenticação exige mTLS (certificado A1) + OAuth2, não um
   // simples bearer token, então aqui só confirmamos que as 5 credenciais necessárias estão
-  // salvas — resolveBankAdapter.js já usa essa mesma lista pra decidir entre o adapter real e o
+  // salvas — resolve-bank-adapter.js já usa essa mesma lista pra decidir entre o adapter real e o
   // Sandbox. Não há "ping" de rede real (não vale abrir uma conexão mTLS só pra health-check
   // deste painel); "Conectado" aqui significa "configurado por completo", não "testado contra o
   // banco" — a mesma distinção que já vale pro resto desta função quando não há chamada de rede.

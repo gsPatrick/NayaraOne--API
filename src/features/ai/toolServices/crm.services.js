@@ -8,6 +8,7 @@ const personService = require('../../people/person.service');
 const { toPlain } = require('./plain');
 const { loadOpportunityFacts } = require('../agents/nay_comercial/comercial.data');
 const { readComercialParams } = require('../agents/nay_comercial/comercial.params');
+const { scopeOfToolScope } = require('../agents/nay_comercial/comercial.scope');
 
 /**
  * Oportunidade com a atividade calculada pelo código (M9-D034): interações recentes, dias sem contato, tarefas abertas, propostas enviadas sem
@@ -16,8 +17,10 @@ const { readComercialParams } = require('../agents/nay_comercial/comercial.param
 function crmOpportunities(transaction, scope = {}) {
   return {
     async getById(id) {
+      // Escopo de carteira (livro do Marco 3 §18): o corretor (read:own) só lê a oportunidade de que é responsável; a de outro é 404.
+      const ownerScope = scopeOfToolScope(scope);
+      const facts = await loadOpportunityFacts(id, transaction, { now: new Date(), ownerScope });
       const base = toPlain(await opportunityService.getOpportunity(id, transaction));
-      const facts = await loadOpportunityFacts(id, transaction, { now: new Date() });
       const params = await readComercialParams({ groupId: scope.groupId, companyId: scope.companyId }, transaction);
       return {
         ...base,
@@ -30,11 +33,12 @@ function crmOpportunities(transaction, scope = {}) {
   };
 }
 
-function crmCustomers(transaction) {
+function crmCustomers(transaction, scope = {}) {
   return {
     async getSummary(personId) {
       const pessoa = toPlain(await personService.getPerson(personId, transaction));
-      const oportunidades = await opportunityService.listOpportunities(transaction, { personId });
+      // Na carteira própria (read:own), a contagem por etapa só considera as oportunidades de que o corretor é responsável.
+      const oportunidades = await opportunityService.listOpportunities(transaction, { personId, ownerScope: scopeOfToolScope(scope) });
       const byStage = {};
       for (const o of oportunidades) byStage[o.stage] = (byStage[o.stage] || 0) + 1;
       return { ...pessoa, opportunities: { total: oportunidades.length, byStage } };

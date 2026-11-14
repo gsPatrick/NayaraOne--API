@@ -113,7 +113,7 @@ async function createTestResultCenter(tenant, transaction, suffix = uniqueSuffix
 
 /**
  * settleFinancialEntryWithApproval — FIX FIN-004 (ver comentário em
- * financialEntries.service.js#settleFinancialEntry): liquidar um PAYABLE direto agora exige
+ * receipt.service.js#settleFinancialEntry): liquidar um PAYABLE direto agora exige
  * aprovação prévia (via payment_intent OU via ApprovalRequest aprovada). Testes que não são
  * sobre o fluxo de aprovação em si (ex.: imutabilidade pós-SETTLED, antifraude, relatório
  * semanal, idempotência de replay) usam este helper pra abrir+aprovar uma ApprovalRequest LOW
@@ -124,7 +124,7 @@ async function createTestResultCenter(tenant, transaction, suffix = uniqueSuffix
 // de aprovação de PAYABLE+bankAccountId é idêntico nas duas (achado A01, auditoria Nayara
 // 15/10/2026: baixa parcial contornava a aprovação exigida da baixa integral).
 async function approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction) {
-  const approvalsService = require('../src/features/finance/approvals.service');
+  const approvalsService = require('../src/modules/finance/application/services/approvals.service');
   const { User } = require('../src/models');
   const suffix = uniqueSuffix();
   const [approver] = await User.findOrCreate({
@@ -164,22 +164,22 @@ async function createManualSettlementEvidence(tenant, actorUserId, transaction) 
 // aprovação (de outra pessoa) vem depois — quem aprova vê o comprovante. Este helper faz a
 // sequência completa: envia o comprovante, anexa, aprova e devolve o objeto de baixa manual.
 async function prepareManualSettlement(tenant, entryId, actorUserId, transaction) {
-  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
   const manualSettlement = await createManualSettlementEvidence(tenant, actorUserId, transaction);
-  await financialEntriesService.attachSettlementEvidence(entryId, manualSettlement, actorUserId, transaction);
+  await settlementEvidence.attachSettlementEvidence(entryId, manualSettlement, actorUserId, transaction);
   await approveFinancialEntryForSettlement(tenant, entryId, actorUserId, transaction);
   return manualSettlement;
 }
 
 async function settleFinancialEntryWithApproval(tenant, entryId, actorUserId, transaction) {
-  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  const receiptService = require('../src/modules/finance/application/services/receipt.service');
   const { FinancialEntry } = require('../src/models');
   const entry = await FinancialEntry.findByPk(entryId, { transaction });
   if (entry && entry.nature === 'PAYABLE') {
     const manualSettlement = await prepareManualSettlement(tenant, entryId, actorUserId, transaction);
-    return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction, { manualSettlement });
+    return receiptService.settleFinancialEntry(entryId, actorUserId, transaction, { manualSettlement });
   }
-  return financialEntriesService.settleFinancialEntry(entryId, actorUserId, transaction);
+  return receiptService.settleFinancialEntry(entryId, actorUserId, transaction);
 }
 
 // F02 (conferência Nayara 18/10/2026): fechar um período exige as conferências humanas do Caderno
@@ -193,7 +193,7 @@ function uniqueClosingTestMonth() {
 }
 
 async function confirmPeriodChecksForTest(tenant, referenceMonth, actorUserId, transaction) {
-  const periodClosuresService = require('../src/features/finance/periodClosures.service');
+  const periodClosuresService = require('../src/modules/finance/application/services/closing.service');
   for (const checkType of ['THIRD_PARTY_CASH', 'COMMISSIONS_REPASSES']) {
     await periodClosuresService.confirmPeriodCheck(
       { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth, checkType, note: `Conferência de teste (${checkType})` },
@@ -210,7 +210,7 @@ async function confirmPeriodChecksForTest(tenant, referenceMonth, actorUserId, t
 // ANTES de transitionContractStatus(..., 'DOCUMENTS_PENDING', ...), nunca depois — o próprio
 // gate roda na transição de ENTRADA também.
 async function waiveAllContractRequirements(contractId, actorUserId, transaction) {
-  const requirementsService = require('../src/features/legal/requirements.service');
+  const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
   await requirementsService.generateRequirementsForContract(contractId, {}, actorUserId, transaction);
   const items = await requirementsService.listRequirements(contractId, transaction);
   for (const item of items) {
@@ -239,12 +239,13 @@ async function createThirdPartyLink(tenant, transaction) {
 }
 
 // Frente 3 (Caderno §14): comissão nasce de um fato gerador (lançamento a receber) e o percentual
-// vem da regra REG-FIN-002 do Motor de Regras — nunca do payload. Para testes que só precisam de
+// vem da regra REG-FIN-001 do Motor de Regras (Guia §11, DEC-005) — nunca do payload. Para testes que só precisam de
 // "uma comissão de X% sobre Y", publica a regra (na transação do teste) e cria o recebimento de
 // origem; `received` (padrão true) já liquida o recebimento, liberando 100% para pagamento.
 async function createCommissionSource(tenant, transaction, { baseAmount, percentage, component = 'BROKER', received = true }) {
-  const commissionsService = require('../src/features/finance/commissions.service');
-  const financialEntriesService = require('../src/features/finance/financialEntries.service');
+  const commissionsService = require('../src/modules/finance/application/services/commission.service');
+  const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+  const receiptService = require('../src/modules/finance/application/services/receipt.service');
   await commissionsService.publishCommissionRuleVersion(
     { groupId: tenant.groupId, companyId: tenant.companyId, componentPercentages: { [component]: percentage } },
     tenant.userId,
@@ -256,7 +257,7 @@ async function createCommissionSource(tenant, transaction, { baseAmount, percent
     tenant.userId,
     transaction
   );
-  if (received) await financialEntriesService.settleFinancialEntry(source.id, tenant.userId, transaction);
+  if (received) await receiptService.settleFinancialEntry(source.id, tenant.userId, transaction);
   return { sourceEntryId: source.id, component };
 }
 

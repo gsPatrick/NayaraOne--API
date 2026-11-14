@@ -1,0 +1,64 @@
+{
+  "demanda": "M4-D140",
+  "geradoNoCommit": "a8335d22073a3ac4a7a0fdda5a634313888dcb9b",
+  "origem": "banco vazio migrado no commit base",
+  "sha256": "f8d7bbce099c4099359ac9949a441956c1710a76a0842daa545fec3ed797941d",
+  "categorias": {
+    "colunas": {
+      "linhas": 6813,
+      "sha256": "132c068031527b06107a2628b936de5e08ff72f914df4c04ccd8182f09725f60"
+    },
+    "restricoes": {
+      "linhas": 3000,
+      "sha256": "5d69d17b9515e05facf4938e5faa55adba08f824341b617334f8d1c80b861657"
+    },
+    "indices": {
+      "linhas": 1138,
+      "sha256": "a0ced0fcfe43de5880fb88b97000df7d2131f8d9c7a1901b8aa3a9ed55da7460"
+    },
+    "gatilhos": {
+      "linhas": 95,
+      "sha256": "107733890e6657e036bd719678a705f2ae7775949022b51570e7884abdd525a6"
+    },
+    "funcoes": {
+      "linhas": 288,
+      "sha256": "a2bf6842979d52920890787b8ae26ef01f6512c0c6fb2605ad36a4b3b1592af3"
+    },
+    "views": {
+      "linhas": 21,
+      "sha256": "58bc1e8f9ccc338806e37c13035e2a81ed46886f535f36ff3e8dba93610135f8"
+    },
+    "politicas": {
+      "linhas": 657,
+      "sha256": "fecf22770e5cbe354bdbaee6be80aa4f890dd5a33a2a82d82261a635370c2136"
+    },
+    "rls": {
+      "linhas": 428,
+      "sha256": "3c6ac5398eb8e8895668d05392faf052b1661596fa0dd91963e0854b5873c0e7"
+    },
+    "grants": {
+      "linhas": 1543,
+      "sha256": "1fc087f8dd5a84ecd3b5834cbc4a3e215f37f7e7522b7480f6afc653d906160a"
+    },
+    "sequencias": {
+      "linhas": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "enums": {
+      "linhas": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "comentarios": {
+      "linhas": 150,
+      "sha256": "38d8fb52db984f728d27536739f7f1e1fa8b198624b2ddbf36e9cdb563c2744b"
+    },
+    "schemas": {
+      "linhas": 18,
+      "sha256": "afa1e8ba091c1ad3c1879de8cff4d0bf335249b6344e86fd081714f9c3c096a5"
+    },
+    "sequelizeMeta": {
+      "linhas": 619,
+      "sha256": "f31995fea909d06fc33b396e70599da64f191869c378f57931d7e59971b8acf9"
+    }
+  }
+}

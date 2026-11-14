@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const stageDependenciesService = require('../src/features/construction/stageDependencies.service');
@@ -309,8 +310,8 @@ test('RDO aceita e preserva evidenceFileIds, inclusive numa correção (append-o
   await withRollbackTenantTransaction(tenant, async (t) => {
     const suffix = uniqueSuffix();
     const project = await createTestProject(t, suffix);
-    const fakeFileId1 = '11111111-1111-1111-1111-111111111111';
-    const fakeFileId2 = '22222222-2222-2222-2222-222222222222';
+    // Fotos reais (core.files): desde 10/11/2026 o RDO recusa ID de arquivo inexistente.
+    const [fakeFileId1, fakeFileId2] = await evidenceIds(tenant, t, 2, 'rdo');
 
     const created = await dailyReportsService.createDailyReport(
       project.id,
@@ -336,7 +337,7 @@ test('RDO aceita e preserva evidenceFileIds, inclusive numa correção (append-o
 // Achado numa rodada de verificação de integrações (30/09/2026): a fonte exige "documentação
 // correspondente" vinculada ao prestador do dia — campo estava inteiramente ausente em
 // DailyWorker. Confirma que o RDO aceita e preserva documentFileIds por trabalhador.
-test('RDO aceita e preserva documentFileIds por trabalhador (documentação do prestador)', async () => {
+test('RDO aceita e preserva documentFileIds por trabalhador (documentação do prestador: arquivo real da empresa)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const suffix = uniqueSuffix();
     const project = await createTestProject(t, suffix);
@@ -345,7 +346,8 @@ test('RDO aceita e preserva documentFileIds por trabalhador (documentação do p
       tenant.userId,
       t
     );
-    const fakeDocId = '33333333-3333-3333-3333-333333333333';
+    // Verificação independente do Marco 6 (M6-08): documento é arquivo real (enviado e examinado pelo antivírus).
+    const [fakeDocId] = await evidenceIds(tenant, t, 1, 'documento-prestador');
 
     const created = await dailyReportsService.createDailyReport(
       project.id,

@@ -44,8 +44,8 @@ Todas as rotas exigem `Authorization: Bearer <accessToken>`.
 
 ### Regra dura: `next_action` obrigatório em opportunity ATIVA
 
-Uma opportunity é considerada **ativa** quando seu `stage` **não** é `CLOSED_WON` nem
-`CLOSED_LOST` (`isActiveStage`, `crm/opportunities.service.js`). Toda opportunity ativa
+Uma opportunity é considerada **ativa** quando seu `stage` **não** é `WON` nem
+`LOST` (`isActiveStage`, `crm/opportunities.service.js`). Toda opportunity ativa
 precisa ter `nextAction` **e** `nextActionDueAt` preenchidos — validado em
 `assertNextActionWhenActive`, chamada tanto no `create` quanto no `update` (considerando o
 estado final resultante do PATCH, não só os campos enviados). Violação falha com:
@@ -69,7 +69,7 @@ tornar configurável por tenant em marcos futuros — um CHECK fixo em `stage NO
 engessaria isso no schema). A obrigatoriedade é aplicada exclusivamente na camada de
 aplicação, antes de qualquer `INSERT`/`UPDATE` chegar ao banco.
 
-Opportunities fechadas (`CLOSED_WON`/`CLOSED_LOST`) **não** exigem `nextAction` e recebem
+Opportunities fechadas (`WON`/`LOST`) **não** exigem `nextAction` e recebem
 `closedAt` automaticamente ao entrar nesse estágio; se um `PATCH` mover a opportunity de
 volta para um estágio ativo, `closedAt` é limpo novamente.
 

@@ -45,7 +45,7 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(32),
         allowNull: false,
         field: 'inspection_type',
-        comment: "CHECK_IN|CHECK_OUT|PERIODIC",
+        comment: "ENTRY|EXIT|INTERMEDIATE|FINAL (códigos do livro; CHECK_IN/CHECK_OUT/PERIODIC só como apelido de entrada)",
       },
       scheduledAt: {
         type: DataTypes.DATE,

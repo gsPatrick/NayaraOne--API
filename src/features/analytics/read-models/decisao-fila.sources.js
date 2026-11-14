@@ -22,6 +22,7 @@ const FIN_SQL = `
            WHEN 'Commission' THEN (SELECT c.total_amount FROM finance.commissions c WHERE c.id = a.related_entity_id AND c.company_id = a.company_id)
            WHEN 'CommissionInstallment' THEN (SELECT i.amount FROM finance.commission_installments i WHERE i.id = a.related_entity_id AND i.company_id = a.company_id)
            WHEN 'OwnerRepass' THEN (SELECT r.net_amount FROM finance.owner_repasses r WHERE r.id = a.related_entity_id AND r.company_id = a.company_id)
+           ELSE a.amount -- M4PG: pagamento, caso de estorno e reabertura guardam o valor no próprio pedido
          END AS amount
     FROM finance.approval_requests a WHERE a.company_id = :companyId`;
 const INV_SQL = `

@@ -1,8 +1,8 @@
 'use strict';
 
 const { BankAdapter } = require('../../providers/bank/bank.port');
-const { SandboxBankAdapter } = require('../../../finance/adapters/BankAdapter');
-const { getBankLegacyOverride } = require('../../../finance/adapters/resolveBankAdapter');
+const { SandboxBankAdapter } = require('../../../../modules/finance/infrastructure/bank/providers/sandbox.provider');
+const { getBankLegacyOverride } = require('../../../../modules/finance/infrastructure/bank/resolve-bank-adapter');
 const { wrapLegacy } = require('../legacyWrap');
 const { STATUS, OPS, CAPABILITIES } = require('./bank.ops');
 

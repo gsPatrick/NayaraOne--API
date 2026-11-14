@@ -4,23 +4,15 @@ const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { Person, PersonContact, PersonDocument, PersonRole, PersonAddress } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { onlyDigits, validateDocumentFormat, hashTaxId } = require('./personDocumentFormat.service');
-const { findPotentialDuplicate } = require('./personDedup.service');
+const { onlyDigits, hashTaxId, assertValidTaxId } = require('./personDocumentFormat.service');
+const { assertCreationAllowed, registrarRevisoes } = require('./personDedupGate');
+const { createChildren } = require('./personCreateChildren');
 const { publishPersonCreated, publishPersonUpdated } = require('./personEvents.service');
-const { VALID_ROLES } = require('./personRoles.service');
 const { scorePersonDataQuality } = require('./personDataQuality.service');
+const { projectForSession, assertBaseOwner, isLinkedElsewhereError, linkedElsewhereError } = require('./personView');
+const { registrarTentativa } = require('./personLinks.service');
+const { findStrongInCompany } = require('./personDedup.service');
 const { assertEvidenceForCriticalChange, recordFieldChangeEvidence, personEntity } = require('../core-governance/data-quality/evidence');
-
-// Mesma validação de personRoles.service.createRole, aplicada aos papéis enviados junto do
-// payload de criação da pessoa (fonte única da lista: VALID_ROLES).
-function validatePersonRoleCode(roleCode) {
-  if (!VALID_ROLES.includes(roleCode)) {
-    throw AppError.badRequest(
-      `O campo "roleCode" deve ser um de: ${VALID_ROLES.join(', ')}.`,
-      'PERSON_ROLE_VALIDATION'
-    );
-  }
-}
 
 /**
  * CRUD puro de Person (mais a criação inicial de seus contacts/documents embutidos no payload
@@ -28,16 +20,21 @@ function validatePersonRoleCode(roleCode) {
  * vive em personDocumentFormat.service.js; contacts/documents/roles como sub-recursos têm CRUD
  * próprio em personContacts.service.js / personDocuments.service.js / personRoles.service.js.
  *
- * "people"."persons" tem RLS por empresa: persons_company_select (migration 20260101000083) e
- * persons_company_insert/update/delete (migration 20260101009965, que tirou o FOR ALL só por grupo
- * que liberava a leitura para o grupo inteiro); "person_contacts"/"person_documents" têm RLS por
- * `company_id = current_setting('app.company_id', true)`. Toda query aqui recebe `transaction`
- * já aberta por `req.withTenantTransaction` (ver src/middlewares/tenant.middleware.js).
+ * "people"."persons" é o cadastro do GRUPO visto por VÍNCULO com a empresa (migration 20260101010940, DI-M9I-1): a sessão lê a
+ * pessoa da empresa responsável pela base (company_id) ou com vínculo ACTIVE em people.person_company_links; só a responsável
+ * grava a base (persons_company_insert/update/delete, migration 20260101009965). Os filhos (contatos, endereços, documentos,
+ * papéis, consentimentos) são da empresa da sessão, com RLS por `company_id = current_setting('app.company_id', true)` e chave
+ * composta para o vínculo (migration 20260101010941). Toda query aqui recebe `transaction` já aberta por
+ * `req.withTenantTransaction` (ver src/middlewares/tenant.middleware.js).
  */
 
-async function createPerson(payload, actorUserId, transaction) {
-  const { groupId, companyId, personType, legalName, taxIdNormalized, birthOrFoundationDate, status, contacts, documents, allowDuplicate } =
-    payload;
+/**
+ * createPerson — `options.podeForcarDuplicidade` (a sessão tem people:dedup:override; o controller informa; chamadas internas = sistema) e
+ * `options.modoSemelhante` ('EXIGIR' pela tela: o cadastro parecido só é criado com similarReviewed=true; 'FILA', o padrão das criações
+ * automáticas: cria e manda o par à fila de revisão). Ver personDedupGate.js.
+ */
+async function createPerson(payload, actorUserId, transaction, options = {}) {
+  const { groupId, companyId, personType, legalName, taxIdNormalized, birthOrFoundationDate, status, contacts } = payload;
 
   // groupId/companyId vêm da sessão (não são campos que a pessoa preenche): faltar é falha de contexto, e a mensagem não cita nome técnico.
   if (!groupId || !companyId) {
@@ -59,22 +56,17 @@ async function createPerson(payload, actorUserId, transaction) {
   }
 
   const taxIdDigits = onlyDigits(taxIdNormalized) || null;
-  if (taxIdDigits) {
-    validateDocumentFormat(normalizedType === 'PF' ? 'CPF' : 'CNPJ', taxIdDigits);
-  }
+  assertValidTaxId(normalizedType, taxIdDigits); // M3-01: formato (400) e dígito verificador (422 PERSON_TAX_ID_INVALID)
 
-  if (!allowDuplicate) {
-    const duplicate = await findPotentialDuplicate({ taxIdNormalized: taxIdDigits, contacts }, transaction);
-    if (duplicate) {
-      throw AppError.conflict(
-        'Já existe uma pessoa cadastrada com o mesmo documento ou contato principal.',
-        'PERSON_DUPLICATE',
-        { existingPersonId: duplicate.id }
-      );
-    }
-  }
-
+  // Deduplicação ANTES de criar (livro §4, CRMX-010): forte, forte no grupo, médio, médio no grupo e fraco (personDedupGate.js).
+  const ctx = { groupId, companyId, actorUserId, podeForcarDuplicidade: options.podeForcarDuplicidade, modoSemelhante: options.modoSemelhante || 'FILA' };
+  const plano = await assertCreationAllowed({ ...payload, taxIdDigits, contacts }, ctx, transaction);
   let person;
+  // SAVEPOINT por SQL (não transação aninhada do Sequelize): a gravação e os ganchos da pessoa (avaliação de qualidade do Marco 9,
+  // M9-D806, anotada na transação) ficam na transação da requisição; se a unicidade do banco recusar (corrida), ela continua utilizável
+  // para saber de quem é o CPF/CNPJ.
+  const sp = (sql) => transaction.sequelize.query(sql, { transaction });
+  await sp('SAVEPOINT pessoa_cadastro');
   try {
     person = await Person.create(
       {
@@ -93,15 +85,22 @@ async function createPerson(payload, actorUserId, transaction) {
       },
       { transaction }
     );
+    await sp('RELEASE SAVEPOINT pessoa_cadastro');
   } catch (error) {
-    // UNIQUE(group_id, tax_id_normalized) é uma constraint de identidade rígida do banco
-    // (TAB-0100) — diferente do match "médio/fraco" de findPotentialDuplicate, ela NÃO pode
-    // ser contornada por "allowDuplicate": duas pessoas com o mesmo CPF/CNPJ no mesmo grupo
-    // nunca são uma duplicata legítima de negócio, são o mesmo documento.
+    await sp('ROLLBACK TO SAVEPOINT pessoa_cadastro');
+    // UNIQUE(group_id, tax_id_normalized) é a identidade rígida do banco (TAB-0100) e nada a contorna. O portão já recusou o CPF/CNPJ
+    // desta empresa e o das outras empresas do grupo; chegar aqui é corrida com um cadastro gravado ao mesmo tempo. Gravado NESTA empresa:
+    // a mesma resposta do portão (match forte, abrir o existente). Gravado em OUTRA empresa do grupo: o caminho é o vínculo.
     if (error.name === 'SequelizeUniqueConstraintError' && /tax_id_normalized/.test(error.parent?.detail || error.parent?.message || '')) {
+      const forte = await findStrongInCompany(taxIdDigits, transaction);
+      if (forte) {
+        throw AppError.conflict('Já existe uma pessoa cadastrada com este CPF/CNPJ. Abra o cadastro existente em vez de criar outro.', 'PERSON_DUPLICATE',
+          { nivel: 'FORTE', existingPersonId: forte.id, existente: { id: forte.id, legalName: forte.legalName } });
+      }
+      registrarTentativa(transaction, { groupId, companyId }, actorUserId, 'CPF_CNPJ_JA_NO_GRUPO');
       throw AppError.conflict(
-        'Já existe uma pessoa com este documento (CPF/CNPJ) neste grupo. Esta duplicidade é uma restrição de identidade e não pode ser forçada com "allowDuplicate".',
-        'PERSON_DUPLICATE_TAX_ID'
+        'Este CPF/CNPJ já tem cadastro em outra empresa do grupo. Para usar esse cadastro aqui, vincule-o a esta empresa informando o CPF/CNPJ e o nome como está no documento.',
+        'PERSON_TAX_ID_IN_GROUP'
       );
     }
     throw error;
@@ -124,113 +123,8 @@ async function createPerson(payload, actorUserId, transaction) {
     transaction
   );
 
-  if (Array.isArray(contacts)) {
-    for (const contact of contacts) {
-      const contactType = contact.contactType || contact.channel;
-      const valueNormalized = contact.valueNormalized || contact.value;
-      if (!contactType || !valueNormalized) continue;
-      await PersonContact.create(
-        {
-          groupId,
-          companyId,
-          personId: person.id,
-          contactType: String(contactType).toUpperCase(),
-          valueNormalized,
-          isPrimary: !!contact.isPrimary,
-          createdBy: actorUserId || null,
-          updatedBy: actorUserId || null,
-        },
-        { transaction }
-      );
-    }
-  }
-
-  if (Array.isArray(documents)) {
-    for (const document of documents) {
-      if (!document.documentType || !document.fileId) continue;
-      // Documento já verificado na criação: mesma regra da verificação (sem leitura gravada, campos críticos informados).
-      const documentStatus = document.verificationStatus ? String(document.verificationStatus).toUpperCase() : 'PENDING';
-      let documentExtracted = null;
-      if (documentStatus === 'VERIFIED') {
-        const { assertReadingAllowsVerification } = require('./personDocuments.service');
-        const entries = assertReadingAllowsVerification(document.documentType, null, document.manualFields);
-        if (entries.length) {
-          documentExtracted = { manualFields: Object.fromEntries(entries), manualFieldsConfirmedBy: actorUserId || null, manualFieldsConfirmedAt: new Date().toISOString() };
-        }
-      }
-      await PersonDocument.create(
-        {
-          groupId,
-          companyId,
-          personId: person.id,
-          documentType: String(document.documentType).toUpperCase(),
-          fileId: document.fileId,
-          versionNo: document.versionNo || 1,
-          issuedAt: document.issuedAt || null,
-          expiresAt: document.expiresAt || null,
-          verificationStatus: documentStatus,
-          extractedDataJson: documentExtracted,
-          createdBy: actorUserId || null,
-          updatedBy: actorUserId || null,
-        },
-        { transaction }
-      );
-    }
-  }
-
-  // `roles` e `addresses` embutidos no payload de criação: a tela de cadastro de contato envia
-  // papéis e endereço no mesmo formulário, então criar a pessoa e depois disparar N chamadas a
-  // /people/:id/roles e /people/:id/addresses deixaria o cadastro parcialmente escrito se uma
-  // delas falhasse. Aqui tudo entra na MESMA transação da Person.
-  if (Array.isArray(payload.roles)) {
-    for (const role of payload.roles) {
-      const roleCode = String(typeof role === 'string' ? role : role.roleCode || '').toUpperCase();
-      if (!roleCode) continue;
-      validatePersonRoleCode(roleCode);
-      await PersonRole.create(
-        {
-          groupId,
-          companyId,
-          personId: person.id,
-          roleCode,
-          startsAt: role.startsAt || null,
-          endsAt: role.endsAt || null,
-          createdBy: actorUserId || null,
-          updatedBy: actorUserId || null,
-        },
-        { transaction }
-      );
-    }
-  }
-
-  const addresses = Array.isArray(payload.addresses)
-    ? payload.addresses
-    : payload.address
-      ? [payload.address]
-      : [];
-  for (const address of addresses) {
-    if (!address) continue;
-    await PersonAddress.create(
-      {
-        groupId,
-        companyId,
-        personId: person.id,
-        zipCode: address.zipCode || null,
-        street: address.street || null,
-        number: address.number || null,
-        complement: address.complement || null,
-        neighborhood: address.neighborhood || null,
-        city: address.city || null,
-        state: address.state || null,
-        isCurrent: address.isCurrent !== undefined ? !!address.isCurrent : true,
-        validFrom: address.validFrom || null,
-        validUntil: address.validUntil || null,
-        createdBy: actorUserId || null,
-        updatedBy: actorUserId || null,
-      },
-      { transaction }
-    );
-  }
+  await createChildren(person, payload, actorUserId, transaction);
+  await registrarRevisoes(person, plano, ctx, transaction);
 
   return getPerson(person.id, transaction);
 }
@@ -250,12 +144,13 @@ async function listPersons(transaction, filters = {}) {
   const where = {};
   if (filters.personType) where.personType = String(filters.personType).toUpperCase();
   if (filters.status) where.status = filters.status;
-  return Person.findAll({
+  const persons = await Person.findAll({
     where,
     include: PERSON_INCLUDE,
     order: [['created_at', 'DESC']],
     transaction,
   });
+  return projectForSession(persons, transaction); // DI-M9I-3: pessoa vinculada vem só com a base
 }
 
 async function getPerson(id, transaction) {
@@ -270,12 +165,13 @@ async function getPerson(id, transaction) {
   // é silenciosamente descartada por `res.json`/`JSON.stringify`. Por isso devolvemos um objeto
   // plano (`{ ...person.toJSON(), dataQuality }`), mesmo padrão já usado em `afterJson` em todo
   // o projeto (ex: opportunity.service.js), em vez de anexar a propriedade na instância.
-  return { ...person.toJSON(), dataQuality: scorePersonDataQuality(person) };
+  return projectForSession({ ...person.toJSON(), dataQuality: scorePersonDataQuality(person) }, transaction);
 }
 
 async function updatePerson(id, payload, actorUserId, transaction) {
   const person = await Person.findByPk(id, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
+  await assertBaseOwner(person, transaction); // DI-M9I-3: a base só muda pela empresa responsável
 
   const currentCritical = { legalName: person.legalName, taxIdNormalized: person.taxIdNormalized, birthOrFoundationDate: person.birthOrFoundationDate };
   const { legalName, preferredName, taxIdNormalized, birthOrFoundationDate, status, personType, riskFlagsJson } = payload;
@@ -290,7 +186,7 @@ async function updatePerson(id, payload, actorUserId, transaction) {
   }
   if (taxIdNormalized !== undefined) {
     const taxIdDigits = onlyDigits(taxIdNormalized) || null;
-    if (taxIdDigits) validateDocumentFormat(person.personType === 'PF' ? 'CPF' : 'CNPJ', taxIdDigits);
+    assertValidTaxId(person.personType, taxIdDigits); // M3-01: a troca do CPF/CNPJ também confere o dígito verificador
     person.taxIdNormalized = taxIdDigits;
     person.taxIdNormalizedHash = hashTaxId(taxIdDigits);
   }
@@ -313,9 +209,15 @@ async function deletePerson(id, actorUserId, transaction) {
   await legalHold.assertPersonErasable(id, transaction); // M9-D912: pessoa (ou contrato, processo e arquivo dela) sob retenção legal não se apaga
   const person = await Person.findByPk(id, { transaction });
   if (!person) throw AppError.notFound('Pessoa não encontrada.', 'PERSON_NOT_FOUND');
+  await assertBaseOwner(person, transaction); // DI-M9I-3: a vinculada desfaz o vínculo (POST /people/:id/unlink), não exclui a base
   person.deletedBy = actorUserId || null;
-  await person.save({ transaction });
-  await person.destroy({ transaction }); // soft delete (paranoid: true no model)
+  try {
+    await person.save({ transaction });
+    await person.destroy({ transaction }); // soft delete (paranoid: true no model)
+  } catch (err) {
+    if (isLinkedElsewhereError(err)) throw linkedElsewhereError(); // gatilho persons_base_vinculada_nao_some
+    throw err;
+  }
   return { id };
 }
 

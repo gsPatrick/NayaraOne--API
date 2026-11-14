@@ -7,7 +7,7 @@
 //   2. §11 "Conciliação bancária" — motor de sugestão com score/classe.
 //   4. §14 "Comissões" — ajuste de comissão por cancelamento (FIN-TS-017).
 //   5. FIN-TS-018 "Banco timeout | Execução sem confirmação | Não cria sucesso falso".
-//   6. FIN-005 "Limites vêm do Motor de Regras" — antifraude migrado para o Motor de Regras.
+//   6. Limiares do antifraude: DEC-007 (DI-DEC007-2) trocou a regra FIN-005 do Motor pelos parâmetros da tela de Configurações.
 //
 // Todos rodam contra o banco real via withRollbackTenantTransaction (RLS real — SET LOCAL
 // app.group_id/company_id/user_id), sem nenhum mock.
@@ -16,19 +16,21 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, createManualSettlementEvidence, createThirdPartyLink, settleFinancialEntryWithApproval, createCommissionSource } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const antifraudService = require('../src/features/finance/financeAntifraud.service');
-const commissionsService = require('../src/features/finance/commissions.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankPaymentsService = require('../src/features/finance/bankPayments.service');
-const approvalsService = require('../src/features/finance/approvals.service');
-const financialHealthReportService = require('../src/features/finance/financialHealthReport.service');
-const ownerRepassesService = require('../src/features/finance/ownerRepasses.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const antifraudService = require('../src/modules/finance/application/services/finance-antifraud.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankPaymentsService = require('../src/modules/finance/application/services/bank-submission.service');
+const paymentService = require('../src/modules/finance/application/services/payment.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
+const financialHealthReportService = require('../src/modules/finance/application/services/finance-health.service');
+const ownerRepassesService = require('../src/modules/finance/application/services/owner-repasses.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const { seedFinanceAntifraudRules } = require('../scripts/seedFinanceAntifraudRules');
 const { PaymentIntent, BankPaymentProviderRouting, FinancialEntry } = require('../src/models');
 
 let tenant;
@@ -217,7 +219,9 @@ test('contrato §11 autoReconcileSuggestion concilia automaticamente só nas cla
         externalTransactionId: `auto-exact-${suffix}`,
       },
       tenant.userId,
-      transaction
+      transaction,
+      // Caderno §11 "auto confirmado se fonte confiável" (DI-M4CC-2): arquivo importado por quem tem finance:reconcile.
+      { source: 'FILE_IMPORT', canReconcile: true }
     );
 
     const autoResult = await reconciliationService.autoReconcileSuggestion(
@@ -274,7 +278,7 @@ test('FIN-TS-017 cancelCommission gera ajuste auditável, proporcional ao já pa
 
     // Paga a 1ª parcela (300) contra um lançamento real liquidado — já recebido.
     const entry = await createEntry(transaction, { entryType: 'CREDIT', nature: 'RECEIVABLE', amount: installments[0].amount, description: 'baixa parcela 1' });
-    await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction);
     await commissionsService.markInstallmentPaid(installments[0].id, entry.id, tenant.userId, transaction);
 
     // Contrato cancelado -> ajuste de comissão.
@@ -346,18 +350,19 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
     await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, transaction);
 
     const submitted = await bankPaymentsService.submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
-    assert.equal(submitted.status, 'SUBMITTED');
+    assert.equal(submitted.status, 'EXECUTING'); // Guia M4 §3: enviado ao banco = EXECUTING, fase SUBMITTED
+    assert.equal(submitted.submissionPhase, 'SUBMITTED');
 
     const routing = await BankPaymentProviderRouting.findOne({ where: { paymentIntentId: intent.id }, transaction });
     assert.ok(routing, 'roteamento gravado para o webhook/polling resolver o tenant depois');
 
     // Simula o banco respondendo TIMEOUT (nenhuma confirmação confiável) — "sistema nunca
     // presume sucesso" (Centro Financeiro §8, item 8).
-    const afterTimeout = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
+    const afterTimeout = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
     // F06-PAY-05/06 (conferência 18/10/2026): timeout é resposta INCERTA — o banco pode ter
     // processado. A intenção continua SUBMITTED (antes virava FAILED e liberava um 2º pagamento).
-    assert.equal(afterTimeout.status, 'SUBMITTED', 'timeout não é sucesso nem falha: o pagamento segue em trânsito');
-    assert.notEqual(afterTimeout.status, 'EXECUTED');
+    assert.equal(afterTimeout.status, 'EXECUTING', 'timeout não é sucesso nem falha: o pagamento segue em trânsito');
+    assert.notEqual(afterTimeout.status, 'CONFIRMED');
 
     const reloadedEntry = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(reloadedEntry.status, 'PENDING', 'NENHUMA liquidação indevida — o lançamento original nunca foi tocado');
@@ -366,9 +371,9 @@ test('FIN-TS-018 confirmBankPayment com status de timeout/falha NUNCA liquida o 
     // Reprocessar o MESMO status de novo (reentrega de webhook) é idempotente: devolve o
     // estado atual, sem tentar liquidar por trás.
     const reloadedIntent = await PaymentIntent.findByPk(intent.id, { transaction });
-    assert.equal(reloadedIntent.status, 'SUBMITTED');
-    const again = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
-    assert.equal(again.status, 'SUBMITTED');
+    assert.equal(reloadedIntent.status, 'EXECUTING');
+    const again = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'TIMEOUT', transaction);
+    assert.equal(again.status, 'EXECUTING');
     const reloadedEntryAgain = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(reloadedEntryAgain.status, 'PENDING');
   });
@@ -404,8 +409,8 @@ test('FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvi
     const beforeConfirm = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(beforeConfirm.status, 'PENDING', 'nenhum ledger/liquidação antes da confirmação do banco');
 
-    const firstConfirm = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(firstConfirm.status, 'EXECUTED');
+    const firstConfirm = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
+    assert.equal(firstConfirm.status, 'CONFIRMED');
     const afterFirst = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(afterFirst.status, 'SETTLED');
     const firstSettledAt = afterFirst.settledAt?.getTime();
@@ -413,8 +418,8 @@ test('FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvi
 
     // Reenvio do MESMO webhook (provedor reentregando por falta de 200 explícito, cenário
     // comum em integrações bancárias reais) — não pode reliquidar nem mexer no settledAt.
-    const secondConfirm = await bankPaymentsService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(secondConfirm.status, 'EXECUTED', 'idempotente: devolve o mesmo estado, sem reprocessar');
+    const secondConfirm = await paymentService.confirmBankPayment(routing.externalSubmissionId, 'CONFIRMED', transaction);
+    assert.equal(secondConfirm.status, 'CONFIRMED', 'idempotente: devolve o mesmo estado, sem reprocessar');
     const afterSecond = await FinancialEntry.findByPk(entry.id, { transaction });
     assert.equal(afterSecond.status, 'SETTLED');
     assert.equal(afterSecond.settledAt?.getTime(), firstSettledAt, 'settledAt não muda — não houve segunda liquidação');
@@ -422,58 +427,57 @@ test('FIN-TS-018b confirmBankPayment com CONFIRMED reentregue duas vezes (reenvi
 });
 
 // ---------------------------------------------------------------------------------------
-// Item 6 — FIN-005 limiares de antifraude vêm do Motor de Regras
+// Item 6 — limiares do antifraude: parâmetros da tela de Configurações (DEC-007, DI-DEC007-2)
 // ---------------------------------------------------------------------------------------
 
-test('FIN-005 resolveAntifraudThresholds usa os defaults hardcoded quando a regra não foi publicada para o tenant (fail closed, nunca enfraquece a proteção)', async () => {
+test('DEC-007 resolveAntifraudThresholds: sem nada gravado vale o padrão da DEC-007, sem consultar o Motor de Regras', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const thresholds = await antifraudService.resolveAntifraudThresholds(tenant, transaction);
     assert.equal(thresholds.historyMultiplier, antifraudService.DEFAULT_ANOMALY_HISTORY_MULTIPLIER);
     assert.equal(thresholds.newAccountThreshold, antifraudService.DEFAULT_ANOMALY_NEW_ACCOUNT_THRESHOLD);
     assert.equal(thresholds.cooldownHours, antifraudService.DEFAULT_BANK_ACCOUNT_COOLDOWN_HOURS);
-    assert.equal(thresholds.ruleVersionId, null, 'sem regra publicada, não há ruleVersionId');
+    assert.equal('ruleVersionId' in thresholds, false, 'nenhuma versão de regra do Motor decide o limiar');
   });
 });
 
-test('FIN-005 limiares de antifraude vêm do Motor de Regras (evaluateRule) quando a regra FIN-005 está publicada, ajustável via settings', async () => {
+test('DEC-007 o valor gravado pela tela vale sempre, mais restritivo ou mais frouxo que o padrão (sem regra do Motor)', async () => {
+  const { TenantSetting } = require('../src/models');
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await seedFinanceAntifraudRules(tenant, transaction);
+    await TenantSetting.destroy({ where: { companyId: tenant.companyId, key: ['finance.antifraud_history_multiplier', 'finance.antifraud_new_account_threshold'] }, force: true, transaction });
+    const row = (key, value) => TenantSetting.create({ groupId: tenant.groupId, companyId: tenant.companyId, key, value }, { transaction });
+    await row('finance.antifraud_history_multiplier', 5);
+    await row('finance.antifraud_new_account_threshold', 2000);
     const thresholds = await antifraudService.resolveAntifraudThresholds(tenant, transaction);
-    assert.ok(thresholds.ruleVersionId, 'com a regra publicada, a decisão fica rastreada por ruleVersionId');
-    // Sem override de settings, usa o actionJson da regra (os mesmos valores que eram
-    // hardcoded antes, preservados como default da regra — ver seedFinanceAntifraudRules.js).
-    assert.equal(thresholds.historyMultiplier, 3);
-    assert.equal(thresholds.newAccountThreshold, 10000);
-    assert.equal(thresholds.bankAccountCooldownHours ?? thresholds.cooldownHours, thresholds.cooldownHours);
+    assert.equal(thresholds.historyMultiplier, 5, 'mais frouxo que o padrão 3 vale');
+    assert.equal(thresholds.newAccountThreshold, 2000, 'mais restritivo que o padrão 5.000 vale');
   });
 });
 
-test('FIN-005 flagAnomalousPayment continua detectando desvio histórico e primeiro-pagamento-alto com os limiares resolvidos pelo Motor de Regras', async () => {
+test('antifraude flagAnomalousPayment detecta o primeiro pagamento alto numa conta sem histórico com os limiares dos parâmetros', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await seedFinanceAntifraudRules(tenant, transaction);
     const account = await createActiveBankAccount(transaction, suffix);
 
     const entry = await createEntry(transaction, { amount: 50000, bankAccountId: account.id });
-    const flag = await antifraudService.flagAnomalousPayment(entry, transaction);
-    assert.equal(flag.flagged, true, 'conta nova recebendo pagamento alto continua detectada mesmo com os limiares vindos do Motor de Regras');
-    assert.match(flag.reason, /FIN-005/);
+    // Fechamento do Marco 4 (10/11/2026, §17): o antifraude roda na CRIAÇÃO do pagamento — o lançamento já
+    // nasce retido e chamar a regra de novo não duplica a retenção nem o caso.
+    const flag = { flagged: entry.requiresManualReview, reason: entry.manualReviewReason };
+    assert.equal(flag.flagged, true, 'conta nova recebendo pagamento alto continua detectada');
+    assert.match(flag.reason, /Primeiro pagamento desta conta bancária.*limite do antifraude para conta sem histórico: 5000\.00/);
+    assert.equal((await antifraudService.flagAnomalousPayment(entry, transaction)).alreadyFlagged, true);
 
-    // GAP REAL CORRIGIDO (Caderno §17/§19): flagAnomalousPayment agora também abre um
-    // AnomalyCase HIGH (antes só marcava a flag requires_manual_review, sem registro próprio).
+    // GAP REAL CORRIGIDO (Caderno §17/§19): flagAnomalousPayment também abre o caso próprio (antes só marcava a flag
+    // requires_manual_review). M4-D022 item 3 (DI-DEC007-6): conta nova + pagamento imediato é NEW_ACCOUNT_IMMEDIATE_PAYMENT MEDIUM.
     const { AnomalyCase } = require('../src/models');
-    const cases = await AnomalyCase.findAll({ where: { relatedEntityId: entry.id, companyId: tenant.companyId }, transaction });
-    assert.equal(cases.length, 1);
-    assert.equal(cases[0].status, 'OPEN');
-    assert.equal(cases[0].riskLevel, 'HIGH');
-    assert.equal(cases[0].caseType, 'AMOUNT_OUTLIER');
+    // DEC-007: 50.000 numa conta recém-cadastrada também é "fornecedor novo de alto valor" (30 dias, a partir de R$ 20.000,00) — caso próprio.
+    const cases = await AnomalyCase.findAll({ where: { relatedEntityId: entry.id, companyId: tenant.companyId }, order: [['caseType', 'ASC']], transaction });
+    assert.deepEqual(cases.map((c) => [c.caseType, c.riskLevel, c.status]), [['NEW_ACCOUNT_IMMEDIATE_PAYMENT', 'MEDIUM', 'OPEN'], ['NEW_SUPPLIER_HIGH_VALUE', 'MEDIUM', 'OPEN']]);
   });
 });
 
-test('FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imediato, com o limiar vindo do Motor de Regras', async () => {
+test('FIN-TS-013 cooling period de conta nova continua bloqueando pagamento imediato, com a espera do parâmetro finance.bank_account_cooldown_hours', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await seedFinanceAntifraudRules(tenant, transaction);
     const account = await bankAccountsService.createBankAccount(
       { groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `fin013-${suffix}` },
       tenant.userId,
@@ -494,15 +498,18 @@ test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno e
     const account = await createActiveBankAccount(transaction, suffix);
 
     let lastReversal;
-    for (let i = 0; i < 3; i += 1) {
+    // DEC-007 / M4-D006 item 9 (DI-DEC007-2): 5 estornos na empresa em 30 dias abrem o caso. Valores diferentes: cada lançamento é um pagamento distinto
+    // (mesmo favorecido, valor e competência seria duplicidade suspeita, DI-DEC007-4).
+    for (let i = 0; i < 5; i += 1) {
        
-      const entry = await createEntry(transaction, { bankAccountId: account.id, description: `estorno frequente ${i}` });
+      const entry = await createEntry(transaction, { bankAccountId: account.id, amount: 100 + i, description: `estorno frequente ${i}` });
        
-      lastReversal = await financialEntriesService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction);
+      // M4LR (Caderno §6): lançamento nunca realizado — o estorno anula o previsto (sem ledger), a pedido explícito.
+      lastReversal = await receiptService.reverseFinancialEntry(entry.id, `QA estorno ${i}`, tenant.userId, transaction, { voidNotRealized: true });
     }
 
     const alert = await antifraudService.checkFrequentReversalAlert(tenant.companyId, transaction);
-    assert.ok(alert.count >= 3);
+    assert.ok(alert.count >= 5);
     assert.equal(alert.flagged, true, 'contador simples sinaliza estorno frequente — sem bloquear o estorno em si');
 
     // GAP REAL CORRIGIDO (Caderno §17, "Estorno frequente → Anomaly case"): reverseFinancialEntry
@@ -513,7 +520,7 @@ test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno e
       transaction,
     });
     assert.ok(openCases.length >= 1, 'pelo menos um AnomalyCase de estorno frequente deve existir (aberto no último estorno que cruzou o limiar)');
-    assert.equal(openCases[0].riskLevel, 'HIGH');
+    assert.equal(openCases[0].riskLevel, 'MEDIUM', 'M4-D006 item 9: FREQUENT_REVERSALS MEDIUM');
     void lastReversal;
 
     const reconciliationAlert = await antifraudService.checkRecurringManualReconciliationAlert(tenant.companyId, transaction);
@@ -526,7 +533,7 @@ test('antifraude: estorno frequente abre AnomalyCase (nunca bloqueia o estorno e
 // abriu a ação "Liquidar" direto no detalhe, sem passar por nenhuma fila de aprovação (só
 // bloqueada pelo 2FA). Reproduzido ao vivo antes do fix: settleFinancialEntry liquidava
 // qualquer PAYABLE com bankAccountId sem checar payment_intent/ApprovalRequest nenhuma. Fix:
-// gate em financialEntries.service.js#settleFinancialEntry.
+// gate em receipt.service.js#settleFinancialEntry.
 test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovação prévia (payment_intent OU ApprovalRequest)', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
@@ -535,7 +542,7 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
     // 1) Liquidação direta SEM nenhuma aprovação é recusada.
     const entry1 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-a-${suffix}` });
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry1.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry1.id, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
         return true;
@@ -545,7 +552,7 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
     assert.equal(reread1.status, 'PENDING', 'nada foi liquidado sem aprovação');
 
     // 2) Via payment_intent aprovado + executado: liquida normalmente.
-    const entry2 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-b-${suffix}` });
+    const entry2 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000.01, idempotencyKey: `fin004-b-${suffix}` }); // outro valor: não é duplicidade (DI-DEC007-4)
     const { User: User2 } = require('../src/models');
     const [intentApprover] = await User2.findOrCreate({
       where: { email: `homo-qa-fin004-intent-approver-${suffix}@nayaraone.dev` },
@@ -554,7 +561,7 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
     // F03/A4 (conferência 18/10/2026 + revisão): executar a intenção sem passar pelo banco é
     // baixa manual — o comprovante é anexado ANTES da aprovação da intenção.
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
-    await financialEntriesService.attachSettlementEvidence(entry2.id, manualSettlement, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(entry2.id, manualSettlement, tenant.userId, transaction);
     const intent = await paymentIntentsService.createPaymentIntent(
       { groupId: tenant.groupId, companyId: tenant.companyId, financialEntryId: entry2.id, idempotencyKey: `fin004-intent-${suffix}` },
       tenant.userId,
@@ -562,46 +569,46 @@ test('FIN-004: PAYABLE com conta bancária não pode ser liquidado sem aprovaç�
     );
     await paymentIntentsService.approvePaymentIntent(intent.id, intentApprover.id, transaction);
     const executed = await paymentIntentsService.executePaymentIntent(intent.id, tenant.userId, transaction, { manualSettlement });
-    assert.equal(executed.intent.status, 'EXECUTED');
+    assert.equal(executed.intent.status, 'CONFIRMED');
     assert.equal(executed.entry.status, 'SETTLED');
     const reread2 = await FinancialEntry.findByPk(entry2.id, { transaction });
     assert.equal(reread2.status, 'SETTLED');
 
     // 3) Via ApprovalRequest aprovada (maker-checker genérico) para o mesmo FinancialEntry:
     // liquida normalmente, sem precisar de payment_intent.
-    const entry3 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000, idempotencyKey: `fin004-c-${suffix}` });
+    const entry3 = await createEntry(transaction, { bankAccountId: account.id, amount: 1000.02, idempotencyKey: `fin004-c-${suffix}` });
     const { User } = require('../src/models');
     const [approver] = await User.findOrCreate({
       where: { email: `homo-qa-fin004-approver-${suffix}@nayaraone.dev` },
       defaults: { name: `HOMO QA — Aprovador FIN-004 ${suffix}`, passwordHash: 'x', status: 'ACTIVE' },
     });
     const manualSettlement3 = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
-    await financialEntriesService.attachSettlementEvidence(entry3.id, manualSettlement3, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(entry3.id, manualSettlement3, tenant.userId, transaction);
     const request = await approvalsService.createApprovalRequest(
       { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry3.id, riskLevel: 'LOW' },
       tenant.userId,
       transaction
     );
     await approvalsService.decideApprovalStep(request.id, { decision: 'APPROVED' }, approver.id, transaction);
-    const settled3 = await financialEntriesService.settleFinancialEntry(entry3.id, tenant.userId, transaction, { manualSettlement: manualSettlement3 });
+    const settled3 = await receiptService.settleFinancialEntry(entry3.id, tenant.userId, transaction, { manualSettlement: manualSettlement3 });
     assert.equal(settled3.status, 'SETTLED');
 
     // 4) RECEIVABLE continua liquidando direto, sem exigir nenhuma aprovação (Caderno §10).
     const resultCenter = await createTestResultCenter(tenant, transaction, suffix);
     const receivable = await createEntry(transaction, { nature: 'RECEIVABLE', resultCenterId: resultCenter.id, amount: 500, idempotencyKey: `fin004-d-${suffix}` });
-    const settledReceivable = await financialEntriesService.settleFinancialEntry(receivable.id, tenant.userId, transaction);
+    const settledReceivable = await receiptService.settleFinancialEntry(receivable.id, tenant.userId, transaction);
     assert.equal(settledReceivable.status, 'SETTLED', 'recebimento não exige aprovação prévia, só pagamento exige');
   });
 });
 
 // FIX FIN-TS-007 (auditoria externa Abacus AI, 11/10/2026): "Nenhuma tela de importação
-// OFX/CSV encontrada" — bankTransactions.service.js só tinha criação individual (via
+// OFX/CSV encontrada" — bank-transactions.service.js só tinha criação individual (via
 // API/webhook); importBankStatement é o caminho de LOTE novo.
 test('FIN-TS-007: importação de extrato em lote (CSV) é idempotente — reimportar o MESMO arquivo não duplica', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
-    const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
+    const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
 
     const csv = [
       'externalTransactionId,transactionDate,description,amount',
@@ -635,7 +642,7 @@ test('FIN-TS-007: importação de extrato recusa CSV com cabeçalho errado ou li
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
-    const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
+    const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
 
     await assert.rejects(
       () => bankTransactionsService.importBankStatement(
@@ -663,7 +670,7 @@ test('FIN-TS-007: importação de extrato recusa CSV com cabeçalho errado ou li
 // FIN-004(c) — verificação cética pós-correção (11/10/2026): o fix original só provou a parte
 // "aprovação prévia obrigatória" (settleFinancialEntry recusa sem payment_intent/ApprovalRequest
 // aprovado). As partes "snapshot/hash" e "invalidação ao trocar favorecido" já eram cobertas por
-// mecanismos existentes (computeSnapshotHash em paymentIntents.service.js; isBankAccountRedirect
+// mecanismos existentes (computeSnapshotHash em domain/payment-intent.js; isBankAccountRedirect
 // em updateFinancialEntry marca requiresManualReview=true), mas NENHUM teste provava o cenário
 // COMBINADO: ApprovalRequest aprovada -> favorecido (bankAccountId) trocado depois -> tentativa
 // de liquidação direta tem que ser bloqueada mesmo com a aprovação antiga ainda "válida" no
@@ -692,7 +699,7 @@ test('FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequ
     await financialEntriesService.updateFinancialEntry(entry.id, { bankAccountId: bankB.id }, tenant.userId, transaction);
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW'); return true; }
     );
 
@@ -707,7 +714,7 @@ test('FIN-004(c): trocar o favorecido (bankAccountId) DEPOIS de uma ApprovalRequ
 // de concorrência REAL (duas conexões/transações distintas, não duas chamadas sequenciais na
 // mesma transação). Concorrência real precisa de transações COMMITADAS — usa o mesmo padrão
 // `withCommitted` já usado em ADV-F21 (test/adversarial.finance.test.js).
-test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra é rejeitada (idempotente, não duplica ledger)', async () => {
+test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma vence, a outra devolve o resultado existente (idempotente, não duplica ledger)', async () => {
   const suffix = uniqueSuffix();
   async function withCommitted(fn) {
     const t = await sequelize.transaction();
@@ -744,7 +751,7 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
       entryId = entry.id;
       // F03/A4: execução manual exige comprovante anexado ANTES da aprovação da intenção.
       manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
-      await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, t);
+      await settlementEvidence.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, t);
       const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, maker.id, t);
       intentId = intent.id;
       await paymentIntentsService.approvePaymentIntent(intent.id, approver.id, t);
@@ -756,15 +763,14 @@ test('FIN-TS-002: duas execuções CONCORRENTES da mesma payment intent — uma 
       withCommitted((t) => paymentIntentsService.executePaymentIntent(intentId, approver.id, t, { manualSettlement })),
     ]);
 
-    const sucessos = resultados.filter((r) => r.status === 'fulfilled');
-    const falhas = resultados.filter((r) => r.status === 'rejected');
-    assert.equal(sucessos.length, 1, 'exatamente UMA das duas execuções concorrentes deve vencer');
-    assert.equal(falhas.length, 1, 'a outra deve ser rejeitada (não executar duas vezes)');
-    assert.equal(
-      falhas[0].reason.code,
-      'FINANCE_PAYMENT_INTENT_NOT_APPROVED',
-      'a perdedora falha porque, quando ela consegue o lock, a intent já não está mais APPROVED (a vencedora já mudou pra EXECUTED)'
-    );
+    // Guia M4 §5 (`if (existing) return existing`) e FIN-TS-002 "1 vence; outro idempotente" (M4PG): a perdedora espera o lock
+    // e, quando o consegue, a intenção já está CONFIRMED — devolve o resultado existente (replay), sem segunda execução.
+    assert.equal(resultados.filter((r) => r.status === 'rejected').length, 0, JSON.stringify(resultados.map((r) => r.reason && r.reason.code)));
+    const vencedoras = resultados.filter((r) => !r.value.replayed);
+    const replays = resultados.filter((r) => r.value.replayed === true);
+    assert.equal(vencedoras.length, 1, 'exatamente UMA das duas execuções concorrentes executa');
+    assert.equal(replays.length, 1, 'a outra devolve o resultado existente (idempotente)');
+    assert.equal(replays[0].value.intent.status, 'CONFIRMED');
 
     await withCommitted(async (t) => {
       const ledgerCount = await FinancialEntry.count({ where: { id: entryId, status: 'SETTLED' }, transaction: t });
@@ -833,15 +839,18 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
       { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: `M4-20b aluguel ${suffix}`, resultCenterId: resultCenter.id },
       tenant.userId, transaction
     );
-    await financialEntriesService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
     await ownerRepassesService.createOwnerRepasse(
       { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: ownerAccount.id, sourceEntryIds: [recebimento.id], grossAmount: 500, deductionsAmount: 50, deductionsReason: 'Taxa de administração', referenceMonth: '2026-10' },
       tenant.userId, transaction
     );
 
-    // Anomalia aberta: pagamento alto numa conta sem histórico.
-    await seedFinanceAntifraudRules(tenant, transaction);
+    // Anomalia aberta de risco alto: valor 90x a mediana de 5 pagamentos já liquidados à mesma conta (DEC-007: a partir de 10x é HIGH e bloqueia).
     const anomalyAccount = await createActiveBankAccount(transaction, `m420bx-${suffix.slice(-8)}`);
+    const historyCc = await createTestCostCenter(tenant, transaction);
+    for (let i = 0; i < 5; i += 1) {
+      await FinancialEntry.create({ groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: anomalyAccount.id, costCenterId: historyCc.id, entryType: 'DEBIT', nature: 'PAYABLE', amount: 1000, description: `M4-20b histórico ${i} ${suffix}`, status: 'SETTLED', settledAt: new Date(), competenceMonth: new Date().toISOString().slice(0, 7) }, { transaction });
+    }
     const anomalyEntry = await createEntry(transaction, { amount: 90000, bankAccountId: anomalyAccount.id });
     await antifraudService.flagAnomalousPayment(anomalyEntry, transaction);
 
@@ -920,7 +929,7 @@ test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de tercei
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(caucao.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(caucao.id, tenant.userId, transaction);
 
     // Margem por setor: um centro de resultado com receita 500 e custo 120 -> margem 380.
     const resultCenter = await createTestResultCenter(tenant, transaction);
@@ -929,7 +938,7 @@ test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de tercei
       tenant.userId,
       transaction
     );
-    await financialEntriesService.settleFinancialEntry(receita.id, tenant.userId, transaction);
+    await receiptService.settleFinancialEntry(receita.id, tenant.userId, transaction);
     const custoCostCenter = await createTestCostCenter(tenant, transaction);
     const custo = await financialEntriesService.createFinancialEntry(
       { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 120, costCenterId: custoCostCenter.id, resultCenterId: resultCenter.id, description: `M4-20c custo ${suffix}` },
@@ -946,7 +955,12 @@ test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de tercei
     const freeDelta = Math.round((after.freeCash.value - before.freeCash.value) * 100) / 100;
     assert.equal(grossDelta, 700, 'extrato: +1000 -300 = +700 de saldo bruto');
     assert.equal(heldDelta, 400, 'caução SETTLED recebida fica retida como dinheiro de terceiro');
-    assert.equal(freeDelta, 300, 'caixa livre = bruto (700) - retido de terceiro (400)');
+    // Caderno §19 "Caixa disponível — saldos conciliados próprios" (M4LR, DI-M4LR-7): o extrato importado sem conciliação não é
+    // caixa disponível, e o terceiro retido só sai do caixa na parte que está no conciliado. O cenário conciliado está em
+    // test/m4lr.relatorioRecebivelParcial.test.js (sonda P12).
+    const conciliatedDelta = Math.round((after.freeCash.conciliatedBankBalance - before.freeCash.conciliatedBankBalance) * 100) / 100;
+    assert.equal(conciliatedDelta, 0, 'nada conciliado neste cenário');
+    assert.equal(freeDelta, 0, 'caixa disponível = conciliado próprio (nada conciliado)');
 
     const sector = after.marginBySector.find((s) => s.resultCenterId === resultCenter.id);
     assert.ok(sector, 'centro de resultado aparece em marginBySector');

@@ -1,0 +1,104 @@
+# estágio 5: finance_integration_tests
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-5-0.xml test/financeE2E.flow.test.js
+(node:25623) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ Financeiro E2E: lançamento -> intenção -> callback sandbox HMAC -> ledger -> extrato -> conciliação -> relatório (322.808458ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1189.476334
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-5-1.xml test/marco4.httpRoutes.test.js
+✔ Marco 4 ponta a ponta via HTTP real: plano de contas -> centros -> lançamento -> listagem -> orçamento -> relatório (549.406ms)
+✔ FIN-TS-017 via HTTP: cancelar comissão exige motivo e gera ajuste auditável (76.745833ms)
+✔ Anomaly cases via HTTP: listar e resolver um caso real (31.022792ms)
+✔ FIN-TS-011: POST /finance/period-closures/reopen responde 403 para usuário sem finance:approve (3.991ms)
+✔ GAP fechado via HTTP: fila de pendências de classificação é listável e resolvível pela rota (27.849083ms)
+✔ GAP fechado via HTTP: autoReconcileSuggestion concilia sozinho um match EXATO, pela rota (64.535291ms)
+✔ GAP fechado via HTTP: histórico de ajustes de comissão é consultável pela rota (62.989625ms)
+✔ GAP fechado via HTTP: composição do repasse de proprietário é consultável pela rota (Caderno §12) (36.903042ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2893.185083
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-5-2.xml test/m4.reconfBrowser.errors.test.js test/m4.reconfBrowser.finance.test.js test/m4.reconfBrowser.group.test.js test/m4.reconfBrowser.statement.test.js test/nayaraConferencia1810.finance.test.js test/nayaraExternalAuditMatrixM4Group1.test.js test/nayaraExternalAuditMatrixM4Group2.test.js test/marco45.auditTrailBeforeAfter.test.js
+{"level":50,"time":"2026-11-11T00:25:44.462Z","service":"nayaraone-api","correlationId":"t","method":"POST","path":"/x","code":"FILES_CRYPTO_CONFIG_MISSING","statusCode":503,"msg":"[AppError] FILES_CRYPTO_CONFIG_MISSING: Variável de ambiente obrigatória ausente: FILES_ENCRYPTION_KEY."}
+{"level":50,"time":"2026-11-11T00:25:44.465Z","service":"nayaraone-api","correlationId":"t","method":"POST","path":"/x","code":"MFA_CRYPTO_CONFIG_MISSING","statusCode":503,"msg":"[AppError] MFA_CRYPTO_CONFIG_MISSING: Variável de ambiente obrigatória ausente: MFA_ENCRYPTION_KEY."}
+{"level":50,"time":"2026-11-11T00:25:44.465Z","service":"nayaraone-api","correlationId":"t","method":"POST","path":"/x","code":"JWT_CONFIG_MISSING","statusCode":503,"msg":"[AppError] JWT_CONFIG_MISSING: Variável de ambiente obrigatória ausente: JWT_ACCESS_SECRET."}
+{"level":50,"time":"2026-11-11T00:25:44.465Z","service":"nayaraone-api","correlationId":"t","method":"POST","path":"/x","code":"PII_HASH_CONFIG_MISSING","statusCode":503,"msg":"[AppError] PII_HASH_CONFIG_MISSING: Variável de ambiente obrigatória ausente: PII_HASH_SECRET."}
+{"level":50,"time":"2026-11-11T00:25:44.465Z","service":"nayaraone-api","correlationId":"t","method":"POST","path":"/x","code":"FILES_CRYPTO_CONFIG_MISSING","statusCode":503,"msg":"[AppError] FILES_CRYPTO_CONFIG_MISSING: Variável de ambiente obrigatória ausente: FILES_ENCRYPTION_KEY."}
+✔ F-01: variável de ambiente ausente vira mensagem genérica em português, 503, sem o nome da variável (5.422542ms)
+✔ F-01 (controle): erro operacional comum continua com a própria mensagem e código (0.280042ms)
+✔ F-05: trocar a conta do favorecido cancela a intenção aprovada, abre caso de revisão e libera nova intenção (118.952208ms)
+✔ F-05 (controle): primeira definição da conta e edição sem mudar o retrato não invalidam nem abrem caso (42.496875ms)
+✔ F-08: dedução sem motivo, valor acima do elegível e repasse duplicado voltam com mensagem clara em português e código estável (54.857542ms)
+✔ Relatório de saúde: "em aberto (previsto)" e "retido em caixa (realizado)" são medidas rotuladas e distintas (7.553042ms)
+✔ POST /finance/reconciliations/group: sem finance:reconcile é 403 (382.023875ms)
+✔ POST /finance/reconciliations/group: dois lançamentos de R$ 50 conciliam com uma transação de R$ 100 (201) (53.593167ms)
+✔ POST /finance/reconciliations/group: soma que não bate é 409 FINANCE_RECONCILIATION_AMOUNT_MISMATCH e nada é gravado (22.336834ms)
+✔ A1: valor "abc" recusa o lote inteiro com o número da linha e não grava nenhuma linha (66.392209ms)
+✔ A1: NaN, Infinity, vazio e "1.234" (ambíguo) são recusados (9.576ms)
+✔ A1: "1.234,56" sem aspas num CSV de vírgula é recusado (não vira 1,23); entre aspas ou com ponto e vírgula vale 1234.56 (26.814833ms)
+✔ A1: reimportar o mesmo arquivo continua idempotente (20.131375ms)
+✔ A1: o banco recusa valor NaN em finance.bank_transactions (CHECK da migration 600) (14.638792ms)
+✔ F-09: data de dia do CSV (2026-10-20 e 20/10/2026) fica no dia 20 no fuso de São Paulo (18.248291ms)
+✔ regra de comissão: publicar grava antes (versão anterior) e depois; histórico lista as versões (121.184958ms)
+✔ exclusões (centro de custo, centro de resultado, conta bancária) gravam antes e depois (39.772041ms)
+✔ conciliação e exportação gravam antes e depois; motivo com valor em reais (57.362167ms)
+(node:25701) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ F2: "Consultar banco" acha a intenção mesmo sem roteamento gravado e muda a situação (83.385667ms)
+✔ F1: encerramento sem pendência grava antes/depois; checagem devolve lista (25.193416ms)
+✔ F8: competência e valores em formato brasileiro nos textos gerados (0.482667ms)
+✔ varredura do código: toda auditoria dos Marcos 4/5 grava depois; não-criação grava antes e depois (18.53825ms)
+✔ F02-1: sem as conferências de caixa de terceiros e de comissões/repasses, o pedido de fechamento é bloqueado (383.424125ms)
+✔ F02-2: conta bancária movimentada no mês sem extrato importado bloqueia o fechamento (72.305375ms)
+✔ F02-3: transação de extrato do mês sem conciliação bloqueia o fechamento (35.392083ms)
+✔ F02-4: excedente aguardando classificação no mês bloqueia o fechamento (198.163041ms)
+✔ F02-5: conferência de caixa de terceiros fica desatualizada se o movimento de terceiros muda depois dela (101.500916ms)
+✔ F02-6: controle positivo — com tudo conferido o período vai a REVIEW, fecha em CLOSED e grava snapshot íntegro (106.897ms)
+✔ F02-7: o snapshot do fechamento é imutável no banco (UPDATE e DELETE recusados) (39.444417ms)
+✔ F02-8 (HTTP): a rota de fechamento bloqueia sem pré-condições e expõe o checklist — sem gravar fechamento (162.660834ms)
+✔ F03-1: baixa direta de pagamento bancário aprovado, sem comprovante, é recusada e não liquida nada (43.905041ms)
+(node:25713) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ F03-2: comprovante inexistente ou motivo vazio não servem como exceção (45.189166ms)
+✔ F03-3: exceção formal — baixa manual com comprovante, motivo e aprovação fica marcada como manual, nunca como confirmação bancária (50.148375ms)
+✔ F03-4: baixa manual continua exigindo a aprovação prévia — comprovante não substitui o maker-checker (26.234334ms)
+✔ F03-5: executar manualmente uma intenção aprovada sem passar pelo banco também exige comprovante (100.535625ms)
+✔ F03-6: caminho do banco — só a confirmação efetiva liquida, e fica marcada como BANK_CONFIRMED (150.70725ms)
+✔ F03-7: recebimento sem conta segue direto; pagamento sem conta exige aprovação e comprovante (59.451458ms)
+✔ F03-8 (HTTP): POST /finance/entries/:id/settle recusa sem comprovante e aceita a exceção formal com comprovante (180.9905ms)
+✔ F04-1: devolução e compensação ligadas à origem, contrato e titular, com saldo e trilha (101.382834ms)
+✔ F04-1b: o vínculo com a origem e o titular são imutáveis no BANCO — UPDATE cru é recusado pelo trigger (53.200292ms)
+✔ F04-2: negativos — sem origem, origem inexistente, contrato divergente, titular divergente e valor acima do saldo (34.344041ms)
+✔ F04-3: origem que não é caução recebida (não recebida, ou sem contrato/titular) não pode ser devolvida (27.369ms)
+✔ F04-4: no recebimento, o titular precisa ser parte do contrato (8.041625ms)
+✔ F04-5 (HTTP): POST /finance/entries recusa devolução de caução sem origem e aceita a vinculada (57.892083ms)
+✔ Repasses §12: GAP CORRIGIDO — um segundo repasse NÃO pode reutilizar o saldo já consumido pelo primeiro repasse sobre o mesmo recebimento (110.784958ms)
+✔ Repasses §12: GAP CORRIGIDO — repasse parcial consome só a fração usada, deixando o restante disponível para um segundo repasse legítimo (42.966ms)
+✔ Repasses §12: um repasse CANCELLED devolve o saldo do recebimento para um novo repasse legítimo (39.379542ms)
+(node:25767) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ Caução §13: receber caução vinculada ao contrato, excluída do caixa livre, e devolver com referência rastreável ao mesmo contrato (108.634625ms)
+✔ Caução §13: devolução sem vínculo com a caução recebida, ou com contrato diferente, é recusada (18.283166ms)
+✔ Plano de contas (HTTP real): usuário SEM finance:create recebe 403 ao tentar criar conta contábil (382.602208ms)
+✔ Plano de contas (HTTP real): usuário COM finance:chartOfAccounts consegue criar conta contábil e ela aparece na listagem (51.039167ms)
+✔ Ledger append-only (SQL cru, banco real): DELETE direto em finance.financial_entries é bloqueado pelo trigger de banco, não pelo service (18.419875ms)
+✔ Ledger append-only (SQL cru, banco real): UPDATE direto mudando "amount" é bloqueado pelo trigger de banco (17.98575ms)
+ℹ tests 53
+ℹ suites 0
+ℹ pass 53
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12082.200125
+# estágio 5: finance_integration_tests => VERDE

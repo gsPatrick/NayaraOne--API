@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { Proposal, Opportunity, Property, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { withScope } = require('./carteira/carteira.scope');
 const { publishDomainEvent } = require('../../engines/events/outbox');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
@@ -80,11 +81,18 @@ async function createProposal(payload, actorUserId, transaction) {
   const opportunity = await Opportunity.findByPk(opportunityId, { transaction });
   if (!opportunity) throw AppError.notFound('Oportunidade não encontrada.', 'OPPORTUNITY_NOT_FOUND');
 
-  const resolvedPropertyId = propertyId !== undefined ? propertyId : opportunity.propertyId;
-  if (resolvedPropertyId) {
-    const property = await Property.findByPk(resolvedPropertyId, { transaction });
-    if (!property) throw AppError.notFound('Imóvel da proposta não encontrado.', 'PROPERTY_NOT_FOUND');
+  // M3-13 (contrato: "propostas ligadas à oportunidade e ao imóvel"): proposta sem imóvel é recusada. O imóvel vem do pedido
+  // ou, na falta dele, do imóvel de interesse da oportunidade.
+  const resolvedPropertyId = propertyId || opportunity.propertyId || null;
+  if (!resolvedPropertyId) {
+    throw AppError.unprocessable(
+      'A proposta precisa estar ligada a um imóvel: informe "propertyId" ou defina o imóvel de interesse da oportunidade.',
+      'PROPOSAL_PROPERTY_REQUIRED',
+      { opportunityId }
+    );
   }
+  const property = await Property.findByPk(resolvedPropertyId, { transaction });
+  if (!property) throw AppError.notFound('Imóvel da proposta não encontrado.', 'PROPERTY_NOT_FOUND');
 
   const resolvedPersonId = proposedByPersonId !== undefined ? proposedByPersonId : opportunity.personId;
   if (resolvedPersonId) {
@@ -97,7 +105,7 @@ async function createProposal(payload, actorUserId, transaction) {
   const previous = await Proposal.findOne({
     where: {
       opportunityId,
-      propertyId: resolvedPropertyId || null,
+      propertyId: resolvedPropertyId,
     },
     order: [['version_number', 'DESC']],
     transaction,
@@ -109,7 +117,7 @@ async function createProposal(payload, actorUserId, transaction) {
       groupId,
       companyId,
       opportunityId,
-      propertyId: resolvedPropertyId || null,
+      propertyId: resolvedPropertyId,
       proposedByPersonId: resolvedPersonId || null,
       value,
       currency: currency ? String(currency).toUpperCase() : 'BRL',
@@ -168,7 +176,7 @@ async function listProposals(transaction, filters = {}) {
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.statusIn) where.status = { [Op.in]: filters.statusIn.map((s) => String(s).toUpperCase()) };
   return Proposal.findAll({
-    where,
+    where: withScope(where, 'proposal', filters.carteira), // CRM-TS-012: só a carteira do corretor de escopo próprio
     order: [
       ['opportunity_id', 'ASC'],
       ['version_number', 'DESC'],

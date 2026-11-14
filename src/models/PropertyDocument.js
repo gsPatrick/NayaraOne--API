@@ -59,6 +59,12 @@ module.exports = (sequelize) => {
         field: 'status',
         comment: 'REGULARIZADO|EM_ANALISE|PENDENTE',
       },
+      // Arquivo real (documento do imóvel) em people.files, conferido pelo antivírus no vínculo (migration 20260101010310).
+      fileId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'file_id',
+      },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

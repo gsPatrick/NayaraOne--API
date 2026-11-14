@@ -1,8 +1,8 @@
 'use strict';
 
 // Os números financeiros vêm do relatório do sistema (read model determinístico); a NAY nunca calcula (M9-D026).
-const { getWeeklyHealthReport } = require('../../finance/financialHealthReport.service');
-const paymentIntents = require('../../finance/paymentIntents.service');
+const { getWeeklyHealthReport } = require('../../../modules/finance/application/services/finance-health.service');
+const paymentIntents = require('../../../modules/finance/application/services/payment.service');
 const { toPlain } = require('./plain');
 
 const ZERO = { count: 0, total: 0 };

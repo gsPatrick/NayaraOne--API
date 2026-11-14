@@ -2,7 +2,7 @@
 
 Gerada do código por `node scripts/gerarMatrizPermissoes.js --md`. Não editar à mão.
 
-Rotas com permissão exigida: 818. Rotas só com login ou públicas: 42.
+Rotas com permissão exigida: 902. Rotas só com login ou públicas: 44.
 
 Regras gerais: sem token a resposta é 401; com token sem a permissão indicada a resposta é 403 (código `PERMISSION_DENIED`, campo `required`).
 
@@ -162,6 +162,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/billing/schedules` | `billing:read` | não |
 | `POST` | `/api/v1/billing/schedules` | `billing:create` | não |
 | `POST` | `/api/v1/billing/utility-accounts` | `billing:create` | não |
+| `POST` | `/api/v1/billing/utility-cycles/:id/waive` | `billing:approve` | não |
+| `GET` | `/api/v1/billing/utility-obligations/:id/cycles` | `billing:read` | não |
 | `POST` | `/api/v1/billing/utility-obligations/:id/ownership-transfer` | `billing:update` | não |
 | `POST` | `/api/v1/billing/utility-obligations/:id/payments` | `billing:update` | não |
 | `GET` | `/api/v1/billing/utility-obligations/:id` | `billing:read` | não |
@@ -181,12 +183,16 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/companies/:id` | `companies:update` | não |
 | `GET` | `/api/v1/companies` | `companies:read` | não |
 | `POST` | `/api/v1/companies` | `companies:create` | não |
-| `POST` | `/api/v1/construction/approval-thresholds` | `construction:update` | não |
+| `GET` | `/api/v1/construction/approval-thresholds` | `construction:read` | não |
+| `POST` | `/api/v1/construction/approval-thresholds` | `construction:approval_threshold:manage` | sim |
 | `DELETE` | `/api/v1/construction/budget-lines/:id` | `construction:update` | não |
 | `PATCH` | `/api/v1/construction/budget-lines/:id` | `construction:update` | não |
 | `POST` | `/api/v1/construction/budgets/:id/approve` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/budgets/:id` | `construction:read` | não |
 | `POST` | `/api/v1/construction/change-orders/:id/decide` | `construction:approve` | não |
+| `PATCH` | `/api/v1/construction/checklist-templates/:id` | `construction:approve` | não |
+| `GET` | `/api/v1/construction/checklist-templates` | `construction:read` | não |
+| `POST` | `/api/v1/construction/checklist-templates` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/daily-reports/:id/history` | `construction:read` | não |
 | `GET` | `/api/v1/construction/daily-reports/:id/materials` | `construction:read` | não |
 | `GET` | `/api/v1/construction/daily-reports/:id/workers` | `construction:read` | não |
@@ -216,14 +222,20 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/construction/measurements/:id/review` | `construction:update` | não |
 | `POST` | `/api/v1/construction/measurements/:id/revise` | `construction:create` | não |
 | `POST` | `/api/v1/construction/measurements/:id/submit` | `construction:create` | não |
+| `GET` | `/api/v1/construction/members` | `construction:read` | não |
 | `POST` | `/api/v1/construction/nonconformities/:id/close` | `construction:update` | não |
 | `GET` | `/api/v1/construction/nonconformities/:id` | `construction:read` | não |
+| `PATCH` | `/api/v1/construction/project-types/:id` | `construction:approve` | não |
+| `GET` | `/api/v1/construction/project-types` | `construction:read` | não |
+| `POST` | `/api/v1/construction/project-types` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/projects/:id/budget-lines` | `construction:read` | não |
 | `POST` | `/api/v1/construction/projects/:id/budget-lines` | `construction:create` | não |
+| `GET` | `/api/v1/construction/projects/:id/budget-revisions` | `construction:read` | não |
 | `GET` | `/api/v1/construction/projects/:id/budgets` | `construction:read` | não |
 | `POST` | `/api/v1/construction/projects/:id/budgets` | `construction:create` | não |
 | `GET` | `/api/v1/construction/projects/:id/change-orders` | `construction:read` | não |
 | `POST` | `/api/v1/construction/projects/:id/change-orders` | `construction:create` | não |
+| `POST` | `/api/v1/construction/projects/:id/checklist/apply` | `construction:update` | não |
 | `POST` | `/api/v1/construction/projects/:id/close-warranty` | `construction:approve` | não |
 | `POST` | `/api/v1/construction/projects/:id/daily-logs` | `construction:create` | não |
 | `GET` | `/api/v1/construction/projects/:id/daily-reports` | `construction:read` | não |
@@ -253,6 +265,10 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/construction/projects` | `construction:create` | não |
 | `POST` | `/api/v1/construction/quality-items/:id/check` | `construction:update` | não |
 | `DELETE` | `/api/v1/construction/quality-items/:id` | `construction:update` | não |
+| `GET` | `/api/v1/construction/settings/cost-basis` | `construction:read` | não |
+| `PUT` | `/api/v1/construction/settings/cost-basis` | `construction:approve` | não |
+| `GET` | `/api/v1/construction/settings/parameters` | `construction:read` | não |
+| `PUT` | `/api/v1/construction/settings/parameters` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/settings/sla-rule` | `construction:read` | não |
 | `POST` | `/api/v1/construction/settings/sla-rule` | `construction:approve` | não |
 | `GET` | `/api/v1/construction/stages/:id/dependencies` | `construction:read` | não |
@@ -262,17 +278,34 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/construction/stages/:id` | `construction:read` | não |
 | `PATCH` | `/api/v1/construction/stages/:id` | `construction:update` | não |
 | `POST` | `/api/v1/construction/warranty-cases` | `construction:create` | não |
+| `POST` | `/api/v1/contract-versions/:id/approve` | `contracts.version.approve` | não |
+| `POST` | `/api/v1/contract-versions/:id/send-signature` | `legal:sign` | não |
+| `POST` | `/api/v1/contracts/:contractId/guarantees` | `legal:create` | não |
+| `POST` | `/api/v1/contracts/:id/key-delivery` | `legal:create`, `lease.keys.deliver` | não |
+| `POST` | `/api/v1/contracts/:id/versions` | `legal:create` | não |
+| `POST` | `/api/v1/contracts` | `legal:create` | não |
 | `GET` | `/api/v1/crm/dashboard` | `crm:dashboard:read` | não |
 | `PATCH` | `/api/v1/crm/feedback-cases/:id/escalate` | `crm:feedback:update` | não |
 | `PATCH` | `/api/v1/crm/feedback-cases/:id/resolve` | `crm:feedback:update` | não |
+| `DELETE` | `/api/v1/crm/feedback-cases/:id` | `crm:feedback:update` | não |
 | `GET` | `/api/v1/crm/feedback-cases/:id` | `crm:feedback:read` | não |
 | `GET` | `/api/v1/crm/feedback-cases` | `crm:feedback:read` | não |
 | `POST` | `/api/v1/crm/feedback-cases` | `crm:feedback:create` | não |
+| `DELETE` | `/api/v1/crm/occurrences/:id` | `crm:feedback:update` | não |
+| `POST` | `/api/v1/crm/occurrences` | `crm:feedback:create` | não |
+| `POST` | `/api/v1/crm/opportunities/:id/interactions` | `crm:messages:create` | não |
+| `POST` | `/api/v1/crm/opportunities/:id/lost` | `crm:opportunities:update` | não |
+| `POST` | `/api/v1/crm/opportunities/:id/visits` | `crm:visits:create` | não |
 | `GET` | `/api/v1/crm/opportunities/export` | `crm:opportunities:export` | não |
+| `POST` | `/api/v1/crm/opportunities/reassign` | `crm:opportunities:reassign` | não |
+| `POST` | `/api/v1/crm/opportunities` | `crm:opportunities:create` | não |
+| `GET` | `/api/v1/crm/outcome-reasons` | `crm:opportunities:read` | não |
 | `PATCH` | `/api/v1/crm/proposals/:id/status` | `crm:proposals:update` | não |
 | `GET` | `/api/v1/crm/proposals/:id` | `crm:proposals:read` | não |
 | `GET` | `/api/v1/crm/proposals` | `crm:proposals:read` | não |
 | `POST` | `/api/v1/crm/proposals` | `crm:proposals:create` | não |
+| `GET` | `/api/v1/crm/radars/:id/matches` | `radar:read` | não |
+| `POST` | `/api/v1/crm/radars` | `radar:create` | não |
 | `GET` | `/api/v1/data-classification/legacy-review` | `governance:data-quality:read` | não |
 | `GET` | `/api/v1/data-classification` | `governance:data-quality:read` | não |
 | `PUT` | `/api/v1/data-classification` | `governance:classification:manage` | não |
@@ -311,6 +344,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PUT` | `/api/v1/files/:id/classification` | `governance:classification:manage` | não |
 | `POST` | `/api/v1/finance/anomaly-cases/:id/resolve` | `finance:update` | não |
 | `GET` | `/api/v1/finance/anomaly-cases` | `finance:read` | não |
+| `GET` | `/api/v1/finance/antifraud/parameters` | `settings:read` | não |
 | `POST` | `/api/v1/finance/approval-requests/:id/decide` | `finance:approve` | não |
 | `GET` | `/api/v1/finance/approval-requests` | `finance:read` | não |
 | `POST` | `/api/v1/finance/approval-requests` | `finance:create` | não |
@@ -349,7 +383,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/cost-centers` | `finance:create` | não |
 | `POST` | `/api/v1/finance/entries/:id/clear-manual-review` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/entries/:id/impact` | `finance:settle` | não |
-| `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:settle` | não |
+| `POST` | `/api/v1/finance/entries/:id/reverse` | `finance:reverse` | sim |
+| `POST` | `/api/v1/finance/entries/:id/settle-complement` | `finance:settle` | sim |
 | `POST` | `/api/v1/finance/entries/:id/settle-partial` | `finance:settle` | sim |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence/detach` | `finance:settle` | não |
 | `POST` | `/api/v1/finance/entries/:id/settlement-evidence` | `finance:settle` | não |
@@ -361,6 +396,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/entries` | `finance:read` | não |
 | `POST` | `/api/v1/finance/entries` | `finance:create` | não |
 | `GET` | `/api/v1/finance/exports/entries` | `finance:read` | não |
+| `GET` | `/api/v1/finance/health` | `finance:read` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/approve` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/reconcile` | `finance:reconcile` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers/:id/reject` | `finance:approve` | não |
@@ -368,6 +404,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/finance/intercompany-transfers/destination-companies` | `finance:read` | não |
 | `GET` | `/api/v1/finance/intercompany-transfers` | `finance:read` | não |
 | `POST` | `/api/v1/finance/intercompany-transfers` | `finance:settle` | sim |
+| `POST` | `/api/v1/finance/ledger/:id/reverse` | `finance:reverse` | sim |
 | `GET` | `/api/v1/finance/nay/insights` | `finance:read` | não |
 | `POST` | `/api/v1/finance/owner-repasses/:id/approve` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/owner-repasses/:id/composition` | `finance:read` | não |
@@ -384,13 +421,23 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/finance/payment-intents/:id/submit-to-bank` | `finance:settle` | sim |
 | `GET` | `/api/v1/finance/payment-intents` | `finance:read` | não |
 | `POST` | `/api/v1/finance/payment-intents` | `finance:create` | não |
+| `POST` | `/api/v1/finance/payments/:id/approve` | `finance:approve` | não |
+| `POST` | `/api/v1/finance/payments/:id/execute` | `finance:settle` | sim |
+| `POST` | `/api/v1/finance/payments/prepare` | `finance:create` | não |
 | `GET` | `/api/v1/finance/period-closures/:referenceMonth/preconditions` | `finance:read` | não |
 | `POST` | `/api/v1/finance/period-closures/approve` | `finance:approve` | sim |
 | `POST` | `/api/v1/finance/period-closures/checks` | `finance:settle` | não |
-| `POST` | `/api/v1/finance/period-closures/reopen` | `finance:approve` | sim |
+| `POST` | `/api/v1/finance/period-closures/reopen-requests/:id/approve` | `finance:periodReopen` | sim |
+| `POST` | `/api/v1/finance/period-closures/reopen-requests/:id/reject` | `finance:periodReopen` | sim |
+| `GET` | `/api/v1/finance/period-closures/reopen-requests` | `finance:read` | não |
+| `POST` | `/api/v1/finance/period-closures/reopen` | `finance:periodReopen` | sim |
 | `POST` | `/api/v1/finance/period-closures/return-to-open` | `finance:approve` | sim |
 | `GET` | `/api/v1/finance/period-closures` | `finance:read` | não |
 | `POST` | `/api/v1/finance/period-closures` | `finance:settle` | não |
+| `POST` | `/api/v1/finance/periods/:month/close` | `finance:settle` | não |
+| `POST` | `/api/v1/finance/reconciliation/:id/confirm` | `finance:reconcile` | não |
+| `GET` | `/api/v1/finance/reconciliation/pending` | `finance:read` | não |
+| `GET` | `/api/v1/finance/reconciliation/policy` | `finance:read` | não |
 | `POST` | `/api/v1/finance/reconciliations/group` | `finance:reconcile` | não |
 | `GET` | `/api/v1/finance/reconciliations` | `finance:read` | não |
 | `POST` | `/api/v1/finance/reconciliations` | `finance:reconcile` | não |
@@ -400,6 +447,9 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/finance/result-centers/:id` | `finance:update` | não |
 | `GET` | `/api/v1/finance/result-centers` | `finance:read` | não |
 | `POST` | `/api/v1/finance/result-centers` | `finance:create` | não |
+| `POST` | `/api/v1/finance/reversal-cases/:id/approve` | `finance:approve` | sim |
+| `POST` | `/api/v1/finance/reversal-cases/:id/reject` | `finance:approve` | sim |
+| `GET` | `/api/v1/finance/reversal-cases` | `finance:read` | não |
 | `GET` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:read` | não |
 | `POST` | `/api/v1/financing-cases/:id/appraisals` | `correspondent:create` | não |
 | `POST` | `/api/v1/financing-cases/:id/cancel` | `correspondent:create` | não |
@@ -472,6 +522,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/groups/:id` | `groups:update` | não |
 | `GET` | `/api/v1/groups` | `groups:read` | não |
 | `POST` | `/api/v1/groups` | `groups:create` | não |
+| `POST` | `/api/v1/inspections/:id/sign` | `legal:update` | sim |
+| `POST` | `/api/v1/inspections` | `legal:create` | não |
 | `POST` | `/api/v1/integration-errors/:id/resolve` | `correspondent:create` | não |
 | `GET` | `/api/v1/integration-errors` | `correspondent:read` | não |
 | `POST` | `/api/v1/inventory/adjustment-proposals/:id/decide` | `inventory:approve` | não |
@@ -525,11 +577,19 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/amendments/:id/sign` | `legal:update` | não |
 | `GET` | `/api/v1/legal/amendments/:id` | `legal:read` | não |
 | `POST` | `/api/v1/legal/cases/:id/deadlines` | `legal:create` | não |
+| `GET` | `/api/v1/legal/cases/:id/documents` | `legal:read` | não |
+| `POST` | `/api/v1/legal/cases/:id/documents` | `legal:create` | não |
+| `POST` | `/api/v1/legal/cases/:id/evidence-package` | `legal:create` | não |
 | `POST` | `/api/v1/legal/cases/:id/evidence-packages/auto` | `legal:create` | não |
 | `GET` | `/api/v1/legal/cases/:id/evidence-packages` | `legal:read` | não |
 | `POST` | `/api/v1/legal/cases/:id/evidence-packages` | `legal:create` | não |
 | `POST` | `/api/v1/legal/cases/:id/legal-hold` | `legal:update` | não |
 | `POST` | `/api/v1/legal/cases/:id/link-task` | `legal:update` | não |
+| `GET` | `/api/v1/legal/cases/:id/parties` | `legal:read` | não |
+| `POST` | `/api/v1/legal/cases/:id/parties` | `legal:create` | não |
+| `GET` | `/api/v1/legal/cases/:id/receivables` | `legal:read` | não |
+| `POST` | `/api/v1/legal/cases/:id/receivables` | `legal:approve`, `finance:create` | não |
+| `GET` | `/api/v1/legal/cases/:id/timeline` | `legal:read` | não |
 | `GET` | `/api/v1/legal/cases/:id` | `legal:read` | não |
 | `PATCH` | `/api/v1/legal/cases/:id` | `legal:update` | não |
 | `GET` | `/api/v1/legal/cases` | `legal:read` | não |
@@ -539,11 +599,14 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/clauses/:code/versions` | `legal:create` | não |
 | `POST` | `/api/v1/legal/clauses/:id/approve-condition` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/clauses/:id/deactivate` | `legal:update` | não |
+| `POST` | `/api/v1/legal/clauses/:id/homologate` | `legal:approve` | não |
 | `GET` | `/api/v1/legal/clauses` | `legal:read` | não |
 | `POST` | `/api/v1/legal/clauses` | `legal:create` | não |
 | `POST` | `/api/v1/legal/contract-templates/:id/clauses/:clauseId/upgrade` | `legal:create` | não |
 | `POST` | `/api/v1/legal/contract-templates/:id/clauses` | `legal:create` | não |
+| `POST` | `/api/v1/legal/contract-templates/:id/publish` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/contract-templates/:id/render` | `legal:read` | não |
+| `GET` | `/api/v1/legal/contract-templates/:id/versions` | `legal:read` | não |
 | `GET` | `/api/v1/legal/contract-templates/:id` | `legal:read` | não |
 | `GET` | `/api/v1/legal/contract-templates` | `legal:read` | não |
 | `POST` | `/api/v1/legal/contract-templates` | `legal:create` | não |
@@ -556,6 +619,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/contracts/:id/close` | `legal:approve` | não |
 | `PATCH` | `/api/v1/legal/contracts/:id/correct` | `legal:update` | sim |
 | `GET` | `/api/v1/legal/contracts/:id/impact` | `legal:approve` | não |
+| `POST` | `/api/v1/legal/contracts/:id/key-delivery` | `legal:create`, `lease.keys.deliver` | não |
 | `GET` | `/api/v1/legal/contracts/:id/parties` | `legal:read` | não |
 | `POST` | `/api/v1/legal/contracts/:id/parties` | `legal:create` | não |
 | `POST` | `/api/v1/legal/contracts/:id/reactivate` | `legal:approve` | não |
@@ -564,7 +628,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/contracts/:id/suspend` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/contracts/:id/terminate` | `legal:approve` | não |
 | `GET` | `/api/v1/legal/contracts/:id/timeline` | `legal:read` | não |
-| `POST` | `/api/v1/legal/contracts/:id/transition` | `legal:approve` | não |
+| `POST` | `/api/v1/legal/contracts/:id/transition` | `legal:approve`; `contracts.version.approve` quando targetStatus = APPROVED | não |
 | `GET` | `/api/v1/legal/contracts/:id/versions/:versionId/generate-pdf` | `legal:read` | não |
 | `GET` | `/api/v1/legal/contracts/:id/versions` | `legal:read` | não |
 | `POST` | `/api/v1/legal/contracts/:id/versions` | `legal:create` | não |
@@ -574,8 +638,10 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/legal/deadlines/:id` | `legal:update` | não |
 | `GET` | `/api/v1/legal/deadlines` | `legal:read` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id/access-log` | `legal:read` | não |
-| `GET` | `/api/v1/legal/evidence-packages/:id/export` | `legal:read` | não |
+| `GET` | `/api/v1/legal/evidence-packages/:id/export` | `legal:evidence:export` | não |
 | `GET` | `/api/v1/legal/evidence-packages/:id` | `legal:read` | não |
+| `GET` | `/api/v1/legal/guarantee-flows` | `legal:create` | não |
+| `POST` | `/api/v1/legal/guarantees/:id/replace` | `legal:update` | não |
 | `DELETE` | `/api/v1/legal/guarantees/:id` | `legal:update` | não |
 | `GET` | `/api/v1/legal/guarantees/:id` | `legal:read` | não |
 | `PATCH` | `/api/v1/legal/guarantees/:id` | `legal:update` | não |
@@ -595,8 +661,8 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `POST` | `/api/v1/legal/inspections/with-items` | `legal:create` | não |
 | `GET` | `/api/v1/legal/inspections` | `legal:read` | não |
 | `POST` | `/api/v1/legal/inspections` | `legal:create` | não |
-| `POST` | `/api/v1/legal/key-deliveries/:id/cancel` | `legal:deliverKeys` | não |
-| `POST` | `/api/v1/legal/key-deliveries/:id/release` | `legal:deliverKeys` | não |
+| `POST` | `/api/v1/legal/key-deliveries/:id/cancel` | `lease.keys.deliver` | não |
+| `POST` | `/api/v1/legal/key-deliveries/:id/release` | `lease.keys.deliver` | não |
 | `GET` | `/api/v1/legal/key-deliveries/:id/term-preview` | `legal:read` | não |
 | `GET` | `/api/v1/legal/key-deliveries/:id` | `legal:read` | não |
 | `GET` | `/api/v1/legal/key-deliveries` | `legal:read` | não |
@@ -605,16 +671,27 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/legal/nay/cases/:id/summary` | `legal:read` | não |
 | `GET` | `/api/v1/legal/nay/clause-suggestions` | `legal:read` | não |
 | `GET` | `/api/v1/legal/nay/contracts/:id/compare` | `legal:read` | não |
+| `GET` | `/api/v1/legal/nay/contracts/:id/draft-suggestions` | `legal:read` | não |
+| `POST` | `/api/v1/legal/nay/contracts/:id/draft-suggestions` | `legal:create` | não |
 | `GET` | `/api/v1/legal/nay/contracts/:id/summary` | `legal:read` | não |
 | `POST` | `/api/v1/legal/nay/deadline-suggestions` | `legal:read` | não |
+| `POST` | `/api/v1/legal/nay/draft-suggestions/:id/accept` | `legal:create` | não |
+| `POST` | `/api/v1/legal/nay/draft-suggestions/:id/discard` | `legal:create` | não |
+| `POST` | `/api/v1/legal/nay/inspections/compare` | `legal:read` | não |
 | `POST` | `/api/v1/legal/notices/:id/approve` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/notices/:id/delivery-evidence` | `legal:update` | não |
 | `POST` | `/api/v1/legal/notices/:id/reject` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/notices/:id/send` | `legal:update` | sim |
 | `POST` | `/api/v1/legal/notices/:id/submit-for-review` | `legal:update` | não |
+| `GET` | `/api/v1/legal/notices/:id/versions` | `legal:read` | não |
+| `POST` | `/api/v1/legal/notices/:id/versions` | `legal:update` | não |
 | `GET` | `/api/v1/legal/notices/:id` | `legal:read` | não |
 | `GET` | `/api/v1/legal/notices` | `legal:read` | não |
 | `POST` | `/api/v1/legal/notices` | `legal:create` | não |
+| `GET` | `/api/v1/legal/receivable-bases` | `legal:read` | não |
+| `GET` | `/api/v1/legal/requirement-rules/versions` | `legal:read` | não |
+| `GET` | `/api/v1/legal/requirement-rules` | `legal:read` | não |
+| `POST` | `/api/v1/legal/requirement-rules` | `legal:approve` | não |
 | `POST` | `/api/v1/legal/requirements/:requirementId/waive` | `legal:waive` | não |
 | `PATCH` | `/api/v1/legal/requirements/:requirementId` | `legal:update` | não |
 | `POST` | `/api/v1/legal/signature-envelopes/:id/switch-provider` | `legal:sign` | sim |
@@ -678,6 +755,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/migration/rollback-report` | `governance:migration:admin` | não |
 | `POST` | `/api/v1/migration/runs` | `governance:migration:run` | não |
 | `POST` | `/api/v1/offers/:id/publish` | `properties:update` | não |
+| `GET` | `/api/v1/opportunities/:id/carts` | `crm:opportunities:read` | não |
 | `POST` | `/api/v1/opportunities/:id/carts` | `crm:opportunities:update` | não |
 | `GET` | `/api/v1/opportunities/:id/tasks` | `crm:tasks:read` | não |
 | `POST` | `/api/v1/opportunities/:id/tasks` | `crm:tasks:create` | não |
@@ -708,10 +786,14 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/people/:id/roles/:roleId` | `people:update` | não |
 | `GET` | `/api/v1/people/:id/roles` | `people:read` | não |
 | `POST` | `/api/v1/people/:id/roles` | `people:update` | não |
+| `POST` | `/api/v1/people/:id/unlink` | `people:link` | não |
 | `DELETE` | `/api/v1/people/:id` | `people:delete` | não |
 | `GET` | `/api/v1/people/:id` | `people:read` | não |
 | `PATCH` | `/api/v1/people/:id` | `people:update` | não |
+| `POST` | `/api/v1/people/duplicates/check` | `people:create` | não |
 | `GET` | `/api/v1/people/duplicates` | `people:read` | não |
+| `POST` | `/api/v1/people/links` | `people:link` | não |
+| `GET` | `/api/v1/people/roles-catalog` | `people:read` | não |
 | `GET` | `/api/v1/people` | `people:read` | não |
 | `POST` | `/api/v1/people` | `people:create` | não |
 | `GET` | `/api/v1/permissions` | `roles:read` | não |
@@ -760,6 +842,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `GET` | `/api/v1/properties/:id/documents` | `properties:read` | não |
 | `POST` | `/api/v1/properties/:id/documents` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/impact` | `properties:delete` | não |
+| `PATCH` | `/api/v1/properties/:id/media/:mediaId/quality` | `properties:update` | não |
 | `DELETE` | `/api/v1/properties/:id/media/:mediaId` | `properties:update` | não |
 | `GET` | `/api/v1/properties/:id/media` | `properties:read` | não |
 | `POST` | `/api/v1/properties/:id/media` | `properties:update` | não |
@@ -784,6 +867,7 @@ Regras gerais: sem token a resposta é 401; com token sem a permissão indicada 
 | `PATCH` | `/api/v1/provider-accounts/:id` | `correspondent:parameters` | não |
 | `GET` | `/api/v1/provider-accounts` | `correspondent:parameters` | não |
 | `POST` | `/api/v1/provider-accounts` | `correspondent:parameters` | não |
+| `GET` | `/api/v1/radar/:id/match-history` | `radar:read` | não |
 | `GET` | `/api/v1/radar/:id/matches/:propertyId/explain` | `radar:read` | não |
 | `GET` | `/api/v1/radar/:id/matches` | `radar:read` | não |
 | `DELETE` | `/api/v1/radar/:id` | `radar:delete` | não |
@@ -861,6 +945,7 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 
 | Método | Caminho | Permissão exigida | MFA recente |
 |---|---|---|---|
+| `GET` | `/api/health/pool` | público (saúde do serviço) | não |
 | `GET` | `/api/health` | público (saúde do serviço) | não |
 | `POST` | `/api/marketing/unsubscribe` | público; autenticidade pelo token assinado do link de descadastro | não |
 | `POST` | `/api/marketing/webhooks/:channel` | público; autenticidade pela assinatura do provider | não |
@@ -901,5 +986,6 @@ Catálogo fechado do Marco 9 (M9-D800). Permissão sem rota nesta tabela ainda n
 | `POST` | `/api/v1/users/me/mfa/setup` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/users/me/mfa/verify` | só login (o próprio usuário) | não |
 | `POST` | `/api/v1/webhooks/:provider/:channel` | público; autenticidade pela assinatura do provider | não |
+| `POST` | `/api/v1/webhooks/signature/:provider` | público; autenticidade pela assinatura do provider | não |
 | `GET` | `/api/version` | público (saúde do serviço) | não |
 | `POST` | `/api/webhooks/:provider/:channel` | público; autenticidade pela assinatura do provider | não |

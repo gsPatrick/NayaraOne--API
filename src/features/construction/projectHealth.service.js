@@ -8,16 +8,18 @@ const {
   BudgetLine,
   FinancialEntry,
   ChangeOrder,
+  Budget,
   LossRecord,
   Nonconformity,
 } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const { RULE_CODE: MARGIN_RULE_CODE } = require('./marginRules.service');
+const { accrualByProject, paidFinancialCostByProject } = require('./costBasis');
 
 // M6-42/M6-99 — read model de custo/saúde da obra. Cálculo REAL sobre dados já existentes no
 // banco (nenhum número inventado): tudo aqui é soma/derivação de linhas reais, lida sob o RLS
-// da empresa do contexto (mesma filosofia de financialHealthReport.service.js, M4-20).
+// da empresa do contexto (mesma filosofia de finance-health.service.js, M4-20).
 //
 // GET /construction/projects/:id/health devolve os 9 campos pedidos pelo escopo do Marco 6
 // (M6-42) mais um conjunto de KPIs adicionais (M6-99) que dependem só de dados sob controle
@@ -81,43 +83,29 @@ async function getProject(id, transaction) {
 async function computeMarginProjection(projectId, transaction, { extraApprovedChanges = 0 } = {}) {
   const project = await getProject(projectId, transaction);
 
-  const [budgetLines, settledEntries] = await Promise.all([
-    BudgetLine.findAll({ where: { projectId }, transaction }),
-    FinancialEntry.findAll({
-      where: { constructionProjectId: projectId, nature: 'PAYABLE', status: { [Op.in]: ['SETTLED', 'PARTIALLY_SETTLED'] } },
-      transaction,
-    }),
-  ]);
+  const budgetLines = await BudgetLine.findAll({ where: { projectId }, transaction });
 
   const committedCost = budgetLines.reduce((acc, line) => acc + toNumber(line.plannedAmount), 0);
   const approvedChangesBase = await getApprovedChangeOrdersTotal(projectId, transaction);
   const approvedChanges = approvedChangesBase + toNumber(extraApprovedChanges);
 
-  const settledIds = settledEntries.map((e) => e.id);
-  const partialSettlements = settledIds.length
-    ? await FinancialEntry.findAll({
-        where: { parentEntryId: { [Op.in]: settledIds }, status: 'SETTLED' },
-        transaction,
-      })
-    : [];
-  const actualFinancialCost = settledEntries.reduce((acc, entry) => {
-    if (entry.status === 'SETTLED') return acc + toNumber(entry.amount);
-    return acc;
-  }, 0) + partialSettlements.reduce((acc, s) => acc + toNumber(s.amount), 0);
+  // Custo pago: mesma regra do painel agregado (costBasis.paidFinancialCostByProject) — SETTLED pelo valor da obrigação,
+  // PARTIALLY_SETTLED só pelas baixas filhas; a baixa filha (que carrega a obra, M6-97) nunca é somada de novo.
+  const paidFinancialCost = (await paidFinancialCostByProject([projectId], transaction)).get(projectId) || 0;
+  // Base CAIXA (padrão) ou COMPETENCIA da empresa (costBasis.js): em COMPETENCIA as obrigações em aberto da obra entram.
+  const { base, open, accrual } = await accrualByProject([projectId], project, transaction);
+  const actualFinancialCost = paidFinancialCost + (accrual.get(projectId) || 0);
+  const costBasis = { base, paidFinancialCost: round2(paidFinancialCost), openPayablesCost: open.get(projectId).total, pendingApprovedMeasurementsCost: open.get(projectId).fromMeasurements, includedInActualFinancialCost: base === 'COMPETENCIA' };
 
   const consumedInventoryCost = await getConsumedInventoryCost(projectId, transaction);
 
   const realizedCost = actualFinancialCost + consumedInventoryCost;
   const marginBudgetBase = committedCost + approvedChanges;
 
-  // BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F2): a fórmula
-  // anterior calculava `forecastToComplete = max(B - R, 0)` — ou seja, SEMPRE assumia que o
-  // restante do orçamento inteiro ainda seria gasto até o fim, nunca menos. Isso faz
-  // `projectedTotalCost` nunca ficar abaixo de B: se R < B, projectedTotalCost = R + (B-R) = B
-  // (margem sempre 0); se R >= B, projectedTotalCost = R (margem sempre <= 0). Prova algébrica:
-  // a margem projetada NUNCA podia ser positiva, estruturalmente — mesmo uma obra terminando
-  // genuinamente abaixo do orçamento nunca mostraria lucro/economia projetada, só "zero" ou
-  // "prejuízo". O Caderno Técnico (seção 7, "Read model de custo") exige os CAMPOS
+  // BUG REAL CORRIGIDO (auditoria externa Nayara/ChatGPT, reteste 10/10/2026 — F2): a fórmula anterior
+  // (`forecastToComplete = max(B - R, 0)`) sempre assumia gastar o resto do orçamento, então a margem
+  // projetada NUNCA podia ser positiva (R < B → margem 0; R >= B → margem <= 0), nem para uma obra
+  // genuinamente abaixo do orçamento. O Caderno Técnico (seção 7, "Read model de custo") exige os CAMPOS
   // (forecastToComplete/projectedTotalCost/projectedMargin) mas não fecha a fórmula — a escolha
   // de "sempre gastar o resto do orçamento" era conservadora demais a ponto de quebrar o
   // propósito do KPI (nunca sinaliza economia real).
@@ -208,19 +196,21 @@ async function computeMarginProjection(projectId, transaction, { extraApprovedCh
     commissionPct,
     economyAmount,
     commissionAmount,
+    costBasis,
+    stages: stagesForProgress, // reaproveitada por getProjectHealth (uma leitura a menos por chamada; M6Q-DEF-2)
   };
 }
 
 /**
  * getProjectHealth — os 9 campos do M6-42 + KPIs adicionais do M6-99.
  *
- *  1. baselineBudget         — construction.projects.budget_amount (orçamento base aprovado da
- *                               obra); se nulo, soma construction.budget_lines.planned_amount.
+ *  1. baselineBudget         — baseline APROVADA (construction.budgets.baseline_amount, imutável); sem
+ *                               orçamento aprovado, projects.budget_amount; senão a soma das linhas.
  *  2. approvedChanges        — soma de Change Orders APROVADOS (fatia em paralelo — ver acima).
  *  3. committedCost          — soma de construction.budget_lines.planned_amount (o que já foi
  *                               comprometido/orçado por linha de custo).
- *  4. actualFinancialCost    — soma de finance.financial_entries SETTLED (nature=PAYABLE,
- *                               construction_project_id = obra) — dinheiro que JÁ SAIU de fato.
+ *  4. actualFinancialCost    — CAIXA (padrão): lançamentos PAYABLE da obra já pagos; COMPETENCIA:
+ *                               + medições aprovadas ainda a pagar (parâmetro, costBasis.js).
  *  5. consumedInventoryCost  — custo HISTÓRICO do estoque levado à obra (unit_cost/total_cost
  *                               gravados em cada movimento; política de custódia em
  *                               inventory/inventoryCost.service.js — revisão Marco 7, A1).
@@ -261,19 +251,20 @@ async function getProjectHealth(projectId, transaction) {
     commissionPct,
     economyAmount,
     commissionAmount,
+    costBasis,
+    stages,
   } = await computeMarginProjection(projectId, transaction);
 
-  const baselineBudget = project.budgetAmount !== null && project.budgetAmount !== undefined
-    ? toNumber(project.budgetAmount)
-    : committedCost;
+  // M6-42/M6-17: baselineBudget é a baseline APROVADA (congelada, nunca muda); os aditivos ficam em approvedChanges.
+  const approvedBudget = await Budget.findOne({ where: { projectId, status: 'APPROVED' }, transaction });
+  let baselineBudget = committedCost;
+  if (approvedBudget && approvedBudget.baselineAmount !== null) baselineBudget = toNumber(approvedBudget.baselineAmount);
+  else if (project.budgetAmount !== null && project.budgetAmount !== undefined) baselineBudget = toNumber(project.budgetAmount);
 
-  const [stages, pendingEntries] = await Promise.all([
-    ProjectStage.findAll({ where: { projectId }, transaction }),
-    FinancialEntry.findAll({
-      where: { constructionProjectId: projectId, nature: 'PAYABLE', status: 'PENDING' },
-      transaction,
-    }),
-  ]);
+  const pendingEntries = await FinancialEntry.findAll({
+    where: { constructionProjectId: projectId, nature: 'PAYABLE', status: 'PENDING', parentEntryId: null },
+    transaction,
+  });
 
   const stageIds = stages.map((s) => s.id);
   const measurements = stageIds.length
@@ -307,7 +298,7 @@ async function getProjectHealth(projectId, transaction) {
       !['FINAL_INSPECTION', 'DELIVERED', 'WARRANTY', 'CLOSED', 'CANCELLED'].includes(project.status)
   );
   const scheduleDelayDays = isOverdue
-    ? Math.ceil((Date.now() - new Date(project.endsAtPlanned).getTime()) / (24 * 60 * 60 * 1000))
+    ? Math.ceil((Date.now() - new Date(project.endsAtPlanned).getTime()) / (24 * 60 * 60 * 1000)) // scanner:allow — conversão de unidade de tempo (milissegundos), não regra de negócio
     : 0;
 
   const measurementsByStatus = measurements.reduce((acc, m) => {
@@ -361,6 +352,7 @@ async function getProjectHealth(projectId, transaction) {
     // --- Os 9 campos pedidos pelo M6-42 ---
     baselineBudget: round2(baselineBudget),
     approvedChanges: round2(approvedChanges),
+    currentApprovedBudget: round2(baselineBudget + approvedChanges), // baseline + aditivos aprovados (revisões)
     committedCost: round2(committedCost),
     actualFinancialCost: round2(actualFinancialCost),
     consumedInventoryCost: round2(consumedInventoryCost),
@@ -375,6 +367,7 @@ async function getProjectHealth(projectId, transaction) {
     commissionPct,
     economyAmount,
     commissionAmount,
+    costBasis, // CAIXA x COMPETENCIA (parâmetro construction.custo_realizado.base)
     updatedAt: new Date().toISOString(),
 
     // --- KPIs adicionais (M6-99) calculáveis só com dados desta fatia ---

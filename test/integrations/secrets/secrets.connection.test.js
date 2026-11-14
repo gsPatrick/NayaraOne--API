@@ -10,6 +10,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const { IntegrationConnection, AuditLog } = require('../../../src/models');
 const registry = require('../../../src/features/integrations/registry/registry.service');
 const settingsService = require('../../../src/features/settings/settings.service');
+const { gravarParametro } = require('../../helpers/mfaRecente');
 const secrets = require('../../../src/features/integrations/secrets');
 const { semMfa } = require('../../marco9/_helpers/semMfa');
 
@@ -33,7 +34,7 @@ const loja = () => secrets.createHttpVaultStore({ mode: 'sandbox', clock: relogi
 // Chave `platformOnly` só grava com a marca de plataforma (D870); as demais, como o ADMIN da empresa.
 async function config(transaction, chave, valor) {
   const platform = settingsService.SETTINGS_SCHEMA[chave]?.platformOnly === true;
-  await settingsService.upsertSetting(chave, valor, tenant, tenant.userId, transaction, { platform });
+  await gravarParametro(chave, valor, tenant, transaction, { platform }); // sensível (requiresMfa): operador com MFA recente real
 }
 async function recusa(promessa, code, status) {
   await assert.rejects(promessa, (err) => {

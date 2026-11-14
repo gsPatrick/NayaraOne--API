@@ -8,7 +8,7 @@
  * DECISÃO DE ENGENHARIA: o Anexo I pede alçada "via alçada, mesma lógica de aprovação
  * financeira do resto do sistema" (M6-29), mas não define o valor numérico do limite — isso é
  * necessariamente uma decisão operacional/de negócio, não uma regra fixa de código. Varri
- * `src/features/finance/` procurando um mecanismo de alçada genérico e reaproveitável (termos
+ * `src/modules/finance/` (na época, a pasta antiga do Financeiro) procurando um mecanismo de alçada genérico e reaproveitável (termos
  * "alçada"/"approval"/"threshold") e só encontrei uma constante pontual de antifraude
  * (`financeAntifraud.service.js: ANOMALY_NEW_ACCOUNT_THRESHOLD`, específica de detecção de
  * anomalia em conta nova, não um mecanismo de alçada genérico reaproveitável) — não um padrão de

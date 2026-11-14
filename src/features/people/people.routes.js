@@ -4,6 +4,8 @@ const { Router } = require('express');
 const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const peopleController = require('./people.controller');
+const personLinksController = require('./personLinks.controller');
+const personDedupController = require('./personDedup.controller');
 
 const peopleRouter = Router();
 
@@ -13,8 +15,13 @@ peopleRouter.use(authMiddleware, tenantMiddleware);
 const { validarCriacaoDePessoa, validarAtualizacaoDePessoa, validarListagemDePessoas } = require('./people.schema');
 peopleRouter.post('/people', requirePermission('people:create'), validarCriacaoDePessoa, peopleController.create);
 peopleRouter.get('/people', requirePermission('people:read'), validarListagemDePessoas, peopleController.list);
+// Pessoa já cadastrada em outra empresa do grupo: vínculo explícito, com permissão própria (DI-M9I-4). Antes de '/people/:id'.
+peopleRouter.post('/people/links', requirePermission('people:link'), personLinksController.link);
 // Precisa vir ANTES de '/people/:id', senão "duplicates" seria capturado como um :id.
 peopleRouter.get('/people/duplicates', requirePermission('people:read'), peopleController.listDuplicates);
+// Consulta de duplicidade ANTES de criar (DI-M3PE-4) e catálogo de papéis da empresa (DI-M3PE-2).
+peopleRouter.post('/people/duplicates/check', requirePermission('people:create'), personDedupController.check);
+peopleRouter.get('/people/roles-catalog', requirePermission('people:read'), personDedupController.rolesCatalog);
 peopleRouter.get('/people/:id', requirePermission('people:read'), peopleController.getOne);
 peopleRouter.patch('/people/:id', requirePermission('people:update'), validarAtualizacaoDePessoa, peopleController.update);
 peopleRouter.delete('/people/:id', requirePermission('people:delete'), peopleController.remove);
@@ -42,5 +49,6 @@ peopleRouter.post('/people/:id/consents', requirePermission('people:update'), pe
 peopleRouter.get('/people/:id/consents', requirePermission('people:read'), peopleController.listConsents);
 
 peopleRouter.post('/people/:id/merge', requirePermission('people:update'), require('./people.schema').validarMesclagem, peopleController.merge);
+peopleRouter.post('/people/:id/unlink', requirePermission('people:link'), personLinksController.unlink);
 
 module.exports = peopleRouter;

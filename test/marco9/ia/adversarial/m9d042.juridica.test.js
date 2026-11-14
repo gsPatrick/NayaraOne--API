@@ -8,7 +8,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const F = require('../../_helpers/advFixtures');
 const { PROHIBITIONS } = require('../../../../src/features/ai/agents/nay_juridica/juridica.policy');
-const contractVersionsService = require('../../../../src/features/legal/contractVersions.service');
+const contractVersionsService = require('../../../../src/modules/legal/contracts/application/contractVersions.service');
 const H = require('../../_helpers/m9d037Agente');
 const J = require('../../_helpers/m9d038Juridico');
 

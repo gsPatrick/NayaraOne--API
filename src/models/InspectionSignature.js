@@ -48,6 +48,8 @@ module.exports = (sequelize) => {
         allowNull: false,
         field: 'signature_hash',
       },
+      // Fechamento M5 (Guia §9 signInspection): SHA-256 do JSON canônico da vistoria no momento da assinatura.
+      snapshotHash: { type: DataTypes.STRING(64), allowNull: true, field: 'snapshot_hash' },
       signedAt: {
         type: DataTypes.DATE,
         allowNull: false,

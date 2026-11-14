@@ -42,6 +42,8 @@ function tenantMiddleware(req, res, next) {
   const { groupId, companyId, userId } = req.auth;
 
   req.withTenantTransaction = async (fn) => {
+    // Recusa de anexo adiada pelo fileAttachGuard (vale antes de qualquer acesso ao banco do handler).
+    if (req.deferredFileAttachError) throw req.deferredFileAttachError;
     let currentTransaction = null;
     try {
       return await runInTenantTransaction(fn, (tx) => { currentTransaction = tx; });

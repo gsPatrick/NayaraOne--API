@@ -79,7 +79,8 @@ test('m9d802 VISIT: visita agendada, reagendada, concluída e cancelada na orige
   await run(async (tx) => {
     const prop = await origin.property(T(), tx);
     const lead = await origin.person(T(), tx);
-    const create = (extra = {}) => visits.createVisit({ groupId: T().groupId, companyId: T().companyId, propertyId: prop.id, personId: lead.id, agentUserId: T().userId, scheduledAt: origin.future(2), ...extra }, T().userId, tx);
+    const opp = await origin.opportunity(T(), tx); // M3-13: visita é sempre de uma oportunidade
+    const create = (extra = {}) => visits.createVisit({ groupId: T().groupId, companyId: T().companyId, propertyId: prop.id, opportunityId: opp.id, personId: lead.id, agentUserId: T().userId, scheduledAt: origin.future(2), ...extra }, T().userId, tx);
     const visit = await create();
     let item = await seen('VISIT', visit.id, tx);
     assert.equal(item.status, 'OPEN'); assertLink(item);
@@ -101,10 +102,10 @@ test('m9d802 VISIT: visita agendada, reagendada, concluída e cancelada na orige
 });
 
 test('m9d802 LEGAL_DEADLINE: prazo criado, alterado, concluído e reaberto pelo serviço do Jurídico', { skip: skip() }, async () => {
-  const deadlines = require('../../../src/features/legal/legalDeadlines.service');
+  const deadlines = require('../../../src/modules/legal/cases/deadline.service');
   await run(async (tx) => {
     const lc = await origin.legalCase(T(), tx);
-    const deadline = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', responsibleUserId: T().userId }, T().userId, tx);
+    const deadline = await deadlines.createLegalDeadline(lc.id, { description: 'Contestação QA-M9', dueAt: origin.future(10), sourceEvent: 'teste', sourceFileId: await require('../../helpers/prazoOrigem').origemNaTransacao(T(), tx), responsibleUserId: T().userId }, T().userId, tx);
     let item = await seen('LEGAL_DEADLINE', deadline.id, tx);
     assert.equal(item.status, 'OPEN'); assertLink(item);
     assert.equal(item.title, 'Contestação QA-M9');
@@ -141,7 +142,7 @@ test('m9d802 RENEWAL (apólice): tarefa criada, concluída e cancelada na origem
 });
 
 test('m9d802 RENEWAL (contrato): término do contrato projetado e fechado ao encerrar', { skip: skip() }, async () => {
-  const { publishContractRenewalChange } = require('../../../src/features/legal/legalDeadlineCalendarEvents.service');
+  const { publishContractRenewalChange } = require('../../../src/modules/legal/cases/legalDeadlineCalendarEvents.service');
   const { leaseContract } = env;
   await run(async (tx) => {
     const contract = await leaseContract(T(), tx);

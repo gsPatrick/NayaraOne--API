@@ -2,46 +2,54 @@
 
 const { Op } = require('sequelize');
 const { PropertyOffer } = require('../../models');
+const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 
 /**
- * supersedeCurrentActiveOffer — regra dura: uma property nunca pode ter duas offers ACTIVE do
- * mesmo `offerType` simultaneamente. Se já existir uma (ou mais) offer ACTIVE do mesmo tipo
- * (diferente de `excludeOfferId`, quando informado), ela(s) são marcadas SUPERSEDED na mesma
- * transação (atômico).
+ * Substituição controlada de oferta (matriz M3-07; livro do Marco 3 §6 e CRMX-004): um imóvel nunca tem duas ofertas ACTIVE do
+ * mesmo tipo. Em duas etapas, na mesma transação:
+ *  1. supersedeCurrentActiveOffer — trava (SELECT ... FOR UPDATE) as ofertas ACTIVE do tipo (menos `excludeOfferId`) e as marca
+ *     SUPERSEDED antes de a nova virar ACTIVE (o índice único parcial da migration 20260101000175 é a rede contra corrida);
+ *  2. linkSupersededOffers — depois que a substituta existe, grava nela o vínculo (superseded_by_offer_id, superseded_at) e audita
+ *     cada substituição com antes e depois (verificação independente de 11/11/2026: a substituição não era auditada nem dizia
+ *     qual oferta a substituiu).
+ * A oferta SUPERSEDED é final: não volta a ACTIVE nem muda de preço (propertyOffers.service.js recusa).
  */
 async function supersedeCurrentActiveOffer({ propertyId, offerType, excludeOfferId, actorUserId }, transaction) {
-  // FIX (homologação 22/09/2026 — auditoria proativa): usava `findOne`, que só pega a PRIMEIRA
-  // offer ACTIVE encontrada. Não há constraint única no banco que impeça duas offers ACTIVE do
-  // mesmo tipo coexistirem (ex.: corrida entre duas requisições de criação/atualização de offer
-  // não serializadas), então se esse estado inválido já existisse, esta função silenciosamente
-  // "resolvia" só uma das offers e deixava a(s) outra(s) ACTIVE — violando a própria invariante
-  // que o comentário acima promete garantir. Trocado para um UPDATE em massa que fecha TODAS as
-  // offers ACTIVE do tipo, não só a primeira.
-  //
-  // FIX (homologação 23/09/2026 — auditoria adversarial de corrida): o UPDATE em massa acima
-  // não bloqueava as linhas ACTIVE antes de decidir o que fechar. Duas requisições concorrentes
-  // (dois corretores criando/reativando oferta pro mesmo imóvel ao mesmo tempo) podiam rodar o
-  // supersede em paralelo sem uma enxergar o INSERT ainda não commitado da outra, e ambas
-  // terminavam inserindo sua oferta como ACTIVE — duas offers ACTIVE do mesmo tipo pro mesmo
-  // imóvel, quebrando a invariante. Agora a leitura das offers ACTIVE candidatas usa
-  // `lock: transaction.LOCK.UPDATE` (SELECT ... FOR UPDATE) para serializar concorrentes antes
-  // de decidir o que fechar.
   const where = { propertyId, offerType, status: 'ACTIVE' };
-  if (excludeOfferId) {
-    where.id = { [Op.ne]: excludeOfferId };
-  }
-  const toSupersede = await PropertyOffer.findAll({
-    where,
-    transaction,
-    lock: transaction.LOCK.UPDATE,
-  });
-  if (toSupersede.length === 0) {
-    return;
-  }
+  if (excludeOfferId) where.id = { [Op.ne]: excludeOfferId };
+  const toSupersede = await PropertyOffer.findAll({ where, transaction, lock: transaction.LOCK.UPDATE });
+  if (toSupersede.length === 0) return [];
+  const befores = toSupersede.map((offer) => offer.toJSON());
   await PropertyOffer.update(
     { status: 'SUPERSEDED', updatedBy: actorUserId || null },
     { where: { id: toSupersede.map((offer) => offer.id) }, transaction }
   );
+  return befores;
 }
 
-module.exports = { supersedeCurrentActiveOffer };
+async function linkSupersededOffers(befores, substitute, actorUserId, transaction) {
+  const supersededAt = new Date();
+  for (const beforeJson of befores) {
+    await PropertyOffer.update(
+      { supersededByOfferId: substitute.id, supersededAt, updatedBy: actorUserId || null },
+      { where: { id: beforeJson.id }, transaction }
+    );
+    const after = await PropertyOffer.findByPk(beforeJson.id, { transaction });
+    await registrarAuditoria(
+      {
+        groupId: substitute.groupId,
+        companyId: substitute.companyId,
+        actorUserId,
+        action: 'property_offer.supersede',
+        entityType: 'PropertyOffer',
+        entityId: beforeJson.id,
+        beforeJson,
+        afterJson: after.toJSON(),
+        reason: `Oferta ${beforeJson.id} (${beforeJson.offerType}) substituída pela oferta ${substitute.id}.`,
+      },
+      transaction
+    );
+  }
+}
+
+module.exports = { supersedeCurrentActiveOffer, linkSupersededOffers };

@@ -26,10 +26,11 @@ const {
   confirmPeriodChecksForTest,
   prepareManualSettlement,
 } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const approvalsService = require('../src/features/finance/approvals.service');
-const periodClosuresService = require('../src/features/finance/periodClosures.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
+const periodClosuresService = require('../src/modules/finance/application/services/closing.service');
 const AppError = require('../src/utils/AppError');
 const { User } = require('../src/models');
 
@@ -81,7 +82,7 @@ test('A01: baixa PARCIAL de PAYABLE com conta bancária sem aprovação prévia 
     const { entry } = await createPayableEntry(transaction, suffix);
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
@@ -99,7 +100,7 @@ test('A01 (controle positivo): baixa PARCIAL de PAYABLE com aprovação prévia 
     // banco precisa do comprovante da baixa manual.
     const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
 
-    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction, { manualSettlement });
+    const result = await receiptService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction, { manualSettlement });
     assert.equal(result.original.status, 'PARTIALLY_SETTLED');
   });
 });
@@ -123,7 +124,7 @@ test('A01 (controle negativo): RECEIVABLE parcial continua sem exigir aprovaçã
       transaction
     );
 
-    const result = await financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction);
+    const result = await receiptService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction);
     assert.equal(result.original.status, 'PARTIALLY_SETTLED');
   });
 });
@@ -156,7 +157,7 @@ test('A02: baixa INTEGRAL em período já FECHADO é bloqueada (mesmo gate da ba
     assert.equal(closure.status, 'CLOSED');
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'FINANCE_PERIOD_CLOSED');

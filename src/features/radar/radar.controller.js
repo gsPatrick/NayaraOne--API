@@ -14,7 +14,7 @@ const create = catchAsync(async (req, res) => {
 
 const list = catchAsync(async (req, res) => {
   const radars = await req.withTenantTransaction((transaction) =>
-    radarService.listRadars(transaction, { personId: req.query.personId, status: req.query.status })
+    radarService.listRadars(transaction, { personId: req.query.personId, status: req.query.status, carteira: req.carteira }) // CRM-TS-012
   );
   return success(res, { data: radars });
 });
@@ -60,4 +60,10 @@ const explainMatch = catchAsync(async (req, res) => {
   return success(res, { data: explanation });
 });
 
-module.exports = { create, list, getOne, update, remove, matches, explainMatch };
+// Histórico dos matches gravados (crm.radar_matches): score, critérios atendidos/falhos, impressão digital e versão (livro §13).
+const matchHistory = catchAsync(async (req, res) => {
+  const rows = await req.withTenantTransaction((transaction) => radarService.getStoredRadarMatches(req.params.id, transaction));
+  return success(res, { data: rows });
+});
+
+module.exports = { create, list, getOne, update, remove, matches, explainMatch, matchHistory };

@@ -10,7 +10,7 @@ const { evaluateRule } = require('../../engines/rules/rulesEngine');
 // estoque exige motivo, evidência e aprovação conforme valor/risco") já tinha motivo obrigatório
 // e aprovação (actor.canApprove) para ADJUSTMENT/LOSS/DISPOSAL — mas "conforme valor/risco" não
 // tinha NENHUMA tradução em código: o mesmo ajuste de R$50 ou de R$50.000 passava pela mesma
-// exigência fixa. Mesmo padrão já usado pelo Financeiro (FIN-005, financeAntifraud.service.js)
+// exigência fixa. Mesmo padrão já usado pelo Financeiro (FIN-005, finance-antifraud.service.js)
 // e por REG-OBR-001/REG-OBR-002/REG-EST-001 — um limiar de VALOR configurável via Motor de
 // Regras genérico, acima do qual a evidência deixa de ser opcional e passa a ser obrigatória
 // (a aprovação, via actor.canApprove, já é obrigatória para os três tipos de qualquer forma —

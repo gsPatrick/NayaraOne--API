@@ -4,10 +4,10 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractAmendmentsService = require('../src/features/legal/contractAmendments.service');
-const noticesService = require('../src/features/legal/notices.service');
-const contractTimelineService = require('../src/features/legal/contractTimeline.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractAmendmentsService = require('../src/modules/legal/contracts/application/contractAmendments.service');
+const noticesService = require('../src/modules/legal/contracts/application/notices.service');
+const contractTimelineService = require('../src/modules/legal/contracts/application/contractTimeline.service');
 const { CollectionCase, BillingSchedule } = require('../src/models');
 
 let tenant;
@@ -57,20 +57,25 @@ test('AUD-015: subtipos de venda (SALE_CASH/SALE_FINANCED/SALE_TRADE/SALE_INSTAL
   });
 });
 
-test('AUD-015: contratos LEASE/SALE genéricos (dados já existentes) continuam funcionando sem quebra', async () => {
+test('AUD-015: contratos LEASE/SALE genéricos (dados já existentes) continuam funcionando sem quebra; contrato novo é gravado com o código do Caderno §3', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    // DI-M5CT-2: na entrada, o código legado é convertido explicitamente (e auditado) para o código do livro.
     const lease = await contractsService.createContract(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', totalValue: 1000 },
       tenant.userId,
       transaction
     );
-    assert.equal(lease.contractType, 'LEASE');
+    assert.equal(lease.contractType, 'LEASE_RESIDENTIAL');
     const sale = await contractsService.createContract(
       { groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'SALE', totalValue: 100000 },
       tenant.userId,
       transaction
     );
-    assert.equal(sale.contractType, 'SALE');
+    assert.equal(sale.contractType, 'SALE_CASH');
+    // Linha antiga gravada com o código genérico continua legível.
+    const { Contract } = require('../src/models');
+    const antigo = await Contract.create({ groupId: tenant.groupId, companyId: tenant.companyId, contractType: 'LEASE', contractNumber: `LEG-${uniqueSuffix()}`, status: 'DRAFT' }, { transaction });
+    assert.equal((await contractsService.getContract(antigo.id, transaction)).contractType, 'LEASE');
   });
 });
 
@@ -83,6 +88,8 @@ test('AUD-017: getContractTimeline reúne aditivo, notificação e inadimplênci
       tenant.userId,
       transaction
     );
+    // Matriz M5 (§13): o aditivo referencia a versão base do contrato.
+    await require('../src/modules/legal/contracts/application/contractVersions.service').createContractVersion(contract.id, { content: `Contrato base ${uniqueSuffix()}`, requireDocument: false }, tenant.userId, transaction);
 
     const amendment = await contractAmendmentsService.createAmendment(
       contract.id,
@@ -92,7 +99,7 @@ test('AUD-017: getContractTimeline reúne aditivo, notificação e inadimplênci
     );
 
     const notice = await noticesService.createNotice(
-      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, channel: 'EMAIL', content: 'Aviso de vencimento próximo' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, recipientDescription: 'Destinatário de teste', channel: 'EMAIL', content: 'Aviso de vencimento próximo' },
       tenant.userId,
       transaction
     );
@@ -148,7 +155,8 @@ test('AUD-017: getContractTimeline reúne aditivo, notificação e inadimplênci
     const amendmentItem = timeline.items.find((i) => i.referenceId === amendment.id);
     assert.ok(amendmentItem.summary.includes('Reajuste combinado'));
     const noticeItem = timeline.items.find((i) => i.referenceId === notice.id);
-    assert.ok(noticeItem.summary.includes('EMAIL'));
+    assert.ok(noticeItem.summary.includes('e-mail'), 'canal em português no resumo');
+    assert.equal(noticeItem.details.channel, 'EMAIL', 'o código fica no campo estruturado');
     const delinquencyItem = timeline.items.find((i) => i.referenceId === collectionCase.id);
     assert.ok(delinquencyItem.summary.includes('1600'));
   });

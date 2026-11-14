@@ -49,21 +49,21 @@ function parseArgs(argv) {
   return out;
 }
 
-const { sequelize, Group, Company, User } = require('../../src/models');
-const guaranteesService = require('../../src/features/legal/guarantees.service');
+const { sequelize, Group, Company, User, UserMembership } = require('../../src/models');
+const guaranteesService = require('../../src/modules/legal/leasing/guarantee.service');
 const filesService = require('../../src/features/files/files.service');
 const peopleService = require('../../src/features/people/people.service');
 const propertiesService = require('../../src/features/properties/properties.service');
-const contractsService = require('../../src/features/legal/contracts.service');
-const contractVersionsService = require('../../src/features/legal/contractVersions.service');
-const contractClausesService = require('../../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../../src/features/legal/contractTemplates.service');
-const requirementsService = require('../../src/features/legal/requirements.service');
-const signaturesService = require('../../src/features/legal/signatures.service');
-const inspectionsService = require('../../src/features/legal/inspections.service');
-const legalCasesService = require('../../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../../src/features/legal/evidencePackages.service');
-const { SandboxSignatureAdapter } = require('../../src/features/legal/adapters/SignatureAdapter');
+const contractsService = require('../../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../../src/modules/legal/contracts/application/contractVersions.service');
+const contractClausesService = require('../../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../../src/modules/legal/contracts/application/template.service');
+const requirementsService = require('../../src/modules/legal/contracts/application/requirement.service');
+const signaturesService = require('../../src/modules/legal/signatures/signature.service');
+const inspectionsService = require('../../src/modules/legal/inspections/inspection.service');
+const legalCasesService = require('../../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../../src/modules/legal/cases/evidence-package.service');
+const { SandboxSignatureAdapter } = require('../../src/modules/legal/signatures/providers');
 
 const SIGNED_PDF = Buffer.from(
   `%PDF-1.4\n% Drill restore Nayara One — CONTRATO ASSINADO pelas duas partes\n${crypto.randomBytes(3072).toString('base64')}\n%%EOF\n`,
@@ -71,6 +71,17 @@ const SIGNED_PDF = Buffer.from(
 );
 SandboxSignatureAdapter.prototype.downloadSignedDocument = async function drillSignedDocument() {
   return { buffer: SIGNED_PDF, fileName: 'drill-contrato-assinado.pdf' };
+};
+// Desde o M9-D236 o fechamento do envelope passa pelo provedor de laboratório da camada de
+// integrações (signature.sandbox.base.js#downloadSigned), não mais pelo SandboxSignatureAdapter
+// acima: sem esta troca o arquivo gravado era o texto determinístico do sandbox e o SHA-256
+// independente das fixtures (calculado sobre SIGNED_PDF) nunca batia (achado do drill de
+// 10/11/2026). A saída normalizada do provedor é preservada; só os bytes passam a ser os conhecidos.
+const { SignatureSandboxBase } = require('../../src/features/integrations/providers/signature/sandbox/signature.sandbox.base');
+const sandboxDownloadSigned = SignatureSandboxBase.prototype.downloadSigned;
+SignatureSandboxBase.prototype.downloadSigned = async function drillDownloadSigned(ctx, request) {
+  const out = await sandboxDownloadSigned.call(this, ctx, request);
+  return { ...out, document: { buffer: SIGNED_PDF, fileName: 'drill-contrato-assinado.pdf' } };
 };
 
 const sha256 = (buffer) => crypto.createHash('sha256').update(buffer).digest('hex');
@@ -216,6 +227,7 @@ async function seedTenantA(tenant, approverId) {
     const versionFile = await upload(t, 'drill-contrato-v1.pdf', 'application/pdf', pdfBytes('contrato-v1'), 'contracts');
     // Versão gerada pelo SERVIDOR a partir do modelo: o texto, as cláusulas incluídas/excluídas
     // e o contexto da condição são calculados no serviço (o cliente só manda variáveis).
+    await require('../../src/modules/legal/contracts/application/template.service').publishTemplate(template.id, tenant.userId, t); // só a versão publicada gera contrato
     const version = await contractVersionsService.createContractVersion(
       contract.id,
       { templateId: template.id, variables: {}, documentFileId: versionFile.id },
@@ -223,6 +235,13 @@ async function seedTenantA(tenant, approverId) {
       t
     );
     ids.contractVersionId = version.id;
+    // Desde a migration 9981 (Contratos) os bytes da versão viram um arquivo próprio (content_file_id). O SHA-256
+    // independente é calculado AQUI sobre o texto da versão (o mesmo que o serviço grava), não lido do storage.
+    if (version.contentFileId) {
+      const versionText = typeof version.content === 'string' ? version.content : JSON.stringify(version.content);
+      ids.files.push(version.contentFileId);
+      ids.expectedFileSha256[version.contentFileId] = sha256(Buffer.from(versionText, 'utf8'));
+    }
 
     await contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, t);
     await contractsService.transitionContractStatus(contract, 'APPROVED', tenant.userId, t);
@@ -241,9 +260,16 @@ async function seedTenantA(tenant, approverId) {
     ids.expectedFileSha256[closed.fileId] = sha256(SIGNED_PDF);
 
     // Garantia ativa (entra no contexto da condição e no encerramento).
+    // Desde a área de Locação (garantia por tipo, migration 9990) o seguro-fiança ativo exige apólice (com arquivo),
+    // seguradora, parcelas do prêmio e data de renovação: a apólice entra no storage e no conjunto de bytes conferidos.
+    const policyFile = await upload(t, 'drill-apolice-seguro-fianca.pdf', 'application/pdf', pdfBytes('apolice-seguro-fianca'), 'contracts');
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'INSURANCE', value: 10500, status: 'ACTIVE', startsAt: '2026-11-01', endsAt: '2027-10-31' },
+      {
+        guaranteeType: 'INSURANCE', value: 10500, status: 'ACTIVE', startsAt: '2026-11-01', endsAt: '2027-10-31',
+        providerName: 'Seguradora Fictícia do Drill', policyNumber: 'DRILL-APOLICE-0001', policyFileId: policyFile.id, renewalDueAt: '2027-10-01',
+        premiumInstallments: [{ number: 1, dueDate: '2026-11-10', amount: 875 }, { number: 2, dueDate: '2026-12-10', amount: 875 }],
+      },
       tenant.userId,
       t
     );
@@ -302,9 +328,10 @@ async function seedTenantA(tenant, approverId) {
 // submissão ao banco (adapter sandbox) → callback CONFIRMED.
 async function seedConfirmedBankPayment(tenant, approverId) {
   const { CostCenter, BankAccount } = require('../../src/models');
-  const { createFinancialEntry } = require('../../src/features/finance/financialEntries.service');
-  const { createPaymentIntent, approvePaymentIntent } = require('../../src/features/finance/paymentIntents.service');
-  const { submitPaymentIntentToBank, confirmBankPayment } = require('../../src/features/finance/bankPayments.service');
+  const { createFinancialEntry } = require('../../src/modules/finance/application/services/financial-entry.service');
+  const { createPaymentIntent, approvePaymentIntent } = require('../../src/modules/finance/application/services/payment.service');
+  const { submitPaymentIntentToBank } = require('../../src/modules/finance/application/services/bank-submission.service');
+  const { confirmBankPayment } = require('../../src/modules/finance/application/services/payment.service');
   return inTenant(tenant, async (t) => {
     const costCenter = await CostCenter.create({ groupId: tenant.groupId, companyId: tenant.companyId, code: `CC-DRILL-${Date.now()}`, name: 'DRILL Centro de custo' }, { transaction: t });
     const bankAccount = await BankAccount.create(
@@ -354,6 +381,9 @@ async function main() {
   const admin = await User.findOne({ where: { email: 'admin@nayaraone.dev' } });
   const tenantA = { groupId: group.id, companyId: company.id, userId: admin.id };
   const approver = await User.create({ name: 'DRILL Aprovador', email: `drill-approver-${Date.now()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' });
+  // Escalonamento do processo e aprovador precisam ter vínculo ativo com a empresa (regra do Marco 5: responsável e
+  // escalonamento de outra empresa são recusados — achado do pentest).
+  await inTenant(tenantA, (t) => UserMembership.create({ userId: approver.id, groupId: tenantA.groupId, companyId: tenantA.companyId, status: 'ACTIVE' }, { transaction: t }));
 
   const a = await seedTenantA(tenantA, approver.id);
   const bankPayment = await seedConfirmedBankPayment(tenantA, approver.id);

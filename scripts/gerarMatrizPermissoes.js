@@ -16,18 +16,14 @@ function prefixFrom(layer) {
   return m ? m[1].replace(/\\\//g, '/') : '';
 }
 
-function walk(stack, prefix, out) {
+/** Visita cada rota (método × caminho completo) com a lista de funções da cadeia, na ordem do Express. */
+function percorrerRotas(stack, prefix, visitar) {
   for (const layer of stack) {
     if (layer.route) {
       const handlers = layer.route.stack.map((l) => l.handle);
-      const permissions = [...new Set(handlers.map((h) => h.requiredPermission).filter(Boolean))];
-      const mfa = handlers.some((h) => h.name === 'requireRecentMfa');
-      const scope = handlers.map((h) => h.requiredScope).find(Boolean) || null; // rota da API externa (M9-D844): scope exigido do token de cliente
-      for (const method of Object.keys(layer.route.methods)) {
-        out.push({ method: method.toUpperCase(), path: prefix + layer.route.path, permissions, mfaRecente: mfa, ...(scope ? { scope } : {}) });
-      }
+      for (const method of Object.keys(layer.route.methods)) visitar(method.toUpperCase(), prefix + layer.route.path, handlers);
     } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
-      walk(layer.handle.stack, prefix + prefixFrom(layer), out);
+      percorrerRotas(layer.handle.stack, prefix + prefixFrom(layer), visitar);
     }
   }
 }
@@ -35,7 +31,14 @@ function walk(stack, prefix, out) {
 function gerar() {
   const router = require('../src/routes');
   const out = [];
-  walk(router.stack, '/api', out);
+  percorrerRotas(router.stack, '/api', (method, rota, handlers) => {
+    const permissions = [...new Set(handlers.map((h) => h.requiredPermission).filter(Boolean))];
+    const mfa = handlers.some((h) => h.name === 'requireRecentMfa');
+    const scope = handlers.map((h) => h.requiredScope).find(Boolean) || null; // rota da API externa (M9-D844): scope exigido do token de cliente
+    // Permissão exigida só em certos pedidos (ex.: /transition para APPROVED exige contracts.version.approve): fica fora de `permissions`.
+    const condicionais = handlers.map((h) => h.conditionalPermission).filter(Boolean);
+    out.push({ method, path: rota, permissions, mfaRecente: mfa, ...(scope ? { scope } : {}), ...(condicionais.length ? { condicionais } : {}) });
+  });
   return out.sort((a, b) => (a.path + a.method).localeCompare(b.path + b.method));
 }
 
@@ -52,7 +55,7 @@ function gerarCatalogoGovernanca(rotas) {
   }));
 }
 
-module.exports = { gerar, gerarCatalogoGovernanca };
+module.exports = { gerar, gerarCatalogoGovernanca, percorrerRotas };
 
 if (require.main === module) {
   const rotas = gerar();
@@ -72,7 +75,8 @@ if (require.main === module) {
       if (/^\/api\/v1\/files/.test(r.path)) return 'só login; o acesso ao arquivo é decidido pelo dono e pela permissão do módulo';
       return 'só login';
     };
-    const linha = (r) => `| \`${r.method}\` | \`${r.path}\` | ${r.permissions.length ? r.permissions.map((p) => `\`${p}\``).join(', ') : categoria(r)} | ${r.mfaRecente ? 'sim' : 'não'} |`;
+    const extra = (r) => (r.condicionais || []).map((c) => `; \`${c.code}\` quando ${c.when}`).join('');
+    const linha = (r) => `| \`${r.method}\` | \`${r.path}\` | ${r.permissions.length ? r.permissions.map((p) => `\`${p}\``).join(', ') + extra(r) : categoria(r)} | ${r.mfaRecente ? 'sim' : 'não'} |`;
     const md = [
       '# Matriz de permissões da API',
       '',

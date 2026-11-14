@@ -20,7 +20,7 @@ function filters(window) {
   return {
     'radar.matches': { period, equals: { eventType: 'radar.matched' } },
     'crm.broker_capture': { period, equals: live },
-    'crm.broker_conversion': { period, status: ['CLOSED_LOST', 'CLOSED_WON'], equals: live },
+    'crm.broker_conversion': { period, status: ['LOST', 'WON'], equals: live },
   };
 }
 

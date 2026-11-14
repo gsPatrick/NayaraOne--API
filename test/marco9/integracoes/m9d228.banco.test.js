@@ -13,8 +13,9 @@ const dispatchApi = require('../../../src/features/integrations/dispatch');
 const { clearCircuitCache } = require('../../../src/features/integrations/health');
 const health = require('../../../src/features/integrations/health');
 const { IntegrationConnection } = require('../../../src/models');
-const bankPayments = require('../../../src/features/finance/bankPayments.service');
-const paymentIntents = require('../../../src/features/finance/paymentIntents.service');
+const bankPayments = require('../../../src/modules/finance/application/services/bank-submission.service');
+const paymentService = require('../../../src/modules/finance/application/services/payment.service');
+const paymentIntents = require('../../../src/modules/finance/application/services/payment.service');
 const { runEventConsumers } = require('../../../src/engines/events/consumers');
 const { OutboxEvent } = require('../../../src/models');
 
@@ -31,7 +32,7 @@ const linhaDe = (id) => e215.ler(tenant, id);
 before(async () => {
   ({ tenant } = await e215.carregarTenants());
   contingency.installContingency();
-  require('../../../src/features/finance/bank');
+  require('../../../src/modules/finance/application/services/bank-hub');
 });
 beforeEach(async () => {
   Banco = e215.bancoReconciliavel();
@@ -50,7 +51,7 @@ test('contingencia_banco_nao_presume_pago', async () => {
     await health.updateCircuitState(connection.id, { circuitState: 'OPEN', circuitOpenedAt: new Date(), circuitCooldownS: 3600 }, t);
     const { entry, intent } = await e237.intencaoEnviada(t, { amount: 1800.5 });
     // O banco está fora: a ordem espera na fila, a intenção segue SUBMITTING e a tela diz "Aguardando confirmação do banco"; nada é EXECUTED nem liquidado.
-    assert.equal(intent.status, 'SUBMITTING');
+    assert.equal(intent.status, 'EXECUTING');
     assert.equal(intent.externalStatus, 'QUEUED');
     assert.equal(intent.statusMessage, 'Aguardando confirmação do banco');
     assert.equal(intent.toJSON().statusMessage, 'Aguardando confirmação do banco');
@@ -64,7 +65,7 @@ test('contingencia_banco_nao_presume_pago', async () => {
     assert.equal(ativas.find((a) => a.connectionId === connection.id).mode, 'NO_ASSUME_AND_QUERY');
     assert.equal(r.switched, 0, 'o banco não troca sozinho de fornecedor: outro banco só com aprovação humana e MFA');
     await intent.reload({ transaction: t });
-    assert.equal(intent.status, 'SUBMITTING', 'depois da rodada continua aguardando: nenhum pagamento é presumido');
+    assert.equal(intent.status, 'EXECUTING', 'depois da rodada continua aguardando: nenhum pagamento é presumido');
     assert.equal((await entry.reload({ transaction: t })).status, 'PENDING');
   });
 });
@@ -160,20 +161,20 @@ test('contingencia_pendencia_72h_nao_vira_pago_sem_evidencia', async () => {
     for (const e of await OutboxEvent.findAll({ where: { companyId: e237.tenant.companyId, eventType: 'integration.contingency.manual_task' }, transaction: t })) await runEventConsumers(e, t);
     // Nada vira PAID por tempo: a intenção segue aguardando, a execução manual é recusada e sem evidência do banco não há por onde liquidar.
     await intent.reload({ transaction: t });
-    assert.equal(intent.status, 'SUBMITTING');
+    assert.equal(intent.status, 'EXECUTING');
     await assert.rejects(paymentIntents.executePaymentIntent(intent.id, e237.tenant.userId, t), (e) => e.statusCode === 409 && e.code === 'FINANCE_PAYMENT_INTENT_NOT_APPROVED');
-    await assert.rejects(bankPayments.confirmBankPayment('ext-que-o-banco-nunca-informou', 'PAID', t), (e) => e.statusCode === 404 && e.code === 'FINANCE_BANK_PAYMENT_ROUTING_NOT_FOUND');
+    await assert.rejects(paymentService.confirmBankPayment('ext-que-o-banco-nunca-informou', 'PAID', t), (e) => e.statusCode === 404 && e.code === 'FINANCE_BANK_PAYMENT_ROUTING_NOT_FOUND');
     assert.equal((await entry.reload({ transaction: t })).status, 'PENDING');
     // O banco volta: a ordem é consultada pela chave e reenviada com a mesma chave; ainda assim só o status FINAL, com o valor conferido, liquida.
     await health.updateCircuitState(connection.id, { circuitState: 'CLOSED', circuitOpenedAt: null, circuitCooldownS: null, consecutiveFailures: 0 }, t);
     await bankPayments.reconcilePaymentIntent(intent.id, { userId: e237.tenant.userId }, t);
     await intent.reload({ transaction: t });
-    assert.equal(intent.status, 'SUBMITTED', 'o banco aceitou a ordem');
+    assert.equal(intent.status, 'EXECUTING', 'o banco aceitou a ordem');
     assert.ok(intent.externalSubmissionId);
-    await bankPayments.confirmBankPayment(intent.externalSubmissionId, 'PROCESSING', t);
+    await paymentService.confirmBankPayment(intent.externalSubmissionId, 'PROCESSING', t);
     assert.equal((await entry.reload({ transaction: t })).status, 'PENDING', 'status não final nunca liquida');
-    await bankPayments.confirmBankPayment(intent.externalSubmissionId, 'PAID', t, { amount: '3000.00', source: 'STATUS_QUERY' });
-    assert.equal((await intent.reload({ transaction: t })).status, 'EXECUTED', 'a evidência (status final do banco com o valor) é o que paga');
+    await paymentService.confirmBankPayment(intent.externalSubmissionId, 'PAID', t, { amount: '3000.00', source: 'STATUS_QUERY' });
+    assert.equal((await intent.reload({ transaction: t })).status, 'CONFIRMED', 'a evidência (status final do banco com o valor) é o que paga');
     assert.equal((await entry.reload({ transaction: t })).status, 'SETTLED');
   });
 });

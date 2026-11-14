@@ -15,6 +15,7 @@ const cartsService = require('./carts.service');
 const { sequelize } = require('../../models');
 const messaging = require('./messaging');
 const { assertRecordBodyLimit } = require('./messaging/messaging.textLimits');
+const { resolveOpportunityOwnerScope } = require('./opportunityScope.guard');
 
 // --- Opportunities ---
 
@@ -26,18 +27,7 @@ const createOpportunity = catchAsync(async (req, res) => {
   return success(res, { statusCode: 201, data: opportunity });
 });
 
-// CRM-TS-012: resolve o escopo ANTES do service — se o usuário tem a permissão de gestor
-// (`crm:opportunities:read:all`), vê tudo; se só tem a de corretor (`:read:own`), vê só a
-// própria carteira; se não tem NENHUMA das duas (papel ainda não migrado para o RBAC
-// granular), cai no fallback 'ALL' — sem regressão de acesso para quem já usava o sistema
-// antes desta permissão existir.
-function resolveOpportunityOwnerScope(auth) {
-  const permissions = auth.permissions || [];
-  if (permissions.includes('crm:opportunities:read:all')) return { mode: 'ALL' };
-  if (permissions.includes('crm:opportunities:read:own')) return { mode: 'OWN', userId: auth.userId };
-  return { mode: 'ALL' };
-}
-
+// CRM-TS-012: o escopo de carteira (gestor x corretor) é resolvido em opportunityScope.guard.js (listagem e rotas por id).
 const listOpportunities = catchAsync(async (req, res) => {
   const opportunities = await req.withTenantTransaction((transaction) =>
     opportunitiesService.listOpportunities(transaction, {
@@ -123,6 +113,7 @@ const listVisits = catchAsync(async (req, res) => {
       opportunityId: req.query.opportunityId,
       personId: req.query.personId,
       status: req.query.status,
+      carteira: req.carteira, // CRM-TS-012: escopo da carteira (carteira.guard.js)
     })
   );
   return success(res, { data: visits });
@@ -184,7 +175,7 @@ const refreshMessageStatus = catchAsync(async (req, res) => {
 
 const listMessages = catchAsync(async (req, res) => {
   const messages = await req.withTenantTransaction((transaction) =>
-    messagesService.listMessages(transaction, { personId: req.query.personId, opportunityId: req.query.opportunityId })
+    messagesService.listMessages(transaction, { personId: req.query.personId, opportunityId: req.query.opportunityId, carteira: req.carteira })
   );
   return success(res, { data: messages });
 });
@@ -217,6 +208,7 @@ const listProposals = catchAsync(async (req, res) => {
       opportunityId: req.query.opportunityId,
       propertyId: req.query.propertyId,
       status: req.query.status,
+      carteira: req.carteira, // CRM-TS-012
     })
   );
   return success(res, { data: proposals });
@@ -247,8 +239,11 @@ const getDashboard = catchAsync(async (req, res) => {
         propertyId: req.query.propertyId,
         createdFrom: req.query.createdFrom,
         createdTo: req.query.createdTo,
+        // M3-17: o mesmo escopo de carteira da listagem (corretor de escopo próprio só vê os números da carteira dele).
+        ownerScope: resolveOpportunityOwnerScope(req.auth),
       },
-      transaction
+      transaction,
+      { groupId: req.auth.groupId, companyId: req.auth.companyId }
     )
   );
   return success(res, { data: dashboard });
@@ -273,6 +268,7 @@ const listFeedbackCases = catchAsync(async (req, res) => {
       personId: req.query.personId,
       assignedToUserId: req.query.assignedToUserId,
       overdue: req.query.overdue === 'true',
+      carteira: req.carteira, // CRM-TS-012
     })
   );
   return success(res, { data: cases });

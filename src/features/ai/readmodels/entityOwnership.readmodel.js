@@ -13,6 +13,7 @@ const ENTITY_TABLES = Object.freeze({
   property: 'real_estate.properties',
   constructionProject: 'construction.projects',
   legalContract: 'legal.contracts',
+  legalInspection: 'legal.inspections', // Fechamento M5: legal.compareInspections
   financingCase: 'correspondent.financing_cases',
   financialEntry: 'finance.financial_entries',
   file: 'people.files',

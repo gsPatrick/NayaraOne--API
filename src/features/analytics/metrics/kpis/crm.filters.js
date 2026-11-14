@@ -26,8 +26,8 @@ function filtersOf(asOfDate, includeToday) {
       'crm.leads_by_origin': { period, equals: live },
       'crm.first_response_time': { period, equals: live },
       'crm.opportunities_by_stage': { equals: { ...live, crmClosedFrom: w.from, crmClosedTo: w.to } },
-      'crm.conversion_rate': { period, status: ['CLOSED_LOST', 'CLOSED_WON'], equals: live },
-      'crm.loss_reasons': { period, status: ['CLOSED_LOST'], equals: live },
+      'crm.conversion_rate': { period, status: ['LOST', 'WON'], equals: live },
+      'crm.loss_reasons': { period, status: ['LOST'], equals: live },
       'crm.portfolio_without_next_action': { equals: { ...live, crmTaskDueFrom: w.taskDueFrom } },
     },
   };

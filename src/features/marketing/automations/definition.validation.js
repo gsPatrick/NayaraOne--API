@@ -1,5 +1,7 @@
 'use strict';
 
+const { STAGES, canonicalStage } = require('../../crm/opportunityStages');
+
 const {
   TRIGGER_TYPES, RISK_LEVELS, COOLDOWN_UNITS, FREQUENCY_SCOPES, MAX_ACTIONS, ACTION_TYPES, TRIGGER_EVENTS,
 } = require('./catalog');
@@ -71,6 +73,8 @@ const ACTION_REQUIRED_FIELDS = {
   CREATE_CONTENT_DRAFT: { field: 'type', reason: 'Informe o tipo do conteúdo do rascunho.', test: (a) => filled(a.type) },
   OPEN_CASE: { field: 'description', reason: 'Informe a descrição da ocorrência.', test: (a) => filled(a.description) },
   UPDATE_CRM_STAGE_TAG: { field: 'stage', reason: 'Informe a etapa ou a etiqueta.', test: (a) => filled(a.stage) || filled(a.temperature) },
+  // Funil do livro do Marco 3 §10: a etapa da automação precisa existir no catálogo, senão a execução falharia depois.
+  UPDATE_CRM_STAGE_TAG_CATALOGO: { field: 'stage', reason: `Etapa fora do funil do livro. Use uma destas: ${STAGES.join(', ')}.`, test: (a) => !filled(a.stage) || STAGES.includes(canonicalStage(a.stage)) },
 };
 
 function checkActions(def, problems) {
@@ -86,6 +90,8 @@ function checkActions(def, problems) {
     // O que o executor exige para rodar e que não depende do contato: falta aqui vira pendência na publicação, não falha na execução.
     const required = ACTION_REQUIRED_FIELDS[action.actionType];
     if (required && !required.test(action)) problems.push({ field: `actions[${i}].${required.field}`, reason: required.reason });
+    const catalogo = ACTION_REQUIRED_FIELDS[`${action.actionType}_CATALOGO`];
+    if (catalogo && !catalogo.test(action)) problems.push({ field: `actions[${i}].${catalogo.field}`, reason: catalogo.reason });
   });
 }
 

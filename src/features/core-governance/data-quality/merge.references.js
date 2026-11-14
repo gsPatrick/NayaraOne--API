@@ -4,7 +4,7 @@ const { QueryTypes } = require('sequelize');
 const { sequelize } = require('../../../models');
 const { govError } = require('../governance.errors');
 const { TABLE_OF } = require('./merge.repository');
-const { SUPPLIER_EXTRA_REFERENCES, FILE_LINK_TYPES, DERIVED_TABLES } = require('./merge.constants');
+const { SUPPLIER_EXTRA_REFERENCES, FILE_LINK_TYPES, DERIVED_TABLES, HISTORY_REFERENCES } = require('./merge.constants');
 
 const ident = (value) => `"${String(value).replace(/"/g, '""')}"`;
 const qualified = (name) => name.split('.').map(ident).join('.');
@@ -30,11 +30,20 @@ const extraReferences = (entityType) => (entityType === 'SUPPLIER' ? SUPPLIER_EX
 
 const allReferences = async (entityType, transaction) => [...(await foreignReferences(entityType, transaction)), ...extraReferences(entityType)];
 
-/** Quantas linhas apontam para o cadastro que sai, por tabela (só as que têm linha). Usado pela rota /impact. */
+/** Condição SQL das linhas que a união MOVE (as de histórico imutável ficam no cadastro absorvido, HISTORY_REFERENCES); null = nenhuma. */
+function movedRowsFilter(table, column) {
+  const frozen = HISTORY_REFERENCES[`${table}.${column}`];
+  if (frozen === 'true') return null;
+  return frozen ? ` AND NOT (${frozen})` : '';
+}
+
+/** Quantas linhas a união vai mover do cadastro que sai, por tabela (só as que têm linha). Usado pela rota /impact. */
 async function countReferences(entityType, otherId, transaction) {
   const counts = {};
   for (const { table, column } of await allReferences(entityType, transaction)) {
-    const [{ n }] = await sequelize.query(`SELECT count(*)::int AS n FROM ${qualified(table)} WHERE ${ident(column)} = :otherId`, { type: QueryTypes.SELECT, transaction, replacements: { otherId } });
+    const keep = movedRowsFilter(table, column);
+    if (keep === null) continue;
+    const [{ n }] = await sequelize.query(`SELECT count(*)::int AS n FROM ${qualified(table)} WHERE ${ident(column)} = :otherId${keep}`, { type: QueryTypes.SELECT, transaction, replacements: { otherId } });
     if (n > 0) counts[`${table}.${column}`] = n;
   }
   const [{ n: links }] = await sequelize.query(
@@ -44,8 +53,27 @@ async function countReferences(entityType, otherId, transaction) {
   return counts;
 }
 
+/**
+ * Tabela em que o papel da sessão não tem UPDATE (ex.: só SELECT e INSERT por desenho): o mesmo cuidado do merge de Pessoas (M3-04,
+ * personMerge.references) — segue só se nenhuma linha que a união moveria aponta para o absorvido; senão recusa (nunca referência órfã
+ * em silêncio, nunca erro 500 de permissão).
+ */
+async function updateAllowed(table, column, otherId, keep, transaction) {
+  const [priv] = await sequelize.query(`SELECT has_table_privilege(CAST(:t AS text), 'UPDATE') AS pode_update, has_table_privilege(CAST(:t AS text), 'SELECT') AS pode_select`,
+    { type: QueryTypes.SELECT, transaction, replacements: { t: table } });
+  if (priv.pode_update) return true;
+  const blocked = () => govError(409, 'GOV_MERGE_PROTECTED_REFERENCE', 'Não foi possível unir: há registro protegido contra alteração que aponta para o cadastro que sai. Peça ajuda a quem administra o sistema.', { reference: `${table}.${column}` });
+  if (!priv.pode_select) throw blocked();
+  const [{ n }] = await sequelize.query(`SELECT count(*)::int AS n FROM ${qualified(table)} WHERE ${ident(column)} = :otherId${keep}`, { type: QueryTypes.SELECT, transaction, replacements: { otherId } });
+  if (n > 0) throw blocked();
+  return false;
+}
+
 async function update(table, column, survivorId, otherId, transaction) {
-  const [, meta] = await sequelize.query(`UPDATE ${qualified(table)} SET ${ident(column)} = :survivorId WHERE ${ident(column)} = :otherId`, { transaction, replacements: { survivorId, otherId } });
+  const keep = movedRowsFilter(table, column);
+  if (keep === null) return 0; // histórico imutável: fica no cadastro absorvido (merge.constants)
+  if (!(await updateAllowed(table, column, otherId, keep, transaction))) return 0;
+  const [, meta] = await sequelize.query(`UPDATE ${qualified(table)} SET ${ident(column)} = :survivorId WHERE ${ident(column)} = :otherId${keep}`, { transaction, replacements: { survivorId, otherId } });
   return meta && meta.rowCount ? meta.rowCount : 0;
 }
 

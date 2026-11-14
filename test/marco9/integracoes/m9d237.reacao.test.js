@@ -10,7 +10,7 @@ const env = require('../_helpers/m9d237Env');
 const reacao = require('../_helpers/reacaoD220');
 const { erroHttp } = require('../_helpers/m9d214Scripted');
 const { IntegrationDispatch } = require('../../../src/models');
-const { SandboxBankAdapter } = require('../../../src/features/finance/adapters/BankAdapter');
+const { SandboxBankAdapter } = require('../../../src/modules/finance/infrastructure/bank/providers/sandbox.provider');
 const { publishDispatchEvent, EVENTS } = require('../../../src/features/integrations/dispatch/dispatch.events');
 const { compensateDispatch } = require('../../../src/features/integrations/domain');
 
@@ -34,7 +34,7 @@ test('banco_d220_recusa_do_banco_vai_a_failed_so_pelo_evento_e_uma_vez', async (
   try {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const { entry, intent } = await env.intencaoEnviada(t);
-      assert.equal(intent.status, 'SUBMITTING', 'a recusa chegou ao envio, mas a intenção só muda pelo evento');
+      assert.equal(intent.status, 'EXECUTING', 'a recusa chegou ao envio, mas a intenção só muda pelo evento');
       const [envio] = await env.envios(t, intent.id);
       assert.equal(envio.status, 'FAILED');
       assert.equal(envio.last_error_class, 'VALIDATION');
@@ -57,11 +57,11 @@ test('banco_d220_falha_sem_recusa_e_sem_resposta_nao_decidem_o_pagamento', async
       assert.equal(envio.status, 'UNKNOWN', 'timeout depois de enviar: incerto, nunca falho');
       const falhos = await env.linhas(t, "SELECT count(*)::int AS n FROM integration.outbox_events WHERE event_type = 'integration.dispatch.failed' AND payload_json->>'dispatchId' = :d", { d: envio.id });
       assert.equal(falhos[0].n, 0, 'sem resposta do banco não há evento de falha');
-      assert.equal((await recarregar(t, intent)).status, 'SUBMITTING');
+      assert.equal((await recarregar(t, intent)).status, 'EXECUTING');
       // Mesmo uma falha de credencial (classe AUTH) não decide o pagamento: a intenção segue em envio incerto, com o rastro auditado.
       await publishDispatchEvent(env.ctxDe(), await IntegrationDispatch.findByPk(envio.id, { transaction: t }), EVENTS.FAILED, { errorClass: 'AUTH', errorCode: 'HTTP_401', status: 'FAILED' }, t);
       await reacao.consumirNaTransacao(sequelize, t, 'integration.dispatch.failed', envio.id);
-      assert.equal((await recarregar(t, intent)).status, 'SUBMITTING');
+      assert.equal((await recarregar(t, intent)).status, 'EXECUTING');
       assert.equal(await reacao.reacoesNaTransacao(sequelize, t, 'finance.bank.dispatch_failed', intent.id), 1);
     });
   } finally { restaurar(); }
@@ -75,7 +75,7 @@ test('banco_d220_sem_resposta_conclusiva_abre_revisao_humana_sem_mudar_a_intenca
       const envio = await IntegrationDispatch.findOne({ where: { aggregateType: 'PaymentIntent', aggregateId: intent.id }, transaction: t });
       await publishDispatchEvent(env.ctxDe(), envio, EVENTS.NEEDS_MANUAL_REVIEW, { reason: 'UNRESOLVED' }, t);
       await reacao.consumirNaTransacao(sequelize, t, 'integration.dispatch.needs_manual_review', envio.id);
-      assert.equal((await recarregar(t, intent)).status, 'SUBMITTING', 'o pagamento pode ter saído: a intenção não muda');
+      assert.equal((await recarregar(t, intent)).status, 'EXECUTING', 'o pagamento pode ter saído: a intenção não muda');
       const abertos = await casos(t, intent.id);
       assert.equal(abertos.length, 1, 'duas entregas do evento, um caso de revisão');
       assert.equal(abertos[0].risk_level, 'HIGH');
@@ -111,8 +111,14 @@ test('banco_d220_pagamento_nao_tem_compensacao_automatica_e_o_envio_original_fic
 });
 
 test('banco_d220_modulo_nao_chama_o_banco_direto_para_ordenar_pagamento', () => {
-  const dir = path.join(__dirname, '../../../src/features/finance/bank');
-  const fontes = fs.readdirSync(dir).filter((f) => f.endsWith('.js')).map((f) => [f, fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')]);
+  // Guia M4 §2: o hub do banco fica em infrastructure/bank/hub; as reações, o webhook e a fachada, em application/services.
+  const fin = path.join(__dirname, '../../../src/modules/finance');
+  const hub = path.join(fin, 'infrastructure', 'bank', 'hub');
+  const arquivos = [
+    ...fs.readdirSync(hub).filter((f) => f.endsWith('.js')).map((f) => path.join(hub, f)),
+    ...['bank-hub.js', 'bank-reactions.js', 'bank-webhook.service.js'].map((f) => path.join(fin, 'application', 'services', f)),
+  ];
+  const fontes = arquivos.map((f) => [path.basename(f), fs.readFileSync(f, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')]);
   for (const [f, texto] of fontes) assert.equal(/\.submitPayment\(|new (Sandbox|Santander)BankAdapter/.test(texto), false, `${f} ordena pagamento por fora do Dispatch Service`);
   assert.ok(fontes.some(([, t]) => /registerDomainReaction/.test(t)));
 });

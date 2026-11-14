@@ -1,0 +1,56 @@
+# estágio 16: pentest
+$ node --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/fin-ci/estagio-16-0.xml test/f06.flowSecurity.test.js test/adversarial.finance.test.js test/finance.exportCsvInjection.test.js test/finance.receiptFileAccess.test.js test/finance.bankWebhookSignature.test.js
+✔ ADV-F01 trocar o company_id do contexto não deixa ler o lançamento da outra empresa (RLS bloqueia, não filtra no app) (95.2925ms)
+✔ ADV-F02 forjar companyId no payload (escrever lançamento na empresa vizinha) é barrado pelo banco, não pela UI (21.645667ms)
+✔ ADV-F03 conciliar lançamento da empresa A dizendo que pertence à empresa vizinha é recusado (49.424291ms)
+✔ ADV-F04 valor negativo, zero, NaN, Infinity e string não-numérica são recusados na criação do lançamento (10.525791ms)
+✔ ADV-F05 overflow numérico (valor além do DECIMAL(18,2)) falha alto — nunca grava valor truncado silenciosamente (20.950208ms)
+(node:28646) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ ADV-F06 valor com mais de 2 casas decimais não "cria dinheiro": é arredondado pelo tipo e a baixa parcial respeita o centavo (185.339208ms)
+✔ ADV-F07 SQL injection em campo de texto é armazenada como texto literal (Sequelize parametriza) e nada quebra (14.176208ms)
+✔ ADV-F08 competência forjada com payload de injeção é recusada pelo validador de formato (7.180458ms)
+✔ ADV-F09 id inexistente ou malformado devolve erro de negócio tratado — nunca 500 com detalhe de SQL vazando (4.161709ms)
+✔ ADV-F10 mandar "amount" e "status" no update de agenda não altera o valor nem o status do lançamento (20.192833ms)
+✔ ADV-F11 lançamento já liquidado não pode ser editado nem "re-liquidado", e o estorno não apaga o original (121.384333ms)
+✔ ADV-F12 baixa parcial em lançamento REVERSED/CANCELLED é recusada (não se paga o que já foi estornado) (33.801875ms)
+✔ ADV-F13 repetir o mesmo lançamento na lista do grupo pra "dobrar" a soma e casar com o extrato é recusado (20.595833ms)
+✔ ADV-F14 misturar crédito e débito no extrato pra "compensar" a diferença não engana a conciliação em grupo (21.580917ms)
+✔ ADV-F15 reusar uma transação bancária já conciliada em um novo grupo (dupla baixa do mesmo dinheiro) é recusado (39.660083ms)
+✔ ADV-F16 trocar o BENEFICIÁRIO depois da aprovação invalida a decisão baseada no que foi revisado (43.661584ms)
+✔ ADV-F17 abrir uma segunda solicitação de aprovação para a mesma entidade (garimpar um aprovador mais fácil) é bloqueado (17.307792ms)
+✔ ADV-F18 insistir numa solicitação já REJEITADA (reaprovar com outro usuário) não ressuscita o pagamento (25.806625ms)
+✔ ADV-F19 tentar limpar o flag de revisão manual pelo update de agenda (sem revisor) não funciona (51.949041ms)
+✔ ADV-F20 pagar para conta bancária BLOQUEADA depois da criação do lançamento é recusado no momento da baixa (38.344791ms)
+✔ ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total do lançamento (86.610375ms)
+(node:28675) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ F06-PAY-01 pular a aprovação: submeter ao banco uma intenção ainda PENDING é recusado (780.640542ms)
+✔ F06-PAY-02 reaproveitar a aprovação de OUTRO lançamento numa intenção é recusado (29.745042ms)
+✔ F06-PAY-03 recuperação após falha DEFINITIVA: nova tentativa confirmada liquida uma vez; replays e confirmação tardia da tentativa rejeitada não duplicam (274.087709ms)
+✔ F06-PAY-04 enquanto um pagamento está SUBMITTED (em trânsito no banco), abrir outra intenção para o mesmo lançamento é recusado (99.743292ms)
+✔ F06-PAY-05 resposta INCERTA do banco seguida da confirmação real: o pagamento é registrado no ledger exatamente uma vez (181.507208ms)
+✔ F06-PAY-06 depois de uma resposta INCERTA, não se abre um segundo pagamento para o mesmo lançamento (116.940625ms)
+✔ F06-IDOR-01 outra empresa real com legal:read não exporta o dossiê de A pela rota (404) e não deixa rastro na cadeia de custódia (189.161708ms)
+✔ F06-IDOR-02 outra empresa real não lê o relatório de vistoria de A pela rota (404) (25.667334ms)
+✔ F06-IDOR-03 outra empresa real não baixa arquivo de A pela rota de conteúdo (404) (71.291375ms)
+✔ F06-IDOR-04 outra empresa real com finance:read não lê lançamento de A pela rota (404) (54.880625ms)
+✔ F06-RBAC-01 perfil da própria empresa SEM a permissão de leitura é barrado (403) no dossiê, no relatório de vistoria e no lançamento (12.04775ms)
+✔ F06-RBAC-02 download de arquivo exige permissão de leitura do módulo dono do arquivo (81.021875ms)
+✔ F06-RBAC-02b arquivo do Estoque exige inventory:read; arquivo sem módulo dono só para uploader ou admin (100.962459ms)
+✔ bank webhook: verifyBankWebhookSignature aceita HMAC válido e rejeita ausente/errado/sem secret (timing-safe) (1.682708ms)
+✔ csvCell: neutraliza = + - @ TAB CR, preserva número negativo e escapa separador/aspas (332.742417ms)
+✔ exportFinancialEntries: descrições maliciosas saem prefixadas; colunas e valores intactos (59.87175ms)
+✔ rota GET /finance/exports/entries foi movida para POST /exports (M9-D822): 410 GOV_EXPORT_MOVED e nenhum arquivo sai por ela (51.270583ms)
+(node:28768) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ test/finance.receiptFileAccess.test.js (1918.842792ms)
+ℹ tests 39
+ℹ suites 0
+ℹ pass 39
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12012.583542
+# estágio 16: pentest => VERDE

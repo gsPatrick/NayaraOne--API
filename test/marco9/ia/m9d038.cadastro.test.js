@@ -11,7 +11,7 @@ const { computeConfigHash } = require('../../../src/features/ai/agents/agentConf
 const { AiEvaluationService } = require('../../../src/features/ai/evaluations');
 const policy = require('../../../src/features/ai/agents/nay_juridica/juridica.policy');
 const { AGENTE } = require('../../../migrations/_helpers/aiAgentJuridica');
-const nay = require('../../../src/features/legal/legalNay.service');
+const nay = require('../../../src/modules/legal/cases/legalNay.service');
 const H = require('../_helpers/m9d037Agente');
 const J = require('../_helpers/m9d038Juridico');
 
@@ -21,7 +21,8 @@ before(async () => { ({ tenantA, tenantB } = await prepararTenants()); });
 after(async () => { await sequelize.close(); });
 
 const PERMS = ['ai:use', 'legal:read', 'legal:create'];
-const TOOLS = ['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'legal.getExpiringContracts', 'knowledge.search', 'legal.draftContract'];
+// Fechamento M5 (§11): + legal.compareInspections (comparação de vistorias com sugestão para validação humana).
+const TOOLS = ['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'legal.getExpiringContracts', 'legal.compareInspections', 'knowledge.search', 'legal.draftContract'];
 
 test('m9d038_agente_cadastrado_com_proposito_tools_escopos_e_limites', async () => {
   await withRollbackTenantTransaction(tenantA, async (tx) => {
@@ -31,7 +32,7 @@ test('m9d038_agente_cadastrado_com_proposito_tools_escopos_e_limites', async () 
     assert.equal(row.criticality, 'CRITICAL');
     assert.equal(row.purpose, policy.PURPOSE);
     assert.equal(row.system_policy, policy.SYSTEM_POLICY);
-    assert.deepEqual(row.data_scopes, ['legal.contracts', 'legal.contract_versions', 'legal.requirements', 'legal.addenda', 'knowledge.homologated']);
+    assert.deepEqual(row.data_scopes, ['legal.contracts', 'legal.contract_versions', 'legal.requirements', 'legal.addenda', 'legal.inspections', 'knowledge.homologated']);
     assert.deepEqual(row.limits, { max_tool_calls_por_run: 6 });
     const tools = await H.q('SELECT tool_name, permission_code, risk_level, requires_human_approval, enabled FROM ai.agent_tools WHERE agent_id = :id ORDER BY tool_name', { id: row.id }, tx);
     assert.deepEqual(tools.map((t) => t.tool_name), [...TOOLS].sort());

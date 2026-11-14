@@ -115,7 +115,7 @@ test('m9d634 funil na ordem do parâmetro, com o tempo parado de cada estágio',
   const gravado = seeded['crm.opportunities_by_stage'].result.dimensions.filter((d) => /^estagio:[^:]+$/.test(d.key));
   assert.deepEqual([...ids].sort(), gravado.map((d) => d.key.split(':')[1]).sort(), 'todos os estágios gravados e nenhum a mais');
   assert.ok(w.view.items[0].formatted && w.view.items.every((i) => i.formatted !== null));
-  const order = 'NEW,QUALIFIED,MATCHING,VISIT_SCHEDULED,VISITED,PROPOSAL,FINANCING,CONTRACT,NURTURE,CLOSED_WON,CLOSED_LOST,WITHDRAWN'.split(',');
+  const order = 'NEW,QUALIFIED,MATCHING,VISIT_SCHEDULED,VISITED,PROPOSAL,FINANCING,CONTRACT,NURTURE,WON,LOST,WITHDRAWN'.split(',');
   const rank = (id) => (order.includes(id) ? order.indexOf(id) : 99);
   assert.deepEqual(ids, [...ids].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : 1)), 'ordem do funil do administrador');
   const idle = w.view.items.find((i) => (i.extra || []).length);
@@ -127,12 +127,12 @@ test('m9d634 ordem do funil acompanha o parâmetro do administrador', async () =
   const t = env.tenantA;
   await env.admin.query(
     "INSERT INTO core.tenant_settings (id, group_id, company_id, key, value) VALUES (gen_random_uuid(), :g, :c, 'analytics.comercial.ordem_estagios', CAST(:v AS jsonb))",
-    { replacements: { g: t.groupId, c: t.companyId, v: JSON.stringify('WITHDRAWN,CLOSED_LOST,CLOSED_WON,NEW,NEGOCIACAO') } }
+    { replacements: { g: t.groupId, c: t.companyId, v: JSON.stringify('WITHDRAWN,LOST,WON,NEW,NEGOCIACAO') } }
   );
   try {
     const res = await openPanel(env, 'crm', { perms: CRM_USER });
     const ids = metricWidgets(res).find((x) => x.metricCode === 'crm.opportunities_by_stage').view.items.map((i) => i.id);
-    const wanted = ['WITHDRAWN', 'CLOSED_LOST', 'CLOSED_WON', 'NEW'].filter((id) => ids.includes(id));
+    const wanted = ['WITHDRAWN', 'LOST', 'WON', 'NEW'].filter((id) => ids.includes(id));
     assert.deepEqual(ids.filter((id) => wanted.includes(id)), wanted, 'os estágios do parâmetro vêm na ordem dele');
   } finally {
     await env.admin.query("DELETE FROM core.tenant_settings WHERE company_id = :c AND key = 'analytics.comercial.ordem_estagios'", { replacements: { c: t.companyId } });

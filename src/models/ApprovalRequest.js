@@ -62,6 +62,16 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'lock_version_at_request',
       },
+      // M4PG (Caderno §5 "approval_requests: Snapshot de aprovação"; Guia §4 createFromRule): retrato aprovável e o hash dele, o nº de
+      // aprovadores e a versão da regra que os definiu (REG-FIN-002) ou a origem PARAMETERS, o motivo (estorno/reabertura) e o valor.
+      snapshotJson: { type: DataTypes.JSONB, allowNull: true, field: 'snapshot_json' },
+      snapshotHash: { type: DataTypes.STRING(64), allowNull: true, field: 'snapshot_hash' },
+      requiredApprovals: { type: DataTypes.INTEGER, allowNull: true, field: 'required_approvals' },
+      ruleVersionId: { type: DataTypes.UUID, allowNull: true, field: 'rule_version_id' },
+      riskSource: { type: DataTypes.STRING(16), allowNull: true, field: 'risk_source' },
+      reason: { type: DataTypes.TEXT, allowNull: true, field: 'reason' },
+      amount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'amount' },
+      payloadJson: { type: DataTypes.JSONB, allowNull: true, field: 'payload_json' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

@@ -4,6 +4,10 @@ const crypto = require('crypto');
 const { Cart, CartVersion, CartShareRouting, Opportunity, Property, PropertyOffer, PropertyMedia } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { publishDomainEvent } = require('../../engines/events/outbox');
+const { PHOTO_MEDIA_TYPES } = require('../properties/propertyMediaQuality.service');
+const { getSetting } = require('../settings/settings.service');
+const { LINK_EXPIRATION_DAYS_KEY, LINK_EXPIRATION_DAYS_DEFAULT, LINK_EXPIRATION_DAYS_MAX } = require('./carts.settings');
+const { recordCartEvent } = require('./cartTracking.service');
 
 /**
  * carts.service.js — item 3 do ciclo de auditoria externa Marco 3 ("crm.carts — não existe
@@ -22,7 +26,23 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
  * SignatureProviderRouting, pois o visitante do link público não tem tenant/JWT nenhum).
  */
 
-const DEFAULT_EXPIRATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Validade do link (livro §14 "link/coleção com expiração"): data própria do carrinho, ou o parâmetro da empresa
+// crm.cart.link_expiration_days (padrão 7 dias, o valor antes fixo aqui; DI-M3IM-6). A data própria precisa estar no futuro e
+// dentro do teto do parâmetro.
+async function resolveExpiresAt(expiresAt, companyId, transaction) {
+  if (expiresAt) {
+    const date = new Date(expiresAt);
+    if (Number.isNaN(date.getTime()) || date <= new Date() || date > new Date(Date.now() + LINK_EXPIRATION_DAYS_MAX * DAY_MS)) {
+      throw AppError.badRequest(`O campo "expiresAt" deve ser uma data futura, em até ${LINK_EXPIRATION_DAYS_MAX} dias.`, 'CART_VALIDATION');
+    }
+    return date;
+  }
+  const days = Number(await getSetting(LINK_EXPIRATION_DAYS_KEY, { companyId }, transaction, LINK_EXPIRATION_DAYS_DEFAULT));
+  const safeDays = Number.isInteger(days) && days >= 1 && days <= LINK_EXPIRATION_DAYS_MAX ? days : LINK_EXPIRATION_DAYS_DEFAULT;
+  return new Date(Date.now() + safeDays * DAY_MS);
+}
 
 async function createCart(opportunityId, payload, actorUserId, transaction) {
   const { propertyIds, expiresAt } = payload || {};
@@ -48,7 +68,7 @@ async function createCart(opportunityId, payload, actorUserId, transaction) {
       opportunityId,
       currentVersion: 1,
       status: 'ACTIVE',
-      expiresAt: expiresAt ? new Date(expiresAt) : new Date(Date.now() + DEFAULT_EXPIRATION_MS),
+      expiresAt: await resolveExpiresAt(expiresAt, opportunity.companyId, transaction),
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -191,12 +211,13 @@ async function getPublicCartByToken(token, sequelize) {
       const activeOffer = await PropertyOffer.findOne({ where: { propertyId: property.id, status: 'ACTIVE' }, transaction: t });
       // eslint-disable-next-line no-await-in-loop
       const approvedMedia = await PropertyMedia.findAll({
-        where: { propertyId: property.id, mediaType: 'PHOTO', qualityStatus: 'APPROVED' },
+        where: { propertyId: property.id, mediaType: PHOTO_MEDIA_TYPES, qualityStatus: 'APPROVED' },
         transaction: t,
       });
       sanitizedProperties.push(sanitizePropertyForPublicCart(property, activeOffer, approvedMedia));
     }
 
+    await recordCartEvent(cart, 'VIEWED', null, t); // rastreio (crm.cart_events)
     await publishDomainEvent(
       {
         groupId: cart.groupId,
@@ -230,7 +251,17 @@ async function recordPublicCartClick(token, propertyId, sequelize) {
 
     const cart = await Cart.findByPk(routing.cartId, { transaction: t });
     if (!cart) throw AppError.notFound('Carrinho não encontrado.', 'CART_NOT_FOUND');
+    // O clique vale as mesmas regras da visualização (verificação de 11/11/2026, CAD-14): link expirado ou revogado não registra
+    // nada, e só conta imóvel que está na versão atual do carrinho.
+    if (cart.status !== 'ACTIVE' || new Date(cart.expiresAt) < new Date()) {
+      throw AppError.unprocessable('Este link de carrinho expirou ou foi revogado.', 'CART_SHARE_LINK_EXPIRED');
+    }
+    const version = await CartVersion.findOne({ where: { cartId: cart.id, versionNumber: cart.currentVersion }, transaction: t });
+    if (!version || !(version.propertyIdsJson || []).includes(propertyId)) {
+      throw AppError.notFound('Este imóvel não está no carrinho.', 'CART_PROPERTY_NOT_IN_CART');
+    }
 
+    await recordCartEvent(cart, 'PROPERTY_CLICKED', propertyId, t); // rastreio (crm.cart_events)
     await publishDomainEvent(
       {
         groupId: cart.groupId,

@@ -11,7 +11,7 @@ const noFloatMoney = require('./scripts/eslint-rules/noFloatMoney');
 const nayaraPlugin = { rules: { 'analytics-somente-leitura': analyticsReadOnlyImports, 'analytics-camadas': analyticsCamadas, 'no-float-money': noFloatMoney } };
 
 module.exports = [
-  { ignores: ['.claude/**', 'node_modules/**', 'uploads/**', 'backups/**', 'scratchpad/**', 'coverage/**'] },
+  { ignores: ['.claude/**', 'node_modules/**', 'uploads/**', 'backups/**', 'scratchpad/**', 'coverage/**', 'front-checkout/**'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],

@@ -1,9 +1,9 @@
 'use strict';
 
 // M9-D036 — projeção de fluxo e anomalias para a NAY Financeira: serviços de leitura do Financeiro, sob o RLS do tenant.
-const { getCashflowProjection } = require('../../finance/financeCashflowProjection.service');
-const { getOpenAnomalies } = require('../../finance/financeAnomalySummary.service');
-const { listCollectionSuggestions } = require('../../finance/financeCollectionSuggestions.service');
+const { getCashflowProjection } = require('../../../modules/finance/application/services/finance-cashflow-projection.service');
+const { getOpenAnomalies } = require('../../../modules/finance/application/services/finance-anomaly-summary.service');
+const { listCollectionSuggestions } = require('../../../modules/finance/application/services/finance-collection-suggestions.service');
 const { getSetting } = require('../../settings/settings.service');
 const { FINANCEIRA_KEYS, FINANCEIRA_SETTING_DEFAULTS } = require('../agents/nay_financeira/financeira.settings');
 

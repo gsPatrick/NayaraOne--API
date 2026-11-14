@@ -12,17 +12,17 @@ const fs = require('fs');
 const path = require('path');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const commissionsService = require('../src/features/finance/commissions.service');
-const costCentersService = require('../src/features/finance/costCenters.service');
-const resultCentersService = require('../src/features/finance/resultCenters.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const bankPaymentsService = require('../src/features/finance/bankPayments.service');
-const financeExportService = require('../src/features/finance/financeExport.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
+const costCentersService = require('../src/modules/finance/application/services/cost-centers.service');
+const resultCentersService = require('../src/modules/finance/application/services/result-centers.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const bankPaymentsService = require('../src/modules/finance/application/services/bank-submission.service');
+const financeExportService = require('../src/modules/finance/application/services/finance-export.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const closeoutService = require('../src/features/billing/closeout.service');
 const { formatCompetenceBR, formatMoneyBR } = require('../src/utils/formatBR');
 const { AuditLog, PaymentIntent, BankPaymentProviderRouting } = require('../src/models');
@@ -132,7 +132,8 @@ test('F2: "Consultar banco" acha a intenção mesmo sem roteamento gravado e mud
     const { entry } = await payableEntry(transaction, 12.34);
     const created = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
     const intent = await PaymentIntent.findByPk(created.id, { transaction });
-    intent.status = 'SUBMITTED';
+    intent.status = 'EXECUTING'; // Guia M4 §3 (DEC-056): enviado ao banco = EXECUTING, fase SUBMITTED
+    intent.submissionPhase = 'SUBMITTED';
     intent.paymentMethod = 'PIX';
     intent.externalSubmissionId = `sandbox-m45-audit-${uniqueSuffix()}`;
     intent.externalStatus = 'PENDING_EXTERNAL';
@@ -141,7 +142,7 @@ test('F2: "Consultar banco" acha a intenção mesmo sem roteamento gravado e mud
 
     const result = await bankPaymentsService.reconcilePaymentIntent(intent.id, { userId: tenant.userId }, transaction);
     assert.equal(result.outcome, 'CONFIRMED');
-    assert.equal(result.intent.status, 'EXECUTED');
+    assert.equal(result.intent.status, 'CONFIRMED');
     const routing = await BankPaymentProviderRouting.findOne({ where: { externalSubmissionId: intent.externalSubmissionId }, transaction });
     assert.ok(routing, 'roteamento recriado');
     await expectTransition('finance.payment_intent.confirm_bank_payment', intent.id, transaction);
@@ -167,7 +168,7 @@ test('F8: competência e valores em formato brasileiro nos textos gerados', () =
 });
 
 test('varredura do código: toda auditoria dos Marcos 4/5 grava depois; não-criação grava antes e depois', () => {
-  const roots = ['src/features/finance', 'src/features/billing', 'src/features/legal', 'src/engines/jobs'].map((r) => path.join(__dirname, '..', r));
+  const roots = ['src/modules/finance', 'src/features/billing', 'src/modules/legal', 'src/engines/jobs'].map((r) => path.join(__dirname, '..', r));
   const CREATION = /\.(create|generate|request|open|enroll|import|step|access|manual_collect)'$/;
   const problems = [];
   const walk = (dir) => {

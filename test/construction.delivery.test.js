@@ -3,7 +3,9 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
+const { emOrdemComTrava } = require('./helpers/travaConcorrente');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const budgetsService = require('../src/features/construction/budgets.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
@@ -199,7 +201,7 @@ test('delivery: deliverProject BLOQUEIA entrega quando há não conformidade CRI
     const project = await createTestProject(transaction, 'FINAL_INSPECTION');
     await nonconformitiesService.createNonconformity(
       project.id,
-      withTenant({ description: 'Rachadura estrutural', severity: 'CRITICAL', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['99999999-9999-9999-9999-999999999999'] }),
+      withTenant({ description: 'Rachadura estrutural', severity: 'CRITICAL', responsibleUserId: tenant.userId, beforeEvidenceFileIds: await evidenceIds(tenant, transaction) }),
       tenant.userId,
       transaction
     );
@@ -266,7 +268,7 @@ test('delivery: reprovar item de checklist ESTRUTURA abre NC CRITICAL e BLOQUEIA
     );
     await qualityChecklistService.checkQualityItem(
       item.id,
-      { status: 'NOT_OK', notes: 'Fissura visível na viga.', evidenceFileIds: ['aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'] },
+      { status: 'NOT_OK', notes: 'Fissura visível na viga.', evidenceFileIds: await evidenceIds(tenant, transaction) },
       tenant.userId,
       transaction
     );
@@ -349,8 +351,8 @@ test('closeProjectWarranty: fecha a obra quando todos os casos de garantia estã
       {
         status: 'CLOSED',
         rootCauseCode: 'WORKMANSHIP',
-        beforeMediaFileIds: ['77777777-7777-7777-7777-777777777777'],
-        afterMediaFileIds: ['88888888-8888-8888-8888-888888888888'],
+        beforeMediaFileIds: await evidenceIds(tenant, transaction),
+        afterMediaFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
@@ -441,19 +443,17 @@ test('removeProject: concorrente com createBudget — não pode excluir a obra s
   });
 
   try {
-    // Transação A: cria o Budget, mas segura o lock (pg_sleep ANTES do commit) para garantir
-    // que a transação B (remove) realmente concorra com o lock ainda aberto.
-    const results = await Promise.allSettled([
-      withCommitted(async (t) => {
+    // Ordem garantida por sincronização explícita (test/helpers/travaConcorrente.js): a exclusão só começa com a criação
+    // segurando a trava da obra, e a criação só faz commit quando a exclusão está bloqueada por ela.
+    const results = await emOrdemComTrava(
+      sequelize,
+      withCommitted,
+      async (t) => {
         const budget = await budgetsService.createBudget(projectId, withTenant({}), tenant.userId, t);
-        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
         return budget;
-      }),
-      (async () => {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        return withCommitted((t) => projectsService.removeProject(projectId, tenant.userId, t));
-      })(),
-    ]);
+      },
+      (t) => projectsService.removeProject(projectId, tenant.userId, t)
+    );
 
     const [budgetResult, removeResult] = results;
     assert.equal(budgetResult.status, 'fulfilled', 'a criação do orçamento deve ter sucesso');
@@ -509,29 +509,29 @@ test('removeProject: concorrente com createChangeOrder — não pode excluir a o
   });
 
   try {
-    const results = await Promise.allSettled([
-      withCommitted(async (t) => {
+    // Ordem garantida por sincronização explícita (test/helpers/travaConcorrente.js): a exclusão só começa com a criação
+    // segurando a trava da obra, e a criação só faz commit quando a exclusão está bloqueada por ela.
+    const results = await emOrdemComTrava(
+      sequelize,
+      withCommitted,
+      async (t) => {
         const co = await changeOrdersService.createChangeOrder(
-          projectId,
-          withTenant({
-            reasonCode: 'SCOPE_CHANGE',
-            description: 'Aditivo de concorrência',
-            budgetImpact: 100,
-            scheduleImpactDays: 0,
-            evidenceFileIds: ['11111111-1111-1111-1111-111111111111'],
-            idempotencyKey: uniqueSuffix(),
-          }),
-          tenant.userId,
-          t
-        );
-        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
+        projectId,
+        withTenant({
+          reasonCode: 'SCOPE_CHANGE',
+          description: 'Aditivo de concorrência',
+          budgetImpact: 100,
+          scheduleImpactDays: 0,
+          evidenceFileIds: await evidenceIds(tenant, t),
+          idempotencyKey: uniqueSuffix(),
+        }),
+        tenant.userId,
+        t
+      );
         return co;
-      }),
-      (async () => {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        return withCommitted((t) => projectsService.removeProject(projectId, tenant.userId, t));
-      })(),
-    ]);
+      },
+      (t) => projectsService.removeProject(projectId, tenant.userId, t)
+    );
 
     const [coResult, removeResult] = results;
     assert.equal(coResult.status, 'fulfilled', 'a criação do Change Order deve ter sucesso');
@@ -584,28 +584,28 @@ test('removeProject: concorrente com createLossRecord — não pode excluir a ob
   });
 
   try {
-    const results = await Promise.allSettled([
-      withCommitted(async (t) => {
+    // Ordem garantida por sincronização explícita (test/helpers/travaConcorrente.js): a exclusão só começa com a criação
+    // segurando a trava da obra, e a criação só faz commit quando a exclusão está bloqueada por ela.
+    const results = await emOrdemComTrava(
+      sequelize,
+      withCommitted,
+      async (t) => {
         const loss = await lossRecordsService.createLossRecord(
-          projectId,
-          withTenant({
-            materialDescription: 'Cimento perdido',
-            quantity: 1,
-            estimatedValue: 50,
-            reason: 'Avaria de concorrência',
-            idempotencyKey: uniqueSuffix(),
-          }),
-          tenant.userId,
-          t
-        );
-        await sequelize.query('SELECT pg_sleep(1)', { transaction: t });
+        projectId,
+        withTenant({
+          materialDescription: 'Cimento perdido',
+          quantity: 1,
+          estimatedValue: 50,
+          reason: 'Avaria de concorrência',
+          idempotencyKey: uniqueSuffix(),
+        }),
+        tenant.userId,
+        t
+      );
         return loss;
-      }),
-      (async () => {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        return withCommitted((t) => projectsService.removeProject(projectId, tenant.userId, t));
-      })(),
-    ]);
+      },
+      (t) => projectsService.removeProject(projectId, tenant.userId, t)
+    );
 
     const [lossResult, removeResult] = results;
     assert.equal(lossResult.status, 'fulfilled', 'a criação do registro de perda deve ter sucesso');

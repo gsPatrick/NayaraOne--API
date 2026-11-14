@@ -19,11 +19,11 @@ const slice = ({ where }) => {
   return `
   SELECT month, broker_id, lost_reason, SUM(won)::int AS won, SUM(lost)::int AS lost, SUM(withdrawn)::int AS withdrawn, SUM(lost_count)::int AS lost_count FROM (
     SELECT ${MONTH} AS month, ${brokerExpr('o.owner_user_id')} AS broker_id, CAST('' AS text) AS lost_reason,
-           COUNT(*) FILTER (WHERE o.stage = 'CLOSED_WON') AS won, COUNT(*) FILTER (WHERE o.stage = 'CLOSED_LOST') AS lost,
+           COUNT(*) FILTER (WHERE o.stage = 'WON') AS won, COUNT(*) FILTER (WHERE o.stage = 'LOST') AS lost,
            COUNT(*) FILTER (WHERE o.stage = 'WITHDRAWN') AS withdrawn, 0 AS lost_count ${base} GROUP BY 1, 2
     UNION ALL
     SELECT ${MONTH}, ${brokerExpr('o.owner_user_id')}, COALESCE(NULLIF(o.lost_reason, ''), 'NAO_INFORMADO'), 0, 0, 0, COUNT(*)
-      ${base} AND o.stage = 'CLOSED_LOST' GROUP BY 1, 2, 3
+      ${base} AND o.stage = 'LOST' GROUP BY 1, 2, 3
   ) x GROUP BY 1, 2, 3`;
 };
 

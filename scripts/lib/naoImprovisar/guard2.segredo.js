@@ -22,7 +22,7 @@ function colunas(root) {
       if (nome && SENSIVEL.test(nome) && !SO_REFERENCIA.test(nome)) achados.push(violation(2, rel, i + 1, `Coluna "${nome}" de tabela de integração parece guardar segredo; o segredo vive no cofre e a tabela guarda só a referência (secret_ref).`, linha));
     });
   }
-  const migrations = listJs(root, 'migrations');
+  const migrations = [...listJs(root, 'migrations'), ...listJs(root, 'src/modules/finance/infrastructure/db/migrations')]; // M4-D140: as duas pastas de migrations
   for (const rel of migrations) {
     const linhas = rawLines(root, rel);
     if (!linhas.some((l) => /"integration"\."\w+"|integration\.\w+/.test(l) && /CREATE TABLE|ADD COLUMN/i.test(l))) continue;

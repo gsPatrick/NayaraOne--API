@@ -60,9 +60,9 @@ const contract = (env, t, c = {}) => insert(env, 'legal.contracts', t, {
   contract_type: c.type || 'LEASE', status: c.status || 'ACTIVE', property_id: c.property || null, total_value: c.value || null, starts_at: c.startsAt || null, ends_at: c.endsAt || null,
 });
 
-const guarantee = (env, t, c) => insert(env, 'legal.guarantees', t, { contract_id: c.contract, guarantee_type: c.type || 'GUARANTOR', status: c.status || 'ACTIVE', ends_at: c.endsAt || null, starts_at: '2026-01-01' });
+const guarantee = (env, t, c) => insert(env, 'legal.guarantees', t, { contract_id: c.contract, guarantee_type: ({ DEPOSIT: 'SECURITY_DEPOSIT', CAPITALIZATION_TITLE: 'CAPITALIZATION' })[c.type] || c.type || 'GUARANTOR', status: c.status || 'ACTIVE', ends_at: c.endsAt || null, starts_at: '2026-01-01' });
 
-const inspection = (env, t, c) => insert(env, 'legal.inspections', t, { property_id: c.property || uuid(), contract_id: c.contract, inspection_type: 'CHECK_IN', status: c.status || 'SCHEDULED' });
+const inspection = (env, t, c) => insert(env, 'legal.inspections', t, { property_id: c.property || uuid(), contract_id: c.contract, inspection_type: 'ENTRY', status: c.status || 'SCHEDULED' });
 
 const keyDelivery = (env, t, c) => insert(env, 'legal.key_deliveries', t, { contract_id: c.contract, delivered_to_person_id: uuid(), status: c.status || 'PENDING' });
 
@@ -70,7 +70,7 @@ const requirement = (env, t, c) => insert(env, 'legal.contract_requirements', t,
   contract_id: c.contract, requirement_code: `REQ-${uuid().slice(0, 6)}`, description: 'Exigência', requirement_type: 'DOCUMENT', status: c.status || 'PENDING', created_at: '2026-10-01T15:00:00Z', updated_at: '2026-10-01T15:00:00Z',
 });
 
-const utility = (env, t, c) => insert(env, 'finance.utility_obligations', t, {
+const utility = (env, t, c) => insert(env, 'legal.lease_obligations', t, {
   contract_id: c.contract, utility_type: 'WATER', responsible_party: 'TENANT', transfer_required: true, evidence_file_id: c.evidence || null, status: 'ACTIVE',
 });
 

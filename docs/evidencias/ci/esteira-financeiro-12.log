@@ -1,0 +1,26 @@
+# estágio 12: security_scan
+$ node scripts/sastScan.js
+=== sastScan — varredura de padrões perigosos em src/ ===
+Arquivos varridos: 4055
+
+sastScan: 0 ocorrências.
+$ node scripts/secretScan.js
+secretScan: 0 achados em 7366 arquivos.
+$ node scripts/securityScan.js
+=== securityScan — npm audit (dependências de produção) ===
+info=0 low=0 moderate=8 high=0 critical=0 total=8
+
+--- moderate/low (warning, não bloqueia o build) ---
+  - editorconfig (moderate) — fix disponível (npm audit fix)
+  - glob (moderate) — fix disponível (npm audit fix)
+  - js-beautify (moderate) — fix disponível (npm audit fix)
+  - minimatch (moderate) — fix disponível (npm audit fix)
+  - qs (moderate) — fix disponível (npm audit fix)
+  - sequelize (moderate) — fix via sequelize@3.30.0 (major)
+  - sequelize-cli (moderate) — fix disponível (npm audit fix)
+  - uuid (moderate) — fix via sequelize@3.30.0 (major)
+
+securityScan: nenhuma vulnerabilidade HIGH/CRITICAL em dependências de produção.
+$ node scripts/dependencyAudit.js
+dependencyAudit: 0 bloqueante(s), 0 com exceção válida, 0 exceção(ões) sem validade, 0 SDK sem versão exata.
+# estágio 12: security_scan => VERDE

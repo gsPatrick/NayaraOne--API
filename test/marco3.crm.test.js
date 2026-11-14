@@ -18,6 +18,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { createTestProperty } = require('./helpers/m3caCrm');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
@@ -26,8 +27,7 @@ const proposalsService = require('../src/features/crm/proposals.service');
 const dashboardService = require('../src/features/crm/dashboard.service');
 const feedbackCasesService = require('../src/features/crm/feedbackCases.service');
 const exportService = require('../src/features/crm/opportunitiesExport.service');
-const mfaService = require('../src/features/users/mfa.service');
-const { authenticator } = require('otplib');
+const { decideExport, ENTRY: EXPORT_ENTRY } = require('./helpers/m3cbExportGuard');
 const radarService = require('../src/features/radar/radar.service');
 const { explainMatch } = require('../src/features/radar/radarMatching.service');
 const { escalateOverdueFeedbackCases } = require('../src/engines/jobs/feedbackCaseAlertJob');
@@ -60,9 +60,11 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
-      stage: 'QUALIFYING',
+      stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
+      // M3-13: proposta e visita são sempre da oportunidade e de um imóvel; a oportunidade de teste já nasce com o imóvel de interesse.
+      propertyId: extra.propertyId !== undefined ? extra.propertyId : (await createTestProperty(tenant, transaction)).id,
       ...extra,
     },
     tenant.userId,
@@ -74,14 +76,14 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
 // M3-12 — Motivos estruturados de ganho, perda e desistência
 // ---------------------------------------------------------------------------
 
-test('M3-12: fechar como CLOSED_WON sem wonReason é rejeitado (422)', async () => {
+test('M3-12: fechar como WON sem wonReason é rejeitado (422)', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await createLead(transaction, `Lead M312 A ${suffix}`);
     const opportunity = await createActiveOpportunity(transaction, person.id);
 
     await assert.rejects(
-      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'CLOSED_WON' }, tenant.userId, transaction),
+      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'WON' }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.statusCode, 422);
@@ -92,14 +94,14 @@ test('M3-12: fechar como CLOSED_WON sem wonReason é rejeitado (422)', async () 
   });
 });
 
-test('M3-12: fechar como CLOSED_LOST sem lostReason é rejeitado (422)', async () => {
+test('M3-12: fechar como LOST sem lostReason é rejeitado (422)', async () => {
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await createLead(transaction, `Lead M312 B ${suffix}`);
     const opportunity = await createActiveOpportunity(transaction, person.id);
 
     await assert.rejects(
-      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'CLOSED_LOST' }, tenant.userId, transaction),
+      () => opportunitiesService.updateOpportunity(opportunity.id, { stage: 'LOST' }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'OPPORTUNITY_OUTCOME_REASON_REQUIRED');
         return true;
@@ -114,8 +116,8 @@ test('M3-12: motivo fora do enum é rejeitado (422) — em ganho, perda e desist
     const person = await createLead(transaction, `Lead M312 C ${suffix}`);
 
     const cases = [
-      { stage: 'CLOSED_WON', payload: { wonReason: 'PORQUE_SIM' } },
-      { stage: 'CLOSED_LOST', payload: { lostReason: 'ACHOU_CARO_DEMAIS' } },
+      { stage: 'WON', payload: { wonReason: 'PORQUE_SIM' } },
+      { stage: 'LOST', payload: { lostReason: 'ACHOU_CARO_DEMAIS' } },
       { stage: 'WITHDRAWN', payload: { withdrawnReason: 'SUMIU' } },
     ];
 
@@ -147,25 +149,25 @@ test('M3-12: motivos válidos do enum são aceitos e normalizados (WON / LOST / 
     const won = await createActiveOpportunity(transaction, person.id);
     const wonClosed = await opportunitiesService.updateOpportunity(
       won.id,
-      { stage: 'CLOSED_WON', wonReason: 'price_accepted' },
+      { stage: 'WON', wonReason: 'price_accepted' },
       tenant.userId,
       transaction
     );
-    assert.equal(wonClosed.stage, 'CLOSED_WON');
+    assert.equal(wonClosed.stage, 'WON');
     assert.equal(wonClosed.wonReason, 'PRICE_ACCEPTED'); // normalizado em upper case
     assert.ok(wonClosed.closedAt);
 
     const lost = await createActiveOpportunity(transaction, person.id);
     const lostClosed = await opportunitiesService.updateOpportunity(
       lost.id,
-      { stage: 'CLOSED_LOST', lostReason: 'COMPETITOR' },
+      { stage: 'LOST', lostReason: 'COMPETITOR' },
       tenant.userId,
       transaction
     );
     assert.equal(lostClosed.lostReason, 'COMPETITOR');
 
-    // Desistência: stage terminal próprio, com motivo próprio obrigatório, e SEM exigir
-    // nextAction (WITHDRAWN entra em CLOSED_STAGES).
+    // Desistência (DI-M3CA-3): WITHDRAWN na entrada vira LOST com o motivo de desistência marcado em withdrawnReason,
+    // sem exigir nextAction (estágio terminal do livro §10).
     const withdrawn = await createActiveOpportunity(transaction, person.id);
     const withdrawnClosed = await opportunitiesService.updateOpportunity(
       withdrawn.id,
@@ -173,7 +175,8 @@ test('M3-12: motivos válidos do enum são aceitos e normalizados (WON / LOST / 
       tenant.userId,
       transaction
     );
-    assert.equal(withdrawnClosed.stage, 'WITHDRAWN');
+    assert.equal(withdrawnClosed.stage, 'LOST');
+    assert.equal(withdrawnClosed.lostReason, 'NO_RESPONSE');
     assert.equal(withdrawnClosed.withdrawnReason, 'NO_RESPONSE');
     assert.ok(withdrawnClosed.closedAt);
   });
@@ -295,12 +298,12 @@ test('M3-13: transição de status respeita a máquina de estados', async () => 
   });
 });
 
-test('M3-25: jornada mínima — oportunidade -> proposta -> aceite -> CLOSED_WON', async () => {
+test('M3-25: jornada mínima — oportunidade -> proposta -> aceite -> WON', async () => {
   /**
    * FRONTEIRA COBERTA POR ESTE PACOTE (declarada explicitamente): o requisito M3-25 descreve a
    * jornada completa "lead, Radar, visita, proposta, contrato, recebimento e comissão". ESTE
    * TESTE COBRE SOMENTE O TRECHO DE CRM: lead -> Radar (com explicação de match) -> proposta
-   * -> aceite da proposta -> oportunidade fechada como CLOSED_WON com motivo estruturado.
+   * -> aceite da proposta -> oportunidade fechada como WON com motivo estruturado.
    * Contrato (legal), recebimento (finance) e comissão (finance) NÃO são exercitados aqui —
    * são domínio de outros pacotes e continuam sendo a lacuna conhecida desta jornada E2E.
    */
@@ -372,11 +375,11 @@ test('M3-25: jornada mínima — oportunidade -> proposta -> aceite -> CLOSED_WO
     // 6. Oportunidade fechada como ganha, com motivo estruturado obrigatório
     const won = await opportunitiesService.updateOpportunity(
       opportunity.id,
-      { stage: 'CLOSED_WON', wonReason: 'PRICE_ACCEPTED' },
+      { stage: 'WON', wonReason: 'PRICE_ACCEPTED' },
       tenant.userId,
       transaction
     );
-    assert.equal(won.stage, 'CLOSED_WON');
+    assert.equal(won.stage, 'WON');
     assert.equal(won.wonReason, 'PRICE_ACCEPTED');
     assert.ok(won.closedAt);
   });
@@ -481,7 +484,11 @@ test('M3-15: imóvel que falha só no preço mostra priceRange matched=false com
     assert.equal(explanation.criteria.propertyType.matched, true);
     assert.equal(explanation.criteria.city.matched, true);
     assert.equal(explanation.criteria.offerType.matched, true);
-    assert.ok(explanation.score > 0 && explanation.score < 1);
+    // Guia §9 ("Radar scoring"): obrigatório que falha zera o score (REQUIRED_FAILED); a fração dos obrigatórios atendidos
+    // continua visível em requiredScore.
+    assert.equal(explanation.score, 0);
+    assert.deepEqual(explanation.reasons, ['REQUIRED_FAILED']);
+    assert.ok(explanation.requiredScore > 0 && explanation.requiredScore < 1);
   });
 });
 
@@ -512,7 +519,7 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
     const ganha = await createActiveOpportunity(transaction, person.id);
     await opportunitiesService.updateOpportunity(
       ganha.id,
-      { stage: 'CLOSED_WON', wonReason: 'REFERRAL' },
+      { stage: 'WON', wonReason: 'REFERRAL' },
       tenant.userId,
       transaction
     );
@@ -520,12 +527,12 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
     const perdida = await createActiveOpportunity(transaction, person.id);
     await opportunitiesService.updateOpportunity(
       perdida.id,
-      { stage: 'CLOSED_LOST', lostReason: 'PRICE_TOO_HIGH' },
+      { stage: 'LOST', lostReason: 'PRICE_TOO_HIGH' },
       tenant.userId,
       transaction
     );
 
-    await createActiveOpportunity(transaction, person.id); // segue aberta em QUALIFYING
+    await createActiveOpportunity(transaction, person.id); // segue aberta em QUALIFIED
 
     const dashboard = await dashboardService.getCrmDashboard({ personId: person.id }, transaction);
 
@@ -539,8 +546,8 @@ test('M3-17: indicadores do painel batem exatamente com a contagem manual das me
     assert.equal(dashboard.opportunities.total, listed.length);
     assert.equal(dashboard.opportunities.total, 3);
     assert.deepEqual(dashboard.opportunities.byStage, manual);
-    assert.equal(dashboard.opportunities.closed.won, manual.CLOSED_WON || 0);
-    assert.equal(dashboard.opportunities.closed.lost, manual.CLOSED_LOST || 0);
+    assert.equal(dashboard.opportunities.closed.won, manual.WON || 0);
+    assert.equal(dashboard.opportunities.closed.lost, manual.LOST || 0);
     assert.equal(dashboard.opportunities.open, 1);
 
     // 1 ganha de 2 fechadas = 50%.
@@ -578,7 +585,8 @@ test('M3-20: criação calcula o SLA correto por severidade (HIGH 24h, MEDIUM 72
         transaction
       );
 
-      assert.equal(feedbackCase.status, 'OPEN');
+      // Reclamação HIGH é "reclamação grave": nasce escalonada para a gerência (livro §15); as demais nascem abertas.
+      assert.equal(feedbackCase.status, severity === 'HIGH' ? 'ESCALATED' : 'OPEN');
       assert.equal(feedbackCase.severity, severity);
       const deltaHours = (new Date(feedbackCase.slaDueAt).getTime() - before) / 3600000;
       // Tolerância de alguns segundos entre o `before` do teste e o `new Date()` do service.
@@ -687,7 +695,8 @@ test('M3-20: o job encontra e escalona um caso com SLA VENCIDO (tempo simulado v
         personId: person.id,
         type: 'COMPLAINT',
         description: `Reclamação vencida ${suffix}`,
-        severity: 'HIGH',
+        // MEDIUM: reclamação HIGH já nasce escalonada para a gerência (livro §15), e aqui o que se prova é o SLA vencido.
+        severity: 'MEDIUM',
         assignedToUserId: tenant.userId,
       },
       tenant.userId,
@@ -748,115 +757,40 @@ test('M3-20: o job encontra e escalona um caso com SLA VENCIDO (tempo simulado v
 // M3-21 — Exportação sensível limitada e auditada
 // ---------------------------------------------------------------------------
 
+// Desde o M9-D822 a exportação sai SÓ pelo caminho vivo POST /exports (a rota antiga responde 410). Estes testes exercitam o guard do DLP
+// com o pedido que a rota monta; a prova pela rota, com login real, arquivo, carteira e auditoria, está em test/m3cb.exportacao.http.test.js.
 test('M3-21: exportação SEM a permissão dedicada é bloqueada (403)', async () => {
-  await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await assert.rejects(
-      () =>
-        exportService.exportOpportunities(
-          {
-            groupId: tenant.groupId,
-            companyId: tenant.companyId,
-            actorUserId: tenant.userId,
-            // Tem permissão de LEITURA, mas não a de EXPORTAÇÃO.
-            actorPermissions: ['crm:opportunities:read'],
-            format: 'csv',
-            filters: {},
-          },
-          transaction
-        ),
-      (err) => {
-        assert.ok(err instanceof AppError);
-        assert.equal(err.statusCode, 403);
-        assert.equal(err.code, 'PERMISSION_DENIED');
-        assert.equal(err.details.required, 'crm:opportunities:export');
-        return true;
-      }
-    );
-  });
+  const { error, decision } = await decideExport(tenant, { permissions: ['governance:dlp:export', 'crm:opportunities:read'], mfaOk: true });
+  assert.equal(decision.blockReason, 'PERMISSION');
+  assert.equal(error.statusCode, 403);
+  assert.equal(error.code, 'GOV_DLP_PERMISSION');
+  assert.equal(decision.job.status, 'BLOCKED');
 });
-
-async function disableExistingMfa(transaction) {
-  const { sequelize: db } = require('./testHelpers');
-  await db.query('DELETE FROM core.mfa_step_ups WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
-  await db.query('DELETE FROM core.mfa_credentials WHERE user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
-}
 
 test('M3-21/CRM-TS-013: exportação SEM MFA recente é bloqueada mesmo com a permissão certa', async () => {
-  await withRollbackTenantTransaction(tenant, async (transaction) => {
-    await disableExistingMfa(transaction); // ver nota de determinismo no teste seguinte
-    await assert.rejects(
-      () =>
-        exportService.exportOpportunities(
-          {
-            groupId: tenant.groupId,
-            companyId: tenant.companyId,
-            actorUserId: tenant.userId,
-            actorPermissions: ['crm:opportunities:read', 'crm:opportunities:export'],
-            format: 'csv',
-            filters: {},
-          },
-          transaction
-        ),
-      (err) => {
-        assert.ok(err instanceof AppError);
-        assert.equal(err.statusCode, 403);
-        assert.equal(err.code, 'MFA_REQUIRED_NOT_ENABLED');
-        return true;
-      }
-    );
-  });
+  const { error, decision } = await decideExport(tenant, { permissions: ['governance:dlp:export', 'crm:opportunities:export', 'crm:opportunities:read'], mfaOk: false });
+  assert.equal(decision.blockReason, 'MFA');
+  assert.equal(error.statusCode, 403);
+  assert.equal(error.code, 'MFA_STEP_UP_REQUIRED');
 });
 
-test('M3-21: exportação COM a permissão e MFA recente funciona, limita os campos e audita a contagem certa', async () => {
+test('M3-21: exportação COM a permissão e MFA recente é liberada, limita os campos e audita o pedido', async () => {
+  const { error, decision } = await decideExport(tenant, { permissions: ['governance:dlp:export', 'crm:opportunities:export', 'crm:opportunities:read'], mfaOk: true, estimatedRows: 2 });
+  assert.equal(error, null);
+  assert.equal(decision.decision, 'ALLOW');
+  assert.equal(decision.classification, 'HIGH', 'base de clientes nunca sai abaixo de HIGH');
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const audit = await AuditLog.findAll({ where: { action: 'governance.dlp.export', entityId: decision.job.id }, transaction });
+    assert.equal(audit.length, 1, 'pedido liberado auditado');
     const person = await createLead(transaction, `Lead Export ${suffix}`);
     await createActiveOpportunity(transaction, person.id);
     await createActiveOpportunity(transaction, person.id);
-
-    // CRM-TS-013: exportação exige MFA recente, mesmo mecanismo do step-up financeiro.
-    // Determinismo (19/10/2026): o usuário semente do banco compartilhado já tem MFA configurado
-    // (commitado em 14/10). Dentro da transação de rollback a credencial existente é desativada e
-    // o teste configura a sua pelo fluxo real (setup -> confirm -> verify).
-    await disableExistingMfa(transaction);
-    const { otpauthUri } = await mfaService.setupMfa(tenant.userId, tenant, transaction);
-    const secret = /[?&]secret=([^&]+)/.exec(otpauthUri)[1];
-    await mfaService.confirmMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
-    await mfaService.verifyMfa(tenant.userId, authenticator.generate(secret), tenant, transaction);
-
-    const result = await exportService.exportOpportunities(
-      {
-        groupId: tenant.groupId,
-        companyId: tenant.companyId,
-        actorUserId: tenant.userId,
-        actorPermissions: ['crm:opportunities:read', 'crm:opportunities:export'],
-        format: 'csv',
-        filters: { personId: person.id },
-      },
-      transaction
-    );
-
-    assert.equal(result.recordCount, 2);
-    assert.equal(result.format, 'csv');
-
-    // Campos limitados: só as colunas declaradas em EXPORT_FIELDS, e NADA de texto livre
-    // (`nextAction`) nem de dado cadastral da pessoa.
-    assert.deepEqual(Object.keys(result.rows[0]), exportService.EXPORT_FIELDS);
-    assert.ok(!Object.keys(result.rows[0]).includes('nextAction'));
-    assert.ok(!result.content.includes('Ligar para o cliente'));
-    assert.ok(!result.content.includes(`Lead Export ${suffix}`));
-
-    // Cabeçalho + 2 linhas.
-    assert.equal(result.content.split('\n').length, 3);
-
-    // Auditoria obrigatória, com a contagem exata de registros exportados.
-    const logs = await AuditLog.findAll({ where: { action: 'data.export' }, transaction });
-    const thisExport = logs.filter(
-      (log) => log.afterJson && log.afterJson.filters && log.afterJson.filters.personId === person.id
-    );
-    assert.equal(thisExport.length, 1);
-    assert.equal(thisExport[0].afterJson.recordCount, 2);
-    assert.equal(thisExport[0].afterJson.exportType, 'crm.opportunities');
-    assert.equal(thisExport[0].userId, tenant.userId);
+    const { rows } = await EXPORT_ENTRY.collect({ groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId }, { personId: person.id }, transaction);
+    assert.equal(rows.length, 2);
+    assert.deepEqual(Object.keys(rows[0]), exportService.EXPORT_FIELDS);
+    assert.ok(!Object.keys(rows[0]).includes('nextAction'));
+    assert.ok(!JSON.stringify(rows).includes('Ligar para o cliente'));
+    assert.ok(!JSON.stringify(rows).includes(`Lead Export ${suffix}`));
   });
 });

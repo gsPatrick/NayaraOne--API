@@ -87,8 +87,9 @@ test('Marco 5 ponta a ponta via HTTP real: checklist de documentos (JUR-003/JUR-
   assert.ok(listed.body.data.every((r) => r.status === 'PENDING'));
 
   // Avançar o contrato ANTES de resolver o checklist deve ser bloqueado (fail closed, mesmo
-  // bug crítico já corrigido — prova de novo, agora via HTTP real).
-  const blockedTransition = await http('POST', `/legal/contracts/${contract.body.data.id}/transition`, { targetStatus: 'DOCUMENTS_PENDING' });
+  // bug crítico já corrigido — prova de novo, agora via HTTP real). Matriz M5 (Guia §3/§5): o gate de
+  // documento é o da etapa LEGAL_REVIEW (DRAFT -> LEGAL_REVIEW direto é transição do livro).
+  const blockedTransition = await http('POST', `/legal/contracts/${contract.body.data.id}/transition`, { targetStatus: 'LEGAL_REVIEW' });
   assert.equal(blockedTransition.status, 409, JSON.stringify(blockedTransition.body));
   assert.equal(blockedTransition.body.error.code, 'LEGAL_REQUIREMENTS_PENDING');
 

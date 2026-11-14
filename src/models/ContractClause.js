@@ -3,7 +3,7 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * ContractClause — tabela "legal"."contract_clauses"
+ * ContractClause — tabela "legal"."clause_versions" (antiga contract_clauses, migration 9983)
  * Cláusula da biblioteca contratual. APPEND-ONLY POR VERSÃO: `body_text` nunca é atualizado;
  * uma "edição" cria uma nova linha com o mesmo `code` e `version_number + 1` (ver
  * contractClauses.service.js). Por isso o model não tem updated_at nem soft delete.
@@ -16,21 +16,27 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       code: { type: DataTypes.STRING(64), allowNull: false, field: 'code' },
+      // Matriz M5: a versão pertence a uma cláusula da biblioteca (legal.clause_library, FK composta com o código).
+      clauseLibraryId: { type: DataTypes.UUID, allowNull: false, field: 'clause_library_id' },
       title: { type: DataTypes.STRING(255), allowNull: false, field: 'title' },
       bodyText: { type: DataTypes.TEXT, allowNull: false, field: 'body_text' },
       category: { type: DataTypes.STRING(32), allowNull: false, field: 'category' },
       versionNumber: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1, field: 'version_number' },
       isActive: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true, field: 'is_active' },
-      // F01: condição declarativa da versão (ver src/features/legal/clauseConditions.js).
+      // F01: condição declarativa da versão (ver src/modules/legal/contracts/application/clauseConditions.js).
       conditionJson: { type: DataTypes.JSONB, allowNull: true, field: 'condition_json' },
       conditionStatus: { type: DataTypes.STRING(32), allowNull: true, field: 'condition_status' },
       conditionApprovedBy: { type: DataTypes.UUID, allowNull: true, field: 'condition_approved_by' },
       conditionApprovedAt: { type: DataTypes.DATE, allowNull: true, field: 'condition_approved_at' },
+      // Verificação M5 linha 124 (Caderno §4 "Versões homologadas"): homologação do texto por outra pessoa (migration 20260101015104).
+      homologationStatus: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'PENDING', field: 'homologation_status' },
+      homologatedBy: { type: DataTypes.UUID, allowNull: true, field: 'homologated_by' },
+      homologatedAt: { type: DataTypes.DATE, allowNull: true, field: 'homologated_at' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
     },
     {
       schema: 'legal',
-      tableName: 'contract_clauses',
+      tableName: 'clause_versions',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: false,

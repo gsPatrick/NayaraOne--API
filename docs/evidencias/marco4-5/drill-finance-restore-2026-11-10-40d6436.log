@@ -1,0 +1,420 @@
+# Drill de restore/replay financeiro (Marco 4)
+Data: 2026-11-10T22:56:05.465Z
+Commit da API: 40d643687d22fb46c4b48f940b43511609ef6680 (com alterações locais não commitadas)
+PostgreSQL: postgres (PostgreSQL) 17.11 (Homebrew)
+
+### 1. Cluster de ORIGEM descartável (porta 5523)
+  role nayara_runtime NOSUPERUSER/NOBYPASSRLS; 599 migrations; seeds base; GRANT em 18 schemas.
+
+### 2. Fixtures financeiras pelos serviços reais (role de runtime, RLS real, com commit)
+  Fixtures financeiras criadas: recebível 0,30 (0.10→saldo 0.20, 0.20→saldo 0.00), intenção f13567b2-0f64-4ded-b819-0a22e917d14d confirmada pelo callback, conciliação 78bf4820-e042-4fd3-a219-aa4bbe32c291, caução 1d734c88-d04c-4517-8849-d51cce5014b0, repasse PAID, comissão (versão e3c37d1d-bce7-4ae9-b5da-19f22a99c3fb, parcela 1 PAID), intercompany PENDING, período 2025-06 CLOSED, anomalia 2de33e82-0d66-4e43-98b4-ec5e7079a9d9; 12 lançamentos no tenant A; tenant B 1934abcc-cfb5-4342-aa6c-e8e2d86ff29c.
+
+### 3. Backup com os scripts reais (npm run backup → pg_dump -Fc; scripts/backupStorage.js)
+  Backup gerado com sucesso: <tmp>/backup/drill_source_2026-11-10T23-00-28-768Z.dump (2.58 MB)
+  Backup do storage gerado: 6 arquivo(s) em <tmp>/backup/storage (manifest.json com SHA-256 por arquivo).
+
+### 4. Cluster de DESTINO NOVO (porta 5524, outro initdb)
+  4a. restore SEM as roles no destino → falhou apontando as roles ausentes ✅ (nayara_runtime, nayara_analytics_reader)
+  4b. runbook: roles nayara_runtime + nayara_migration + nayara_analytics_reader criadas; banco vazio; restore → Restore concluído em "drill_target" a partir de <tmp>/backup/drill_source_2026-11-10T23-00-28-768Z.dump
+      role nayara_runtime no destino: superuser/bypassrls = false/false
+  4c. Restore do storage concluído: 6/6 arquivo(s) conferidos contra o manifesto em <tmp>/uploads-target.
+
+### 5. Verificação pós-restore (verifyFinanceRestore.js)
+=== Drill de restore financeiro — comparação origem × destino restaurado ===
+Tenant A: company=57881f29-84e0-4797-9507-3ddc8ec342a8  |  Tenant B (isolamento): company=1934abcc-cfb5-4342-aa6c-e8e2d86ff29c
+  ✅ objetos do schema finance na origem: 39 (tabelas e views)
+  ✅ mesmos objetos no destino (39)
+
+--- finance.accounts_chart ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.anomaly_cases ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 13 comparações COM VALOR idênticas (1 registros × 16 campos; 3 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (a97ee8829ab5ce0d…)
+
+--- finance.approval_requests ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 26 comparações COM VALOR idênticas (2 registros × 13 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (887f717f28de6331…)
+
+--- finance.approval_steps ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 24 comparações COM VALOR idênticas (2 registros × 12 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (55a2fab578d998cc…)
+
+--- finance.bank_accounts ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 23 comparações COM VALOR idênticas (2 registros × 17 campos; 11 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (fd1095360ab87e73…)
+
+--- finance.bank_payment_provider_routing ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 6 comparações COM VALOR idênticas (1 registros × 6 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (2f6ab27272edf774…)
+
+--- finance.bank_statement_entries ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.bank_statement_imports ---
+  ✅ registros na origem: 1 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 11 comparações COM VALOR idênticas (1 registros × 12 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (9744f2a2fe8860bb…)
+
+--- finance.bank_transactions ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (815fb5b145dbdce5…)
+
+--- finance.billing_schedule_items ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.billing_schedules ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.budgets_forecasts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.chart_of_account_versions ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.chart_of_accounts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.closing_periods ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 23 comparações COM VALOR idênticas (1 registros × 29 campos; 6 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (8813467255a8e111…)
+
+--- finance.collection_cadence_steps ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.collection_cases ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.commission_installments ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 28 comparações COM VALOR idênticas (2 registros × 15 campos; 2 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (220639a0240048a6…)
+
+--- finance.commissions ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 17 comparações COM VALOR idênticas (1 registros × 21 campos; 4 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (243fb60f19a8496f…)
+
+--- finance.cost_centers ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 7 comparações COM VALOR idênticas (1 registros × 11 campos; 4 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (33e981c4bca5bb68…)
+
+--- finance.entry_installments ---
+  ✅ registros na origem: 3 (mínimo exigido 3)
+  ✅ mesma quantidade de registros (origem 3, destino 3)
+  ✅ 26 comparações COM VALOR idênticas (3 registros × 9 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (7ec5d06e3f46f47d…)
+
+--- finance.financial_entries ---
+  ✅ registros na origem: 14 (mínimo exigido 14)
+  ✅ mesma quantidade de registros (origem 14, destino 14)
+  ✅ 279 comparações COM VALOR idênticas (14 registros × 42 campos; 309 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (8e9658d3803d9355…)
+
+--- finance.guaranteed_rent_contracts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.intercompany_transfers ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 20 comparações COM VALOR idênticas (1 registros × 25 campos; 5 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (9ecbf6dd129c7295…)
+
+--- finance.ledger ---
+  ✅ registros na origem: 8 (mínimo exigido 8)
+  ✅ mesma quantidade de registros (origem 8, destino 8)
+  ✅ 103 comparações COM VALOR idênticas (8 registros × 15 campos; 17 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (c4dca3d8e9a709f1…)
+
+--- finance.owner_repasses ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 24 comparações COM VALOR idênticas (1 registros × 27 campos; 3 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (b4abc31ad3d0ae82…)
+
+--- finance.ownership_transfer_tasks ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.payment_intents ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 22 comparações COM VALOR idênticas (1 registros × 31 campos; 9 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (32e51e78c5da8a49…)
+
+--- finance.period_closure_snapshots ---
+  ✅ registros na origem: 1 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 9 comparações COM VALOR idênticas (1 registros × 9 campos; 0 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (87f62f3027ae796c…)
+
+--- finance.period_closures ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 23 comparações COM VALOR idênticas (1 registros × 29 campos; 6 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (8813467255a8e111…)
+
+--- finance.reconciliations ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 11 comparações COM VALOR idênticas (1 registros × 12 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (5f319ff40a737085…)
+
+--- finance.rent_adjustments ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.rent_advances ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.result_centers ---
+  ✅ registros na origem: 2 (mínimo exigido 2)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 14 comparações COM VALOR idênticas (2 registros × 11 campos; 8 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (6cddd79e03a94420…)
+
+--- finance.security_deposits ---
+  ✅ registros na origem: 2 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 2, destino 2)
+  ✅ 19 comparações COM VALOR idênticas (2 registros × 12 campos; 5 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (8fea08af43b7f96a…)
+
+--- finance.tax_documents ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.utility_accounts ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.utility_obligations ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- finance.utility_reimbursements ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- audit.audit_log (ações finance.*) ---
+  ✅ registros na origem: 56 (mínimo exigido 20)
+  ✅ mesma quantidade de registros (origem 56, destino 56)
+  ✅ 793 comparações COM VALOR idênticas (56 registros × 19 campos; 271 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (f2331947759d92fb…)
+
+--- integration.outbox_events (finance.*) ---
+  ✅ registros na origem: 41 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 41, destino 41)
+  ✅ 574 comparações COM VALOR idênticas (41 registros × 23 campos; 369 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (6a491285115ac16a…)
+
+--- integration.domain_events (finance.*) ---
+  ✅ registros na origem: 0 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 0, destino 0)
+  ✅ objeto vazio nos dois lados (sem dado de fixture neste objeto)
+  ✅ hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)
+
+--- core.rule_versions (regra de comissão) ---
+  ✅ registros na origem: 1 (mínimo exigido 1)
+  ✅ mesma quantidade de registros (origem 1, destino 1)
+  ✅ 15 comparações COM VALOR idênticas (1 registros × 16 campos; 1 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (9b81dce41b2249de…)
+
+--- people.files (comprovantes financeiros) ---
+  ✅ registros na origem: 3 (mínimo exigido 3)
+  ✅ mesma quantidade de registros (origem 3, destino 3)
+  ✅ 54 comparações COM VALOR idênticas (3 registros × 22 campos; 12 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (2e14e0a21438fb61…)
+
+--- Bytes dos comprovantes (storage cifrado restaurado) ---
+  ✅ 063030a2: blob cifrado idêntico (1471 bytes)
+  ✅ 063030a2: SHA-256 decifrado = SHA-256 calculado nas fixtures (1415e379c2fe49fa…)
+  ✅ 063030a2: não vazio e do tamanho gravado (1436 bytes)
+  ✅ 3d5a56c5: blob cifrado idêntico (1463 bytes)
+  ✅ 3d5a56c5: SHA-256 decifrado = SHA-256 calculado nas fixtures (33a57a684115cc86…)
+  ✅ 3d5a56c5: não vazio e do tamanho gravado (1428 bytes)
+  ✅ a048a870: blob cifrado idêntico (1471 bytes)
+  ✅ a048a870: SHA-256 decifrado = SHA-256 calculado nas fixtures (50a6d0c203216e38…)
+  ✅ a048a870: não vazio e do tamanho gravado (1436 bytes)
+
+--- Invariantes no destino (role de runtime, contexto do tenant A) ---
+  ✅ pai restaurado: valor 0.30, status SETTLED
+  ✅ filhas SETTLED restauradas: 0.10 + 0.20 = 0.30
+  ✅ saldo = 0,30 − Σ filhas SETTLED = 0.00
+  ✅ saldos registrados antes do backup: após 0.10 → 0.20 (PARTIALLY_SETTLED); após 0.20 → 0.00 (SETTLED)
+  ✅ finance.ledger: PARTIAL_RECEIVABLE/CREDIT 0.10, PARTIAL_RECEIVABLE/CREDIT 0.20
+  ✅ UPDATE do valor de um movimento liquidado recusado pelo banco restaurado — finance.financial_entries é append-only (FIN-003/010): a coluna "amount" não pode ser alterada após a criação 
+  ✅ UPDATE da chave idempotente de um movimento liquidado recusado pelo banco restaurado — finance.financial_entries é append-only (FIN-003/010): a coluna "idempotency_key" não pode ser alterada após a
+  ✅ DELETE de um movimento liquidado recusado pelo banco restaurado — finance.financial_entries é append-only (FIN-003/010): DELETE direto não é permitido (id=f3b50323-7f90-457b-93
+  ✅ escrita na view finance.ledger recusada — A view finance.ledger é somente leitura (nomes do Caderno M4 §5); escreva pelo serviço do Financeiro.
+  ✅ período 2025-06 restaurado com status CLOSED
+
+--- RLS no destino: tenant B não lê nada do tenant A ---
+  ✅ tenant B vê 0 linhas do A em 13 objetos — {"financial_entries":0,"ledger":0,"payment_intents":0,"approval_requests":0,"bank_transactions":0,"reconciliations":0,"owner_repasses":0,"commissions":0,"commission_installments":0,"intercompany_transfers":0,"period_closures":0,"anomaly_cases":0,"bank_accounts":0}
+  ✅ controle positivo: tenant B vê o próprio lançamento (1)
+  ✅ tenant B alterando anomalia do A → 0 linha(s) afetada(s)
+  ✅ sem contexto de tenant a role de runtime vê 0 lançamentos (fail-closed)
+  ✅ role nayara_runtime no destino: superuser=false, bypassrls=false
+
+=== Resumo por objeto ===
+  ✅ finance.accounts_chart: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.anomaly_cases: 1 registro(s), 13 comparações, hash a97ee8829ab5ce0d…
+  ✅ finance.approval_requests: 2 registro(s), 26 comparações, hash 887f717f28de6331…
+  ✅ finance.approval_steps: 2 registro(s), 24 comparações, hash 55a2fab578d998cc…
+  ✅ finance.bank_accounts: 2 registro(s), 23 comparações, hash fd1095360ab87e73…
+  ✅ finance.bank_payment_provider_routing: 1 registro(s), 6 comparações, hash 2f6ab27272edf774…
+  ✅ finance.bank_statement_entries: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.bank_statement_imports: 1 registro(s), 11 comparações, hash 9744f2a2fe8860bb…
+  ✅ finance.bank_transactions: 1 registro(s), 12 comparações, hash 815fb5b145dbdce5…
+  ✅ finance.billing_schedule_items: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.billing_schedules: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.budgets_forecasts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.chart_of_account_versions: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.chart_of_accounts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.closing_periods: 1 registro(s), 23 comparações, hash 8813467255a8e111…
+  ✅ finance.collection_cadence_steps: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.collection_cases: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.commission_installments: 2 registro(s), 28 comparações, hash 220639a0240048a6…
+  ✅ finance.commissions: 1 registro(s), 17 comparações, hash 243fb60f19a8496f…
+  ✅ finance.cost_centers: 1 registro(s), 7 comparações, hash 33e981c4bca5bb68…
+  ✅ finance.entry_installments: 3 registro(s), 26 comparações, hash 7ec5d06e3f46f47d…
+  ✅ finance.financial_entries: 14 registro(s), 279 comparações, hash 8e9658d3803d9355…
+  ✅ finance.guaranteed_rent_contracts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.intercompany_transfers: 1 registro(s), 20 comparações, hash 9ecbf6dd129c7295…
+  ✅ finance.ledger: 8 registro(s), 103 comparações, hash c4dca3d8e9a709f1…
+  ✅ finance.owner_repasses: 1 registro(s), 24 comparações, hash b4abc31ad3d0ae82…
+  ✅ finance.ownership_transfer_tasks: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.payment_intents: 1 registro(s), 22 comparações, hash 32e51e78c5da8a49…
+  ✅ finance.period_closure_snapshots: 1 registro(s), 9 comparações, hash 87f62f3027ae796c…
+  ✅ finance.period_closures: 1 registro(s), 23 comparações, hash 8813467255a8e111…
+  ✅ finance.reconciliations: 1 registro(s), 11 comparações, hash 5f319ff40a737085…
+  ✅ finance.rent_adjustments: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.rent_advances: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.result_centers: 2 registro(s), 14 comparações, hash 6cddd79e03a94420…
+  ✅ finance.security_deposits: 2 registro(s), 19 comparações, hash 8fea08af43b7f96a…
+  ✅ finance.tax_documents: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.utility_accounts: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.utility_obligations: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ finance.utility_reimbursements: 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ audit.audit_log (ações finance.*): 56 registro(s), 793 comparações, hash f2331947759d92fb…
+  ✅ integration.outbox_events (finance.*): 41 registro(s), 574 comparações, hash 6a491285115ac16a…
+  ✅ integration.domain_events (finance.*): 0 registro(s), 0 comparações, hash 4f53cda18c2baa0c…
+  ✅ core.rule_versions (regra de comissão): 1 registro(s), 15 comparações, hash 9b81dce41b2249de…
+  ✅ people.files (comprovantes financeiros): 3 registro(s), 54 comparações, hash 2e14e0a21438fb61…
+
+202/202 checagens aprovadas (verificação).
+
+### 6. Replay pós-restore e adulteração deliberada (replayFinanceRestore.js)
+--- Replay 1: mesmo callback bancário CONFIRMED contra o banco restaurado ---
+  ✅ 2 entregas do mesmo callback: {"received":true,"processed":false,"reason":"duplicate_event"} | {"received":true,"processed":false,"reason":"duplicate_event"}
+  ✅ intenção segue EXECUTED; lançamentos 14 → 14; filhos 0; lock_version 1 → 1
+
+--- Replay 2: reimportação do mesmo extrato ---
+  ✅ reimportação: importadas 0, duplicadas 1; bank_transactions 1 → 1
+
+--- Replay 3: lançamento com idempotencyKey já existente ---
+  ✅ serviço recusou: FINANCE_DUPLICATE_PAYMENT
+  ✅ INSERT direto com a mesma chave recusado pelo banco: 23505 duplicate key value violates unique constraint "financial_entries_idempotency_ke
+  ✅ lançamentos 14 → 14
+
+--- Replay 4: mesma baixa parcial do recebível de R$ 0,30 (mesma chave) ---
+  ✅ chave idempotente gravada na baixa restaurada: sim; replay → devolvida a baixa original (mesmo id) idempotentReplay=true
+  ✅ filhas do recebível 2 → 2 (nenhuma baixa nova)
+
+--- Replay 5: mesma comissão (mesma idempotencyKey) ---
+  ✅ replay → recusada FINANCE_COMMISSION_DUPLICATE; comissões 1 → 1
+
+--- Período CLOSED restaurado ---
+  ✅ lançamento novo em 2025-06: FINANCE_PERIOD_CLOSED
+  ✅ edição de lançamento do mês fechado: FINANCE_PERIOD_CLOSED
+
+--- Adulteração deliberada no destino (superusuário, triggers desligados) ---
+
+--- finance.financial_entries ---
+  ✅ registros na origem: 14 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 14, destino 14)
+  ✅ 279 comparações COM VALOR idênticas (14 registros × 42 campos; 309 nulo=nulo à parte)
+  ✅ hash canônico SHA-256 origem = destino (8e9658d3803d9355…)
+  (comparação com a adulteração — os ❌ abaixo são o esperado)
+
+--- finance.financial_entries ---
+  ✅ registros na origem: 14 (mínimo exigido 0)
+  ✅ mesma quantidade de registros (origem 14, destino 14)
+  ❌ 82dc7614-1141-4450-825a-e7d781512508.amount — origem "1234.56" ≠ destino "2234.56"
+  ❌ 279 comparações COM VALOR idênticas (14 registros × 42 campos; 309 nulo=nulo à parte)
+  ❌ hash canônico SHA-256 origem = destino (8e9658d3803d9355…) — destino 137e4ab56a659d7b…
+  ✅ antes da adulteração: hash origem = destino (8e9658d3803d9355…)
+  ✅ valor do pagamento alterado no destino (1234.56 → 2234.56): divergência de campo detectada (1) e hash diverge (8e9658d3803d9355… ≠ 137e4ab56a659d7b…)
+
+13/13 checagens aprovadas (replay e adulteração).
+(node:39454) DeprecationWarning: Calling client.query() when the client is already executing a query is deprecated and will be removed in pg@9.0. Use async/await or an external async flow control mechanism instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+Resultado do drill: APROVADO — 215/215 checagens aprovadas.
+
+### 7. Teardown
+  relatório salvo em docs/evidencias/marco4-5/drill-finance-restore-2026-11-10-40d6436.{log,json}
+  clusters parados e diretório temporário apagado — nenhum resíduo. Duração: 380.7 s.

@@ -85,7 +85,7 @@ async function main() {
     cl.startCluster(dataTarget, PORT_TARGET, workDir);
     toStop.push(dataTarget);
     cl.createRuntimeRole(PORT_TARGET);
-    cl.psql(PORT_TARGET, 'postgres', 'CREATE ROLE nayara_migration');
+    require('./restoreRoles').createSupportRoles(cl.psql, PORT_TARGET);
     cl.psql(PORT_TARGET, 'postgres', 'CREATE DATABASE drill_target');
     const restoreOut = cl.mustRun('npm run restore', 'npm', ['run', '--silent', 'restore', '--', '--file', dumpFile, '--target-db', 'drill_target'],
       childEnv({ DATABASE_URL: cl.appUrl(PORT_TARGET, 'drill_main'), DB_MIGRATION_USER: cl.SUPER, DB_MIGRATION_PASSWORD: 'trust-local' }));

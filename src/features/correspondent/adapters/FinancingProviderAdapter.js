@@ -7,7 +7,7 @@ const AppError = require('../../../utils/AppError');
 // "CONSTITUIÇÃO DO ERP NAYARA ONE — CORRESPONDENTE BANCÁRIO + NC + FINANCIAMENTOS").
 //
 // Interface comum (duck-typed, MESMO estilo arquitetural já usado em
-// src/features/procurement/adapters/InsuranceAdapter.js / BankAdapter.js / SignatureAdapter.js —
+// src/features/procurement/adapters/InsuranceAdapter.js / bank-adapter.port.js / SignatureAdapter.js —
 // não é coincidência, é o padrão estabelecido do projeto para qualquer integração de provider
 // externo):
 //   capabilities() -> { simulate, submitCase, getCaseStatus, uploadDocument, requestAppraisal, verifyWebhook }

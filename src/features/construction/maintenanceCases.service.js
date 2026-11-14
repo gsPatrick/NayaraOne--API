@@ -2,13 +2,14 @@
 
 const { MaintenanceCase, WarrantyAction, Property, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
-const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { publishMaintenanceCaseOpened, publishWarrantyCaseClosed } = require('./constructionEvents.service');
-const { getApprovalThreshold } = require('./lossRecords.service');
-const financialEntriesService = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
+const { getApprovalThreshold } = require('./approvalThresholds.service');
+const { assertPersonInCompany, assertActiveMember } = require('./companyRefs');
+const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
-// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em costCenters.service.js.
+// BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em cost-centers.service.js.
 const WARRANTY_COST_CENTER_CODE = 'OBRAS-GARANTIA';
 const { setTeamAndMaterial } = require('./warrantyActionTeamMaterialColumns');
 const { getActiveSlaDaysMap, DEFAULT_SLA_DAYS } = require('./slaRules.service');
@@ -20,6 +21,7 @@ const CONTEXT_WARRANTY_RESOLUTION = 'WARRANTY_RESOLUTION';
 // fontes, sem enum documentado — workflow abaixo segue o mesmo padrão de "chamado" já usado
 // em finance.approval_requests e crm.opportunities (aberto -> em andamento -> resolvido/fechado).
 const { assertClosedCaseStillMeetsRequirements, isBlankRootCause } = require('./maintenanceCaseClosedRules');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
 const STATUSES = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'];
 // Grafo de transição válido — mesmo usado no front (app/painel/obras/pos-obra/[id]/page.js,
 // NEXT_STATUS_OPTIONS). CLOSED é terminal: reabertura exige fluxo próprio (fora de escopo aqui).
@@ -65,7 +67,7 @@ const RESOLUTION_TYPE_LABELS_PT = { DISCOUNT: 'Desconto', REIMBURSEMENT: 'Ressar
 // tenant). `SEVERITY_SLA_DAYS` continua exportado abaixo (== DEFAULT_SLA_DAYS) só por
 // compatibilidade de quem importava a constante antes desta migração.
 const SEVERITY_SLA_DAYS = DEFAULT_SLA_DAYS;
-const DAY_MS = 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000; // scanner:allow — conversão de unidade de tempo (milissegundos), não regra de negócio
 
 async function computeSlaDueAt(baseDate, severity, groupId, companyId, transaction, actorUserId) {
   const base = baseDate ? new Date(baseDate) : new Date();
@@ -204,11 +206,15 @@ async function createMaintenanceCase(payload, actorUserId, transaction) {
     }
   }
 
+  // Verificação independente do Marco 6: quem abriu (pessoa) e o responsável (membro ativo) da MESMA empresa.
+  await assertPersonInCompany(openedByPersonId, companyId, transaction, 'openedByPersonId');
+  await assertActiveMember(responsibleUserId, companyId, transaction);
   const normalizedSeverity = validateSeverity(severity);
   const now = new Date();
   const slaBaseDate = warrantyDeadlineAt || now;
   const slaDueAt = await computeSlaDueAt(slaBaseDate, normalizedSeverity, groupId, companyId, transaction, actorUserId);
 
+  await assertEvidenceFilesExist(validateMediaFileIds(beforeMediaFileIds, 'beforeMediaFileIds'), companyId, transaction, 'beforeMediaFileIds');
   const maintenanceCase = await MaintenanceCase.create(
     {
       groupId,
@@ -381,13 +387,18 @@ async function updateMaintenanceCase(id, payload, actorUserId, transaction) {
     });
   }
   if (description !== undefined) maintenanceCase.description = description;
-  if (responsibleUserId !== undefined) maintenanceCase.responsibleUserId = responsibleUserId;
+  if (responsibleUserId !== undefined) {
+    await assertActiveMember(responsibleUserId, maintenanceCase.companyId, transaction);
+    maintenanceCase.responsibleUserId = responsibleUserId;
+  }
   if (category !== undefined) maintenanceCase.category = validateCategory(category);
   if (rootCauseCode !== undefined) maintenanceCase.rootCauseCode = validateRootCauseCode(rootCauseCode);
   const beforeMedia = validateMediaFileIds(beforeMediaFileIds, 'beforeMediaFileIds');
   if (beforeMedia !== undefined) maintenanceCase.beforeMediaFileIds = beforeMedia;
   const afterMedia = validateMediaFileIds(afterMediaFileIds, 'afterMediaFileIds');
   if (afterMedia !== undefined) maintenanceCase.afterMediaFileIds = afterMedia;
+  await assertEvidenceFilesExist(beforeMedia, maintenanceCase.companyId, transaction, 'beforeMediaFileIds');
+  await assertEvidenceFilesExist(afterMedia, maintenanceCase.companyId, transaction, 'afterMediaFileIds');
   if (laborCost !== undefined) maintenanceCase.laborCost = validateMonetaryCost(laborCost, 'laborCost');
   if (materialCost !== undefined) maintenanceCase.materialCost = validateMonetaryCost(materialCost, 'materialCost');
 
@@ -547,6 +558,7 @@ async function createWarrantyAction(warrantyCaseId, payload, actorUserId, transa
     );
   }
 
+  if (performedByUserId) await assertActiveMember(performedByUserId, maintenanceCase.companyId, transaction, 'performedByUserId');
   const action = await WarrantyAction.create(
     {
       groupId: maintenanceCase.groupId,
@@ -623,6 +635,7 @@ async function proposeWarrantyResolution(id, payload, actorUserId, transaction) 
   maintenanceCase.resolutionType = normalizedType;
   maintenanceCase.resolutionAmount = numericAmount;
   maintenanceCase.resolutionStatus = withinThreshold ? 'APPROVED' : 'PENDING_APPROVAL';
+  maintenanceCase.resolutionProposedByUserId = actorUserId || null;
   maintenanceCase.updatedBy = actorUserId || null;
 
   if (withinThreshold) {
@@ -652,6 +665,12 @@ async function approveWarrantyResolution(id, actorUserId, transaction) {
   const maintenanceCase = await getMaintenanceCase(id, transaction, true);
   if (maintenanceCase.resolutionStatus !== 'PENDING_APPROVAL') {
     throw AppError.conflict('Não há resolução de garantia pendente de aprovação para este caso.', 'WARRANTY_RESOLUTION_NOT_PENDING');
+  }
+  // M6-107 (Caderno §9 "Desconto/ressarcimento passa por regra/aprovação"): acima da alçada, quem propôs não aprova. A
+  // tentativa recusada fica na trilha de auditoria (segregação de função).
+  if (!actorUserId || (maintenanceCase.resolutionProposedByUserId && maintenanceCase.resolutionProposedByUserId === actorUserId)) {
+    await registrarTentativaBloqueada({ groupId: maintenanceCase.groupId, companyId: maintenanceCase.companyId, actorUserId, action: 'construction.warranty_resolution.self_approval', entityType: 'MaintenanceCase', entityId: maintenanceCase.id, beforeJson: { resolutionStatus: maintenanceCase.resolutionStatus, resolutionAmount: maintenanceCase.resolutionAmount }, reason: 'Aprovação do desconto/ressarcimento recusada: quem propôs não pode aprovar a própria proposta acima da alçada.' }, null); // transação própria: a recusa desfaz a do pedido
+    throw AppError.forbidden('Quem propôs o desconto/ressarcimento não pode aprová-lo: peça a outra pessoa com permissão de aprovação.', 'WARRANTY_RESOLUTION_SELF_APPROVAL');
   }
   maintenanceCase.resolutionStatus = 'APPROVED';
   maintenanceCase.resolutionApprovedByUserId = actorUserId || null;

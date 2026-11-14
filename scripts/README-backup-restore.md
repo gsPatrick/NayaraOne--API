@@ -18,6 +18,28 @@ node scripts/restoreDatabase.js --file <caminho-do-dump> --target-db <banco-dest
 
 Exige um banco de destino explícito e **recusa rodar** se `--target-db` for igual ao banco principal configurado no ambiente (`DB_NAME`/`DATABASE_URL`) — proteção contra sobrescrever produção/dev ao testar um restore.
 
+Roles que precisam existir no servidor de destino ANTES do restore (o dump traz GRANTs para elas):
+`nayara_runtime` (LOGIN, NOSUPERUSER, NOBYPASSRLS), `nayara_migration` (NOLOGIN) e, desde as migrations de BI do
+Marco 9 (`20260101009612`), `nayara_analytics_reader` (NOLOGIN, NOSUPERUSER, NOBYPASSRLS). Achado no drill de Obras
+de 10/11/2026: sem a terceira role o `pg_restore` falha com "role nayara_analytics_reader does not exist".
+Depois de criar as roles: `GRANT nayara_analytics_reader TO nayara_runtime`. O `pg_dump` não leva a pertença de papel
+(é global do cluster); sem ela o runtime não assume o papel do BI e os GET de `/analytics` perdem, em silêncio, a camada
+do leitor sem escrita. Achado no drill de Obras de 11/11/2026; `scripts/restoreDrill/restoreRoles.js` já faz os dois passos.
+
+## Drill de restore de Obras (Marco 6) — `npm run restore-drill:construction-full`
+
+`scripts/restoreDrill/constructionFullDrill.js [--port 5543] [--http-port 45xxx] [--report-dir <dir>]`: dois clusters descartáveis;
+fixtures de uma obra inteira pelos serviços reais (orçamento + aditivo, requisição + devolução, RDO + correção,
+medição PAYABLE, NC, perda + estorno, entrega, garantia fechada); `npm run backup`; restore pelo runbook num cluster
+novo; `verifyConstructionRestore.js` compara origem × destino (contagem + SHA-256) de todas as tabelas de
+`construction.*` e dos reflexos (lançamentos, movimentos de estoque, Outbox, auditoria e fotos), confere as
+invariantes da obra, RLS ENABLE+FORCE, isolamento da role de runtime e a UNIQUE da conta a pagar; e prova que uma
+adulteração no destino é acusada. Desde 11/11/2026 (esteira de qualidade do Marco 6) também: somas de toda coluna
+numérica de Obras, políticas RLS, grants dos papéis (inclusive `nayara_analytics_reader`), pertença de papéis, o runtime
+assumindo o leitor do BI, a leitura pela API real sobre o banco restaurado (mesmos valores da Saúde da obra calculados
+na origem antes do backup; outra empresa 404; sem permissão 403) e a segunda prova negativa (política RLS apagada e
+SELECT do leitor retirado). Roda no CI na etapa "load/failure tests" da esteira de Obras (`.github/workflows/obras-esteira.yml`).
+
 ## Evidência real de execução (08/10/2026)
 
 1. `pg_dump` 17.11 (Homebrew, `postgresql@17`) contra o banco de dev real — dump de 2.01 MB gerado com sucesso.

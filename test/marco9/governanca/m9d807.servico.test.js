@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d807Env');
 const { adminQuery } = require('../../m9d801.helpers');
 const personService = require('../../../src/features/people/person.service');
-const bankAccountsService = require('../../../src/features/finance/bankAccounts.service');
+const bankAccountsService = require('../../../src/modules/finance/application/services/bank-accounts.service');
 const propertiesService = require('../../../src/features/properties/properties.service');
 
 let tenants;

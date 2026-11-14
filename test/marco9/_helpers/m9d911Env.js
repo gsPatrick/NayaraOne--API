@@ -49,7 +49,7 @@ async function insertLead(tenant, { name, taxId, lastContact, phone = '119888877
   await adminQuery(`INSERT INTO people.persons (id, group_id, company_id, legal_name, preferred_name, tax_id_normalized, tax_id_normalized_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $4, $5, $6, $7, $7)`, [id, ...c, name, taxId, `hash-${taxId}`, lastContact]);
   await adminQuery(`INSERT INTO people.person_contacts (id, group_id, company_id, person_id, contact_type, value_normalized, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'PHONE', $4, $5, $5)`, [...c, id, phone, lastContact]);
   await adminQuery(`INSERT INTO people.person_addresses (id, group_id, company_id, person_id, street, number, zip_code, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'Rua Teste QA', '77', '01310100', $4, $4)`, [...c, id, lastContact]);
-  await adminQuery(`INSERT INTO crm.opportunities (id, group_id, company_id, person_id, stage, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'CLOSED_LOST', $4, $4)`, [...c, id, lastContact]);
+  await adminQuery(`INSERT INTO crm.opportunities (id, group_id, company_id, person_id, stage, created_at, updated_at) VALUES (gen_random_uuid(), $1, $2, $3, 'LOST', $4, $4)`, [...c, id, lastContact]);
   return id;
 }
 const personRow = async (id) => (await adminQuery('SELECT * FROM people.persons WHERE id = $1', [id])).rows[0];

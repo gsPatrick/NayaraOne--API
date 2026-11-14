@@ -1,7 +1,7 @@
 'use strict';
 
 const { FinancialEntry } = require('../../../../../models');
-const { createFinancialEntry, cancelPendingFinancialEntry } = require('../../../../finance/financialEntries.service');
+const { createFinancialEntry, cancelPendingFinancialEntry } = require('../../../../../modules/finance/application/services/financial-entry.service');
 const { resolveRef } = require('../refs');
 const normalize = require('../normalize');
 const { openPending } = require('../../payment/payment.pending');

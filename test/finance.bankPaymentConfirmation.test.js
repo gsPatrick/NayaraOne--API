@@ -4,7 +4,7 @@
 // bancária (FIN-TS-001/002/018/019)": "Não comprovado — Sandbox sem dinheiro real: timeout,
 // falha, resposta incerta, callback válido/duplicado/forjado e criação de ledger só após
 // confirmação." O adapter SandboxBankAdapter e o caminho submit->confirm já existiam
-// (bankPayments.service.js, adapters/BankAdapter.js) mas sem teste de integração real provando
+// (bank-submission.service.js e payment.service.js#confirmBankPayment; infrastructure/bank/providers/) mas sem teste de integração real provando
 // o comportamento contra Postgres — só testes de serviço isolado da própria auditoria.
 //
 // Este teste roda contra o banco real de dev (mesmo padrão de testHelpers.js, RLS ativo via
@@ -22,9 +22,10 @@ const {
   uniqueSuffix,
 } = require('./testHelpers');
 
-const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
-const { createPaymentIntent, approvePaymentIntent } = require('../src/features/finance/paymentIntents.service');
-const { submitPaymentIntentToBank, confirmBankPayment } = require('../src/features/finance/bankPayments.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
+const { createPaymentIntent, approvePaymentIntent } = require('../src/modules/finance/application/services/payment.service');
+const { submitPaymentIntentToBank } = require('../src/modules/finance/application/services/bank-submission.service');
+const { confirmBankPayment } = require('../src/modules/finance/application/services/payment.service');
 const { BankAccount, User } = require('../src/models');
 
 async function makeApproverUserId(transaction) {
@@ -82,7 +83,8 @@ test('FIN-TS-001/018: submissão ao banco não liquida o lançamento — só CON
     const { entry, intent } = await makeApprovedIntent(tenant, transaction);
 
     const submitted = await submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
-    assert.equal(submitted.status, 'SUBMITTED');
+    assert.equal(submitted.status, 'EXECUTING'); // Guia M4 §3 (DEC-056): enviado ao banco = EXECUTING, fase SUBMITTED
+    assert.equal(submitted.submissionPhase, 'SUBMITTED');
 
     await entry.reload({ transaction });
     assert.equal(entry.status, 'PENDING', 'lançamento não pode ser liquidado só por ter sido submetido ao banco');
@@ -96,7 +98,7 @@ test('FIN-TS-019: callback CONFIRMED do banco libera o ledger (liquida o lançam
     const submitted = await submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
 
     const confirmed = await confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(confirmed.status, 'EXECUTED');
+    assert.equal(confirmed.status, 'CONFIRMED');
 
     await entry.reload({ transaction });
     assert.equal(entry.status, 'SETTLED');
@@ -124,13 +126,13 @@ test('Callback duplicado (idempotência): reprocessar CONFIRMED duas vezes não 
     const submitted = await submitPaymentIntentToBank(intent.id, 'PIX', { userId: tenant.userId }, transaction);
 
     const first = await confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(first.status, 'EXECUTED');
+    assert.equal(first.status, 'CONFIRMED');
 
     // Segunda entrega do mesmo webhook (reenvio real de provedor, retry de rede) — não pode
     // liquidar de novo nem lançar erro: confirmBankPayment detecta que já saiu de SUBMITTED e
     // retorna o estado atual sem reprocessar.
     const second = await confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', transaction);
-    assert.equal(second.status, 'EXECUTED');
+    assert.equal(second.status, 'CONFIRMED');
     assert.equal(second.id, first.id);
 
     await entry.reload({ transaction });
@@ -157,7 +159,7 @@ test('Resposta incerta do provedor (status desconhecido) não é tratada como co
     const uncertain = await confirmBankPayment(submitted.externalSubmissionId, 'PROCESSING_UNKNOWN', transaction);
     // F06-PAY-05/06 (conferência 18/10/2026): resposta incerta não é sucesso NEM falha — a intenção
     // continua SUBMITTED aguardando o status final (antes virava FAILED e liberava pagar de novo).
-    assert.equal(uncertain.status, 'SUBMITTED', 'resposta incerta mantém o pagamento em trânsito, nunca vira sucesso silencioso');
+    assert.equal(uncertain.status, 'EXECUTING', 'resposta incerta mantém o pagamento em trânsito, nunca vira sucesso silencioso');
 
     await entry.reload({ transaction });
     assert.equal(entry.status, 'PENDING');

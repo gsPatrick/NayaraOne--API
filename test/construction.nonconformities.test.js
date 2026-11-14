@@ -4,6 +4,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { setThresholds } = require('./constructionM6vFixture');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const projectsService = require('../src/features/construction/projects.service');
 const nonconformitiesService = require('../src/features/construction/nonconformities.service');
 const lossRecordsService = require('../src/features/construction/lossRecords.service');
@@ -42,7 +44,7 @@ test('M6-62: fechar não conformidade sem after_evidence_file_ids bloqueia', asy
         severity: 'HIGH',
         description: 'Infiltração no banheiro da suíte 2.',
         responsibleUserId: tenant.userId,
-        beforeEvidenceFileIds: ['11111111-1111-1111-1111-111111111111'],
+        beforeEvidenceFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
@@ -78,17 +80,17 @@ test('M6-24: fechar NC com requiresAcceptance=true sem acceptedByUserId bloqueia
         description: 'Trinca estrutural na viga do 2º pavimento.',
         requiresAcceptance: true,
         responsibleUserId: tenant.userId,
-        beforeEvidenceFileIds: ['22222222-2222-2222-2222-222222222222'],
+        beforeEvidenceFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
     );
 
     await assert.rejects(
-      () =>
+      async () =>
         nonconformitiesService.closeNonconformity(
           nc.id,
-          { afterEvidenceFileIds: ['22222222-2222-2222-2222-222222222222'] },
+          { afterEvidenceFileIds: await evidenceIds(tenant, transaction) },
           tenant.userId,
           transaction
         ),
@@ -101,7 +103,7 @@ test('M6-24: fechar NC com requiresAcceptance=true sem acceptedByUserId bloqueia
     // Com aceite preenchido, agora fecha normalmente e dispara nonconformity.closed.
     const closed = await nonconformitiesService.closeNonconformity(
       nc.id,
-      { afterEvidenceFileIds: ['22222222-2222-2222-2222-222222222222'], acceptedByUserId: tenant.userId },
+      { afterEvidenceFileIds: await evidenceIds(tenant, transaction), acceptedByUserId: tenant.userId },
       tenant.userId,
       transaction
     );
@@ -117,13 +119,13 @@ test('NC fecha normalmente quando after_evidence_file_ids está preenchido e nã
     const project = await createTestProject(transaction);
     const nc = await nonconformitiesService.createNonconformity(
       project.id,
-      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'Pintura com respingo na sala.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['33333333-3333-3333-3333-333333333334'] },
+      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'Pintura com respingo na sala.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: await evidenceIds(tenant, transaction) },
       tenant.userId,
       transaction
     );
     const closed = await nonconformitiesService.closeNonconformity(
       nc.id,
-      { afterEvidenceFileIds: ['33333333-3333-3333-3333-333333333333'] },
+      { afterEvidenceFileIds: await evidenceIds(tenant, transaction) },
       tenant.userId,
       transaction
     );
@@ -135,6 +137,7 @@ test('NC fecha normalmente quando after_evidence_file_ids está preenchido e nã
 // e só vira APPROVED com aprovação explícita.
 test('M6-29: perda de material acima da alçada exige aprovação explícita', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const project = await createTestProject(transaction);
     const threshold = await lossRecordsService.getApprovalThreshold(
       tenant.groupId,
@@ -302,6 +305,7 @@ test('upsertApprovalThreshold recusa valores Infinity/NaN/negativo', async () =>
 // M6-60: devolução de material gera movimento inverso e corrige o saldo calculado.
 test('M6-60: devolução de material corrige o saldo (movimento inverso real)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const project = await createTestProject(transaction);
     const materialDescription = 'Telha cerâmica colonial';
 
@@ -373,6 +377,7 @@ test('M6-60: devolução de material corrige o saldo (movimento inverso real)', 
 // (idempotencyKey diferente, quantidade diferente) continua funcionando normalmente.
 test('returnLossRecord: idempotencyKey é obrigatória, e reenviar a MESMA chave (retry) devolve o registro original — não duplica a devolução', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { MATERIAL_LOSS: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const project = await createTestProject(transaction);
     const loss = await lossRecordsService.createLossRecord(
       project.id,
@@ -423,7 +428,7 @@ test('RLS: não conformidade de uma empresa não é visível fora do contexto de
     const project = await createTestProject(transaction);
     const nc = await nonconformitiesService.createNonconformity(
       project.id,
-      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'RLS smoke test.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: ['44444444-4444-4444-4444-444444444444'] },
+      { groupId: tenant.groupId, companyId: tenant.companyId, severity: 'LOW', description: 'RLS smoke test.', responsibleUserId: tenant.userId, beforeEvidenceFileIds: await evidenceIds(tenant, transaction) },
       tenant.userId,
       transaction
     );
@@ -454,7 +459,7 @@ test('M6-12: marcar item de checklist de qualidade como NOT_OK abre Nonconformit
 
     const checked = await qualityChecklistService.checkQualityItem(
       item.id,
-      { status: 'NOT_OK', notes: 'Manchas visíveis na fachada.', evidenceFileIds: ['55555555-5555-5555-5555-555555555555'] },
+      { status: 'NOT_OK', notes: 'Manchas visíveis na fachada.', evidenceFileIds: await evidenceIds(tenant, transaction) },
       tenant.userId,
       transaction
     );
@@ -495,18 +500,18 @@ test('M6-12 (ciclo 4): reenviar NOT_OK para o mesmo item já reprovado não dupl
       transaction
     );
 
-    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão.', evidenceFileIds: ['66666666-6666-6666-6666-666666666666'] }, tenant.userId, transaction);
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão.', evidenceFileIds: await evidenceIds(tenant, transaction) }, tenant.userId, transaction);
     let ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
     assert.equal(ncs.length, 1, 'primeira reprovação precisa abrir exatamente uma Nonconformity');
 
     // Reenvio do mesmo "check" (status já era NOT_OK) — não pode abrir uma segunda NC.
-    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão (reenvio).', evidenceFileIds: ['77777777-7777-7777-7777-777777777777'] }, tenant.userId, transaction);
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Vazamento na conexão (reenvio).', evidenceFileIds: await evidenceIds(tenant, transaction) }, tenant.userId, transaction);
     ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
     assert.equal(ncs.length, 1, 'reenviar NOT_OK para o mesmo item já reprovado não pode duplicar a Nonconformity');
 
     // Depois de corrigido (OK) e reprovado de novo, uma NOVA NC legítima deve ser aberta.
     await qualityChecklistService.checkQualityItem(item.id, { status: 'OK' }, tenant.userId, transaction);
-    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Voltou a vazar.', evidenceFileIds: ['88888888-8888-8888-8888-888888888888'] }, tenant.userId, transaction);
+    await qualityChecklistService.checkQualityItem(item.id, { status: 'NOT_OK', notes: 'Voltou a vazar.', evidenceFileIds: await evidenceIds(tenant, transaction) }, tenant.userId, transaction);
     ncs = await nonconformitiesService.listNonconformities(project.id, transaction);
     assert.equal(ncs.length, 2, 'uma nova reprovação genuína (após ter sido corrigida) precisa abrir uma NOVA Nonconformity');
   });

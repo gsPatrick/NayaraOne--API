@@ -5,7 +5,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const commissionsService = require('../src/features/finance/commissions.service');
+const commissionsService = require('../src/modules/finance/application/services/commission.service');
 
 let tenant;
 before(async () => { tenant = await getSeedTenant(); });

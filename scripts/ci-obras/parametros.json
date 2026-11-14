@@ -1,0 +1,16 @@
+{
+  "descricao": "Limites e tempos dos testes de carga, concorrência e falha de Obras (Guia M6 §13 'concurrency' e 'load/failure tests', sprint O9 'carga/falhas/segurança'). Nenhum número fica fixo no teste: cada valor sai daqui e pode ser trocado por variável de ambiente OBRAS_<NOME_EM_MAIUSCULAS_COM_SUBLINHADO> (ex.: OBRAS_APROVACOES_SIMULTANEAS=16). O livro não fixa volume nem tempo para Obras; a única meta numérica do contrato é 'p95 < 300ms em consultas comuns' (contrato §16, GATE-DB-09), usada na leitura. Os demais valores são decisão de implementação registrada em DI-M6Q-3.",
+  "parametros": {
+    "aprovacoesSimultaneas": { "valor": 8, "explicacao": "aprovações disparadas ao mesmo tempo sobre a MESMA medição (cada uma na sua conexão); o livro pede uma só conta a pagar" },
+    "baixasIntegraisSimultaneas": { "valor": 6, "explicacao": "baixas integrais simultâneas da MESMA conta a pagar da medição; só uma pode valer" },
+    "baixasParciaisSimultaneas": { "valor": 4, "explicacao": "parcelas iguais (total / N) pagas ao mesmo tempo, mais uma excedente; a soma nunca passa do total" },
+    "diarioObras": { "valor": 3, "explicacao": "obras ativas que recebem diário no teste de volume" },
+    "diarioDiasPorObra": { "valor": 20, "explicacao": "dias de diário por obra (um RDO por dia e turno)" },
+    "diarioGravacoesParalelas": { "valor": 6, "explicacao": "gravações de RDO em paralelo (conexões simultâneas)" },
+    "diarioReenviosSimultaneos": { "valor": 6, "explicacao": "reenvios simultâneos do MESMO RDO (mesma chave de idempotência, e depois mesma obra/data/turno com chaves diferentes)" },
+    "leiturasRepetidas": { "valor": 20, "explicacao": "repetições da leitura do diário e da Saúde da obra para medir o p95" },
+    "limiteP95GravacaoRdoMs": { "valor": 1500, "explicacao": "p95 máximo da gravação de um RDO com evento na Outbox, sob gravações paralelas (DI-M6Q-3)" },
+    "limiteP95LeituraMs": { "valor": 300, "explicacao": "p95 máximo da leitura comum (lista do diário, Saúde da obra): contrato §16 'p95 < 300ms em consultas comuns'" },
+    "limiteRajadaMs": { "valor": 20000, "explicacao": "tempo máximo para uma rajada concorrente inteira terminar (prova de que não trava nem entra em deadlock sem fim)" }
+  }
+}

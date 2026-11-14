@@ -6,7 +6,8 @@
  * fictício, contato, consentimento, endereço, papel e documento com um PDF fictício (o PDF passa pelo antivírus do ambiente), e a
  * pessoa "ACEITE-M9 P5 Contato da Outra Empresa" na outra empresa (controle: a lista dela não vem vazia por falta de acesso).
  * Depois confere que a empresa A continua com as mesmas contagens.
- * O mesmo CPF/CNPJ em outra empresa do grupo continua recusado pela unicidade do grupo (409 PERSON_DUPLICATE_TAX_ID), sem
+ * O mesmo CPF/CNPJ em outra empresa do grupo continua recusado (409; desde o vínculo da pessoa por empresa, DI-M9I-2, o código é
+ * PERSON_TAX_ID_IN_GROUP, convite ao vínculo em vez de cadastro duplicado), sem
  * devolver nada da pessoa da empresa A.
  */
 const CENARIO = '(4) isolamento entre empresas';
@@ -105,8 +106,8 @@ async function executar(ctx) {
   if (alvo.cpf && ctx.outra.groupId === ctx.admin.groupId) {
     const c = await ctx.outra.chamar('POST', '/people', { personType: 'PF', legalName: 'ACEITE-M9 P5 tentativa com o CPF da empresa A', taxIdNormalized: alvo.cpf });
     const vazou = c.texto.includes(id) || c.texto.includes(NOME_DOC);
-    ctx.rel.conferir(CENARIO, 'o mesmo CPF na outra empresa do grupo é recusado (409 PERSON_DUPLICATE_TAX_ID) sem devolver nada da pessoa da empresa A',
-      c.status === 409 && c.erro && c.erro.code === 'PERSON_DUPLICATE_TAX_ID' && !vazou, `POST /people com o CPF da pessoa de A -> ${resumo(c)}${vazou ? ' (a resposta trouxe id ou nome)' : ''}`);
+    ctx.rel.conferir(CENARIO, 'o mesmo CPF na outra empresa do grupo é recusado (409 PERSON_TAX_ID_IN_GROUP, convite ao vínculo) sem devolver nada da pessoa da empresa A',
+      c.status === 409 && c.erro && c.erro.code === 'PERSON_TAX_ID_IN_GROUP' && !vazou, `POST /people com o CPF da pessoa de A -> ${resumo(c)}${vazou ? ' (a resposta trouxe id ou nome)' : ''}`);
   }
   // a outra empresa enxerga a própria lista (controle: as recusas acima não são falta de acesso geral)
   const propria = await ctx.outra.chamar('GET', '/people');

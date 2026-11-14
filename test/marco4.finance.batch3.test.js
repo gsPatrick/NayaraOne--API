@@ -13,13 +13,16 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter, uniqueClosingTestMonth, confirmPeriodChecksForTest, createThirdPartyLink, settleFinancialEntryWithApproval, createManualSettlementEvidence } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const chartOfAccountsService = require('../src/features/finance/chartOfAccounts.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
-const intercompanyTransfersService = require('../src/features/finance/intercompanyTransfers.service');
-const periodClosuresService = require('../src/features/finance/periodClosures.service');
-const financialHealthReportService = require('../src/features/finance/financialHealthReport.service');
-const { publishFinancialEntryCreated } = require('../src/features/finance/financeEvents.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const chartOfAccountsService = require('../src/modules/finance/application/services/chart-of-accounts.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
+const paymentIntentDomain = require('../src/modules/finance/domain/payment-intent');
+const intercompanyTransfersService = require('../src/modules/finance/application/services/intercompany-transfers.service');
+const periodClosuresService = require('../src/modules/finance/application/services/closing.service');
+const financialHealthReportService = require('../src/modules/finance/application/services/finance-health.service');
+const { publishFinancialEntryCreated } = require('../src/modules/finance/application/services/finance-events.service');
 const { Company, FinancialEntry, OutboxEvent, User } = require('../src/models');
 
 let tenant;
@@ -177,11 +180,11 @@ test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do sna
     );
 
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
-    assert.equal(intent.status, 'PENDING');
+    assert.equal(intent.status, 'PENDING_APPROVAL');
     assert.equal(intent.snapshotJson.amount, '2500.00');
     assert.equal(
       intent.snapshotHash,
-      paymentIntentsService.computeSnapshotHash(intent.snapshotJson),
+      paymentIntentDomain.computeSnapshotHash(intent.snapshotJson),
       'o hash gravado tem que ser o SHA-256 do snapshot gravado'
     );
 
@@ -232,7 +235,7 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
     // Revisão 18/10/2026 (A1/A4): PAYABLE sem conta também é saída de caixa — a execução manual
     // da intenção exige comprovante anexado antes da aprovação.
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, transaction);
-    await financialEntriesService.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, transaction);
+    await settlementEvidence.attachSettlementEvidence(entry.id, manualSettlement, tenant.userId, transaction);
     const intent = await paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, transaction);
 
     const approver = await User.create(
@@ -256,15 +259,15 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
       transaction,
       { manualSettlement }
     );
-    assert.equal(executed.status, 'EXECUTED');
+    assert.equal(executed.status, 'CONFIRMED');
     assert.equal(settled.status, 'SETTLED');
     assert.ok(settled.settledAt, 'liquidação precisa carimbar settled_at');
 
-    // Executar de novo não pode liquidar nada duas vezes.
-    await assert.rejects(
-      () => paymentIntentsService.executePaymentIntent(intent.id, approver.id, transaction),
-      (err) => { assert.equal(err.code, 'FINANCE_PAYMENT_INTENT_NOT_APPROVED'); return true; }
-    );
+    // Executar de novo não pode liquidar nada duas vezes (Guia §5, FIN-TS-002): devolve o resultado existente.
+    const again = await paymentIntentsService.executePaymentIntent(intent.id, approver.id, transaction);
+    assert.equal(again.replayed, true);
+    assert.equal(again.entry.id, settled.id);
+    assert.equal(String(again.entry.settledAt), String(settled.settledAt), 'nenhuma segunda liquidação');
   });
 });
 
@@ -573,15 +576,21 @@ test('M4-19 fechar período bloqueia lançamento naquele mês; reabrir exige mot
       (err) => { assert.equal(err.code, 'FINANCE_PERIOD_REOPEN_REASON_REQUIRED'); return true; }
     );
 
-    // Reabrir COM motivo: libera e deixa rastro de quem/por quê.
-    const reopened = await periodClosuresService.reopenPeriod(
-      { companyId: tenant.companyId, referenceMonth, reason: 'Nota fiscal do fornecedor chegou atrasada.' },
+    // Reabrir COM motivo (Caderno §16 / Guia §18, M4PG): é o PEDIDO do fluxo CRITICAL — o mês continua fechado até OUTRA pessoa,
+    // com MFA recente, aprovar; a reabertura deixa rastro de quem pediu, quem aprovou e por quê.
+    const pedido = await periodClosuresService.reopenPeriod(
+      { groupId: tenant.groupId, companyId: tenant.companyId, referenceMonth, reason: 'Nota fiscal do fornecedor chegou atrasada.' },
       tenant.userId,
       transaction
     );
+    assert.equal(pedido.riskLevel, 'CRITICAL');
+    assert.equal((await periodClosuresService.getClosureByMonth(tenant.companyId, referenceMonth, transaction)).status, 'CLOSED');
+    const aprovadorReabertura = await User.create({ name: `M4-19 aprovador ${suffix}`, email: `m419-reabre-${suffix}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' }, { transaction });
+    await require('./helpers/mfaRecente').comMfaRecente(aprovadorReabertura.id, tenant, transaction);
+    const { closure: reopened } = await require('../src/modules/finance/application/services/period-reopen.service').approvePeriodReopen(pedido.id, aprovadorReabertura.id, transaction);
     assert.equal(reopened.status, 'OPEN');
     assert.equal(reopened.reopenReason, 'Nota fiscal do fornecedor chegou atrasada.');
-    assert.equal(reopened.reopenedByUserId, tenant.userId);
+    assert.equal(reopened.reopenedByUserId, aprovadorReabertura.id);
     assert.ok(reopened.reopenedAt);
 
     const afterReopen = await financialEntriesService.createFinancialEntry(
@@ -808,7 +817,7 @@ test('M4-25 replay de liquidação não paga duas vezes o mesmo lançamento', as
 
     // Replay da mesma liquidação: recusada, e o carimbo original não é sobrescrito.
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => { assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS'); return true; }
     );
 

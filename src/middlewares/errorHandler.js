@@ -134,6 +134,9 @@ async function tratarErro(err, req, res) {
   if (err && err.name === 'SequelizeUniqueConstraintError') {
     // Rodada 8 (DI-M9R-25): o 409 da unicidade não ficava em registro nenhum; sai como aviso, com a restrição (sem o valor), para a equipe ver.
     logger.warn({ ...context, code: 'UNIQUE_CONSTRAINT_VIOLATION', statusCode: 409, sqlState: err.parent && err.parent.code, constraint: err.parent && err.parent.constraint }, '[ClientData] unicidade recusada pelo banco');
+    // FIN-TS-001: a unicidade de idempotência do Financeiro vira o código de negócio (quem perde a corrida recebe o mesmo 409 da checagem).
+    const financeMapped = require('../modules/finance/presentation/http/finance-unique-violations').mapFinanceUniqueViolation(err);
+    if (financeMapped) return failure(res, financeMapped);
     return failure(res, {
       statusCode: 409,
       code: 'UNIQUE_CONSTRAINT_VIOLATION',
@@ -144,6 +147,10 @@ async function tratarErro(err, req, res) {
 
   const marketingMapped = mapMarketingDatabaseError(err);
   if (marketingMapped) return failure(res, marketingMapped);
+
+  // DI-M9I-6/7: base de pessoa com vínculo em outra empresa (409) e dado filho de pessoa não vinculada à empresa (403).
+  const peopleLinkMapped = require('../features/people/personView').mapPeopleLinkDatabaseError(err);
+  if (peopleLinkMapped) return failure(res, peopleLinkMapped);
 
   const rlsMapped = mapRlsViolation(err);
   if (rlsMapped) {

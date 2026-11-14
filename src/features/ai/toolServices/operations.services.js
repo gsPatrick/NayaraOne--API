@@ -1,7 +1,7 @@
 'use strict';
 
 const { getProjectHealth } = require('../../construction/projectHealth.service');
-const contractsService = require('../../legal/contracts.service');
+const contractsService = require('../../../modules/legal/contracts/application/contract.service');
 const { toPlain } = require('./plain');
 const { correspondentReaders } = require('../agents/nay_correspondente/readers');
 

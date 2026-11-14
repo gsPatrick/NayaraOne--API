@@ -191,7 +191,19 @@ const checkCloseoutEligibility = catchAsync(async (req, res) => {
   return success(res, { data: { contractId: req.params.contractId, eligible: reasons.length === 0, reasons } });
 });
 const closeoutContract = catchAsync(async (req, res) => {
-  const item = await req.withTenantTransaction((t) => closeoutService.closeoutContract(req.params.contractId, req.auth.userId, t));
+  let item;
+  try {
+    item = await req.withTenantTransaction((t) => closeoutService.closeoutContract(req.params.contractId, req.auth.userId, t));
+  } catch (err) {
+    // Fechamento M5: o 409 desfaz a transação; o evento closeout.blocked e a auditoria são gravados de novo
+    // numa transação própria (nunca escondem o erro original).
+    if (err && err.code === 'CLOSEOUT_BLOCKED') {
+      await req
+        .withTenantTransaction((t) => closeoutService.recordCloseoutBlockedById(req.params.contractId, err.details && err.details.reasons, req.auth.userId, t))
+        .catch(() => {});
+    }
+    throw err;
+  }
   return success(res, { data: item });
 });
 

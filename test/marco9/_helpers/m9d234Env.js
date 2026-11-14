@@ -1,9 +1,10 @@
 'use strict';
 
+const { gravarParametro } = require('../../helpers/mfaRecente'); // parâmetro sensível (requiresMfa): operador com MFA recente real (DI-DEC007-1)
+
 // Apoio dos testes do e-mail de saída (M9-D234): connection de e-mail com canal e segredo do webhook, arquivos com antivírus e classificação, envio pelo serviço,
 // rodada do worker de envios e eventos assinados do provedor. Roda em banco descartável (os testes COMMITAM). Quem usa define process.env.PORT ANTES de requerer este arquivo.
 const env = require('./m9d212Env');
-const settingsService = require('../../../src/features/settings/settings.service');
 const { File } = require('../../../src/models');
 const { transitionConnection } = require('../../../src/features/integrations/registry/connections.transition');
 const { runDispatchCycle } = require('../../../src/features/integrations/dispatch/worker');
@@ -31,7 +32,7 @@ async function criarArquivo(tenant, { nome = `anexo-${uniqueSuffix()}.pdf`, mime
   }, { transaction: t }));
 }
 
-const config = (tenant, chave, valor) => comTenant(tenant, (t) => settingsService.upsertSetting(chave, valor, tenant, tenant.userId, t));
+const config = (tenant, chave, valor) => comTenant(tenant, (t) => gravarParametro(chave, valor, tenant, t));
 
 /** Envia pelo serviço (commit). `extra` sobrescreve os campos padrão. */
 function enviarEmail(tenant, extra = {}) {

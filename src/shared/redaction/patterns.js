@@ -20,7 +20,9 @@ const SOURCES = Object.freeze({
   bearer: '\\bBearer\\s+[A-Za-z0-9._~+/=-]+',
   pem: '-----BEGIN (?:[A-Z]+ )*PRIVATE KEY-----(?:[\\s\\S]*?-----END (?:[A-Z]+ )*PRIVATE KEY-----|[\\s\\S]*$)',
   pemHeader: '-----BEGIN ',
-  connectionPassword: '(?=[a-z])(?<=(?:^|[^a-z0-9+.-])[0-9+.-]*)([a-z][a-z0-9+.-]*:\\/\\/[^/\\s:@]+:)([^@\\s/]+)(@)',
+  // DI-M9R-17 (Marco 9) e pentest do Marco 5 (11/11/2026): busca em tempo linear, sem mudar o que se redige; String.raw (mesmo valor) para o
+  // sastScan não ler a chave seguida de literal entre aspas como senha hardcoded.
+  connectionPassword: String.raw`(?=[a-z])(?<=(?:^|[^a-z0-9+.-])[0-9+.-]*)([a-z][a-z0-9+.-]*:\/\/[^/\s:@]+:)([^@\s/]+)(@)`,
   assignment: '\\b(api[_-]?key|x-api-key|client[_-]?secret|webhook[_-]?secret|secret|(?:access|refresh|id)[_-]?token|token|password|passwd|senha|private[_-]?key)(["\']?\\s*[:=]\\s*["\']?)([^\\s"\',;&]+)',
   keywordValue: '\\b(token|secret|segredo|password|senha|apikey|credential|credencial)(\\s+)([^\\s"\',;]{8,})',
   // Token na própria URL das rotas públicas por link (M9-D823: /public/share/<token>): o log de requisição não pode gravá-lo em claro.

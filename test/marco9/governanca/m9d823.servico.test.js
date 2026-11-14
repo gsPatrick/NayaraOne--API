@@ -83,7 +83,7 @@ test('m9d823 acesso público mostra o recurso com campos HIGH e RESTRICTED masca
   const { token, link } = await env.share(A, contract);
   const { result } = await open(token);
   const data = result.data;
-  assert.deepEqual([data.id, data.contractType, data.status], [contract.id, 'LEASE', contract.status], 'LOW em claro');
+  assert.deepEqual([data.id, data.contractType, data.status], [contract.id, 'LEASE_RESIDENTIAL', contract.status], 'LOW em claro'); // contrato criado com o código antigo LEASE é gravado como LEASE_RESIDENTIAL (DI-M5CT-2)
   assert.equal(data.contractNumber, contract.contractNumber, 'MEDIUM em claro');
   assert.equal(data.totalValue, '***', 'HIGH mascarado');
   assert.deepEqual(data.parties.map((p) => [p.role, p.name, p.taxId]), [['TENANT', '***', '***']], 'nome HIGH e CPF RESTRICTED mascarados, papel em claro');

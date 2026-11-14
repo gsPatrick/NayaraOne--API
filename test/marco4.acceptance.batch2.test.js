@@ -6,10 +6,10 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const { User } = require('../src/models');
 
 let tenant;

@@ -11,7 +11,7 @@
  *  - B2: o contexto vem do contrato (partes, garantias, imóvel, valor, prazo), nunca do corpo; o
  *    contexto usado e as cláusulas excluídas ficam gravados na versão.
  *  - I1: versão de cláusula substituída bloqueia o modelo em vez de sumir em silêncio.
- *  - I3: trigger de imutabilidade em legal.contract_clauses (SQL cru).
+ *  - I3: trigger de imutabilidade em legal.clause_versions (antiga contract_clauses, SQL cru).
  *  - M1/M2: aprovação serializada, sem versão histórica e sem autor desconhecido.
  *  - HTTP: geração e aprovação pelas rotas reais (201/400/403/404).
  */
@@ -30,11 +30,11 @@ const {
   uniqueSuffix,
 } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const contractTemplatesService = require('../src/features/legal/contractTemplates.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const { User, Company, ContractClause, ContractTemplate, ContractTemplateClause, ContractVersion, ContractParty, Contract } = require('../src/models');
@@ -109,7 +109,7 @@ async function addGuarantor(t, contractId) {
   const guarantor = await createPerson(t, 'PF');
   return guaranteesService.createGuarantee(
     contractId,
-    { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, endsAt: '2030-12-31' },
+    await require('./m5fech.locacao.helpers').completeGuarantor(tenant, t, guarantor.id),
     tenant.userId,
     t
   );
@@ -137,7 +137,15 @@ async function template(t, clauses, contractType = 'LEASE') {
   return tpl;
 }
 
-function generate(t, contractId, payload) {
+// Matriz M5 (§6/§19): só a versão PUBLICADA do modelo gera contrato. Este apoio publica o rascunho em edição
+// (ato de governança) antes de gerar, como o jurídico faria depois de alterar o modelo.
+async function generate(t, contractId, payload) {
+  if (payload && payload.templateId) {
+    const { TemplateVersion } = require('../src/models');
+    if (await TemplateVersion.findOne({ where: { templateId: payload.templateId, status: 'DRAFT' }, transaction: t })) {
+      await contractTemplatesService.publishTemplate(payload.templateId, tenant.userId, t);
+    }
+  }
   return contractVersionsService.createContractVersion(contractId, { requireDocument: false, ...payload }, tenant.userId, t);
 }
 
@@ -275,7 +283,7 @@ test('F01-G6 (B2): duas modalidades de garantia ativas — a cláusula que depen
     const tpl = await template(t, [fianca]);
     const contract = await createLease(t);
     await addGuarantor(t, contract.id);
-    await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'DEPOSIT', value: 3000 }, tenant.userId, t);
+    await guaranteesService.createGuarantee(contract.id, await require('./m5fech.locacao.helpers').completeInsurance(tenant, t, { value: 3000 }), tenant.userId, t);
     await assert.rejects(
       () => generate(t, contract.id, { templateId: tpl.id }),
       (err) => err.code === 'LEGAL_CLAUSE_CONDITION_CONTEXT_AMBIGUOUS' && /8\.245/.test(err.message)
@@ -353,7 +361,7 @@ test('F01-G9 (I1): cláusula retirada de circulação sai do documento e fica re
 test('F01-G10 (I3): no BANCO, texto, regra, reativação e autoaprovação são recusados; a aprovação legítima passa', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const c = await clause(t, { title: 'DA FIANÇA', bodyText: 'Original', condition: FIANCA, approve: false });
-    const sql = (set) => `UPDATE legal.contract_clauses SET ${set} WHERE id = :id`;
+    const sql = (set) => `UPDATE legal.clause_versions SET ${set} WHERE id = :id`;
 
     await savepointRejects(t, sql("body_text = 'Adulterado'"), { id: c.id }, /append-only/, 'texto imutável');
     await savepointRejects(t, sql(`condition_json = '{"match":"all","rules":[{"variable":"guaranteeType","operator":"eq","value":"DEPOSIT"}]}'::jsonb`), { id: c.id }, /append-only/, 'regra imutável');
@@ -418,6 +426,7 @@ async function committedFixture() {
     const fianca = await clause(t, { title: 'DA FIANÇA', bodyText: 'Fiança HTTP', condition: FIANCA });
     const pending = await clause(t, { title: 'DA CAUÇÃO', bodyText: 'Caução HTTP', condition: { match: 'all', rules: [{ variable: 'guaranteeType', operator: 'eq', value: 'DEPOSIT' }] }, approve: false });
     const tpl = await template(t, [base, fianca]);
+    await contractTemplatesService.publishTemplate(tpl.id, tenant.userId, t); // só a versão publicada gera contrato
     const contract = await createLease(t);
     committed.clauseIds.push(base.id, fianca.id, pending.id);
     committed.templateIds.push(tpl.id);

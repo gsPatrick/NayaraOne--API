@@ -1,0 +1,793 @@
+'use strict';
+
+const catchAsync = require('../../../utils/catchAsync');
+const { success } = require('../../../utils/httpResponse');
+const AppError = require('../../../utils/AppError');
+const { getSetting } = require('../../../features/settings/settings.service');
+const { sequelize, SignatureProviderRouting } = require('../../../models');
+const contractsService = require('../contracts/application/contract.service');
+const contractVersionsService = require('../contracts/application/contractVersions.service');
+const signaturesService = require('../signatures/signature.service');
+const signatureFlow = require('../signatures/framework');
+const guaranteesService = require('../leasing/guarantee.service');
+const inspectionsService = require('../inspections/inspection.service');
+const keyDeliveriesService = require('../leasing/key-delivery.service');
+const legalCasesService = require('../cases/legal-case.service');
+const legalDeadlinesService = require('../cases/deadline.service');
+const evidencePackagesService = require('../cases/evidence-package.service');
+const { guardEvidenceExport } = require('../../../features/core-governance/dlp/downloads/dossier.guard');
+const contractAmendmentsService = require('../contracts/application/contractAmendments.service');
+const contractTemplatesService = require('../contracts/application/template.service');
+const contractClausesService = require('../contracts/application/contractClauses.service');
+const { deriveDraftConditionContext } = require('../contracts/application/clauseConditionContext');
+const contractTimelineService = require('../contracts/application/contractTimeline.service');
+const contractPdfService = require('../contracts/application/contractPdf.service');
+const requirementsService = require('../contracts/application/requirement.service');
+const noticesService = require('../contracts/application/notices.service');
+const legalNayService = require('../cases/legalNay.service');
+
+function withTenant(req) {
+  return { ...req.body, groupId: req.auth.groupId, companyId: req.auth.companyId };
+}
+
+// --- Contracts ---
+const createContract = catchAsync(async (req, res) => {
+  const contract = await req.withTenantTransaction((t) => contractsService.createContract(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: contract });
+});
+const listContracts = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    contractsService.listContracts(t, { status: req.query.status, contractType: req.query.contractType, propertyId: req.query.propertyId })
+  );
+  return success(res, { data: items });
+});
+const getContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.getContract(req.params.id, t));
+  return success(res, { data: item });
+});
+const transitionContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction(async (t) => {
+    const contract = await contractsService.getContract(req.params.id, t);
+    return contractsService.transitionContractStatus(contract, req.body.targetStatus, req.auth.userId, t);
+  });
+  return success(res, { data: item });
+});
+// FIX DIVERGÊNCIA (auditoria técnica da cliente, 07/10/2026) — endpoints de fim-de-vida do
+// contrato (ACTIVE -> SUSPENDED/TERMINATED, SUSPENDED -> ACTIVE/TERMINATED, TERMINATED -> CLOSED)
+// existiam como funções em contracts.service.js mas nunca eram expostos via controller/rota —
+// ver contracts.service.js#suspendContract/reactivateContract/terminateContract/closeContract.
+const suspendContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.suspendContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const reactivateContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.reactivateContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const terminateContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.terminateContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const closeContract = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.closeContract(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const addContractParty = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.addContractParty(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const correctContractData = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractsService.correctContractData(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const listContractParties = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractsService.listContractParties(req.params.id, t));
+  return success(res, { data: items });
+});
+// AUD-017 (JUR-012, "timeline consolidada"): aditivos + notificações + inadimplência +
+// reparos de um contrato, derivados na leitura das tabelas de origem (nunca uma cópia que
+// possa divergir).
+const getContractTimeline = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => contractTimelineService.getContractTimeline(req.params.id, t));
+  return success(res, { data });
+});
+
+// --- Contract requirements (checklist documental por tipo) ---
+const generateContractRequirements = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => requirementsService.generateRequirementsForContract(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: items });
+});
+const listContractRequirements = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => requirementsService.listRequirements(req.params.id, t));
+  return success(res, { data: items });
+});
+// Frente 5: DISPENSA (WAIVED) exige permissão própria legal:waive — antes bastava legal:update
+// no PATCH com "waivedReason". O PATCH continua servindo para SATISFIED (documento anexado); se
+// vier "waivedReason" sem legal:waive -> 403. Rota dedicada: POST /legal/requirements/:id/waive.
+const satisfyContractRequirement = catchAsync(async (req, res) => {
+  const body = req.body || {};
+  if (body.waivedReason !== undefined && body.waivedReason !== null && body.waivedReason !== '') {
+    if (!(req.auth.permissions || []).includes('legal:waive')) {
+      throw AppError.forbidden('Você não tem permissão para dispensar esta exigência. Peça o acesso a quem administra o seu perfil.', 'PERMISSION_DENIED', { required: 'legal:waive' });
+    }
+  }
+  const item = await req.withTenantTransaction((t) => requirementsService.satisfyRequirement(req.params.requirementId, body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const waiveContractRequirement = catchAsync(async (req, res) => {
+  const reason = req.body && typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+  if (!reason) throw AppError.badRequest('"reason" é obrigatório para dispensar um requisito.', 'LEGAL_REQUIREMENT_VALIDATION');
+  const item = await req.withTenantTransaction((t) =>
+    requirementsService.satisfyRequirement(req.params.requirementId, { waivedReason: reason }, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
+// --- Notices (notificações formais) ---
+const createNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.createNotice(req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listNotices = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    noticesService.listNotices(t, { contractId: req.query.contractId, legalCaseId: req.query.legalCaseId, status: req.query.status })
+  );
+  return success(res, { data: items });
+});
+const getNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.getNotice(req.params.id, t));
+  return success(res, { data: item });
+});
+const submitNoticeForReview = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.submitNoticeForReview(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const approveNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.approveNotice(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const rejectNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.rejectNotice(req.params.id, req.body.reason, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const sendNotice = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.sendNotice(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const registerNoticeDeliveryEvidence = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => noticesService.registerDeliveryEvidence(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+// --- Contract versions ---
+const createContractVersion = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractVersionsService.createContractVersion(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listContractVersions = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractVersionsService.listContractVersions(req.params.id, t));
+  return success(res, { data: items });
+});
+// GET (idempotente, sem efeito colateral): o PDF é gerado em memória, sob demanda, a partir do
+// texto já persistido em ContractVersion.content — não cria File nem grava nada em disco (ver
+// decisão documentada em contractPdf.service.js). Chamar duas vezes com o mesmo `content`
+// produz o mesmo PDF/hash, então não há razão pra exigir POST aqui.
+const generateContractVersionPdf = catchAsync(async (req, res) => {
+  const { buffer, fileName } = await req.withTenantTransaction(async (t) => {
+    // Pentest M5 (achado 7): a versão precisa pertencer ao contrato do caminho.
+    const { ContractVersion } = require('../../../models');
+    const version = /^[0-9a-f-]{36}$/i.test(String(req.params.id)) && /^[0-9a-f-]{36}$/i.test(String(req.params.versionId))
+      ? await ContractVersion.findOne({ where: { id: req.params.versionId, contractId: req.params.id }, attributes: ['id'], transaction: t })
+      : null;
+    if (!version) throw AppError.notFound('Versão de contrato não encontrada neste contrato.', 'LEGAL_CONTRACT_VERSION_NOT_FOUND');
+    return contractPdfService.generateContractPdf(req.params.versionId, req.auth.userId, t);
+  });
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+  res.setHeader('Content-Length', buffer.length);
+  return res.status(200).send(buffer);
+});
+
+// --- Contract templates ---
+const createContractTemplate = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractTemplatesService.createTemplate(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listContractTemplates = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    contractTemplatesService.listTemplates(t, { contractType: req.query.contractType, isActive: req.query.isActive === undefined ? undefined : req.query.isActive === 'true' })
+  );
+  return success(res, { data: items });
+});
+const getContractTemplate = catchAsync(async (req, res) => {
+  // Matriz M5: o modelo vem com responsável jurídico, versões e cláusulas de cada versão.
+  const item = await req.withTenantTransaction((t) => require('../contracts/application/contractTemplateDetail').getTemplateDetail(req.params.id, t));
+  return success(res, { data: item });
+});
+// --- Clause library (JUR-002) ---
+// Fix AUD-012 (auditoria externa Nayara, 11/10/2026): contractClauses.service.js já tinha
+// createClause/createClauseVersion/listClauses/listClauseVersions/deactivateClause prontos e
+// testados, mas NENHUMA rota expunha isso — addClauseToContractTemplate exige um
+// contractClauseId já existente, e não havia como criar uma cláusula em primeiro lugar sem
+// SQL direto. A biblioteca de cláusulas ficava inalcançável por qualquer usuário/tela.
+const createClause = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.createClause(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const createClauseVersion = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    contractClausesService.createClauseVersion(req.params.code, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listClauses = catchAsync(async (req, res) => {
+  // Matriz M5 (JUR-002): cada cláusula com o responsável jurídico da biblioteca.
+  const items = await req.withTenantTransaction(async (t) => require('../contracts/application/contractTemplateDetail').withLegalResponsible(await contractClausesService.listClauses(t, req.query), t));
+  return success(res, { data: items });
+});
+const listClauseVersions = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction(async (t) => require('../contracts/application/contractTemplateDetail').withLegalResponsible(await contractClausesService.listClauseVersions(req.params.code, t), t));
+  return success(res, { data: items });
+});
+const deactivateClause = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.deactivateClause(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+const approveClauseCondition = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractClausesService.approveClauseCondition(req.params.id, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+const addClauseToContractTemplate = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractTemplatesService.addClauseToTemplate(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+// Preview: apenas RENDERIZA o texto, não persiste nada. A geração de verdade é
+// POST /legal/contracts/:id/versions com { templateId, variables } — o servidor monta o texto.
+// F01: o contexto das cláusulas condicionais NÃO vem livre do corpo. Fontes aceitas:
+//  - `contractId`: derivado do contrato existente (mesmo resultado da geração real);
+//  - `draftContract`: derivado dos dados da tela "Novo contrato" (imóvel e pessoas lidos do banco);
+//  - `simulationContext`: simulação explícita para quem edita o modelo — a resposta sai marcada
+//    `simulation: true` e esse contexto nunca é aceito na geração da versão.
+const renderContractTemplate = catchAsync(async (req, res) => {
+  const body = req.body || {};
+  if (Object.prototype.hasOwnProperty.call(body, 'conditionContext')) {
+    throw AppError.badRequest(
+      '"conditionContext" não é aceito: informe "contractId" (contrato existente), "draftContract" (contrato em criação) ou, só para simular o modelo, "simulationContext".',
+      'LEGAL_TEMPLATE_RENDER_CONTEXT_NOT_ACCEPTED'
+    );
+  }
+  const variables = body.variables;
+  const data = await req.withTenantTransaction(async (t) => {
+    // A prévia mostra a versão que GERA contrato (a publicada); o rascunho só se pedido (versao=rascunho) ou se não houver publicada.
+    const templateVersion = await contractTemplatesService.previewTemplateVersion(req.params.id, t, { rascunho: body.versao === 'rascunho' || req.query.versao === 'rascunho' });
+    if (body.contractId) {
+      return contractTemplatesService.renderTemplateForContract(req.params.id, String(body.contractId), t, variables, { templateVersion });
+    }
+    if (body.draftContract) {
+      const { context, unresolved } = await deriveDraftConditionContext(body.draftContract, t);
+      return contractTemplatesService.renderTemplate(req.params.id, t, variables, context, { unresolved, contextSource: 'DRAFT_CONTRACT', templateVersion });
+    }
+    if (body.simulationContext) {
+      return contractTemplatesService.renderTemplate(req.params.id, t, variables, body.simulationContext, { contextSource: 'SIMULATION', templateVersion });
+    }
+    return contractTemplatesService.renderTemplate(req.params.id, t, variables, {}, { contextSource: 'NONE', templateVersion });
+  });
+  return success(res, { data: { ...data, simulation: data.contextSource === 'SIMULATION' } });
+});
+
+const upgradeContractTemplateClause = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    contractTemplatesService.upgradeTemplateClause(req.params.id, req.params.clauseId, req.auth.userId, t)
+  );
+  return success(res, { data });
+});
+
+const listClauseTemplateUsage = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => contractTemplatesService.listClauseTemplateUsage(req.params.code, t));
+  return success(res, { data });
+});
+
+// --- Signatures ---
+const initiateSignature = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    signaturesService.initiateSignature(req.params.id, req.body.signerPersonIds, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: items });
+});
+const listSignaturesByContractVersion = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => signaturesService.listSignaturesByContractVersion(req.params.id, t));
+  return success(res, { data: items });
+});
+// Webhook de assinatura — endpoint AUTENTICADO (mantido por compatibilidade/testes internos):
+// exige o MESMO authMiddleware/tenantMiddleware das demais rotas de legal ("legal:sign"). O
+// webhook PÚBLICO de verdade, chamado pelo Clicksign sem JWT nenhum, é `clicksignPublicWebhook`
+// abaixo — rota distinta, fora do authMiddleware (ver legal.routes.js).
+
+// Verificação do HMAC do webhook: porta do adapter de assinatura (Guia M5 §7, signature-adapter.port.js).
+const { verifyProviderWebhookSignature } = require('../signatures/signature-adapter.port');
+
+/**
+ * B1 (revisão 19/10/2026): o sandbox não tem provedor/HMAC por trás — antes qualquer usuário com
+ * legal:sign marcava SIGNED sem prova. Agora (1) sandbox é recusado com
+ * DEPLOY_ENVIRONMENT=production e (2) o payload precisa trazer o hash do documento
+ * (contentHash/documentHash), que o service confere contra a versão enviada para assinatura.
+ */
+function assertSandboxWebhookAllowed(body, env) {
+  if (env.DEPLOY_ENVIRONMENT === 'production') {
+    throw AppError.forbidden(
+      'Webhook de assinatura em modo sandbox não é aceito em produção — configure um provedor real.',
+      'LEGAL_SANDBOX_WEBHOOK_FORBIDDEN_IN_PRODUCTION'
+    );
+  }
+  const payload = body || {};
+  if (!payload.contentHash && !payload.documentHash) {
+    throw AppError.badRequest(
+      'Informe o hash do documento assinado (contentHash) no payload do webhook.',
+      'LEGAL_WEBHOOK_HASH_REQUIRED'
+    );
+  }
+}
+
+const signatureWebhook = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction(async (t) => {
+    const tenant = { groupId: req.auth.groupId, companyId: req.auth.companyId };
+    const provider = await getSetting('legal.signature_provider', tenant, t, 'sandbox');
+
+    // Regra crítica: se um provedor real estiver configurado para o tenant, a rota DEVE
+    // rejeitar qualquer payload sem HMAC válido — nunca aplica o webhook "por confiança". O
+    // sandbox (sem provedor real por trás) segue sem exigir HMAC.
+    if (provider === 'clicksign' || provider === 'zapsign') {
+      const { secret: webhookSecret } = await signatureFlow.resolveSignatureWebhookSecret({ providerKey: provider, tenant, transaction: t }); // M9-D236: cofre de segredos
+      const rawBody = req.rawBody;
+      const isValid = verifyProviderWebhookSignature(provider, rawBody, req.headers, webhookSecret);
+      if (!isValid) {
+        throw AppError.unauthorized(
+          'Assinatura HMAC do webhook ausente ou inválida para o provedor configurado.',
+          'LEGAL_WEBHOOK_HMAC_INVALID'
+        );
+      }
+    } else {
+      assertSandboxWebhookAllowed(req.body, process.env);
+    }
+
+    return signaturesService.handleSignatureWebhook(req.params.externalSignatureId, req.body, t);
+  });
+  return success(res, { data: result });
+});
+
+// Extrai um id de envelope do payload do webhook, tentando os caminhos mais plováveis do
+// formato v3 (o mesmo formato já confirmado ao vivo pra `event.data.signer.key` no evento
+// "sign"). NÃO CONFIRMADO AO VIVO para eventos de envelope fechado (close/auto_close) — não
+// completamos um ciclo real de assinatura nesta sessão (exigiria clique de um signatário real
+// em e-mail, fora do nosso controle). Tenta múltiplos caminhos plausíveis de propósito, do
+// mais provável (espelha `event.data.signer.key`) a formatos legados vistos em documentação
+// mais antiga do Clicksign (`document.key`), pra não depender de acertar de primeira.
+function extractEnvelopeId(body) {
+  const event = body && body.event;
+  return (
+    (event && event.data && event.data.envelope && event.data.envelope.id) ||
+    (body && body.envelope && body.envelope.id) ||
+    (body && body.document && body.document.key) ||
+    null
+  );
+}
+
+/**
+ * clicksignPublicWebhook — endpoint PÚBLICO de verdade (fora do authMiddleware/tenantMiddleware
+ * — ver legal.routes.js), o único que o Clicksign de fato consegue chamar, já que o provedor
+ * externo não tem (e nunca terá) um JWT de usuário deste sistema.
+ *
+ * Fluxo (ver migration 20260101000172-create-legal-signature_provider_routing e a nota em
+ * signatures.service.js): extrai a "key" do signatário do payload do evento (formato
+ * confirmado contra a documentação oficial: `event.data.signer.key`), resolve group_id/
+ * company_id na tabela de roteamento (SEM RLS, só ids opacos), e SÓ DEPOIS abre a transação
+ * com `SET LOCAL` de tenant para validar o HMAC (segredo é por-tenant) e aplicar o webhook.
+ *
+ * Dois tipos de evento tratados: "sign" (assinatura individual — `handleSignatureWebhook`) e
+ * "close"/"auto_close" (envelope fechado — `handleEnvelopeClosedWebhook`, baixa e persiste o
+ * PDF assinado). Esses dois nomes de evento de fechamento são os REGISTRADOS de verdade no
+ * webhook desta conta (`scripts/setupClicksignIntegration.js`), não uma suposição da
+ * documentação pública (que usa a expressão genérica "document_closed"). Outros eventos (ex.:
+ * refusal, cancel, deadline) são reconhecidos com 200 mas não têm efeito hoje — trabalho
+ * futuro, fora deste marco.
+ */
+const clicksignPublicWebhook = catchAsync(async (req, res) => {
+  const eventName = req.body && req.body.event && req.body.event.name;
+  const signerKey = req.body && req.body.event && req.body.event.data && req.body.event.data.signer && req.body.event.data.signer.key;
+  const isEnvelopeClosedEvent = eventName === 'close' || eventName === 'auto_close';
+  const envelopeId = isEnvelopeClosedEvent ? extractEnvelopeId(req.body) : null;
+
+  let routing = null;
+  if (signerKey) {
+    routing = await SignatureProviderRouting.findOne({ where: { externalSignatureId: signerKey } });
+  } else if (envelopeId) {
+    routing = await SignatureProviderRouting.findOne({ where: { providerEnvelopeId: envelopeId } });
+  } else {
+    // Evento sem signatário nem envelope identificável (ex.: upload, add_image) — reconhece
+    // sem processar.
+    return success(res, { data: { acknowledged: true, processed: false, reason: 'no_identifier_in_payload' } });
+  }
+
+  if (!routing) {
+    // Pentest M5 (oráculo): sem roteamento não há segredo para conferir a assinatura — a resposta é a MESMA da
+    // assinatura inválida (401), para não revelar se o signatário/envelope existe (mesmo padrão do financiamento).
+    throw AppError.unauthorized('Assinatura do webhook (Content-Hmac) ausente ou inválida.', 'LEGAL_WEBHOOK_HMAC_INVALID');
+  }
+
+  const tenant = { groupId: routing.groupId, companyId: routing.companyId };
+  const rawBody = req.rawBody;
+
+  const result = await sequelize.transaction(async (t) => {
+    await sequelize.query('SET LOCAL app.group_id = :groupId', { replacements: { groupId: tenant.groupId }, transaction: t });
+    await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: tenant.companyId }, transaction: t });
+
+    const { secret: webhookSecret } = await signatureFlow.resolveSignatureWebhookSecret({ providerKey: 'clicksign', tenant, transaction: t }); // M9-D236: cofre de segredos; o valor antigo migra sozinho
+    const isValid = verifyProviderWebhookSignature('clicksign', rawBody, req.headers, webhookSecret);
+    if (!isValid) {
+      throw AppError.unauthorized(
+        'Assinatura do webhook (Content-Hmac) ausente ou inválida.',
+        'LEGAL_WEBHOOK_HMAC_INVALID'
+      );
+    }
+
+    // M9-D236: assinatura com envelope registrado segue o mesmo caminho do webhook da rota única (signatário previsto, evidência, hash, portão do contrato).
+    const viaEnvelope = await signatureFlow.applyClicksignEvent(tenant, req.body, rawBody, t);
+    if (viaEnvelope) return viaEnvelope;
+
+    if (eventName === 'sign' && signerKey) {
+      const applied = await signaturesService.handleSignatureWebhook(signerKey, req.body, t);
+      return { acknowledged: true, processed: true, ...applied };
+    }
+
+    if (isEnvelopeClosedEvent && envelopeId) {
+      const applied = await signaturesService.handleEnvelopeClosedWebhook(envelopeId, tenant, t);
+      return applied;
+    }
+
+    return { acknowledged: true, processed: false, reason: `event_${eventName}_not_handled` };
+  });
+
+  return success(res, { data: result });
+});
+
+const checkSignatureStatus = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => signaturesService.checkSignatureStatus(req.params.id, t));
+  return success(res, { data: result });
+});
+
+const cancelSignature = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => signaturesService.cancelSignature(req.params.id, req.auth.userId, t));
+  return success(res, { data: result });
+});
+
+// --- Guarantees ---
+const createGuarantee = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => guaranteesService.createGuarantee(req.params.contractId, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listGuarantees = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    guaranteesService.listGuarantees(t, { contractId: req.query.contractId, status: req.query.status })
+  );
+  return success(res, { data: items });
+});
+const getGuarantee = catchAsync(async (req, res) => {
+  // Fechamento M5: leitura com o que falta para ativar e a trilha da caução no Financeiro.
+  const item = await req.withTenantTransaction((t) => require('../leasing/guaranteeDetail.service').getGuaranteeDetail(guaranteesService, req.params.id, t));
+  return success(res, { data: item });
+});
+const updateGuarantee = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => guaranteesService.updateGuarantee(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const removeGuarantee = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) => guaranteesService.deleteGuarantee(req.params.id, req.auth.userId, t));
+  return success(res, { data: result });
+});
+
+// --- Contract Amendments ---
+const createContractAmendment = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    contractAmendmentsService.createAmendment(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listContractAmendments = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => contractAmendmentsService.listAmendments(req.params.id, t));
+  return success(res, { data: items });
+});
+const getContractAmendment = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => contractAmendmentsService.getAmendment(req.params.id, t));
+  return success(res, { data: item });
+});
+const signContractAmendment = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    contractAmendmentsService.signAmendment(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
+// --- Inspections ---
+const createInspection = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => inspectionsService.createInspection(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+// FIX (Bug 4, falta de atomicidade): cria a vistoria + todos os itens numa única transação —
+// ver comentário de createInspectionWithItems em inspections.service.js.
+const createInspectionWithItems = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    inspectionsService.createInspectionWithItems(withTenant(req), req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: result });
+});
+const listInspections = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    inspectionsService.listInspections(t, {
+      propertyId: req.query.propertyId,
+      contractId: req.query.contractId,
+      status: req.query.status,
+      inspectionType: req.query.inspectionType,
+    })
+  );
+  return success(res, { data: items });
+});
+const getInspection = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => inspectionsService.getInspection(req.params.id, t));
+  return success(res, { data: item });
+});
+const completeInspection = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => inspectionsService.completeInspection(req.params.id, req.auth.userId, t, { expectedLockVersion: req.body ? req.body.lockVersion : undefined }));
+  return success(res, { data: item });
+});
+const addInspectionItem = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => inspectionsService.addInspectionItem(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listInspectionItems = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => inspectionsService.listInspectionItems(req.params.id, t));
+  return success(res, { data: items });
+});
+const compareInspections = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    inspectionsService.compareInspections(req.query.entryInspectionId, req.query.exitInspectionId, t)
+  );
+  return success(res, { data: result });
+});
+const attachInspectionItemMedia = catchAsync(async (req, res) => {
+  const link = await req.withTenantTransaction((t) =>
+    inspectionsService.attachInspectionItemMedia(req.params.itemId, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: link });
+});
+const listInspectionItemMedia = catchAsync(async (req, res) => {
+  const links = await req.withTenantTransaction((t) => inspectionsService.listInspectionItemMedia(req.params.itemId, t));
+  return success(res, { data: links });
+});
+const signInspection = catchAsync(async (req, res) => {
+  const signature = await req.withTenantTransaction((t) =>
+    inspectionsService.signInspection(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: signature });
+});
+// M45 (Caderno M5 §11): revisão de vistoria assinada (original intacto).
+const createInspectionRevision = catchAsync(async (req, res) => {
+  const revision = await req.withTenantTransaction((t) =>
+    inspectionsService.createInspectionRevision(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: revision });
+});
+// M45 (Caderno M5 §8): assinatura manual com evidência e coletor identificado.
+const recordManualSignature = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    signaturesService.recordManualSignature(req.params.id, req.body, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: result });
+});
+// M9-D227: troca do fornecedor de assinatura fora do ar por outro elegível, aprovada por uma pessoa com MFA recente (a rota exige).
+const switchSignatureProvider = catchAsync(async (req, res) => {
+  const ctx = { groupId: req.auth.groupId, companyId: req.auth.companyId, userId: req.auth.userId };
+  const approved = Boolean(req.body && req.body.approve === true);
+  const result = await req.withTenantTransaction((t) => signatureFlow.switchSignatureProvider(ctx, { envelopeId: req.params.id, approved, actorUserId: req.auth.userId }, t));
+  return success(res, { data: result });
+});
+const listInspectionSignatures = catchAsync(async (req, res) => {
+  const signatures = await req.withTenantTransaction((t) => inspectionsService.listInspectionSignatures(req.params.id, t));
+  return success(res, { data: signatures });
+});
+const generateInspectionReport = catchAsync(async (req, res) => {
+  const result = await req.withTenantTransaction((t) =>
+    inspectionsService.generateInspectionReport(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: result });
+});
+const getInspectionReport = catchAsync(async (req, res) => {
+  const { pdfBytes, reportHash } = await req.withTenantTransaction((t) => inspectionsService.getInspectionReport(req.params.id, t));
+  res.set('Content-Type', 'application/pdf');
+  res.set('X-Report-Sha256', reportHash);
+  res.set('Content-Disposition', `attachment; filename="vistoria-${req.params.id}.pdf"`);
+  return res.status(200).send(pdfBytes);
+});
+
+// --- Key deliveries ---
+const createKeyDelivery = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.createKeyDelivery(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listKeyDeliveries = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    keyDeliveriesService.listKeyDeliveries(t, { contractId: req.query.contractId, status: req.query.status })
+  );
+  return success(res, { data: items });
+});
+const getKeyDelivery = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.getKeyDelivery(req.params.id, t));
+  return success(res, { data: item });
+});
+const previewKeyDeliveryTerm = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.previewKeyDeliveryTerm(req.params.id, req.query, t));
+  return success(res, { data: item });
+});
+const cancelKeyDelivery = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.cancelKeyDelivery(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const releaseKeyDelivery = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => keyDeliveriesService.releaseKeyDelivery(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+// --- Legal cases ---
+const createLegalCase = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalCasesService.createLegalCase(withTenant(req), req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listLegalCases = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    legalCasesService.listLegalCases(t, { status: req.query.status, caseType: req.query.caseType, contractId: req.query.contractId })
+  );
+  return success(res, { data: items });
+});
+const getLegalCase = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalCasesService.getLegalCase(req.params.id, t));
+  return success(res, { data: item });
+});
+const updateLegalCase = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalCasesService.updateLegalCase(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const linkCaseToTask = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalCasesService.linkCaseToTask(req.params.id, req.body.taskId, req.auth.userId, t));
+  return success(res, { data: item });
+});
+const setLegalHold = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalCasesService.setLegalHold(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { data: item });
+});
+
+// --- Legal deadlines ---
+const createLegalDeadline = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalDeadlinesService.createLegalDeadline(req.params.id, req.body, req.auth.userId, t));
+  return success(res, { statusCode: 201, data: item });
+});
+const listLegalDeadlines = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) =>
+    legalDeadlinesService.listLegalDeadlines(t, { legalCaseId: req.query.legalCaseId, status: req.query.status, severity: req.query.severity })
+  );
+  return success(res, { data: items });
+});
+const updateLegalDeadline = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) => legalDeadlinesService.updateLegalDeadline(req.params.id, req.body, req.auth.userId, t, { actorPermissions: req.auth.permissions || [] }));
+  return success(res, { data: item });
+});
+
+// --- Evidence packages ---
+const createEvidencePackage = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    evidencePackagesService.createEvidencePackage(req.params.id, req.body.manifestItems, req.auth.userId, t)
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+// AUD-016 (JUR-010, "custódia de todos os anexos"): monta o dossiê automaticamente a partir
+// de TODO anexo conhecido do contrato vinculado ao processo, em vez de depender do usuário
+// lembrar de listar cada um manualmente.
+const createEvidencePackageFromContractAttachments = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    evidencePackagesService.createEvidencePackageFromContractAttachments(req.params.id, req.auth.userId, t, {
+      extraManifestItems: req.body && req.body.extraManifestItems,
+    })
+  );
+  return success(res, { statusCode: 201, data: item });
+});
+const listEvidencePackages = catchAsync(async (req, res) => {
+  const items = await req.withTenantTransaction((t) => evidencePackagesService.listEvidencePackagesAudited(req.params.id, req.auth.userId, t)); // M5-A0117: lista audita o acesso
+  return success(res, { data: items });
+});
+// M5-28: o acesso HUMANO ao dossiê entra na cadeia de custódia (viewEvidencePackage), ao
+// contrário de getEvidencePackage, que é a leitura interna usada por outros fluxos.
+const getEvidencePackage = catchAsync(async (req, res) => {
+  const item = await req.withTenantTransaction((t) =>
+    evidencePackagesService.viewEvidencePackage(req.params.id, req.auth.userId, t)
+  );
+  return success(res, { data: item });
+});
+
+// M5-29: export autocontido e verificável do dossiê (registra EXPORTED na cadeia de custódia).
+const exportEvidencePackage = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction(async (t) => {
+    // M9-D920 (AUD-016): a exportação do dossiê herda a classe dos anexos e passa pelo guard da DLP (finalidade, justificativa e MFA conforme a classe) antes de sair.
+    const evidencePackage = await evidencePackagesService.getEvidencePackage(req.params.id, t);
+    await guardEvidenceExport({ tenant: { groupId: req.auth.groupId, companyId: req.auth.companyId }, auth: req.auth, ip: req.ip, evidencePackage, query: req.query, transaction: t });
+    return evidencePackagesService.exportEvidencePackage(req.params.id, req.auth.userId, t);
+  });
+  return success(res, { data });
+});
+
+const listEvidencePackageAccessLog = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => evidencePackagesService.listEvidenceAccessLog(req.params.id, t));
+  return success(res, { data });
+});
+
+// --- NAY Jurídica (Caderno M5 §17): somente leitura/sugestão ---
+const nayTenant = (req) => ({ groupId: req.auth.groupId, companyId: req.auth.companyId });
+const nayContractSummary = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.summarizeContract(nayTenant(req), req.params.id, req.auth.userId, t));
+  return success(res, { data });
+});
+const nayContractCompare = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) =>
+    legalNayService.compareContractVersions(nayTenant(req), req.params.id, req.query.from, req.query.to, req.auth.userId, t)
+  );
+  return success(res, { data });
+});
+const nayCaseSummary = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.summarizeCase(nayTenant(req), req.params.id, req.auth.userId, t));
+  return success(res, { data });
+});
+const nayCaseDossier = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction(async (t) => {
+    const dossier = await legalNayService.organizeDossier(nayTenant(req), req.params.id, req.auth.userId, t);
+    // Fechamento M5 (§16 "Acesso/exportação são auditados"): o dossiê organizado entrega arquivos e hashes de cada pacote do
+    // processo a quem pediu — cada pacote entra na cadeia de custódia (a NAY em si continua só leitura).
+    await evidencePackagesService.logCaseEvidenceAccess(req.params.id, req.auth.userId, t);
+    return dossier;
+  });
+  return success(res, { data });
+});
+const nayClauseSuggestions = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.suggestClauses(nayTenant(req), { category: req.query.category }, req.auth.userId, t));
+  return success(res, { data });
+});
+const nayDeadlineSuggestions = catchAsync(async (req, res) => {
+  const data = await req.withTenantTransaction((t) => legalNayService.suggestDeadlines(nayTenant(req), req.body || {}, req.auth.userId, t));
+  return success(res, { data });
+});
+
+// Fechamento M5 (§11): comparação entrada x saída pela NAY Jurídica (lógica em features/ai/agents/nay_juridica).
+const { compareInspectionsNay: nayInspectionCompare } = require('../inspections/inspectionNay.controller');
+
+module.exports = {
+  nayInspectionCompare,
+  createInspectionRevision, recordManualSignature, switchSignatureProvider,
+  nayContractSummary, nayContractCompare, nayCaseSummary, nayCaseDossier, nayClauseSuggestions, nayDeadlineSuggestions,
+  createContract, listContracts, getContract, transitionContract,
+  suspendContract, reactivateContract, terminateContract, closeContract,
+  generateContractRequirements, listContractRequirements, satisfyContractRequirement, waiveContractRequirement,
+  createNotice, listNotices, getNotice, submitNoticeForReview, approveNotice, rejectNotice, sendNotice, registerNoticeDeliveryEvidence,
+  addContractParty, listContractParties, getContractTimeline, correctContractData,
+  createContractVersion, listContractVersions, generateContractVersionPdf,
+  upgradeContractTemplateClause, listClauseTemplateUsage,
+  createContractTemplate, listContractTemplates, getContractTemplate, addClauseToContractTemplate, renderContractTemplate,
+  createClause, createClauseVersion, listClauses, listClauseVersions, deactivateClause, approveClauseCondition,
+  initiateSignature, listSignaturesByContractVersion, signatureWebhook, assertSandboxWebhookAllowed, clicksignPublicWebhook, verifyProviderWebhookSignature,
+  checkSignatureStatus, cancelSignature,
+  createGuarantee, listGuarantees, getGuarantee, updateGuarantee, removeGuarantee,
+  createContractAmendment, listContractAmendments, getContractAmendment, signContractAmendment,
+  createInspection, createInspectionWithItems, listInspections, getInspection, completeInspection, addInspectionItem, listInspectionItems, compareInspections,
+  attachInspectionItemMedia, listInspectionItemMedia, signInspection, listInspectionSignatures, generateInspectionReport, getInspectionReport,
+  createKeyDelivery, listKeyDeliveries, getKeyDelivery, releaseKeyDelivery, previewKeyDeliveryTerm, cancelKeyDelivery,
+  createLegalCase, listLegalCases, getLegalCase, updateLegalCase, linkCaseToTask, setLegalHold,
+  createLegalDeadline, listLegalDeadlines, updateLegalDeadline,
+  createEvidencePackage, createEvidencePackageFromContractAttachments, listEvidencePackages, getEvidencePackage, exportEvidencePackage, listEvidencePackageAccessLog,
+};

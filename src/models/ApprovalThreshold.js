@@ -20,7 +20,7 @@ module.exports = (sequelize) => {
       groupId: { type: DataTypes.UUID, allowNull: false, field: 'group_id' },
       companyId: { type: DataTypes.UUID, allowNull: false, field: 'company_id' },
       context: { type: DataTypes.STRING(64), allowNull: false, defaultValue: 'MATERIAL_LOSS', field: 'context' },
-      maxAutoApproveAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: false, defaultValue: 1000.0, field: 'max_auto_approve_amount' },
+      maxAutoApproveAmount: { type: DataTypes.DECIMAL(18, 2), allowNull: false, field: 'max_auto_approve_amount' }, // sem padrão: configuração da empresa (DI-M6V-6)
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

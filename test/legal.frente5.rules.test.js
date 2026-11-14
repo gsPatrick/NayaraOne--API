@@ -12,12 +12,12 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const models = require('../src/models');
-const contractsService = require('../src/features/legal/contracts.service');
-const requirementsService = require('../src/features/legal/requirements.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
 const closeoutService = require('../src/features/billing/closeout.service');
-const closureGate = require('../src/features/legal/contractClosureGate');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
+const closureGate = require('../src/modules/legal/contracts/domain/contractClosureGate');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 
 const { Contract, Person, ContractParty, Property } = models;
 
@@ -227,7 +227,7 @@ for (const contractType of contractsService.CONTRACT_TYPES) {
     await withRollbackTenantTransaction(tenant, async (t) => {
       const contract = await makeContract(t, { status: 'DRAFT', contractType });
       await assert.rejects(
-        contractsService.transitionContractStatus(contract, 'CANCELLED', tenant.userId, t),
+        contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, t),
         (err) => err.code === 'LEGAL_REQUIREMENTS_PENDING'
       );
       const reqs = await requirementsService.listRequirements(contract.id, t);
@@ -237,20 +237,23 @@ for (const contractType of contractsService.CONTRACT_TYPES) {
 }
 
 test('checklist documental: tipo SEM modelo bloqueia (falha fechado)', async () => {
-  const templates = requirementsService.REQUIREMENT_TEMPLATES_BY_CONTRACT_TYPE;
-  const saved = templates.SERVICE;
+  // Matriz M5: o checklist é a política REG-JUR-001 do Motor de Regras; publica (em transação desfeita) uma
+  // versão sem o modelo de SERVICE e confere que o tipo sem modelo BLOQUEIA.
+  const { DEFAULT_ACTION } = require('../src/modules/legal/contracts/application/requirementRules.defaults');
+  const { publishRequirementRules } = require('../src/modules/legal/contracts/application/requirementRules.service');
+  const templates = { ...DEFAULT_ACTION.templates };
   delete templates.SERVICE;
-  try {
-    await withRollbackTenantTransaction(tenant, async (t) => {
-      const contract = await makeContract(t, { status: 'DRAFT', contractType: 'SERVICE' });
-      await assert.rejects(
-        contractsService.transitionContractStatus(contract, 'CANCELLED', tenant.userId, t),
-        (err) => err.code === 'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND'
-      );
-    });
-  } finally {
-    templates.SERVICE = saved;
-  }
+  // A política só publica referências fechadas: o tipo sem modelo sai também do mapa tipo -> modelo.
+  const typeToTemplate = { ...DEFAULT_ACTION.typeToTemplate };
+  delete typeToTemplate.SERVICE;
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    await publishRequirementRules(tenant, { templates, typeToTemplate }, tenant.userId, t);
+    const contract = await makeContract(t, { status: 'DRAFT', contractType: 'SERVICE' });
+    await assert.rejects(
+      contractsService.transitionContractStatus(contract, 'LEGAL_REVIEW', tenant.userId, t),
+      (err) => err.code === 'LEGAL_REQUIREMENTS_TEMPLATE_NOT_FOUND'
+    );
+  });
 });
 
 // ---------- 4) Entrega de chaves: política e termo do servidor ----------
@@ -280,15 +283,17 @@ async function releasableKeyDelivery(t, { contractType = 'LEASE', termType = nul
     tenant.userId,
     t
   );
-  return { kd, renter, landlord, contract };
+  // Fechamento M5: checklist da etapa KEY_DELIVERY dispensado e via assinada do termo (gates do livro).
+  const termEvidenceFileId = await require('./m5fech.locacao.helpers').keyDeliveryReady(tenant, contract.id, t);
+  return { kd, renter, landlord, contract, termEvidenceFileId };
 }
 
 test('entrega de chaves: cliente não pode mandar política/termo (400)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const { kd, renter } = await releasableKeyDelivery(t);
+    const { kd, renter, termEvidenceFileId } = await releasableKeyDelivery(t);
     for (const field of ['photosRequired', 'termText', 'photoPolicy']) {
       await assert.rejects(
-        keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 2, termSignedByPersonId: renter.id, [field]: field === 'photosRequired' ? false : 'x' }, tenant.userId, t),
+        keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: renter.id, [field]: field === 'photosRequired' ? false : 'x' }, tenant.userId, t),
         (err) => err.code === 'LEGAL_KEY_DELIVERY_SERVER_POLICY'
       );
     }
@@ -297,9 +302,9 @@ test('entrega de chaves: cliente não pode mandar política/termo (400)', async 
 
 test('entrega de chaves: imóvel usado exige fotos pela política do servidor (cliente não consegue desligar)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const { kd, renter } = await releasableKeyDelivery(t, { termType: 'USED_PROPERTY_DELIVERY' });
+    const { kd, renter, termEvidenceFileId } = await releasableKeyDelivery(t, { termType: 'USED_PROPERTY_DELIVERY' });
     await assert.rejects(
-      keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 2, termSignedByPersonId: renter.id }, tenant.userId, t),
+      keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: renter.id }, tenant.userId, t),
       (err) => err.code === 'LEGAL_KEY_DELIVERY_PHOTOS_REQUIRED'
     );
   });
@@ -307,13 +312,13 @@ test('entrega de chaves: imóvel usado exige fotos pela política do servidor (c
 
 test('entrega de chaves: termo gerado pelo servidor com versão e hash; signatário precisa ser parte/recebedor', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
-    const { kd, renter } = await releasableKeyDelivery(t);
+    const { kd, renter, termEvidenceFileId } = await releasableKeyDelivery(t);
     const outsider = await makePerson(t, 'F5 Estranho');
     await assert.rejects(
-      keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 2, termSignedByPersonId: outsider.id }, tenant.userId, t),
+      keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: 'Chaves de teste', termSignedByPersonId: outsider.id }, tenant.userId, t),
       (err) => err.code === 'LEGAL_KEY_DELIVERY_TERM_SIGNER_INVALID'
     );
-    const released = await keyDeliveriesService.releaseKeyDelivery(kd.id, { keysCount: 2, keysIdentification: '2 chaves portão', termSignedByPersonId: renter.id }, tenant.userId, t);
+    const released = await keyDeliveriesService.releaseKeyDelivery(kd.id, { termEvidenceFileId, keysCount: 2, keysIdentification: '2 chaves portão', termSignedByPersonId: renter.id }, tenant.userId, t);
     assert.equal(released.status, 'RELEASED');
     assert.equal(released.termVersion, keyDeliveriesService.KEY_DELIVERY_TERM_VERSION);
     assert.equal(released.photoPolicy, 'NOT_REQUIRED_LEASE_CHECKIN_SIGNED');
@@ -325,11 +330,12 @@ test('entrega de chaves: termo gerado pelo servidor com versão e hash; signatá
   });
 });
 
-test('entrega de chaves: política do servidor por tipo', () => {
-  const p = keyDeliveriesService.resolveKeyDeliveryPhotoPolicy;
-  assert.equal(p({ contractType: 'LEASE' }, { termType: null }).photosRequired, false);
-  assert.equal(p({ contractType: 'LEASE' }, { termType: 'USED_PROPERTY_DELIVERY' }).photosRequired, true);
-  assert.equal(p({ contractType: 'SALE_CASH' }, { termType: 'KEY_DELIVERY' }).photosRequired, true);
+test('entrega de chaves: política do servidor por tipo', async () => {
+  // Fechamento M5 (M5-A0084): a política é configuração da empresa; sem configuração vale o padrão (o que valia antes).
+  const p = (contractType, termType) => keyDeliveriesService.resolveKeyDeliveryPhotoPolicy({ contractType, ...base() }, { termType });
+  assert.equal((await p('LEASE', null)).photosRequired, false);
+  assert.equal((await p('LEASE', 'USED_PROPERTY_DELIVERY')).photosRequired, true);
+  assert.equal((await p('SALE_CASH', 'KEY_DELIVERY')).photosRequired, true);
 });
 
 // ---------- 5) Vistoria: atomicidade e versão ----------

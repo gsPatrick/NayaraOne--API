@@ -82,7 +82,11 @@ test('m9d840 o contrato versionado do repositório cobre todas as rotas reais do
 test('m9d840 o contrato lista os 12 tipos de contrato, documenta o 409 da mídia e remover um tipo é breaking', () => {
   const yaml = require('js-yaml');
   const doc = yaml.load(fs.readFileSync(path.join(ROOT, 'openapi/openapi.v1.yaml'), 'utf8'));
-  assert.equal(doc.components.schemas.ContractType.enum.length, 12);
+  // Os 12 tipos do caderno do Marco 5 (§3) e os 3 legados (SALE, LEASE, SERVICE).
+  assert.equal(doc.components.schemas.ContractType.enum.length, 15);
+  for (const t of ['SALE_CASH', 'SALE_FINANCED', 'SALE_TRADE', 'SALE_INSTALLMENTS', 'LEASE_RESIDENTIAL', 'LEASE_COMMERCIAL', 'LEASE_SEASONAL', 'PROPERTY_ADMIN', 'CONSTRUCTION', 'ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY']) {
+    assert.ok(doc.components.schemas.ContractType.enum.includes(t), t);
+  }
   assert.ok(doc.paths['/legal/inspections/items/{itemId}/media'].post.responses[409]);
   const next = clone(doc);
   next.components.schemas.ContractType.enum = next.components.schemas.ContractType.enum.slice(1);

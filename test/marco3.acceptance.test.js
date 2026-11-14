@@ -155,56 +155,33 @@ test('M3-06 imóvel com proprietário vinculado, e M3-10 ocorrência interna nun
 
 // --- M3-09: gate de qualidade (vídeo obrigatório) antes de publicar ---
 test('M3-09 publishOffer bloqueia publicação sem vídeo (REG-IMO-001), libera quando há vídeo', async () => {
+  // Verificação de 11/11/2026: só conta mídia e documento com ARQUIVO e qualidade aprovada, e o §7 confere os campos obrigatórios.
+  const { midiaComArquivo, documentoComArquivo, proprietario, ENDERECO } = require('./helpers/m3imPublicavel');
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const property = await propertiesService.createProperty(
-      { groupId: tenant.groupId, companyId: tenant.companyId, title: `M3-09 Imóvel ${suffix}`, internalCode: `M309-${suffix}`, propertyType: 'RESIDENTIAL' },
+      { groupId: tenant.groupId, companyId: tenant.companyId, title: `M3-09 Imóvel ${suffix}`, internalCode: `M309-${suffix}`, propertyType: 'RESIDENTIAL', ...ENDERECO },
       tenant.userId,
       transaction
     );
     const offer = await offersService.createOffer(property.id, { offerType: 'SALE', askingPrice: 300000 }, tenant.userId, transaction);
+    const bloqueia = (code, msg) => assert.rejects(() => publishService.publishOffer(offer.id, tenant, tenant.userId, transaction), (err) => { assert.equal(err.code, code); return true; }, msg);
 
-    await assert.rejects(
-      () => publishService.publishOffer(offer.id, tenant, tenant.userId, transaction),
-      (err) => { assert.equal(err.code, 'PROPERTY_PUBLISH_BLOCKED_REG_IMO_001'); return true; },
-      'sem vídeo, REG-IMO-001 precisa bloquear a publicação (fail closed)'
-    );
+    await bloqueia('PROPERTY_PUBLISH_BLOCKED_REG_IMO_001', 'sem vídeo, REG-IMO-001 precisa bloquear a publicação (fail closed)');
+    await midiaComArquivo(tenant, transaction, property.id, { mediaType: 'VIDEO', qualityStatus: 'PENDING' });
+    await bloqueia('PROPERTY_PUBLISH_BLOCKED_REG_IMO_001', 'vídeo ainda não aprovado não conta');
+    await midiaComArquivo(tenant, transaction, property.id, { mediaType: 'VIDEO' });
 
-    const { PropertyMedia, PropertyDocument } = require('../src/models');
-    await PropertyMedia.create(
-      { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, mediaType: 'VIDEO', storageKey: `m309-${suffix}.mp4`, originalName: 'video.mp4', createdBy: tenant.userId, updatedBy: tenant.userId },
-      { transaction }
-    );
+    // Vídeo aprovado mas sem fotos aprovadas nem documentos: ainda bloqueia — vídeo por si só não basta.
+    await bloqueia('PROPERTY_PUBLISH_BLOCKED_REG_IMO_PHOTO_MIN', 'com vídeo mas sem fotos mínimas aprovadas, REG-IMO-PHOTO-MIN precisa bloquear a publicação');
+    for (let i = 0; i < 3; i += 1) await midiaComArquivo(tenant, transaction, property.id, { mediaType: 'IMAGE', position: i + 1 });
 
-    // Vídeo presente mas sem fotos aprovadas nem documentos (REG-IMO-PHOTO-MIN/REG-IMO-DOCS-001)
-    // ainda bloqueia — vídeo por si só não basta mais.
-    await assert.rejects(
-      () => publishService.publishOffer(offer.id, tenant, tenant.userId, transaction),
-      (err) => { assert.equal(err.code, 'PROPERTY_PUBLISH_BLOCKED_REG_IMO_PHOTO_MIN'); return true; },
-      'com vídeo mas sem fotos mínimas aprovadas, REG-IMO-PHOTO-MIN precisa bloquear a publicação'
-    );
+    await bloqueia('PROPERTY_PUBLISH_BLOCKED_REG_IMO_DOCS_001', 'com vídeo e fotos mas sem matrícula/IPTU, REG-IMO-DOCS-001 precisa bloquear a publicação');
+    await documentoComArquivo(tenant, transaction, property.id, 'REGISTRY');
+    await documentoComArquivo(tenant, transaction, property.id, 'IPTU');
 
-    for (let i = 0; i < 3; i += 1) {
-      await PropertyMedia.create(
-        { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, mediaType: 'PHOTO', qualityStatus: 'APPROVED', storageKey: `m309-${suffix}-foto-${i}.jpg`, originalName: `foto-${i}.jpg`, createdBy: tenant.userId, updatedBy: tenant.userId },
-        { transaction }
-      );
-    }
-
-    await assert.rejects(
-      () => publishService.publishOffer(offer.id, tenant, tenant.userId, transaction),
-      (err) => { assert.equal(err.code, 'PROPERTY_PUBLISH_BLOCKED_REG_IMO_DOCS_001'); return true; },
-      'com vídeo e fotos mas sem matrícula/IPTU, REG-IMO-DOCS-001 precisa bloquear a publicação'
-    );
-
-    await PropertyDocument.create(
-      { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'REGISTRY', label: 'Cartório 1', valueNumber: `MAT-${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
-      { transaction }
-    );
-    await PropertyDocument.create(
-      { groupId: property.groupId, companyId: property.companyId, propertyId: property.id, documentType: 'IPTU', valueNumber: `IPTU-${suffix}`, createdBy: tenant.userId, updatedBy: tenant.userId },
-      { transaction }
-    );
+    await bloqueia('PROPERTY_PUBLISH_BLOCKED_REG_IMO_FIELDS_001', 'sem proprietário (campo obrigatório padrão), REG-IMO-FIELDS-001 bloqueia');
+    await proprietario(tenant, transaction, property.id);
 
     const { property: publishedProperty } = await publishService.publishOffer(offer.id, tenant, tenant.userId, transaction);
     assert.equal(publishedProperty.publicationStatus, 'PUBLISHED');

@@ -172,10 +172,12 @@ rodar('5. (contrato da rodada 8, DI-M9R-25) tipo errado é recusado pelo esquema
   assert.deepEqual([mov.status, codigo(mov), campos(mov)], [400, 'INVENTORY_MOVEMENT_VALIDATION', ['inventoryItemId']], json(mov.json));
   const clausula = await pedir('POST', '/legal/clauses', { corpo: json({ code: 12345, title: 'CI', bodyText: 'Texto.', category: 'GENERAL' }) });
   assert.deepEqual([clausula.status, codigo(clausula), campos(clausula)], [400, 'LEGAL_CONTRACT_CLAUSE_VALIDATION', ['code']], json(clausula.json));
-  // identificador que não existe (chave estrangeira, classe 23): o id do detalhe do banco é o do campo do pedido -> 400 REFERENCE_NOT_FOUND, sem o id
+  // identificador que não existe: desde a conciliação do Marco 4 (M4-G§10, integração dos Marcos 3 a 6) a rota confere a conta da empresa
+  // ANTES do INSERT e responde o 404 de negócio; a regra da chave estrangeira (classe 23 -> 400 REFERENCE_NOT_FOUND com o campo do
+  // pedido) continua na rede de proteção e é conferida em test/entradaGlobal.prova.test.js. Em nenhum dos dois o id volta.
   const inexistente = '9d3b6a0e-0000-4000-8000-0000000000ff';
   const tx = await pedir('POST', '/finance/bank-transactions', { corpo: json({ bankAccountId: inexistente, amount: -10.5, transactionDate: new Date().toISOString() }) });
-  assert.deepEqual([tx.status, codigo(tx), campos(tx)], [400, 'REFERENCE_NOT_FOUND', ['bankAccountId']], json(tx.json));
+  assert.deepEqual([tx.status, codigo(tx)], [404, 'FINANCE_BANK_ACCOUNT_NOT_FOUND'], json(tx.json));
   assert.ok(!JSON.stringify(tx.json).includes(inexistente), 'o id do detalhe do banco não volta');
   // texto maior que a coluna numa rota sem esquema (classe 22): o texto do parâmetro do comando é o do campo do pedido -> 400 VALUE_TOO_LONG
   const centro = await pedir('POST', '/finance/cost-centers', { corpo: json({ name: 'N'.repeat(5000), code: `CI${SUFIXO}`.slice(0, 20) }) });
@@ -187,11 +189,11 @@ rodar('6. o tamanho de texto dos esquemas da porta é o tamanho da coluna no ban
   const { sequelize } = require('../src/models');
   const esquemas = [require('../src/features/people/people.schema').ESQUEMAS, require('../src/features/properties/properties.schema').ESQUEMAS,
     require('../src/features/crm/opportunities.schema').ESQUEMAS, require('../src/features/radar/radar.schema').ESQUEMAS, require('../src/features/auth/auth.schema').ESQUEMAS,
-    // rodada 8 (DI-M9R-24 e DI-M9R-25): esquemas novos de consulta e de corpo
+    // rodada 8 (DI-M9R-24 e DI-M9R-25): esquemas novos de consulta e de corpo (Financeiro e Jurídico na árvore src/modules do M4-D140)
     ...['features/crm/feedbackCases.schema', 'features/core-governance/feature-flags/flags.query.schema', 'features/ai/releaseGates/releaseGates.query.schema',
       'features/ai/memory/memory.query.schema', 'features/ai/recommendations/recommendation.query.schema', 'features/marketing/publications/publications.query.schema',
-      'features/marketing/content/template.query.schema', 'features/finance/finance.input.schema', 'features/procurement/procurement.input.schema',
-      'features/inventory/inventory.input.schema', 'features/construction/construction.input.schema', 'features/legal/legal.input.schema',
+      'features/marketing/content/template.query.schema', 'modules/finance/presentation/http/finance.input.schema', 'features/procurement/procurement.input.schema',
+      'features/inventory/inventory.input.schema', 'features/construction/construction.input.schema', 'modules/legal/shared/legal.input.schema',
       'features/correspondent/cases/financingCase.schema'].map((m) => require(`../src/${m}`).ESQUEMAS)];
   const comColuna = [];
   const pilha = esquemas.flatMap((e) => Object.values(e));

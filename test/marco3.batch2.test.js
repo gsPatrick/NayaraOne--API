@@ -16,6 +16,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { createTestProperty } = require('./helpers/m3caCrm');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const offersService = require('../src/features/properties/propertyOffers.service');
@@ -70,9 +71,11 @@ async function createActiveOpportunity(transaction, personId, extra = {}) {
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
-      stage: 'QUALIFYING',
+      stage: 'QUALIFIED',
       nextAction: 'Ligar para o cliente',
       nextActionDueAt: FUTURE(),
+      // M3-13: proposta e visita são sempre da oportunidade e de um imóvel; a oportunidade de teste já nasce com o imóvel de interesse.
+      propertyId: extra.propertyId !== undefined ? extra.propertyId : (await createTestProperty(tenant, transaction)).id,
       ...extra,
     },
     tenant.userId,
@@ -295,7 +298,7 @@ test('M3-19: timeline traz mensagem, visita e mudança de estágio da MESMA opor
 
     // O item de mudança de estágio carrega de onde para onde foi.
     const stageChange = byType('STAGE_CHANGE')[0];
-    assert.equal(stageChange.data.fromStage, 'QUALIFYING');
+    assert.equal(stageChange.data.fromStage, 'QUALIFIED');
     assert.equal(stageChange.data.toStage, 'PROPOSAL');
 
     // E a criação da oportunidade também aparece, como o item mais antigo do funil.
@@ -507,16 +510,9 @@ test('M3-16: rodar o job do Radar DUAS vezes seguidas não republica evento nem 
         await PropertyRadar.destroy({ where: { id: created.radarId }, force: true, transaction: t });
       }
       if (created.propertyId) {
-        // property_price_history referencia a oferta — precisa sair antes dela.
-        await sequelize.query(
-          'DELETE FROM "real_estate"."property_price_history" WHERE offer_id IN (SELECT id FROM "real_estate"."property_offers" WHERE property_id = :id)',
-          { replacements: { id: created.propertyId }, transaction: t }
-        );
-        await sequelize.query('DELETE FROM "real_estate"."property_offers" WHERE property_id = :id', {
-          replacements: { id: created.propertyId },
-          transaction: t,
-        });
-        await sequelize.query('DELETE FROM "real_estate"."properties" WHERE id = :id', {
+        // M3-08 (verificação de 11/11/2026): o histórico de preço é append-only no banco (gatilho + REVOKE), então a oferta
+        // e o histórico ficam; o imóvel sai por exclusão lógica (banco descartável).
+        await sequelize.query('UPDATE "real_estate"."properties" SET deleted_at = now() WHERE id = :id', {
           replacements: { id: created.propertyId },
           transaction: t,
         });

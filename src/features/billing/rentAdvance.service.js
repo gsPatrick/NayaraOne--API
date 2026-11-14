@@ -2,21 +2,19 @@
 
 const { RentAdvance, Contract, FinancialEntry } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const {
-  createFinancialEntry,
-  settleFinancialEntry,
-  settleFinancialEntryPartial,
-  computeRemainingAmount,
-} = require('../finance/financialEntries.service');
-const { getOrCreateDefaultCostCenter } = require('../finance/costCenters.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
+const { settleFinancialEntry, settleFinancialEntryPartial } = require('../../modules/finance/application/services/receipt.service');
+const { computeRemainingAmount } = require('../../modules/finance/application/services/ledger-balance.service');
+const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
+const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4): ver getOrCreateDefaultCostCenter/getOrCreateDefaultResultCenter.
 const RENT_ADVANCE_COST_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const RENT_ADVANCE_RESULT_CENTER_CODE = 'LOCACAO-ANTECIPACAO';
 const { publishAdvanceCompleted } = require('./billingEvents.service');
-const { isLeaseLikeContractType } = require('../legal/contracts.service');
+const { isLeaseLikeContractType } = require('../../modules/legal/contracts/application/contract.service');
 
 // M45: descrição do lançamento mostra o NÚMERO do contrato (visível ao usuário), nunca o UUID.
 async function contractRef(contractId, transaction) {
@@ -48,6 +46,12 @@ const STATUS_FLOW = {
  */
 async function requestRentAdvance(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, monthsAdvanced, principalAmount, costAmount } = payload;
+  // Fechamento M5 (pentest): tipo conferido antes do banco.
+  if (contractId) assertUuid(contractId, 'contractId', 'RENT_ADVANCE_VALIDATION');
+  if (monthsAdvanced !== undefined && monthsAdvanced !== null && (!Number.isInteger(Number(monthsAdvanced)) || Number(monthsAdvanced) <= 0 || typeof monthsAdvanced === 'object')) throw AppError.badRequest('"monthsAdvanced" deve ser um inteiro positivo.', 'RENT_ADVANCE_VALIDATION');
+  for (const [f, v, min] of [['principalAmount', principalAmount, 0.01], ['costAmount', costAmount, 0]]) {
+    if (v !== undefined && v !== null && (typeof v === 'object' || !Number.isFinite(Number(v)) || Number(v) < min)) throw AppError.badRequest(`"${f}" deve ser um valor numérico válido.`, 'RENT_ADVANCE_VALIDATION');
+  }
   if (!groupId || !companyId || !contractId || !monthsAdvanced || principalAmount === undefined || principalAmount === null) {
     throw AppError.badRequest(
       'Os campos "groupId", "companyId", "contractId", "monthsAdvanced" e "principalAmount" são obrigatórios.',

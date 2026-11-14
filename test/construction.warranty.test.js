@@ -4,6 +4,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { setThresholds, createMember } = require('./constructionM6vFixture');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const { Property, Notification, OutboxEvent } = require('../src/models');
 const maintenanceCasesService = require('../src/features/construction/maintenanceCases.service');
 const { escalateOverdueWarrantyCases } = require('../src/engines/jobs/warrantyEscalationJob');
@@ -334,7 +336,7 @@ test('warranty: createWarrantyAction concorrente com o fechamento do chamado —
 
   const { MaintenanceCase, WarrantyAction, Property: PropertyModel } = require('../src/models');
 
-  const { propertyId, warrantyCaseId } = await withCommitted(async (t) => {
+  const { propertyId, warrantyCaseId, beforeIds, afterIds } = await withCommitted(async (t) => {
     const property = await createTestProperty(t);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Infiltração na laje.' },
@@ -343,7 +345,8 @@ test('warranty: createWarrantyAction concorrente com o fechamento do chamado —
     );
     await maintenanceCasesService.updateMaintenanceCase(warrantyCase.id, { status: 'RESOLVED' }, tenant.userId, t);
     await maintenanceCasesService.createWarrantyAction(warrantyCase.id, { description: 'Visita técnica inicial.' }, tenant.userId, t);
-    return { propertyId: property.id, warrantyCaseId: warrantyCase.id };
+    // Fotos reais enviadas ANTES da corrida (o fechamento concorrente só referencia os IDs).
+    return { propertyId: property.id, warrantyCaseId: warrantyCase.id, beforeIds: await evidenceIds(tenant, t), afterIds: await evidenceIds(tenant, t) };
   });
 
   try {
@@ -357,8 +360,8 @@ test('warranty: createWarrantyAction concorrente com o fechamento do chamado —
           {
             status: 'CLOSED',
             rootCauseCode: 'WORKMANSHIP',
-            beforeMediaFileIds: ['11111111-1111-1111-1111-111111111111'],
-            afterMediaFileIds: ['22222222-2222-2222-2222-222222222222'],
+            beforeMediaFileIds: beforeIds,
+            afterMediaFileIds: afterIds,
           },
           tenant.userId,
           t
@@ -444,8 +447,8 @@ test('warranty: fechar o chamado (status=CLOSED) não lança erro (evento warran
       {
         status: 'CLOSED',
         rootCauseCode: 'MATERIAL_DEFECT',
-        beforeMediaFileIds: ['11111111-1111-1111-1111-111111111111'],
-        afterMediaFileIds: ['22222222-2222-2222-2222-222222222222'],
+        beforeMediaFileIds: await evidenceIds(tenant, transaction),
+        afterMediaFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
@@ -481,8 +484,8 @@ test('warranty: updateMaintenanceCase recusa pular etapa (OPEN->CLOSED direto) e
       {
         status: 'CLOSED',
         rootCauseCode: 'MATERIAL_DEFECT',
-        beforeMediaFileIds: ['33333333-3333-3333-3333-333333333333'],
-        afterMediaFileIds: ['44444444-4444-4444-4444-444444444444'],
+        beforeMediaFileIds: await evidenceIds(tenant, transaction),
+        afterMediaFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
@@ -518,8 +521,8 @@ test('warranty: fechar um chamado OVERDUE zera escalation_level pra NONE (não f
       {
         status: 'CLOSED',
         rootCauseCode: 'MATERIAL_DEFECT',
-        beforeMediaFileIds: ['55555555-5555-5555-5555-555555555555'],
-        afterMediaFileIds: ['66666666-6666-6666-6666-666666666666'],
+        beforeMediaFileIds: await evidenceIds(tenant, transaction),
+        afterMediaFileIds: await evidenceIds(tenant, transaction),
       },
       tenant.userId,
       transaction
@@ -535,6 +538,7 @@ test('warranty: fechar um chamado OVERDUE zera escalation_level pra NONE (não f
 
 test('warranty: proposeWarrantyResolution dentro da alçada (<= threshold padrão de 1000) aprova automaticamente e cria lançamento financeiro', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { WARRANTY_RESOLUTION: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
     const property = await createTestProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Infiltração — desconto combinado.' },
@@ -559,6 +563,8 @@ test('warranty: proposeWarrantyResolution dentro da alçada (<= threshold padrã
 
 test('warranty: proposeWarrantyResolution acima da alçada fica PENDING_APPROVAL sem lançamento financeiro até aprovação explícita', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
+    await setThresholds(tenant, transaction, { WARRANTY_RESOLUTION: 1000 }); // alçada é configuração da empresa (DI-M6V-6): sem padrão no código
+    const aprovador = await createMember(tenant, transaction); // quem propõe não aprova (M6-107)
     const property = await createTestProperty(transaction);
     const warrantyCase = await maintenanceCasesService.createMaintenanceCase(
       { groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, description: 'Ressarcimento de alto valor.' },
@@ -575,7 +581,7 @@ test('warranty: proposeWarrantyResolution acima da alçada fica PENDING_APPROVAL
     assert.equal(proposed.resolutionStatus, 'PENDING_APPROVAL');
     assert.equal(proposed.resolutionFinancialEntryId, null);
 
-    const approved = await maintenanceCasesService.approveWarrantyResolution(warrantyCase.id, tenant.userId, transaction);
+    const approved = await maintenanceCasesService.approveWarrantyResolution(warrantyCase.id, aprovador.id, transaction);
     assert.equal(approved.resolutionStatus, 'APPROVED');
     assert.ok(approved.resolutionFinancialEntryId, 'aprovação explícita deveria criar o lançamento financeiro');
   });

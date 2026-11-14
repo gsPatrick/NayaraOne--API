@@ -5,7 +5,7 @@ const { SandboxOcrAdapter } = require('./OcrAdapter');
 const { ClamAvAdapter } = require('./ClamAvAdapter');
 const { LocalOcrAdapter } = require('./LocalOcrAdapter');
 
-// resolveAntivirusAdapter / resolveOcrAdapter — mesmo padrão de resolveBankAdapter.js/
+// resolveAntivirusAdapter / resolveOcrAdapter — mesmo padrão de resolve-bank-adapter.js/
 // resolveInsuranceAdapter.js. O motor real só entra quando a infraestrutura é ativada por
 // variável de ambiente (ANTIVIRUS_PROVIDER=clamav, OCR_PROVIDER=local); sem ela, o adaptador de
 // laboratório continua sendo o padrão seguro. A ativação em servidor depende de aprovação da

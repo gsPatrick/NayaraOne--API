@@ -10,6 +10,7 @@ const { downloadAccess } = require('./download.single');
 const { requestBatch } = require('./download.batch');
 const { serveGrant } = require('./download.serve');
 const { assertUuid } = require('./download.input');
+const { recordEvidenceFileAccess } = require('../../../../modules/legal/cases/evidenceFileAccess');
 
 /** O que a API devolve do endereço assinado. */
 const grantView = (grant) => ({ exportJobId: grant.exportJobId, status: grant.status, downloadUrl: grant.url, expiresAt: grant.expiresAt, classification: grant.classification, watermark: grant.watermark });
@@ -25,9 +26,12 @@ const where = (req) => ({ tenant: tenantFromAuth(req), auth: req.auth, ip: req.i
 const getDownload = catchAsync(async (req, res) => {
   const out = await req.withTenantTransaction(async (transaction) => {
     const id = assertUuid(req.params.id);
-    const { file, restricted } = await assertCanReadFile(id, req.auth, transaction);
+    const { file, restricted, ownership } = await assertCanReadFile(id, req.auth, transaction);
     rejectRestrictedUnlessAllowed(restricted, req.auth.permissions, file);
-    return downloadAccess({ ...where(req), file, restricted, query: req.query, transaction });
+    const out = await downloadAccess({ ...where(req), file, restricted, query: req.query, transaction });
+    // Fechamento M5 (JUR-010): download de prova do Jurídico entra na cadeia de custódia (bytes entregues ou endereço emitido).
+    await recordEvidenceFileAccess({ file, ownership, auth: req.auth, kind: out.file ? 'CONTENT' : 'DOWNLOAD_GRANT', ip: req.ip }, transaction);
+    return out;
   });
   if (out.file) return sendFile(res, out.file);
   res.set('Cache-Control', 'no-store');

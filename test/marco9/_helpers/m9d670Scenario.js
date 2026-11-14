@@ -69,7 +69,7 @@ async function bom(env, t) {
   ids.leads.push(await lead(env, t, {})); // sem campanha
   await lead(env, t, { campaignId: ids.c1, at: at('09-20') }); // setembro: fora do mês
   await lead(env, t, { source: null, campaignId: ids.c1 }); // sem origem de marketing: não é lead de marketing
-  for (let i = 0; i < 2; i += 1) await lead(env, t, { campaignId: ids.c1, stage: 'CLOSED_WON', closedAt: at('10-15'), at: at('09-01') });
+  for (let i = 0; i < 2; i += 1) await lead(env, t, { campaignId: ids.c1, stage: 'WON', closedAt: at('10-15'), at: at('09-01') });
   await event(env, t, { type: 'SALE', evidence: { attribution: 'NAO_ATRIBUIDA', reason: 'SEM_TOQUE_VALIDO_NA_JANELA' }, at: at('10-12') });
   return ids;
 }
@@ -81,7 +81,7 @@ async function ruim(env, t) {
   ids.semCusto = await campaign(env, t, { code: `QA-RS-${src.uuid().slice(0, 6)}`, status: 'RUNNING', channels: '{SITE}' });
   for (let i = 0; i < 6; i += 1) await attributedLead(env, t, ids.semCusto);
   for (let i = 0; i < 4; i += 1) await lead(env, t, {});
-  await lead(env, t, { campaignId: ids.semCusto, stage: 'CLOSED_WON', closedAt: at('10-15'), at: at('09-01') });
+  await lead(env, t, { campaignId: ids.semCusto, stage: 'WON', closedAt: at('10-15'), at: at('09-01') });
   await event(env, t, { type: 'SALE', evidence: { attribution: 'NAO_ATRIBUIDA', reason: 'SEM_TOQUE_VALIDO_NA_JANELA' }, at: at('10-12') });
   return ids;
 }

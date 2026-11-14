@@ -4,11 +4,12 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const mfaService = require('../src/features/users/mfa.service');
 const { authenticator } = require('otplib');
 const { User } = require('../src/models');
@@ -95,7 +96,8 @@ test('maker-checker: quem solicitou a aprovação não pode decidir a própria s
 
 test('maker-checker: segundo usuário aprova (risco HIGH exige 2 aprovações independentes)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const entry = await createEntry(transaction, tenant.userId);
+    // M4PG (FIN-005): o risco vem do valor, não do pedido — R$ 120.000,00 cai na faixa HIGH (DEC-004: acima de R$ 50.000 até R$ 200.000).
+    const entry = await createEntry(transaction, tenant.userId, { amount: 120000 });
     const request = await approvalsService.createApprovalRequest(
       { groupId: tenant.groupId, companyId: tenant.companyId, relatedEntityType: 'FinancialEntry', relatedEntityId: entry.id, riskLevel: 'HIGH' },
       tenant.userId,
@@ -218,8 +220,9 @@ test('conciliação: valores batendo concilia; conciliar de novo o mesmo lançam
       tenant.userId,
       transaction
     );
+    // Segunda linha de extrato do mesmo valor: descrição diferente (a MESMA linha é barrada pelo UNIQUE do fingerprint, Guia §10).
     const bankTx2 = await bankTransactionsService.createBankTransaction(
-      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -150.5, transactionDate: new Date() },
+      { groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: account.id, amount: -150.5, transactionDate: new Date(), description: 'segunda linha' },
       tenant.userId,
       transaction
     );
@@ -248,10 +251,11 @@ test('conciliação: valores batendo concilia; conciliar de novo o mesmo lançam
 test('estorno: lançamento estornado não pode ser estornado de novo', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const entry = await createEntry(transaction, tenant.userId);
-    await financialEntriesService.reverseFinancialEntry(entry.id, 'HOMO QA — estorno de teste', tenant.userId, transaction);
+    // M4LR (Caderno §6): lançamento nunca realizado — o estorno só anula o previsto (sem ledger), a pedido explícito.
+    await receiptService.reverseFinancialEntry(entry.id, 'HOMO QA — estorno de teste', tenant.userId, transaction, { voidNotRealized: true });
 
     await assert.rejects(
-      () => financialEntriesService.reverseFinancialEntry(entry.id, 'HOMO QA — segunda tentativa', tenant.userId, transaction),
+      () => receiptService.reverseFinancialEntry(entry.id, 'HOMO QA — segunda tentativa', tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_ALREADY_REVERSED');
         return true;

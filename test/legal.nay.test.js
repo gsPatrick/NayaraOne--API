@@ -11,17 +11,18 @@ process.env.PORT = process.env.NAY_JUR_HTTP_TEST_PORT || '21642';
 
 const app = require('../app'); // eslint-disable-line no-unused-vars
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Company, Person } = require('../src/models');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const requirementsService = require('../src/features/legal/requirements.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
-const contractClausesService = require('../src/features/legal/contractClauses.service');
-const nay = require('../src/features/legal/legalNay.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
+const contractClausesService = require('../src/modules/legal/contracts/application/contractClauses.service');
+const nay = require('../src/modules/legal/cases/legalNay.service');
 
 let tenant;
 let otherCompany;
@@ -38,6 +39,7 @@ async function realCompany(groupId, name) {
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
   const company = await realCompany(tenant.groupId, 'NAY-JUR empresa vizinha (teste)');
   otherCompany = { groupId: tenant.groupId, companyId: company.id };
   baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
@@ -69,8 +71,8 @@ async function scenario(t) {
   const v2 = await contractVersionsService.createContractVersion(contract.id, { content: 'Cláusula 1 — objeto\nCláusula 2 — aluguel de R$ 2.500\nCláusula 3 — foro\nCláusula 4 — reajuste anual pelo IPCA', requireDocument: false }, tenant.userId, t);
   await guaranteesService.createGuarantee(contract.id, { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, startsAt: new Date(Date.now() - DAY), endsAt: new Date(Date.now() + 365 * DAY) }, tenant.userId, t);
   const legalCase = await legalCasesService.createLegalCase({ ...ctx(), contractId: contract.id, caseType: 'LITIGATION', caseNumber: `NAY-JUR-${uniqueSuffix()}`, summary: 'Despejo por falta de pagamento' }, tenant.userId, t);
-  const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt: new Date(Date.now() + 10 * DAY), sourceDocument: 'Mandado de citação' }, tenant.userId, t);
-  const pkg = await evidencePackagesService.createEvidencePackage(legalCase.id, [{ type: 'FILE', description: 'Contrato assinado', referenceId: v2.id, hash: v2.contentHash }], tenant.userId, t);
+  const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt: new Date(Date.now() + 10 * DAY), sourceDocument: 'Mandado de citação', sourceFileId: origem(tenant), responsibleUserId: tenant.userId }, tenant.userId, t);
+  const pkg = await evidencePackagesService.createEvidencePackage(legalCase.id, [{ type: 'FILE', description: 'Contrato assinado', fileId: v2.contentFileId }] /* Fechamento M5 (M5-A0207): o hash vem do arquivo pelo servidor, não do chamador */, tenant.userId, t);
   return { contract, locatario, fiador, requirements, v1, v2, legalCase, deadline, pkg };
 }
 
@@ -81,7 +83,7 @@ async function fingerprint(t) {
       (SELECT md5(COALESCE(string_agg(id::text || status, ',' ORDER BY id), '')) FROM legal.contracts) AS contracts,
       (SELECT md5(COALESCE(string_agg(id::text || status || due_at::text, ',' ORDER BY id), '')) FROM legal.legal_deadlines) AS deadlines,
       (SELECT md5(COALESCE(string_agg(id::text || status, ',' ORDER BY id), '')) FROM legal.contract_requirements) AS requirements,
-      (SELECT md5(COALESCE(string_agg(id::text || COALESCE(condition_status,'') || is_active::text, ',' ORDER BY id), '')) FROM legal.contract_clauses) AS clauses,
+      (SELECT md5(COALESCE(string_agg(id::text || COALESCE(condition_status,'') || is_active::text, ',' ORDER BY id), '')) FROM legal.clause_versions) AS clauses,
       (SELECT md5(COALESCE(string_agg(id::text || package_hash, ',' ORDER BY id), '')) FROM legal.evidence_packages) AS packages`,
     { transaction: t, type: sequelize.QueryTypes.SELECT }
   );
@@ -141,9 +143,14 @@ test('NAY-JUR-03: minuta sugerida só com cláusulas homologadas — condição 
       t
     );
     assert.equal(conditional.conditionStatus, 'PENDING_APPROVAL');
+    // Verificação M5 linha 124: homologada = aprovada por outra pessoa, não só "ativa".
+    const naoHomologada = await contractClausesService.createClause({ ...ctx(), code: `NAYJUR-N-${sfx}`, title: 'Multa', bodyText: 'Multa de 10%.', category: 'GENERAL' }, tenant.userId, t);
+    const revisor = await require('./m5fech.juridico.helpers').newUser(tenant, t);
+    await require('../src/modules/legal/contracts/application/clauseHomologation.service').homologateClauseVersion(plain.id, revisor.id, t);
     const out = await nay.suggestClauses(ctx(), { category: 'GENERAL' }, tenant.userId, t);
     const ids = out.clausulasSugeridas.map((c) => c.id);
-    assert.ok(ids.includes(plain.id), 'cláusula ativa sem condição é sugerida');
+    assert.ok(ids.includes(plain.id), 'cláusula homologada sem condição é sugerida');
+    assert.ok(!ids.includes(naoHomologada.id), 'cláusula ativa mas não homologada não entra');
     assert.ok(!ids.includes(conditional.id), 'condição não aprovada não entra');
     assert.ok(out.clausulasNaoHomologadasOmitidas >= 1);
     assert.match(out.aviso, /validação profissional/);
@@ -211,7 +218,7 @@ test('NAY-JUR-07 (HTTP): resumo e sugestão de prazos com legal:read = 200; sem 
     return { status: res.status, body: await res.json().catch(() => null) };
   };
   const writer = token(ctx(), ['legal:create', 'legal:read']);
-  const created = await http(writer, 'POST', '/legal/contracts', { contractType: 'SERVICE', totalValue: 100 });
+  const created = await http(writer, 'POST', '/legal/contracts', { contractType: 'LEASE_RESIDENTIAL', totalValue: 100 });
   assert.equal(created.status, 201, JSON.stringify(created.body));
   const id = created.body.data.id;
 

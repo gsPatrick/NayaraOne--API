@@ -1,0 +1,3222 @@
+{
+  "drill": "restore/replay financeiro (Marco 4)",
+  "commit": "40d643687d22fb46c4b48f940b43511609ef6680",
+  "dirty": true,
+  "iniciadoEm": "2026-11-10T22:56:05.465Z",
+  "terminadoEm": "2026-11-10T23:02:23.288Z",
+  "duracaoSegundos": 377.823,
+  "exitCode": 0,
+  "comando": "node scripts/restoreDrill/financeFullDrill.js --port 5523 --report-dir docs/evidencias/marco4-5",
+  "etapas": {
+    "origem": {
+      "migrations": 599,
+      "schemas": 18
+    },
+    "backup": {
+      "dumpBytes": 2702117
+    },
+    "restore": {
+      "rolesAusentesDetectadas": "nayara_runtime, nayara_analytics_reader",
+      "rolesCriadas": [
+        "nayara_runtime",
+        "nayara_migration",
+        "nayara_analytics_reader"
+      ]
+    }
+  },
+  "fixtures": {
+    "tenantA": {
+      "groupId": "ad73f591-5b84-4dc5-a70f-b98c4b860b10",
+      "companyId": "57881f29-84e0-4797-9507-3ddc8ec342a8",
+      "userId": "64874ff4-467e-4ab2-9134-9db2c7c43db2",
+      "files": {
+        "063030a2-1ca6-4336-9ba5-e9f664568638": "1415e379c2fe49fa02915076272dbb3d2145d90f6d7434b75c8863b7589070b2",
+        "a048a870-776b-406c-b9a6-5e67e736b71b": "50a6d0c203216e3828109075a1beaf481a2caf60be0f17652e68d54bc0507de9",
+        "3d5a56c5-179b-48b3-890e-0f80127b29ab": "33a57a684115cc865fb5ef290479b313fc1a2417a86b0f03133825ba5c59390b"
+      },
+      "approvalRequestIds": [
+        "18a21322-ebda-4b4b-860f-326dda9a0d3d",
+        "c37283a0-b5ea-43cb-8606-70afa493c71a"
+      ],
+      "resultCenterId": "bf4609d8-3525-4612-98de-159427329ece",
+      "receivable030": {
+        "parentId": "43c5034e-8bad-426a-aad7-2585501ccc61",
+        "amount": "0.30",
+        "steps": [
+          {
+            "amount": "0.10",
+            "idempotencyKey": "drill-rec030-b1-1794351611530",
+            "settlementEntryId": "f3b50323-7f90-457b-936a-a1e5a35c4346",
+            "remainingAmount": "0.20",
+            "parentStatus": "PARTIALLY_SETTLED"
+          },
+          {
+            "amount": "0.20",
+            "idempotencyKey": "drill-rec030-b2-1794351611530",
+            "settlementEntryId": "dd866806-6b15-4395-bb6f-1865f15ec032",
+            "remainingAmount": "0.00",
+            "parentStatus": "SETTLED"
+          }
+        ]
+      },
+      "bankAccountId": "b588b885-5f65-4312-a2ec-e988e433ef09",
+      "costCenterId": "f9f71b35-a084-40a8-b65f-54b63fb9f7af",
+      "payment": {
+        "financialEntryId": "82dc7614-1141-4450-825a-e7d781512508",
+        "paymentIntentId": "f13567b2-0f64-4ded-b819-0a22e917d14d",
+        "externalSubmissionId": "sandbox-payment-intent:f13567b2-0f64-4ded-b819-0a22e917d14d",
+        "idempotencyKey": "drill-payable-1794351611530",
+        "webhookBody": {
+          "externalSubmissionId": "sandbox-payment-intent:f13567b2-0f64-4ded-b819-0a22e917d14d",
+          "status": "CONFIRMED"
+        },
+        "webhookResult": {
+          "received": true,
+          "processed": true
+        }
+      },
+      "statement": {
+        "csvText": "externalTransactionId,transactionDate,description,amount\nDRILL-STMT-1794351611530,2026-11-10,PIX enviado DRILL,-1234.56\n",
+        "bankTransactionId": "b6c3f26b-398a-4502-9ffd-a119e4c26789",
+        "reconciliationId": "78bf4820-e042-4fd3-a219-aa4bbe32c291"
+      },
+      "deposit": {
+        "entryId": "1d734c88-d04c-4517-8849-d51cce5014b0",
+        "contractId": "87667c2a-9358-487c-b204-189eff53f689",
+        "holderPersonId": "7771cd9c-cbce-4a07-a3e4-37a14286a6f9"
+      },
+      "repasse": {
+        "id": "308f3bc6-a1bd-4b3a-8aea-77029f283c5f",
+        "status": "PAID",
+        "payableEntryId": "3a38d212-e270-4ffc-8731-8b00dec842d6",
+        "sourceEntryId": "48059b5a-1730-4d04-9d56-4266b53a09dd"
+      },
+      "commission": {
+        "id": "8a277fdc-4394-4789-8551-210b936eecc5",
+        "ruleVersionId": "e3c37d1d-bce7-4ae9-b5da-19f22a99c3fb",
+        "sourceEntryId": "e05c527c-14f0-4976-b75d-2dc29177b253",
+        "installmentIds": [
+          "36b496e4-256e-4f53-9a0e-c79d49ad263f",
+          "9424b19a-a6a8-4656-b57d-e459697ed8e1"
+        ],
+        "paidInstallmentStatus": "PAID"
+      },
+      "intercompany": {
+        "id": "e4702d48-f24b-4da7-aaee-0a80d0834f02",
+        "toCompanyId": "fe24a74a-4b29-47a1-9834-a8524023228f",
+        "fromEntryId": "a8842621-173e-4718-9437-fd32da9ac6eb",
+        "toEntryId": "5eee3d25-badd-4e13-b2d6-d177089b995e",
+        "status": "PENDING"
+      },
+      "closedPeriod": {
+        "referenceMonth": "2025-06",
+        "insideEntryId": "88f46a65-c268-4e3f-96a2-c053171a9a6e",
+        "id": "b52f1157-cbc4-4876-8a10-6e8e949d37e2",
+        "status": "CLOSED"
+      },
+      "anomalyCaseId": "2de33e82-0d66-4e43-98b4-ec5e7079a9d9",
+      "userIds": [
+        "64874ff4-467e-4ab2-9134-9db2c7c43db2",
+        "252a5e0f-04f6-4164-9f53-7c428de3cd73",
+        "311edea5-83cc-4c88-a522-bec2f8250278"
+      ]
+    },
+    "tenantB": {
+      "groupId": "0d90e241-edb9-49b5-83cc-6e106d4e6c87",
+      "companyId": "1934abcc-cfb5-4342-aa6c-e8e2d86ff29c",
+      "userId": "64874ff4-467e-4ab2-9134-9db2c7c43db2",
+      "entryId": "f3226ee5-3d9a-4ba5-9d37-69eff2b4b3cb"
+    }
+  },
+  "checagens": {
+    "aprovadas": 215,
+    "total": 215
+  },
+  "objetos": [
+    {
+      "objectName": "finance.accounts_chart",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "code",
+        "name",
+        "account_type",
+        "parent_account_id",
+        "is_active",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "code",
+        "name",
+        "account_type",
+        "parent_account_id",
+        "is_active",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.anomaly_cases",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "case_type",
+        "risk_level",
+        "related_entity_type",
+        "related_entity_id",
+        "reason",
+        "status",
+        "resolved_at",
+        "resolved_by",
+        "resolution_note",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 13,
+      "bothNull": 3,
+      "alwaysNullFields": [
+        "resolved_at",
+        "resolved_by",
+        "resolution_note"
+      ],
+      "failures": 0,
+      "hashSource": "a97ee8829ab5ce0d7ba52dd2d6fcbf51fdedc0013c875480ab610aaa1e1a17b9",
+      "hashTarget": "a97ee8829ab5ce0d7ba52dd2d6fcbf51fdedc0013c875480ab610aaa1e1a17b9",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.approval_requests",
+      "records": 2,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "related_entity_type",
+        "related_entity_id",
+        "requested_by_user_id",
+        "status",
+        "risk_level",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "lock_version_at_request"
+      ],
+      "comparedWithValue": 26,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0,
+      "hashSource": "887f717f28de6331899ff3125740c6538808d7c8cc4ee5ae0928fa6280299022",
+      "hashTarget": "887f717f28de6331899ff3125740c6538808d7c8cc4ee5ae0928fa6280299022",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.approval_steps",
+      "records": 2,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "approval_request_id",
+        "approver_user_id",
+        "step_order",
+        "decision",
+        "decided_at",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 24,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0,
+      "hashSource": "55a2fab578d998cc14800d874b8f10f98dbb93fc25fb002460a0671dcce48861",
+      "hashTarget": "55a2fab578d998cc14800d874b8f10f98dbb93fc25fb002460a0671dcce48861",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.bank_accounts",
+      "records": 2,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "owner_person_id",
+        "bank_code",
+        "agency",
+        "account_number",
+        "pix_key",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at",
+        "opening_balance"
+      ],
+      "comparedWithValue": 23,
+      "bothNull": 11,
+      "alwaysNullFields": [
+        "owner_person_id",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at"
+      ],
+      "failures": 0,
+      "hashSource": "fd1095360ab87e733ca1a9c97dd7fa181574f429be16cdda823d8ad9feb08773",
+      "hashTarget": "fd1095360ab87e733ca1a9c97dd7fa181574f429be16cdda823d8ad9feb08773",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "records": 1,
+      "fields": [
+        "id",
+        "external_submission_id",
+        "payment_intent_id",
+        "group_id",
+        "company_id",
+        "created_at"
+      ],
+      "comparedWithValue": 6,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0,
+      "hashSource": "2f6ab27272edf77479252e3eb6d300b5c8fb0d26d19d48fbe6557fe3f20d688e",
+      "hashTarget": "2f6ab27272edf77479252e3eb6d300b5c8fb0d26d19d48fbe6557fe3f20d688e",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.bank_statement_entries",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "connection_id",
+        "entry_id",
+        "direction",
+        "amount",
+        "booked_at",
+        "description",
+        "payee_name",
+        "external_payment_id",
+        "reconciliation_status",
+        "payment_intent_id",
+        "reconciled_at",
+        "created_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "connection_id",
+        "entry_id",
+        "direction",
+        "amount",
+        "booked_at",
+        "description",
+        "payee_name",
+        "external_payment_id",
+        "reconciliation_status",
+        "payment_intent_id",
+        "reconciled_at",
+        "created_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.bank_statement_imports",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "bank_account_id",
+        "period_start",
+        "period_end",
+        "period_declared",
+        "closing_balance",
+        "lines_total",
+        "lines_imported",
+        "created_by",
+        "created_at"
+      ],
+      "comparedWithValue": 11,
+      "bothNull": 1,
+      "alwaysNullFields": [
+        "closing_balance"
+      ],
+      "failures": 0,
+      "hashSource": "9744f2a2fe8860bbd1047e5f381d09a049e77ede9e72c69eedc00102e75a2e3a",
+      "hashTarget": "9744f2a2fe8860bbd1047e5f381d09a049e77ede9e72c69eedc00102e75a2e3a",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.bank_transactions",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "bank_account_id",
+        "external_transaction_id",
+        "amount",
+        "transaction_date",
+        "description",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 12,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0,
+      "hashSource": "815fb5b145dbdce55b2e01a4200e74d5f9a4dc9aa91d5e4f342ad0dae340e9f9",
+      "hashTarget": "815fb5b145dbdce55b2e01a4200e74d5f9a4dc9aa91d5e4f342ad0dae340e9f9",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.billing_schedule_items",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "billing_schedule_id",
+        "component_type",
+        "description",
+        "amount",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "billing_schedule_id",
+        "component_type",
+        "description",
+        "amount",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.billing_schedules",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "period",
+        "due_date",
+        "total_amount",
+        "paid_amount",
+        "balance",
+        "status",
+        "generated_at",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "period",
+        "due_date",
+        "total_amount",
+        "paid_amount",
+        "balance",
+        "status",
+        "generated_at",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.budgets_forecasts",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "competence_month",
+        "nature",
+        "cost_center_id",
+        "result_center_id",
+        "description",
+        "forecasted_amount",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "competence_month",
+        "nature",
+        "cost_center_id",
+        "result_center_id",
+        "description",
+        "forecasted_amount",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.chart_of_account_versions",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "chart_of_account_id",
+        "version_number",
+        "code",
+        "name",
+        "account_type",
+        "parent_account_id",
+        "is_active",
+        "change_reason",
+        "effective_from",
+        "effective_until",
+        "created_by",
+        "created_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "chart_of_account_id",
+        "version_number",
+        "code",
+        "name",
+        "account_type",
+        "parent_account_id",
+        "is_active",
+        "change_reason",
+        "effective_from",
+        "effective_until",
+        "created_by",
+        "created_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.chart_of_accounts",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "code",
+        "name",
+        "account_type",
+        "parent_account_id",
+        "is_active",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "code",
+        "name",
+        "account_type",
+        "parent_account_id",
+        "is_active",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.closing_periods",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "reference_month",
+        "status",
+        "closed_at",
+        "closed_by_user_id",
+        "reopened_at",
+        "reopened_by_user_id",
+        "reopen_reason",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "third_party_checked_at",
+        "third_party_checked_by_user_id",
+        "third_party_check_note",
+        "third_party_balance_at_check",
+        "commissions_reviewed_at",
+        "commissions_reviewed_by_user_id",
+        "commissions_review_note",
+        "commissions_fingerprint_at_review",
+        "current_snapshot_id",
+        "review_requested_by_user_id",
+        "review_requested_at",
+        "third_party_fingerprint_at_check",
+        "returned_to_open_at",
+        "returned_to_open_by_user_id",
+        "return_to_open_reason"
+      ],
+      "comparedWithValue": 23,
+      "bothNull": 6,
+      "alwaysNullFields": [
+        "reopened_at",
+        "reopened_by_user_id",
+        "reopen_reason",
+        "returned_to_open_at",
+        "returned_to_open_by_user_id",
+        "return_to_open_reason"
+      ],
+      "failures": 0,
+      "hashSource": "8813467255a8e111b87c848dc16b9dcf77cfb7feed979bca8719c100d984ea34",
+      "hashTarget": "8813467255a8e111b87c848dc16b9dcf77cfb7feed979bca8719c100d984ea34",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.collection_cadence_steps",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "billing_schedule_id",
+        "contract_id",
+        "rule_version_id",
+        "step_code",
+        "offset_days",
+        "action",
+        "outcome",
+        "business_date",
+        "days_from_due",
+        "balance_at_step",
+        "notification_id",
+        "task_id",
+        "created_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "billing_schedule_id",
+        "contract_id",
+        "rule_version_id",
+        "step_code",
+        "offset_days",
+        "action",
+        "outcome",
+        "business_date",
+        "days_from_due",
+        "balance_at_step",
+        "notification_id",
+        "task_id",
+        "created_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.collection_cases",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "billing_schedule_id",
+        "contract_id",
+        "status",
+        "overdue_since",
+        "original_debt_amount",
+        "current_balance",
+        "penalty_amount",
+        "interest_amount",
+        "grace_days_applied",
+        "penalty_rule_version_id",
+        "grace_rule_version_id",
+        "agreements_json",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "billing_schedule_id",
+        "contract_id",
+        "status",
+        "overdue_since",
+        "original_debt_amount",
+        "current_balance",
+        "penalty_amount",
+        "interest_amount",
+        "grace_days_applied",
+        "penalty_rule_version_id",
+        "grace_rule_version_id",
+        "agreements_json",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.commission_installments",
+      "records": 2,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "commission_id",
+        "installment_number",
+        "amount",
+        "due_at",
+        "paid_at",
+        "financial_entry_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 28,
+      "bothNull": 2,
+      "alwaysNullFields": [],
+      "failures": 0,
+      "hashSource": "220639a0240048a63d02080845d5ed33825a2bd3675185a30135608811a5881c",
+      "hashTarget": "220639a0240048a63d02080845d5ed33825a2bd3675185a30135608811a5881c",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.commissions",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "opportunity_id",
+        "contract_id",
+        "beneficiary_user_id",
+        "base_amount",
+        "percentage",
+        "total_amount",
+        "rule_version_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at",
+        "idempotency_key",
+        "source_entry_id",
+        "component"
+      ],
+      "comparedWithValue": 17,
+      "bothNull": 4,
+      "alwaysNullFields": [
+        "opportunity_id",
+        "contract_id",
+        "deleted_by",
+        "deleted_at"
+      ],
+      "failures": 0,
+      "hashSource": "243fb60f19a8496fd81b8a08fd817939e99f5e0a206e605f708cec9e44e41aab",
+      "hashTarget": "243fb60f19a8496fd81b8a08fd817939e99f5e0a206e605f708cec9e44e41aab",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.cost_centers",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "code",
+        "name",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 7,
+      "bothNull": 4,
+      "alwaysNullFields": [
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at"
+      ],
+      "failures": 0,
+      "hashSource": "33e981c4bca5bb68b7cce0b22ea5e74e31eb8f63111654ab7a220eb4ab21637e",
+      "hashTarget": "33e981c4bca5bb68b7cce0b22ea5e74e31eb8f63111654ab7a220eb4ab21637e",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.entry_installments",
+      "records": 3,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "financial_entry_id",
+        "amount",
+        "due_at",
+        "settled_at",
+        "status",
+        "created_at"
+      ],
+      "comparedWithValue": 26,
+      "bothNull": 1,
+      "alwaysNullFields": [],
+      "failures": 0,
+      "hashSource": "7ec5d06e3f46f47d7798f7af8ee82e54ccd6e86de5f0284e92ba4a28c042653d",
+      "hashTarget": "7ec5d06e3f46f47d7798f7af8ee82e54ccd6e86de5f0284e92ba4a28c042653d",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "records": 14,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "bank_account_id",
+        "cost_center_id",
+        "result_center_id",
+        "contract_id",
+        "entry_type",
+        "nature",
+        "amount",
+        "due_at",
+        "settled_at",
+        "status",
+        "idempotency_key",
+        "reversal_of_entry_id",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "description",
+        "chart_of_account_id",
+        "is_third_party_funds",
+        "third_party_reference",
+        "competence_month",
+        "parent_entry_id",
+        "requires_manual_review",
+        "manual_review_reason",
+        "manual_review_cleared_at",
+        "manual_review_cleared_by",
+        "construction_project_id",
+        "settlement_method",
+        "settlement_evidence_file_id",
+        "settlement_reason",
+        "third_party_origin_entry_id",
+        "third_party_holder_person_id",
+        "settlement_evidence_attached_by",
+        "settlement_evidence_attached_at",
+        "third_party_release_type",
+        "third_party_compensated_entry_id",
+        "chart_of_account_version_id",
+        "origin_ref"
+      ],
+      "comparedWithValue": 279,
+      "bothNull": 309,
+      "alwaysNullFields": [
+        "reversal_of_entry_id",
+        "chart_of_account_id",
+        "manual_review_reason",
+        "manual_review_cleared_at",
+        "manual_review_cleared_by",
+        "construction_project_id",
+        "third_party_origin_entry_id",
+        "third_party_compensated_entry_id",
+        "chart_of_account_version_id",
+        "origin_ref"
+      ],
+      "failures": 0,
+      "hashSource": "8e9658d3803d93558c169b3af5f94085ae669d5e97e655328c466bb6d2478bab",
+      "hashTarget": "8e9658d3803d93558c169b3af5f94085ae669d5e97e655328c466bb6d2478bab",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.guaranteed_rent_contracts",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "status",
+        "coverage_starts_at",
+        "coverage_ends_at",
+        "payments_json",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "status",
+        "coverage_starts_at",
+        "coverage_ends_at",
+        "payments_json",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.intercompany_transfers",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "from_company_id",
+        "to_company_id",
+        "amount",
+        "reason",
+        "status",
+        "from_entry_id",
+        "to_entry_id",
+        "reconciled_at",
+        "reconciled_by_user_id",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "evidence_file_id",
+        "from_bank_account_id",
+        "to_bank_account_id",
+        "requested_by_user_id",
+        "approved_by_user_id",
+        "rejected_by_user_id",
+        "approved_at",
+        "rejected_at",
+        "rejection_reason"
+      ],
+      "comparedWithValue": 20,
+      "bothNull": 5,
+      "alwaysNullFields": [
+        "reconciled_at",
+        "reconciled_by_user_id",
+        "rejected_by_user_id",
+        "rejected_at",
+        "rejection_reason"
+      ],
+      "failures": 0,
+      "hashSource": "9ecbf6dd129c72958af82a78655bd1e5d1f66ecd235cdd365545054ca7dca01b",
+      "hashTarget": "9ecbf6dd129c72958af82a78655bd1e5d1f66ecd235cdd365545054ca7dca01b",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.ledger",
+      "records": 8,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "financial_entry_id",
+        "bank_account_id",
+        "movement_type",
+        "direction",
+        "amount",
+        "currency",
+        "idempotency_key",
+        "occurred_at",
+        "reverses_ledger_id",
+        "is_third_party_funds",
+        "created_by",
+        "created_at"
+      ],
+      "comparedWithValue": 103,
+      "bothNull": 17,
+      "alwaysNullFields": [
+        "reverses_ledger_id"
+      ],
+      "failures": 0,
+      "hashSource": "c4dca3d8e9a709f105193caa04bb9e51f96ad5176fc81c89c506a4394be66642",
+      "hashTarget": "c4dca3d8e9a709f105193caa04bb9e51f96ad5176fc81c89c506a4394be66642",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.owner_repasses",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "property_id",
+        "owner_person_id",
+        "contract_id",
+        "bank_account_id",
+        "gross_amount",
+        "deductions_amount",
+        "net_amount",
+        "reference_month",
+        "status",
+        "idempotency_key",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "financial_entry_id",
+        "paid_at",
+        "approved_by_user_id",
+        "confirmed_by_user_id",
+        "approved_at",
+        "payment_evidence_file_id",
+        "payment_settlement_method",
+        "deductions_reason",
+        "deductions_document_file_id"
+      ],
+      "comparedWithValue": 24,
+      "bothNull": 3,
+      "alwaysNullFields": [
+        "contract_id",
+        "idempotency_key",
+        "deductions_document_file_id"
+      ],
+      "failures": 0,
+      "hashSource": "b4abc31ad3d0ae82e03c099ef9666fb6011d746f3fa409330f65b822e78c574d",
+      "hashTarget": "b4abc31ad3d0ae82e03c099ef9666fb6011d746f3fa409330f65b822e78c574d",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.ownership_transfer_tasks",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "utility_obligation_id",
+        "from_person_id",
+        "to_person_id",
+        "status",
+        "completed_at",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at",
+        "evidence_file_id"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "utility_obligation_id",
+        "from_person_id",
+        "to_person_id",
+        "status",
+        "completed_at",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at",
+        "evidence_file_id"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "financial_entry_id",
+        "snapshot_json",
+        "snapshot_hash",
+        "status",
+        "approval_request_id",
+        "approved_by_user_id",
+        "approved_at",
+        "executed_at",
+        "cancelled_at",
+        "cancel_reason",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "bank_account_id",
+        "beneficiary_snapshot",
+        "payment_method",
+        "idempotency_key",
+        "external_submission_id",
+        "external_status",
+        "submitted_at",
+        "failed_at",
+        "failure_reason",
+        "uncertain_since",
+        "last_reconciled_at",
+        "reconciliation_attempts",
+        "reconciled_at",
+        "reconciled_entry_id"
+      ],
+      "comparedWithValue": 22,
+      "bothNull": 9,
+      "alwaysNullFields": [
+        "approval_request_id",
+        "cancelled_at",
+        "cancel_reason",
+        "failed_at",
+        "failure_reason",
+        "uncertain_since",
+        "last_reconciled_at",
+        "reconciled_at",
+        "reconciled_entry_id"
+      ],
+      "failures": 0,
+      "hashSource": "32e51e78c5da8a49c0bd026076a2f553efc30a3c7557660093137a0416d90469",
+      "hashTarget": "32e51e78c5da8a49c0bd026076a2f553efc30a3c7557660093137a0416d90469",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.period_closure_snapshots",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "period_closure_id",
+        "reference_month",
+        "snapshot_json",
+        "snapshot_hash",
+        "created_by",
+        "created_at"
+      ],
+      "comparedWithValue": 9,
+      "bothNull": 0,
+      "alwaysNullFields": [],
+      "failures": 0,
+      "hashSource": "87f62f3027ae796c3ab216268368381a508d9e36c831732df681d8b917f0fba0",
+      "hashTarget": "87f62f3027ae796c3ab216268368381a508d9e36c831732df681d8b917f0fba0",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.period_closures",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "reference_month",
+        "status",
+        "closed_at",
+        "closed_by_user_id",
+        "reopened_at",
+        "reopened_by_user_id",
+        "reopen_reason",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "third_party_checked_at",
+        "third_party_checked_by_user_id",
+        "third_party_check_note",
+        "third_party_balance_at_check",
+        "commissions_reviewed_at",
+        "commissions_reviewed_by_user_id",
+        "commissions_review_note",
+        "commissions_fingerprint_at_review",
+        "current_snapshot_id",
+        "review_requested_by_user_id",
+        "review_requested_at",
+        "third_party_fingerprint_at_check",
+        "returned_to_open_at",
+        "returned_to_open_by_user_id",
+        "return_to_open_reason"
+      ],
+      "comparedWithValue": 23,
+      "bothNull": 6,
+      "alwaysNullFields": [
+        "reopened_at",
+        "reopened_by_user_id",
+        "reopen_reason",
+        "returned_to_open_at",
+        "returned_to_open_by_user_id",
+        "return_to_open_reason"
+      ],
+      "failures": 0,
+      "hashSource": "8813467255a8e111b87c848dc16b9dcf77cfb7feed979bca8719c100d984ea34",
+      "hashTarget": "8813467255a8e111b87c848dc16b9dcf77cfb7feed979bca8719c100d984ea34",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.reconciliations",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "financial_entry_id",
+        "bank_transaction_id",
+        "matched_at",
+        "matched_by_user_id",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "match_group_id"
+      ],
+      "comparedWithValue": 11,
+      "bothNull": 1,
+      "alwaysNullFields": [
+        "match_group_id"
+      ],
+      "failures": 0,
+      "hashSource": "5f319ff40a73708591198f15be6a9fa270bae0de4cabf684270294caf1995045",
+      "hashTarget": "5f319ff40a73708591198f15be6a9fa270bae0de4cabf684270294caf1995045",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.rent_adjustments",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "index_code",
+        "period",
+        "raw_index_value",
+        "applied_percentage",
+        "old_rent_amount",
+        "new_rent_amount",
+        "rule_version_id",
+        "status",
+        "applied_at",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "index_code",
+        "period",
+        "raw_index_value",
+        "applied_percentage",
+        "old_rent_amount",
+        "new_rent_amount",
+        "rule_version_id",
+        "status",
+        "applied_at",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.rent_advances",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "status",
+        "months_advanced",
+        "principal_amount",
+        "cost_amount",
+        "recovered_amount",
+        "proposed_at",
+        "accepted_at",
+        "paid_at",
+        "principal_entry_id",
+        "cost_entry_id",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "status",
+        "months_advanced",
+        "principal_amount",
+        "cost_amount",
+        "recovered_amount",
+        "proposed_at",
+        "accepted_at",
+        "paid_at",
+        "principal_entry_id",
+        "cost_entry_id",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.result_centers",
+      "records": 2,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "code",
+        "name",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 14,
+      "bothNull": 8,
+      "alwaysNullFields": [
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at"
+      ],
+      "failures": 0,
+      "hashSource": "6cddd79e03a944200b04aab51de3b8a68be1651cff90dbf9bc091478020b64c9",
+      "hashTarget": "6cddd79e03a944200b04aab51de3b8a68be1651cff90dbf9bc091478020b64c9",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.security_deposits",
+      "records": 2,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "holder_person_id",
+        "origin_entry_id",
+        "release_type",
+        "nature",
+        "amount",
+        "status",
+        "settled_at",
+        "created_at"
+      ],
+      "comparedWithValue": 19,
+      "bothNull": 5,
+      "alwaysNullFields": [
+        "origin_entry_id"
+      ],
+      "failures": 0,
+      "hashSource": "8fea08af43b7f96a8d5674f58cdd65ab8ad13a15a7618f485b26aab2b42cf0b2",
+      "hashTarget": "8fea08af43b7f96a8d5674f58cdd65ab8ad13a15a7618f485b26aab2b42cf0b2",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.tax_documents",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "financial_entry_id",
+        "document_type",
+        "document_number",
+        "issued_at",
+        "amount",
+        "file_id",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at",
+        "invoice_request_id",
+        "xml_content",
+        "xml_sha256",
+        "pdf_content",
+        "pdf_sha256",
+        "verification_code",
+        "xml_file_id",
+        "pdf_file_id"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "financial_entry_id",
+        "document_type",
+        "document_number",
+        "issued_at",
+        "amount",
+        "file_id",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at",
+        "invoice_request_id",
+        "xml_content",
+        "xml_sha256",
+        "pdf_content",
+        "pdf_sha256",
+        "verification_code",
+        "xml_file_id",
+        "pdf_file_id"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.utility_accounts",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "utility_obligation_id",
+        "provider",
+        "account_number",
+        "holder_person_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "utility_obligation_id",
+        "provider",
+        "account_number",
+        "holder_person_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.utility_obligations",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "utility_type",
+        "responsible_party",
+        "provider",
+        "account_number",
+        "transfer_required",
+        "evidence_file_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "contract_id",
+        "utility_type",
+        "responsible_party",
+        "provider",
+        "account_number",
+        "transfer_required",
+        "evidence_file_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "finance.utility_reimbursements",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "utility_obligation_id",
+        "paid_by_party",
+        "owed_by_party",
+        "amount",
+        "financial_entry_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "utility_obligation_id",
+        "paid_by_party",
+        "owed_by_party",
+        "amount",
+        "financial_entry_id",
+        "status",
+        "lock_version",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "audit.audit_log (ações finance.*)",
+      "records": 56,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "user_id",
+        "action",
+        "entity_type",
+        "entity_id",
+        "before_json",
+        "after_json",
+        "reason",
+        "occurred_at",
+        "session_id",
+        "ip_address",
+        "correlation_id",
+        "rule_version_id",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 793,
+      "bothNull": 271,
+      "alwaysNullFields": [
+        "session_id",
+        "ip_address",
+        "correlation_id",
+        "rule_version_id"
+      ],
+      "failures": 0,
+      "hashSource": "f2331947759d92fba92773c50ebd23afbecc260a25de965e501384fbf4211f25",
+      "hashTarget": "f2331947759d92fba92773c50ebd23afbecc260a25de965e501384fbf4211f25",
+      "hashEqual": true
+    },
+    {
+      "objectName": "integration.outbox_events (finance.*)",
+      "records": 41,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "aggregate_type",
+        "aggregate_id",
+        "event_type",
+        "event_version",
+        "payload_json",
+        "correlation_id",
+        "causation_id",
+        "idempotency_key",
+        "classification",
+        "occurred_at",
+        "status",
+        "retry_count",
+        "next_retry_at",
+        "dead_letter_reason",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at",
+        "connection_id",
+        "target_domain"
+      ],
+      "comparedWithValue": 574,
+      "bothNull": 369,
+      "alwaysNullFields": [
+        "correlation_id",
+        "causation_id",
+        "classification",
+        "next_retry_at",
+        "dead_letter_reason",
+        "created_by",
+        "updated_by",
+        "connection_id",
+        "target_domain"
+      ],
+      "failures": 0,
+      "hashSource": "6a491285115ac16ad5390923f0ba818cd994959ea86339868b2616e662bd335f",
+      "hashTarget": "6a491285115ac16ad5390923f0ba818cd994959ea86339868b2616e662bd335f",
+      "hashEqual": true
+    },
+    {
+      "objectName": "integration.domain_events (finance.*)",
+      "records": 0,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "aggregate_type",
+        "aggregate_id",
+        "event_type",
+        "payload_json",
+        "occurred_at",
+        "correlation_id",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 0,
+      "bothNull": 0,
+      "alwaysNullFields": [
+        "id",
+        "group_id",
+        "company_id",
+        "aggregate_type",
+        "aggregate_id",
+        "event_type",
+        "payload_json",
+        "occurred_at",
+        "correlation_id",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "failures": 0,
+      "hashSource": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashTarget": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "hashEqual": true
+    },
+    {
+      "objectName": "core.rule_versions (regra de comissão)",
+      "records": 1,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "rule_id",
+        "version_number",
+        "condition_ast_json",
+        "content_hash",
+        "action_json",
+        "effective_from",
+        "effective_until",
+        "status",
+        "published_by_user_id",
+        "created_by",
+        "updated_by",
+        "created_at",
+        "updated_at"
+      ],
+      "comparedWithValue": 15,
+      "bothNull": 1,
+      "alwaysNullFields": [
+        "effective_until"
+      ],
+      "failures": 0,
+      "hashSource": "9b81dce41b2249de1f1424f003cc199a55fff97d30befb10d90e2e796d5972bb",
+      "hashTarget": "9b81dce41b2249de1f1424f003cc199a55fff97d30befb10d90e2e796d5972bb",
+      "hashEqual": true
+    },
+    {
+      "objectName": "people.files (comprovantes financeiros)",
+      "records": 3,
+      "fields": [
+        "id",
+        "group_id",
+        "company_id",
+        "storage_key",
+        "file_name",
+        "mime_type",
+        "size_bytes",
+        "checksum_sha256",
+        "uploaded_by_user_id",
+        "created_by",
+        "updated_by",
+        "deleted_by",
+        "deleted_at",
+        "created_at",
+        "updated_at",
+        "content",
+        "encrypted_at_rest",
+        "scan_status",
+        "scanned_at",
+        "storage_provider",
+        "storage_connection_id",
+        "classification"
+      ],
+      "comparedWithValue": 54,
+      "bothNull": 12,
+      "alwaysNullFields": [
+        "deleted_by",
+        "deleted_at",
+        "content",
+        "storage_connection_id"
+      ],
+      "failures": 0,
+      "hashSource": "2e14e0a21438fb61b2ca0020459b8c86debefbcf9e0dea6d15c3256539f407cb",
+      "hashTarget": "2e14e0a21438fb61b2ca0020459b8c86debefbcf9e0dea6d15c3256539f407cb",
+      "hashEqual": true
+    }
+  ],
+  "replays": [
+    {
+      "replay": "callback bancário CONFIRMED (2 entregas)",
+      "resultado": [
+        "{\"received\":true,\"processed\":false,\"reason\":\"duplicate_event\"}",
+        "{\"received\":true,\"processed\":false,\"reason\":\"duplicate_event\"}"
+      ],
+      "lancamentosAntes": 14,
+      "lancamentosDepois": 14
+    },
+    {
+      "replay": "reimportação do mesmo extrato CSV",
+      "importadas": 0,
+      "duplicadas": 1,
+      "antes": 1,
+      "depois": 1
+    },
+    {
+      "replay": "lançamento com idempotencyKey existente",
+      "servico": "FINANCE_DUPLICATE_PAYMENT",
+      "banco": "23505",
+      "antes": 14,
+      "depois": 14
+    },
+    {
+      "replay": "mesma baixa parcial (mesma chave)",
+      "chaveGravada": true,
+      "resultado": "devolvida a baixa original (mesmo id) idempotentReplay=true",
+      "filhasAntes": 2,
+      "filhasDepois": 2
+    },
+    {
+      "replay": "mesma comissão (mesma idempotencyKey)",
+      "resultado": "recusada FINANCE_COMMISSION_DUPLICATE",
+      "antes": 1,
+      "depois": 1
+    },
+    {
+      "replay": "adulteração deliberada de 1 valor no destino",
+      "hashAntes": "8e9658d3803d93558c169b3af5f94085ae669d5e97e655328c466bb6d2478bab",
+      "hashDepois": "137e4ab56a659d7b9aa9cba054194f7068efe06df19c1e8d5315421f7fe9294a",
+      "divergenciasDeCampo": 1,
+      "detectada": true
+    }
+  ],
+  "verificacao": [
+    {
+      "objectName": "schema finance",
+      "label": "objetos do schema finance na origem: 39 (tabelas e views)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "schema finance",
+      "label": "mesmos objetos no destino (39)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.accounts_chart",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.accounts_chart",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.accounts_chart",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.accounts_chart",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.anomaly_cases",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.anomaly_cases",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.anomaly_cases",
+      "label": "13 comparações COM VALOR idênticas (1 registros × 16 campos; 3 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.anomaly_cases",
+      "label": "hash canônico SHA-256 origem = destino (a97ee8829ab5ce0d…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_requests",
+      "label": "registros na origem: 2 (mínimo exigido 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_requests",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_requests",
+      "label": "26 comparações COM VALOR idênticas (2 registros × 13 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_requests",
+      "label": "hash canônico SHA-256 origem = destino (887f717f28de6331…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_steps",
+      "label": "registros na origem: 2 (mínimo exigido 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_steps",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_steps",
+      "label": "24 comparações COM VALOR idênticas (2 registros × 12 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.approval_steps",
+      "label": "hash canônico SHA-256 origem = destino (55a2fab578d998cc…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_accounts",
+      "label": "registros na origem: 2 (mínimo exigido 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_accounts",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_accounts",
+      "label": "23 comparações COM VALOR idênticas (2 registros × 17 campos; 11 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_accounts",
+      "label": "hash canônico SHA-256 origem = destino (fd1095360ab87e73…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "label": "6 comparações COM VALOR idênticas (1 registros × 6 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_payment_provider_routing",
+      "label": "hash canônico SHA-256 origem = destino (2f6ab27272edf774…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_entries",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_entries",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_entries",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_entries",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_imports",
+      "label": "registros na origem: 1 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_imports",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_imports",
+      "label": "11 comparações COM VALOR idênticas (1 registros × 12 campos; 1 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_statement_imports",
+      "label": "hash canônico SHA-256 origem = destino (9744f2a2fe8860bb…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_transactions",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_transactions",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_transactions",
+      "label": "12 comparações COM VALOR idênticas (1 registros × 12 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.bank_transactions",
+      "label": "hash canônico SHA-256 origem = destino (815fb5b145dbdce5…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedule_items",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedule_items",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedule_items",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedule_items",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedules",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedules",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedules",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.billing_schedules",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.budgets_forecasts",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.budgets_forecasts",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.budgets_forecasts",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.budgets_forecasts",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_account_versions",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_account_versions",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_account_versions",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_account_versions",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_accounts",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_accounts",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_accounts",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.chart_of_accounts",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.closing_periods",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.closing_periods",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.closing_periods",
+      "label": "23 comparações COM VALOR idênticas (1 registros × 29 campos; 6 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.closing_periods",
+      "label": "hash canônico SHA-256 origem = destino (8813467255a8e111…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cadence_steps",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cadence_steps",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cadence_steps",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cadence_steps",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cases",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cases",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cases",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.collection_cases",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commission_installments",
+      "label": "registros na origem: 2 (mínimo exigido 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commission_installments",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commission_installments",
+      "label": "28 comparações COM VALOR idênticas (2 registros × 15 campos; 2 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commission_installments",
+      "label": "hash canônico SHA-256 origem = destino (220639a0240048a6…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commissions",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commissions",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commissions",
+      "label": "17 comparações COM VALOR idênticas (1 registros × 21 campos; 4 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.commissions",
+      "label": "hash canônico SHA-256 origem = destino (243fb60f19a8496f…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.cost_centers",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.cost_centers",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.cost_centers",
+      "label": "7 comparações COM VALOR idênticas (1 registros × 11 campos; 4 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.cost_centers",
+      "label": "hash canônico SHA-256 origem = destino (33e981c4bca5bb68…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.entry_installments",
+      "label": "registros na origem: 3 (mínimo exigido 3)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.entry_installments",
+      "label": "mesma quantidade de registros (origem 3, destino 3)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.entry_installments",
+      "label": "26 comparações COM VALOR idênticas (3 registros × 9 campos; 1 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.entry_installments",
+      "label": "hash canônico SHA-256 origem = destino (7ec5d06e3f46f47d…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "label": "registros na origem: 14 (mínimo exigido 14)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "label": "mesma quantidade de registros (origem 14, destino 14)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "label": "279 comparações COM VALOR idênticas (14 registros × 42 campos; 309 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.financial_entries",
+      "label": "hash canônico SHA-256 origem = destino (8e9658d3803d9355…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.guaranteed_rent_contracts",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.guaranteed_rent_contracts",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.guaranteed_rent_contracts",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.guaranteed_rent_contracts",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.intercompany_transfers",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.intercompany_transfers",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.intercompany_transfers",
+      "label": "20 comparações COM VALOR idênticas (1 registros × 25 campos; 5 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.intercompany_transfers",
+      "label": "hash canônico SHA-256 origem = destino (9ecbf6dd129c7295…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ledger",
+      "label": "registros na origem: 8 (mínimo exigido 8)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ledger",
+      "label": "mesma quantidade de registros (origem 8, destino 8)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ledger",
+      "label": "103 comparações COM VALOR idênticas (8 registros × 15 campos; 17 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ledger",
+      "label": "hash canônico SHA-256 origem = destino (c4dca3d8e9a709f1…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.owner_repasses",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.owner_repasses",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.owner_repasses",
+      "label": "24 comparações COM VALOR idênticas (1 registros × 27 campos; 3 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.owner_repasses",
+      "label": "hash canônico SHA-256 origem = destino (b4abc31ad3d0ae82…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ownership_transfer_tasks",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ownership_transfer_tasks",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ownership_transfer_tasks",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.ownership_transfer_tasks",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "label": "22 comparações COM VALOR idênticas (1 registros × 31 campos; 9 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.payment_intents",
+      "label": "hash canônico SHA-256 origem = destino (32e51e78c5da8a49…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closure_snapshots",
+      "label": "registros na origem: 1 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closure_snapshots",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closure_snapshots",
+      "label": "9 comparações COM VALOR idênticas (1 registros × 9 campos; 0 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closure_snapshots",
+      "label": "hash canônico SHA-256 origem = destino (87f62f3027ae796c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closures",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closures",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closures",
+      "label": "23 comparações COM VALOR idênticas (1 registros × 29 campos; 6 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.period_closures",
+      "label": "hash canônico SHA-256 origem = destino (8813467255a8e111…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.reconciliations",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.reconciliations",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.reconciliations",
+      "label": "11 comparações COM VALOR idênticas (1 registros × 12 campos; 1 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.reconciliations",
+      "label": "hash canônico SHA-256 origem = destino (5f319ff40a737085…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_adjustments",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_adjustments",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_adjustments",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_adjustments",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_advances",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_advances",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_advances",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.rent_advances",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.result_centers",
+      "label": "registros na origem: 2 (mínimo exigido 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.result_centers",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.result_centers",
+      "label": "14 comparações COM VALOR idênticas (2 registros × 11 campos; 8 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.result_centers",
+      "label": "hash canônico SHA-256 origem = destino (6cddd79e03a94420…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.security_deposits",
+      "label": "registros na origem: 2 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.security_deposits",
+      "label": "mesma quantidade de registros (origem 2, destino 2)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.security_deposits",
+      "label": "19 comparações COM VALOR idênticas (2 registros × 12 campos; 5 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.security_deposits",
+      "label": "hash canônico SHA-256 origem = destino (8fea08af43b7f96a…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.tax_documents",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.tax_documents",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.tax_documents",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.tax_documents",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_accounts",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_accounts",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_accounts",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_accounts",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_obligations",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_obligations",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_obligations",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_obligations",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_reimbursements",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_reimbursements",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_reimbursements",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "finance.utility_reimbursements",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "audit.audit_log (ações finance.*)",
+      "label": "registros na origem: 56 (mínimo exigido 20)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "audit.audit_log (ações finance.*)",
+      "label": "mesma quantidade de registros (origem 56, destino 56)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "audit.audit_log (ações finance.*)",
+      "label": "793 comparações COM VALOR idênticas (56 registros × 19 campos; 271 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "audit.audit_log (ações finance.*)",
+      "label": "hash canônico SHA-256 origem = destino (f2331947759d92fb…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.outbox_events (finance.*)",
+      "label": "registros na origem: 41 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.outbox_events (finance.*)",
+      "label": "mesma quantidade de registros (origem 41, destino 41)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.outbox_events (finance.*)",
+      "label": "574 comparações COM VALOR idênticas (41 registros × 23 campos; 369 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.outbox_events (finance.*)",
+      "label": "hash canônico SHA-256 origem = destino (6a491285115ac16a…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.domain_events (finance.*)",
+      "label": "registros na origem: 0 (mínimo exigido 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.domain_events (finance.*)",
+      "label": "mesma quantidade de registros (origem 0, destino 0)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.domain_events (finance.*)",
+      "label": "objeto vazio nos dois lados (sem dado de fixture neste objeto)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "integration.domain_events (finance.*)",
+      "label": "hash canônico SHA-256 origem = destino (4f53cda18c2baa0c…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "core.rule_versions (regra de comissão)",
+      "label": "registros na origem: 1 (mínimo exigido 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "core.rule_versions (regra de comissão)",
+      "label": "mesma quantidade de registros (origem 1, destino 1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "core.rule_versions (regra de comissão)",
+      "label": "15 comparações COM VALOR idênticas (1 registros × 16 campos; 1 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "core.rule_versions (regra de comissão)",
+      "label": "hash canônico SHA-256 origem = destino (9b81dce41b2249de…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.files (comprovantes financeiros)",
+      "label": "registros na origem: 3 (mínimo exigido 3)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.files (comprovantes financeiros)",
+      "label": "mesma quantidade de registros (origem 3, destino 3)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.files (comprovantes financeiros)",
+      "label": "54 comparações COM VALOR idênticas (3 registros × 22 campos; 12 nulo=nulo à parte)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "people.files (comprovantes financeiros)",
+      "label": "hash canônico SHA-256 origem = destino (2e14e0a21438fb61…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "063030a2: blob cifrado idêntico (1471 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "063030a2: SHA-256 decifrado = SHA-256 calculado nas fixtures (1415e379c2fe49fa…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "063030a2: não vazio e do tamanho gravado (1436 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "3d5a56c5: blob cifrado idêntico (1463 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "3d5a56c5: SHA-256 decifrado = SHA-256 calculado nas fixtures (33a57a684115cc86…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "3d5a56c5: não vazio e do tamanho gravado (1428 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "a048a870: blob cifrado idêntico (1471 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "a048a870: SHA-256 decifrado = SHA-256 calculado nas fixtures (50a6d0c203216e38…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "arquivos (bytes)",
+      "label": "a048a870: não vazio e do tamanho gravado (1436 bytes)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "recebível R$ 0,30",
+      "label": "pai restaurado: valor 0.30, status SETTLED",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "recebível R$ 0,30",
+      "label": "filhas SETTLED restauradas: 0.10 + 0.20 = 0.30",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "recebível R$ 0,30",
+      "label": "saldo = 0,30 − Σ filhas SETTLED = 0.00",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "recebível R$ 0,30",
+      "label": "saldos registrados antes do backup: após 0.10 → 0.20 (PARTIALLY_SETTLED); após 0.20 → 0.00 (SETTLED)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "recebível R$ 0,30",
+      "label": "finance.ledger: PARTIAL_RECEIVABLE/CREDIT 0.10, PARTIAL_RECEIVABLE/CREDIT 0.20",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "ledger append-only (destino)",
+      "label": "UPDATE do valor de um movimento liquidado recusado pelo banco restaurado",
+      "ok": true,
+      "detail": "finance.financial_entries é append-only (FIN-003/010): a coluna \"amount\" não pode ser alterada após a criação "
+    },
+    {
+      "objectName": "ledger append-only (destino)",
+      "label": "UPDATE da chave idempotente de um movimento liquidado recusado pelo banco restaurado",
+      "ok": true,
+      "detail": "finance.financial_entries é append-only (FIN-003/010): a coluna \"idempotency_key\" não pode ser alterada após a"
+    },
+    {
+      "objectName": "ledger append-only (destino)",
+      "label": "DELETE de um movimento liquidado recusado pelo banco restaurado",
+      "ok": true,
+      "detail": "finance.financial_entries é append-only (FIN-003/010): DELETE direto não é permitido (id=f3b50323-7f90-457b-93"
+    },
+    {
+      "objectName": "ledger append-only (destino)",
+      "label": "escrita na view finance.ledger recusada",
+      "ok": true,
+      "detail": "A view finance.ledger é somente leitura (nomes do Caderno M4 §5); escreva pelo serviço do Financeiro."
+    },
+    {
+      "objectName": "período fechado (destino)",
+      "label": "período 2025-06 restaurado com status CLOSED",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "RLS (destino)",
+      "label": "tenant B vê 0 linhas do A em 13 objetos",
+      "ok": true,
+      "detail": "{\"financial_entries\":0,\"ledger\":0,\"payment_intents\":0,\"approval_requests\":0,\"bank_transactions\":0,\"reconciliations\":0,\"owner_repasses\":0,\"commissions\":0,\"commission_installments\":0,\"intercompany_transfers\":0,\"period_closures\":0,\"anomaly_cases\":0,\"bank_accounts\":0}"
+    },
+    {
+      "objectName": "RLS (destino)",
+      "label": "controle positivo: tenant B vê o próprio lançamento (1)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "RLS (destino)",
+      "label": "tenant B alterando anomalia do A → 0 linha(s) afetada(s)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "RLS (destino)",
+      "label": "sem contexto de tenant a role de runtime vê 0 lançamentos (fail-closed)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "RLS (destino)",
+      "label": "role nayara_runtime no destino: superuser=false, bypassrls=false",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "replayEAdulteracao": [
+    {
+      "objectName": "replay callback bancário",
+      "label": "2 entregas do mesmo callback: {\"received\":true,\"processed\":false,\"reason\":\"duplicate_event\"} | {\"received\":true,\"processed\":false,\"reason\":\"duplicate_event\"}",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay callback bancário",
+      "label": "intenção segue EXECUTED; lançamentos 14 → 14; filhos 0; lock_version 1 → 1",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay extrato",
+      "label": "reimportação: importadas 0, duplicadas 1; bank_transactions 1 → 1",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay idempotencyKey",
+      "label": "serviço recusou: FINANCE_DUPLICATE_PAYMENT",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay idempotencyKey",
+      "label": "INSERT direto com a mesma chave recusado pelo banco: 23505 duplicate key value violates unique constraint \"financial_entries_idempotency_ke",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay idempotencyKey",
+      "label": "lançamentos 14 → 14",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay baixa parcial",
+      "label": "chave idempotente gravada na baixa restaurada: sim; replay → devolvida a baixa original (mesmo id) idempotentReplay=true",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay baixa parcial",
+      "label": "filhas do recebível 2 → 2 (nenhuma baixa nova)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "replay comissão",
+      "label": "replay → recusada FINANCE_COMMISSION_DUPLICATE; comissões 1 → 1",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "período fechado (destino)",
+      "label": "lançamento novo em 2025-06: FINANCE_PERIOD_CLOSED",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "período fechado (destino)",
+      "label": "edição de lançamento do mês fechado: FINANCE_PERIOD_CLOSED",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "adulteração",
+      "label": "antes da adulteração: hash origem = destino (8e9658d3803d9355…)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "objectName": "adulteração",
+      "label": "valor do pagamento alterado no destino (1234.56 → 2234.56): divergência de campo detectada (1) e hash diverge (8e9658d3803d9355… ≠ 137e4ab56a659d7b…)",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

@@ -98,6 +98,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/NayaraOne--FRONT
+          # A branch do Front com o mesmo nome da API (no pull request, a de origem), como scripts/governance-ci/prepararFront.sh.
+          # Sem isto o checkout pegava a branch padrão do Front, que não tem as telas de BI do Marco 9 (etapa 2 do BI reprovava).
+          ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
           path: front-checkout
 
@@ -320,6 +323,10 @@ jobs:
       - name: Run test suite (RLS real, sem bypass — mesmo usuário de privilégio mínimo da produção)
         env:
           DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
+          # M4-D140 (test/m4d140.estruturaFinanceiro.test.js, testes 9 e 10): o superusuário do container cria um banco VAZIO
+          # próprio, migra pelo executor único (scripts/migrate.js), compara o schema com o retrato de antes e apaga o banco.
+          # Só esse teste lê esta variável; a suíte continua rodando com o usuário de privilégio mínimo acima.
+          M4D140_ADMIN_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
           DB_USER: nayara_ci_app
           DB_PASSWORD: nayara_ci_app_password
           # FIX (18/10/2026): sem NODE_ENV=test, qualquer arquivo de teste que importa app.js
@@ -436,6 +443,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/NayaraOne--FRONT
+          # A branch do Front com o mesmo nome da API (no pull request, a de origem), como scripts/governance-ci/prepararFront.sh.
+          # Sem isto o checkout pegava a branch padrão do Front, que não tem as telas de BI do Marco 9 (etapa 2 do BI reprovava).
+          ref: ${{ github.head_ref || github.ref_name }}
           token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
           path: front-checkout
       - name: Posicionar o Front ao lado da API

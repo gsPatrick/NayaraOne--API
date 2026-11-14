@@ -5,8 +5,8 @@ const {
   Project,
   ProjectStage,
   BudgetLine,
+  Budget,
   ChangeOrder,
-  FinancialEntry,
   StageMeasurement,
   Nonconformity,
   LossRecord,
@@ -15,6 +15,7 @@ const {
 } = require('../../models');
 const { getTeamAndMaterialByActionIds } = require('./warrantyActionTeamMaterialColumns');
 const { getConsumedInventoryCostByProject } = require('../inventory/inventoryCost.service');
+const { paidFinancialCostByProject, accrualByProject } = require('./costBasis');
 
 // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): o contrato ("CONSTRUÇÃO + OBRAS + PÓS-OBRA —
 // BLINDADO v1", seção "Painéis principais" e "9. KPIs Obras" do caderno de BI) exige DOIS
@@ -59,16 +60,10 @@ async function getConstructionDashboard(filters, transaction) {
       !['FINAL_INSPECTION', 'DELIVERED', 'WARRANTY', 'CLOSED', 'CANCELLED'].includes(p.status)
   );
 
-  const [budgetLines, changeOrders, settledEntries, stages, nonconformities, lossRecords] = await Promise.all([
+  const [budgetLines, changeOrders, stages, nonconformities, lossRecords] = await Promise.all([
     projectIds.length ? BudgetLine.findAll({ where: { projectId: { [Op.in]: projectIds } }, transaction }) : [],
     projectIds.length
       ? ChangeOrder.findAll({ where: { projectId: { [Op.in]: projectIds }, status: 'APPROVED' }, transaction })
-      : [],
-    projectIds.length
-      ? FinancialEntry.findAll({
-          where: { constructionProjectId: { [Op.in]: projectIds }, nature: 'PAYABLE', status: { [Op.in]: ['SETTLED', 'PARTIALLY_SETTLED'] } },
-          transaction,
-        })
       : [],
     projectIds.length ? ProjectStage.findAll({ where: { projectId: { [Op.in]: projectIds } }, transaction }) : [],
     projectIds.length ? Nonconformity.findAll({ where: { projectId: { [Op.in]: projectIds } }, transaction }) : [],
@@ -78,12 +73,22 @@ async function getConstructionDashboard(filters, transaction) {
   ]);
 
   const committedCostTotal = budgetLines.reduce((acc, l) => acc + toNumber(l.plannedAmount), 0);
+  // M6-42/M6-17: a baseline é a APROVADA (imutável); aditivos aprovados só em approvedChangesTotal (nunca duas vezes).
+  const approvedBudgets = projectIds.length ? await Budget.findAll({ where: { projectId: { [Op.in]: projectIds }, status: 'APPROVED' }, transaction }) : [];
+  const baselineByProject = new Map(approvedBudgets.map((b) => [b.projectId, toNumber(b.baselineAmount)]));
   const baselineBudgetTotal = projects.reduce(
-    (acc, p) => acc + (p.budgetAmount !== null && p.budgetAmount !== undefined ? toNumber(p.budgetAmount) : 0),
+    (acc, p) => acc + (baselineByProject.has(p.id) ? baselineByProject.get(p.id) : toNumber(p.budgetAmount)),
     0
   );
   const approvedChangesTotal = changeOrders.reduce((acc, c) => acc + toNumber(c.budgetImpact), 0);
-  const actualFinancialCostTotal = settledEntries.reduce((acc, e) => acc + toNumber(e.amount), 0);
+  // Matriz de fechamento do Marco 6 (10/11/2026): custo pago com a MESMA regra do drill-down (antes o agregado contava
+  // um lançamento PARCIALMENTE pago pelo valor cheio) + base CAIXA/COMPETENCIA da empresa (costBasis.js).
+  const paidByProject = await paidFinancialCostByProject(projectIds, transaction);
+  const { base: costBasis, open, accrual } = await accrualByProject(projectIds, { groupId, companyId }, transaction);
+  const actualCostByProject = new Map(projectIds.map((id) => [id, (paidByProject.get(id) || 0) + (accrual.get(id) || 0)]));
+  const actualFinancialCostTotal = [...actualCostByProject.values()].reduce((acc, v) => acc + v, 0);
+  const openPayablesTotal = [...open.values()].reduce((acc, v) => acc + v.total, 0);
+  const pendingApprovedMeasurementsTotal = [...open.values()].reduce((acc, v) => acc + v.fromMeasurements, 0);
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 5, Frente C, 09/10/2026): este agregado
   // calculava forecastToComplete/projectedTotalCost/projectedMargin SEM consumedInventoryCost,
@@ -115,8 +120,6 @@ async function getConstructionDashboard(filters, transaction) {
   for (const l of budgetLines) budgetLinesByProject.set(l.projectId, (budgetLinesByProject.get(l.projectId) || 0) + toNumber(l.plannedAmount));
   const changeOrdersByProject = new Map();
   for (const c of changeOrders) changeOrdersByProject.set(c.projectId, (changeOrdersByProject.get(c.projectId) || 0) + toNumber(c.budgetImpact));
-  const actualCostByProject = new Map();
-  for (const e of settledEntries) actualCostByProject.set(e.constructionProjectId, (actualCostByProject.get(e.constructionProjectId) || 0) + toNumber(e.amount));
   const inventoryCostByProject = consumedByProject;
   const stagesByProject = new Map();
   for (const s of stages) {
@@ -250,6 +253,7 @@ async function getConstructionDashboard(filters, transaction) {
       approvedChangesTotal: round2(approvedChangesTotal),
       committedCostTotal: round2(committedCostTotal),
       actualFinancialCostTotal: round2(actualFinancialCostTotal),
+      costBasis: { base: costBasis, openPayablesTotal: round2(openPayablesTotal), pendingApprovedMeasurementsTotal: round2(pendingApprovedMeasurementsTotal), includedInActualFinancialCost: costBasis === 'COMPETENCIA' },
       consumedInventoryCostTotal: round2(consumedInventoryCostTotal),
       forecastToCompleteTotal: round2(forecastToCompleteTotal),
       projectedTotalCostTotal,

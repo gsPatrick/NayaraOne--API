@@ -1,10 +1,13 @@
 'use strict';
 
-// M9-D034 — pacote da NAY Comercial: política, fronteira (escopo e proibições de escrita), resolvedores RULE das três capacidades do
+// M9-D034 (e livro do Marco 3 §12/§16/§18, rodada M3CB) — pacote da NAY Comercial: política, fronteira (escopo e proibições de escrita), resolvedores RULE das três capacidades do
 // piloto e dos dois rascunhos, recomendação NEXT_ACTION, trava de gravação das propostas e a tool de proposta fora da allowlist.
 const policy = require('./comercial.policy');
 const { COMERCIAL_KEYS: K, COMERCIAL_SETTING_DEFAULTS, COMERCIAL_SETTINGS_SCHEMA } = require('./comercial.settings');
 const { RESOLVERS } = require('./comercial.resolvers');
+const { CAPABILITY_RESOLVERS } = require('./comercial.capabilities');
+const { reviewComercialAnswer } = require('./comercial.review');
+const { comercialServerSources } = require('./comercial.sources');
 const { recommendNextAction } = require('./comercial.recommend');
 const { registerComercialGates } = require('./comercial.gates');
 const { registerComercialSettingGuard } = require('./comercial.settingGuard');
@@ -13,7 +16,10 @@ const { registerAgentScope } = require('../scope');
 const { registerAgentHooks } = require('../agentHooks');
 const { ruleResolvers } = require('../../providers/router/resolvers/ruleResolvers');
 
-const KEY = { CRIAR_TAREFA: K.forbidCreateTask, ALTERAR_ETAPA: K.forbidChangeStage, ENVIAR_MENSAGEM: K.forbidSendMessage, PUBLICAR_DESCRICAO: K.forbidPublish };
+const KEY = {
+  CRIAR_TAREFA: K.forbidCreateTask, ALTERAR_ETAPA: K.forbidChangeStage, ENVIAR_MENSAGEM: K.forbidSendMessage, PUBLICAR_DESCRICAO: K.forbidPublish,
+  INFERIR_ATRIBUTO_SENSIVEL: K.forbidInferSensitive,
+};
 
 function registerNayComercial() {
   registerAgentScope({
@@ -29,10 +35,17 @@ function registerNayComercial() {
       ...(p.code === 'CRIAR_TAREFA' ? { enabled: async (env) => !(await proposalsAllowed(env.tenant, env.transaction)) } : {}),
     })),
   });
-  registerAgentHooks(policy.CODE, { checkAnswer: recommendNextAction });
-  for (const [task, resolver] of Object.entries(RESOLVERS)) ruleResolvers.register(task, resolver);
+  // Livro do Marco 3 §12/§16: fontes do servidor para a redação por modelo, revisão da saída antes do aterramento (guarda da descrição e
+  // de atributo sensível) e a recomendação de cada capacidade.
+  registerAgentHooks(policy.CODE, { checkAnswer: recommendNextAction, reviewAnswer: reviewComercialAnswer, serverSources: comercialServerSources });
+  for (const [task, resolver] of Object.entries({ ...RESOLVERS, ...CAPABILITY_RESOLVERS })) ruleResolvers.register(task, resolver);
   registerComercialGates();
   registerComercialSettingGuard();
 }
 
-module.exports = { ...policy, COMERCIAL_SETTING_DEFAULTS, COMERCIAL_SETTINGS_SCHEMA, registerNayComercial };
+// Lead esquecido (livro do Marco 3 §16, M3CB): o job de src/engines usa estes dois pelo barrel (archGuard). Leitura tardia: o barrel não carrega
+// recomendações e configurações no registro da NAY Comercial.
+const detectForgottenLeadsForCompany = (...args) => require('./comercial.forgottenJob').detectForgottenLeadsForCompany(...args);
+const readForgottenParams = (...args) => require('./comercial.capParams').readForgottenParams(...args);
+
+module.exports = { ...policy, COMERCIAL_SETTING_DEFAULTS, COMERCIAL_SETTINGS_SCHEMA, registerNayComercial, detectForgottenLeadsForCompany, readForgottenParams };

@@ -1,9 +1,11 @@
 'use strict';
 
 const { Router } = require('express');
-const { authMiddleware, requirePermission } = require('../../middlewares/auth.middleware');
+const { authMiddleware, requirePermission, requireRecentMfa } = require('../../middlewares/auth.middleware');
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const constructionController = require('./construction.controller');
+const costBasisController = require('./costBasis.controller');
+const configController = require('./constructionConfig.controller');
 const { confirmAction } = require('../../shared/destructive-actions/guard'); // M9-D852: confirmação com impacto
 
 const constructionRouter = Router();
@@ -101,12 +103,23 @@ constructionRouter.post('/construction/budgets/:id/approve', requirePermission('
 constructionRouter.post('/construction/projects/:id/change-orders', requirePermission('construction:create'), constructionController.createChangeOrder);
 constructionRouter.get('/construction/projects/:id/change-orders', requirePermission('construction:read'), constructionController.listChangeOrders);
 constructionRouter.post('/construction/change-orders/:id/decide', requirePermission('construction:approve'), constructionController.decideChangeOrder);
+// Revisões append-only do orçamento aprovado (M6-17/M6-82): cada Change Order aprovado vira uma revisão; a baseline não muda.
+constructionRouter.get('/construction/projects/:id/budget-revisions', requirePermission('construction:read'), configController.listBudgetRevisionsOfProject);
 
 // Quality checklist
 constructionRouter.post('/construction/projects/:id/quality-items', requirePermission('construction:create'), constructionController.createQualityItem);
 constructionRouter.get('/construction/projects/:id/quality-items', requirePermission('construction:read'), constructionController.listQualityItems);
 constructionRouter.post('/construction/quality-items/:id/check', requirePermission('construction:update'), constructionController.checkQualityItem);
 constructionRouter.delete('/construction/quality-items/:id', requirePermission('construction:update'), constructionController.removeQualityItem);
+// Checklist por etapa/tipo de obra (Caderno §9, M6-12/M6-86): tipos de obra e itens configurados pelo administrador;
+// "aplicar" gera na obra os itens do tipo dela e das etapas (idempotente).
+constructionRouter.get('/construction/project-types', requirePermission('construction:read'), configController.listProjectTypes);
+constructionRouter.post('/construction/project-types', requirePermission('construction:approve'), configController.createProjectType);
+constructionRouter.patch('/construction/project-types/:id', requirePermission('construction:approve'), configController.updateProjectType);
+constructionRouter.get('/construction/checklist-templates', requirePermission('construction:read'), configController.listChecklistTemplates);
+constructionRouter.post('/construction/checklist-templates', requirePermission('construction:approve'), configController.createChecklistTemplate);
+constructionRouter.patch('/construction/checklist-templates/:id', requirePermission('construction:approve'), configController.updateChecklistTemplate);
+constructionRouter.post('/construction/projects/:id/checklist/apply', requirePermission('construction:update'), configController.applyProjectChecklist);
 
 // Nonconformities (não conformidades)
 constructionRouter.post('/construction/projects/:id/nonconformities', requirePermission('construction:create'), constructionController.createNonconformity);
@@ -119,7 +132,10 @@ constructionRouter.post('/construction/projects/:id/loss-records', requirePermis
 constructionRouter.get('/construction/projects/:id/loss-records', requirePermission('construction:read'), constructionController.listLossRecords);
 constructionRouter.post('/construction/loss-records/:id/approve', requirePermission('construction:approve'), constructionController.approveLossRecord);
 constructionRouter.post('/construction/loss-records/:id/return', requirePermission('construction:update'), constructionController.returnLossRecord);
-constructionRouter.post('/construction/approval-thresholds', requirePermission('construction:update'), constructionController.upsertApprovalThreshold);
+// Alçada (M6-29/M6-107, verificação independente do Marco 6): alterar exige permissão própria (não construction:update)
+// e MFA recente; a gravação deixa auditoria com antes e depois (approvalThresholds.service.js).
+constructionRouter.get('/construction/approval-thresholds', requirePermission('construction:read'), configController.listApprovalThresholds);
+constructionRouter.post('/construction/approval-thresholds', requirePermission('construction:approval_threshold:manage'), requireRecentMfa, configController.upsertApprovalThreshold);
 
 // Margem mínima de obra (MarginRule) — pré-requisito pra approveBudget conseguir aprovar
 // QUALQUER orçamento (bug crítico achado numa auditoria do Front: nunca teve endpoint).
@@ -181,5 +197,13 @@ constructionRouter.post('/construction/material-requests/:id/return', requirePer
 // não existia NENHUMA interface (nem rota) para configurar isso.
 constructionRouter.get('/construction/settings/sla-rule', requirePermission('construction:read'), constructionController.getActiveSlaRule);
 constructionRouter.post('/construction/settings/sla-rule', requirePermission('construction:approve'), constructionController.createSlaRule);
+// Base do custo financeiro realizado (CAIXA | COMPETENCIA) — lacuna do Caderno §5 que vira parâmetro da empresa.
+constructionRouter.get('/construction/settings/cost-basis', requirePermission('construction:read'), costBasisController.getCostBasisSetting);
+constructionRouter.put('/construction/settings/cost-basis', requirePermission('construction:approve'), costBasisController.updateCostBasisSetting);
+// Parâmetros de Obras (verificação do Marco 6): evidências mínimas da medição (M6-21) e regra do diário ausente (M6-108).
+// Membros ativos da empresa (campos de responsável das telas de Obras) — mesmo critério da conferência na gravação.
+constructionRouter.get('/construction/members', requirePermission('construction:read'), configController.listMembers);
+constructionRouter.get('/construction/settings/parameters', requirePermission('construction:read'), configController.getParameters);
+constructionRouter.put('/construction/settings/parameters', requirePermission('construction:approve'), configController.updateParameters);
 
 module.exports = constructionRouter;

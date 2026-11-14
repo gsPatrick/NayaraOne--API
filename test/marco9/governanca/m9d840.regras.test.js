@@ -116,6 +116,12 @@ test('m9d840 regra 6 remover valor de enum de resposta e adicionar em enum x-clo
   const requestAdded = clone(baseContract());
   body(requestAdded).properties.kind.enum = ['A', 'B', 'C'];
   assert.equal(lint(baseContract(), requestAdded).exitCode, 0, 'valor novo em enum de requisição nunca é breaking');
+  // Integração dos Marcos 3 a 6 (14/11/2026): "nunca" vale também para enum x-closed (o mesmo schema usado no pedido e na resposta).
+  const requestClosedBase = clone(baseContract());
+  body(requestClosedBase).properties.kind['x-closed'] = true;
+  const requestClosedAdded = clone(requestClosedBase);
+  body(requestClosedAdded).properties.kind.enum = ['A', 'B', 'C'];
+  assert.equal(lint(requestClosedBase, requestClosedAdded).exitCode, 0, 'valor novo em enum x-closed de requisição também não é breaking');
   const requestRemoved = clone(baseContract());
   body(requestRemoved).properties.kind.enum = ['A'];
   assert.deepEqual(rulesOf(lint(baseContract(), requestRemoved)), ['ENUM_VALUE_REMOVED'], 'remover valor aceito na requisição quebra quem o envia (AUD-015)');

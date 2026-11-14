@@ -2,8 +2,8 @@
 
 // Contrato de locação ativo com partes e vistoria de entrada assinada, dentro da transação do teste (rollback), para os testes M9-D809 (não é teste).
 const propertiesService = require('../../../src/features/properties/properties.service');
-const contractsService = require('../../../src/features/legal/contracts.service');
-const inspectionsService = require('../../../src/features/legal/inspections.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
+const inspectionsService = require('../../../src/modules/legal/inspections/inspection.service');
 const peopleService = require('../../../src/features/people/people.service');
 
 const sfx = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;

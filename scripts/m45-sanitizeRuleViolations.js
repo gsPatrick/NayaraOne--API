@@ -29,8 +29,8 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env.migration.local') });
 const { Client } = require('pg');
 const { sequelize, User } = require('../src/models');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 
 const APPLY = process.argv.includes('--apply');
 
@@ -123,7 +123,7 @@ async function main() {
       continue;
     }
     const reason = `Saneamento M45: comprovante com o mesmo conteúdo (SHA-256 ${r.checksum_sha256.slice(0, 12)}…) já vinculado ao lançamento ${r.keptEntryId}; vínculo duplicado removido. Anexe o comprovante próprio deste pagamento.`;
-    if (APPLY) await inTenant(r, actor.id, (t) => financialEntriesService.detachSettlementEvidence(r.id, { reason }, actor.id, t));
+    if (APPLY) await inTenant(r, actor.id, (t) => settlementEvidence.detachSettlementEvidence(r.id, { reason }, actor.id, t));
     report.fixed.push({ type: 'comprovante', entryId: r.id, keptEntryId: r.keptEntryId });
   }
 

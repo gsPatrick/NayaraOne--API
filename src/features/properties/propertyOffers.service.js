@@ -3,56 +3,42 @@
 const { PropertyOffer, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { recordPriceHistory } = require('./propertyPriceHistory.service');
-const { supersedeCurrentActiveOffer } = require('./propertyOfferSupersede.service');
-const { publishPropertyOfferCreated, publishPropertyPublicSourceChanged } = require('./propertyEvents.service');
+const { supersedeCurrentActiveOffer, linkSupersededOffers } = require('./propertyOfferSupersede.service');
+const { publishPropertyOfferCreated, publishPropertyPublicSourceChanged, publishPropertyOfferStatusChanged } = require('./propertyEvents.service');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { OutboxEvent } = require('../../models');
-const { matchNewPropertyToRadars } = require('../radar/radarMatching.service');
-const { publishRadarMatched } = require('../radar/radarEvents.service');
-
-/**
- * M3-22 (CRMX-007) — dispara o matching do Radar NO INSTANTE em que uma offer fica ACTIVE,
- * em vez de só na próxima rodada do job periódico (radarMatchingJob.js). Reaproveita o MESMO
- * evento/idempotencyKey (`radar.matched:${radarId}:${propertyId}`) do job — a unicidade da
- * coluna no outbox garante que, se o job também rodar depois, não duplica o aviso.
- */
-async function triggerRadarMatchingForProperty(property, transaction) {
-  const matchedRadars = await matchNewPropertyToRadars(property, transaction);
-  if (matchedRadars.length === 0) return;
-
-  // Pré-checagem (mesmo padrão de radarMatchingJob.js: "notifiedKeys") em vez de
-  // tentar/capturar a violação de unicidade — um erro capturado deixaria a transação do
-  // Postgres em estado abortado para os comandos seguintes (create do offer, auditoria etc.),
-  // já que não há savepoint aqui.
-  const existing = await OutboxEvent.findAll({
-    where: {
-      aggregateType: 'PropertyRadar',
-      aggregateId: matchedRadars.map((radar) => radar.id),
-      eventType: 'radar.matched',
-    },
-    attributes: ['idempotencyKey'],
-    transaction,
-  });
-  const notifiedKeys = new Set(existing.map((event) => event.idempotencyKey));
-
-  for (const radar of matchedRadars) {
-    const key = `radar.matched:${radar.id}:${property.id}`;
-    if (notifiedKeys.has(key)) continue;
-    await publishRadarMatched(radar, property, transaction);
-  }
-}
+// M3-22 (CRMX-007): o matching do Radar com o imóvel roda POR EVENTO no despacho do outbox (radarEventConsumers.js), a partir de
+// property.offer.created, property.price.changed e property.offer.status.changed publicados aqui na mesma transação.
 
 // CRUD de PropertyOffer — a geração append-only de histórico de preço vive em
 // propertyPriceHistory.service.js e a regra de supersede de offer ACTIVE anterior vive em
 // propertyOfferSupersede.service.js; este service apenas orquestra as duas coisas ao redor do CRUD.
 //
-// confidentialMinPrice NUNCA deve ser incluído em uma serialização servida a um contexto
-// público (site/portais/IA pública) — para o admin/mock atual (tudo interno) retornamos o
-// registro completo; toPublicOffer() abaixo é o ponto de extensão para quando existir uma rota
-// pública real.
+// confidentialMinPrice (preço mínimo confidencial): o escopo padrão de PropertyOffer não o lê; só quem tem a permissão
+// específica properties:internal o vê e o grava (verificação independente de 11/11/2026, M3-07; DI-M3IM-4). `options.canSeeConfidential`
+// vem do controller (req.auth.permissions). toPublicOffer() continua tirando o campo de qualquer serialização pública.
 
 const OFFER_TYPES = ['SALE', 'RENT', 'SEASONAL'];
 const OFFER_STATUSES = ['ACTIVE', 'SUPERSEDED', 'PAUSED', 'CLOSED'];
+const CONFIDENTIAL_PERMISSION = 'properties:internal';
+const CONDITIONS_MAX = 4000;
+
+const offerModel = (options = {}) => (options.canSeeConfidential ? PropertyOffer.scope('withConfidentialPrice') : PropertyOffer);
+
+function assertConfidentialWrite(payload, options = {}) {
+  if (payload.confidentialMinPrice !== undefined && !options.canSeeConfidential) {
+    throw AppError.forbidden(`O preço mínimo confidencial só pode ser informado por quem tem a permissão ${CONFIDENTIAL_PERMISSION}.`, 'PROPERTY_CONFIDENTIAL_PRICE_FORBIDDEN');
+  }
+}
+
+// Livro §6: a oferta guarda as "condições" (texto livre: entrada, prazo, reajuste, o que está incluso...).
+function normalizeConditions(conditions) {
+  if (conditions === undefined) return undefined;
+  if (conditions === null || String(conditions).trim() === '') return null;
+  if (typeof conditions !== 'string' || conditions.length > CONDITIONS_MAX) {
+    throw AppError.badRequest(`O campo "conditions" deve ser um texto de até ${CONDITIONS_MAX} caracteres.`, 'PROPERTY_OFFER_VALIDATION');
+  }
+  return conditions.trim();
+}
 
 function toPublicOffer(offer) {
   const plain = offer.toJSON ? offer.toJSON() : offer;
@@ -66,9 +52,11 @@ async function assertPropertyExists(propertyId, transaction) {
   return property;
 }
 
-async function createOffer(propertyId, payload, actorUserId, transaction) {
+async function createOffer(propertyId, payload, actorUserId, transaction, options = {}) {
   const property = await assertPropertyExists(propertyId, transaction);
   const { offerType, askingPrice, confidentialMinPrice, acceptsFinancing, acceptsTrade, status, startsAt, endsAt } = payload;
+  assertConfidentialWrite(payload, options);
+  const conditions = normalizeConditions(payload.conditions);
 
   if (!offerType || askingPrice === undefined || askingPrice === null) {
     throw AppError.badRequest('Os campos "offerType" e "askingPrice" são obrigatórios.', 'PROPERTY_OFFER_VALIDATION');
@@ -81,10 +69,13 @@ async function createOffer(propertyId, payload, actorUserId, transaction) {
   if (!OFFER_STATUSES.includes(normalizedStatus)) {
     throw AppError.badRequest(`O campo "status" deve ser um de: ${OFFER_STATUSES.join(', ')}.`, 'PROPERTY_OFFER_VALIDATION');
   }
-
-  if (normalizedStatus === 'ACTIVE') {
-    await supersedeCurrentActiveOffer({ propertyId, offerType: normalizedType, actorUserId }, transaction);
+  if (normalizedStatus === 'SUPERSEDED') {
+    throw AppError.badRequest('Uma oferta não nasce substituída: SUPERSEDED só é gravado pela substituição controlada.', 'PROPERTY_OFFER_STATUS_SUPERSEDED_MANUAL');
   }
+
+  const supersededBefore = normalizedStatus === 'ACTIVE'
+    ? await supersedeCurrentActiveOffer({ propertyId, offerType: normalizedType, actorUserId }, transaction)
+    : [];
 
   // FIX (homologação 23/09/2026 — auditoria adversarial): supersedeCurrentActiveOffer +
   // FOR UPDATE fecham a corrida quando já existe uma offer ACTIVE pra travar, mas a constraint
@@ -104,6 +95,7 @@ async function createOffer(propertyId, payload, actorUserId, transaction) {
         confidentialMinPrice: confidentialMinPrice !== undefined ? confidentialMinPrice : null,
         acceptsFinancing: acceptsFinancing !== undefined ? acceptsFinancing : null,
         acceptsTrade: acceptsTrade !== undefined ? acceptsTrade : null,
+        conditions: conditions === undefined ? null : conditions,
         status: normalizedStatus,
         startsAt: startsAt || null,
         endsAt: endsAt || null,
@@ -135,6 +127,7 @@ async function createOffer(propertyId, payload, actorUserId, transaction) {
     transaction
   );
 
+  await linkSupersededOffers(supersededBefore, offer, actorUserId, transaction);
   await publishPropertyOfferCreated(offer, transaction);
 
   await registrarAuditoria(
@@ -145,25 +138,22 @@ async function createOffer(propertyId, payload, actorUserId, transaction) {
       action: 'property_offer.create',
       entityType: 'PropertyOffer',
       entityId: offer.id,
-      afterJson: offer.toJSON(),
+      afterJson: { ...offer.toJSON(), supersededOfferIds: supersededBefore.map((o) => o.id) },
       reason: `Oferta de ${normalizedType === 'RENT' ? 'locação' : normalizedType === 'SALE' ? 'venda' : 'temporada'} criada para o imóvel "${property.title}".`,
     },
     transaction
   );
 
-  if (normalizedStatus === 'ACTIVE') {
-    await triggerRadarMatchingForProperty(property, transaction);
-  }
-
-  return offer;
+  // CRMX-007: o matching do Radar sai do evento publicado acima (radar/radarEventConsumers.js), não de chamada direta.
+  return offerModel(options).findByPk(offer.id, { transaction });
 }
 
-async function listOffers(propertyId, transaction, filters = {}) {
+async function listOffers(propertyId, transaction, filters = {}, options = {}) {
   await assertPropertyExists(propertyId, transaction);
   const where = { propertyId };
   if (filters.status) where.status = String(filters.status).toUpperCase();
   if (filters.offerType) where.offerType = String(filters.offerType).toUpperCase();
-  return PropertyOffer.findAll({ where, order: [['created_at', 'DESC']], transaction });
+  return offerModel(options).findAll({ where, order: [['created_at', 'DESC']], transaction });
 }
 
 async function getOffer(propertyId, offerId, transaction) {
@@ -187,16 +177,24 @@ async function getOffer(propertyId, offerId, transaction) {
  * Com o lock, a segunda transação só lê a linha depois da primeira commitar, então grava o
  * `oldPrice` real (o preço que a primeira transação deixou), preservando a cadeia exata.
  */
-async function updateOffer(propertyId, offerId, payload, actorUserId, transaction) {
+async function updateOffer(propertyId, offerId, payload, actorUserId, transaction, options = {}) {
   const property = await assertPropertyExists(propertyId, transaction);
+  assertConfidentialWrite(payload, options);
   const offer = await PropertyOffer.findOne({
     where: { id: offerId, propertyId },
     lock: transaction.LOCK.UPDATE,
     transaction,
   });
   if (!offer) throw AppError.notFound('Oferta não encontrada.', 'PROPERTY_OFFER_NOT_FOUND');
+  // Substituição controlada (M3-07): a oferta SUPERSEDED é histórico — não volta a ACTIVE nem muda; para vender/alugar de novo,
+  // cria-se uma oferta nova (que substitui a ACTIVE do tipo, se houver).
+  if (offer.status === 'SUPERSEDED') {
+    throw AppError.conflict('Esta oferta foi substituída e não pode mais ser alterada nem reativada. Crie uma nova oferta.', 'PROPERTY_OFFER_SUPERSEDED_FINAL', { supersededByOfferId: offer.supersededByOfferId });
+  }
   const beforeJson = offer.toJSON();
   const { askingPrice, confidentialMinPrice, acceptsFinancing, acceptsTrade, status, startsAt, endsAt, reasonCode } = payload;
+  const conditions = normalizeConditions(payload.conditions);
+  let supersededBefore = [];
 
   // FIX AUD-2026-09-14 (reportado pela cliente: imóvel aparece simultaneamente como
   // "Publicado" e "Sem oferta"): ao pausar/encerrar a ÚLTIMA offer ACTIVE de um imóvel,
@@ -204,14 +202,18 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
   // sem nenhuma offer ACTIVE por trás. Agora, se essa era a offer ACTIVE que sustentava a
   // publicação e não sobra nenhuma outra ACTIVE, o imóvel volta para INACTIVE.
   const wasActive = offer.status === 'ACTIVE';
+  const statusBefore = offer.status;
 
   if (status !== undefined) {
     const normalizedStatus = String(status).toUpperCase();
     if (!OFFER_STATUSES.includes(normalizedStatus)) {
       throw AppError.badRequest(`O campo "status" deve ser um de: ${OFFER_STATUSES.join(', ')}.`, 'PROPERTY_OFFER_VALIDATION');
     }
+    if (normalizedStatus === 'SUPERSEDED') {
+      throw AppError.badRequest('SUPERSEDED só é gravado pela substituição controlada (nova oferta ativa do mesmo tipo).', 'PROPERTY_OFFER_STATUS_SUPERSEDED_MANUAL');
+    }
     if (normalizedStatus === 'ACTIVE' && offer.status !== 'ACTIVE') {
-      await supersedeCurrentActiveOffer(
+      supersededBefore = await supersedeCurrentActiveOffer(
         { propertyId, offerType: offer.offerType, excludeOfferId: offer.id, actorUserId },
         transaction
       );
@@ -238,6 +240,7 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
   if (confidentialMinPrice !== undefined) offer.confidentialMinPrice = confidentialMinPrice;
   if (acceptsFinancing !== undefined) offer.acceptsFinancing = acceptsFinancing;
   if (acceptsTrade !== undefined) offer.acceptsTrade = acceptsTrade;
+  if (conditions !== undefined) offer.conditions = conditions;
   if (startsAt !== undefined) offer.startsAt = startsAt;
   if (endsAt !== undefined) offer.endsAt = endsAt;
   offer.updatedBy = actorUserId || null;
@@ -252,6 +255,7 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
     }
     throw err;
   }
+  await linkSupersededOffers(supersededBefore, offer, actorUserId, transaction);
 
   if (wasActive && offer.status !== 'ACTIVE' && property.publicationStatus === 'PUBLISHED') {
     const remainingActive = await PropertyOffer.count({
@@ -289,14 +293,15 @@ async function updateOffer(propertyId, offerId, payload, actorUserId, transactio
       entityType: 'PropertyOffer',
       entityId: offer.id,
       beforeJson,
-      afterJson: offer.toJSON(),
+      afterJson: { ...offer.toJSON(), supersededOfferIds: supersededBefore.map((o) => o.id) },
       reason: `Oferta do imóvel "${property.title}" atualizada.`,
     },
     transaction
   );
 
+  if (offer.status !== statusBefore) await publishPropertyOfferStatusChanged(offer, statusBefore, transaction);
   await publishPropertyPublicSourceChanged(property, transaction);
-  return offer;
+  return offerModel(options).findByPk(offer.id, { transaction });
 }
 
-module.exports = { createOffer, listOffers, getOffer, updateOffer, toPublicOffer, OFFER_TYPES, OFFER_STATUSES };
+module.exports = { createOffer, listOffers, getOffer, updateOffer, toPublicOffer, OFFER_TYPES, OFFER_STATUSES, CONFIDENTIAL_PERMISSION };

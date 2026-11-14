@@ -1,0 +1,1495 @@
+{
+  "demanda": "M4-D140",
+  "geradoNoCommit": "a8335d22073a3ac4a7a0fdda5a634313888dcb9b",
+  "atualizacoes": [
+    "DEC-007 rodada 2 (DI-DEC007-2): + GET /finance/antifraud/parameters",
+    "Pagamentos (m4fix/pagamentos-verificacao f1e4b50f): + rotas de reabertura de período por pedido; estorno exige finance:reverse e MFA recente; reabertura exige finance:periodReopen",
+    "Integração dos Marcos 3 a 6 sobre o Marco 9 (13/11/2026): cadeias com o contrato da consulta (contratoDaConsulta) e o esquema de entrada (middleware) do Marco 9",
+    "Conciliação e comissão (m4fix/conciliacao-comissao): + GET /finance/reconciliation/policy",
+    "Ledger e relatórios (m4fix/ledger-relatorios): rotas do relatório/razão da linha do Marco 4"
+  ],
+  "total": 109,
+  "rotas": [
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/anomaly-cases",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/anomaly-cases/:id/resolve",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/antifraud/parameters",
+      "permissions": [
+        "settings:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/approval-requests",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/approval-requests",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/approval-requests/:id/decide",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/bank-accounts",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/bank-accounts",
+      "permissions": [
+        "finance:bankAccounts"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/finance/bank-accounts/:id",
+      "permissions": [
+        "finance:bankAccounts"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/bank-accounts/:id",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/finance/bank-accounts/:id",
+      "permissions": [
+        "finance:bankAccounts"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/bank-accounts/:id/block",
+      "permissions": [
+        "finance:bankAccounts"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/bank-transactions",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/bank-transactions",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "middleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/bank-transactions/:id/auto-reconcile",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/bank-transactions/:id/reconciliation-suggestions",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/bank-transactions/import",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/budget-forecasts",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/budget-forecasts",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "middleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/budget-forecasts/compare",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/chart-of-accounts",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/chart-of-accounts",
+      "permissions": [
+        "finance:chartOfAccounts"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/finance/chart-of-accounts/:id",
+      "permissions": [
+        "finance:chartOfAccounts"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/finance/chart-of-accounts/:id",
+      "permissions": [
+        "finance:chartOfAccounts"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/chart-of-accounts/:id/versions",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/commission-installments/:installmentId/pay",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/commission-rule",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/commission-rule",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/commission-rule/versions",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/commissions",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/commissions",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/commissions/:id/adjustments",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/commissions/:id/cancel",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/commissions/:id/installments",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/commissions/:id/release",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/cost-centers",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/cost-centers",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/finance/cost-centers/:id",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/finance/cost-centers/:id",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/entries",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "middleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/entries/:id",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/finance/entries/:id",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/clear-manual-review",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/entries/:id/impact",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/reverse",
+      "permissions": [
+        "finance:reverse"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "wrapped",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/settle",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/settle-complement",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/settle-partial",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/settlement-evidence",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/:id/settlement-evidence/detach",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/entries/classification-pendings",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/entries/classification-pendings/:id/resolve",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/exports/entries",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "(anônima)"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/health",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/intercompany-transfers",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/intercompany-transfers",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/intercompany-transfers/:id/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/intercompany-transfers/:id/reconcile",
+      "permissions": [
+        "finance:reconcile"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/intercompany-transfers/:id/reject",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/intercompany-transfers/destination-bank-accounts",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/intercompany-transfers/destination-companies",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/ledger/:id/reverse",
+      "permissions": [
+        "finance:reverse"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "wrapped",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/nay/insights",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/owner-repasses",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/owner-repasses",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/owner-repasses/:id/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/owner-repasses/:id/composition",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/owner-repasses/:id/pay",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/owner-repasses/eligible-sources",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/payment-intents",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payment-intents",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payment-intents/:id/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payment-intents/:id/cancel",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "wrapped",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payment-intents/:id/execute",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/payment-intents/:id/impact",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payment-intents/:id/reconcile",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payment-intents/:id/resolve-uncertainty",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payment-intents/:id/submit-to-bank",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payments/:id/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payments/:id/execute",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/payments/prepare",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "rejectExcessDecimalsMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/period-closures",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/period-closures/:referenceMonth/preconditions",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/checks",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/reopen",
+      "permissions": [
+        "finance:periodReopen"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/period-closures/reopen-requests",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/reopen-requests/:id/approve",
+      "permissions": [
+        "finance:periodReopen"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/reopen-requests/:id/reject",
+      "permissions": [
+        "finance:periodReopen"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/period-closures/return-to-open",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/periods/:month/close",
+      "permissions": [
+        "finance:settle"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reconciliation/:id/confirm",
+      "permissions": [
+        "finance:reconcile"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reconciliation/pending",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "authMiddleware",
+        "tenantMiddleware",
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reconciliation/policy",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reconciliations",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reconciliations",
+      "permissions": [
+        "finance:reconcile"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reconciliations/group",
+      "permissions": [
+        "finance:reconcile"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "middleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reports/group-consolidated",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reports/weekly-health",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/result-centers",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/result-centers",
+      "permissions": [
+        "finance:create"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/finance/result-centers/:id",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/finance/result-centers/:id",
+      "permissions": [
+        "finance:update"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/finance/reversal-cases",
+      "permissions": [
+        "finance:read"
+      ],
+      "mfaRecente": false,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reversal-cases/:id/approve",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/reversal-cases/:id/reject",
+      "permissions": [
+        "finance:approve"
+      ],
+      "mfaRecente": true,
+      "middlewares": [
+        "requirePermissionMiddleware",
+        "requireRecentMfa",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/finance/webhooks/bank-payment",
+      "permissions": [],
+      "mfaRecente": false,
+      "middlewares": [
+        "rawBodyMiddleware",
+        "wrapped",
+        "contratoDaConsulta",
+        "wrapped"
+      ]
+    }
+  ]
+}

@@ -73,6 +73,17 @@ const RULES = [
     conditionAstJson: { fact: 'hasRequiredDocuments', op: '==', value: true },
     actionJson: { allow: true, reason: 'REQUIRED_DOCUMENTS_MISSING' },
   },
+  {
+    // Livro §7 "... documentos e campos obrigatórios" (verificação de 11/11/2026): os campos conferidos vêm do parâmetro
+    // real_estate.publication.required_fields (src/features/properties/propertyPublication.settings.js). Empresas que já tinham o
+    // catálogo recebem esta regra pela migration 20260101010312.
+    code: 'REG-IMO-FIELDS-001',
+    name: 'Campos obrigatórios preenchidos para publicação',
+    description: 'Bloqueia a publicação se faltar algum campo da lista configurada em real_estate.publication.required_fields.',
+    domain: 'real_estate',
+    conditionAstJson: { fact: 'hasRequiredFields', op: '==', value: true },
+    actionJson: { allow: true, reason: 'REQUIRED_FIELDS_MISSING' },
+  },
 ];
 
 function hashCondition(conditionAstJson) {

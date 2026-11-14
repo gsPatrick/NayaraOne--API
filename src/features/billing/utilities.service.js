@@ -1,33 +1,16 @@
 'use strict';
 
-const { formatMoneyBR } = require('../../utils/formatBR');
-
-const {
-  UtilityObligation,
-  UtilityAccount,
-  UtilityReimbursement,
-  OwnershipTransferTask,
-  Contract,
-  File,
-} = require('../../models');
+const { UtilityObligation, UtilityAccount, OwnershipTransferTask, Contract, File } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
+const { assertCompanyPerson, assertCompanyFile } = require('./utilityInputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
-const { createFinancialEntry } = require('../finance/financialEntries.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
-// BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
-// BLINDADO v1, §4): ver getOrCreateDefaultResultCenter em resultCenters.service.js.
-const UTILITIES_RESULT_CENTER_CODE = 'LOCACAO-UTILIDADES';
-const {
-  publishUtilityTransferRequired,
-  publishUtilityTransferCompleted,
-  publishReimbursementCreated,
-} = require('./billingEvents.service');
+const { publishUtilityTransferRequired, publishUtilityTransferCompleted } = require('./billingEvents.service');
+const { resolvePeriodicity } = require('./leaseObligationSchedule');
 
 const UTILITY_TYPES = ['WATER', 'ELECTRICITY', 'GAS', 'CONDO', 'IPTU', 'SPU', 'OTHER'];
 const RESPONSIBLE_PARTIES = ['LANDLORD', 'TENANT'];
-// M45: rótulos para o texto do lançamento (a descrição é vista pelo usuário — nunca o código).
-const UTILITY_TYPE_LABELS = { WATER: 'água', ELECTRICITY: 'energia elétrica', GAS: 'gás', CONDO: 'condomínio', IPTU: 'IPTU', SPU: 'SPU (laudêmio/foro)', OTHER: 'outra despesa' };
-const PARTY_LABELS = { LANDLORD: 'o locador', TENANT: 'o locatário' };
+// Pagamento de um vencimento (comprovante, reembolso e lançamento a receber): obligations/utilityPayment.service.js.
 
 async function createUtilityObligation(payload, actorUserId, transaction) {
   const { groupId, companyId, contractId, utilityType, responsibleParty, provider, accountNumber, transferRequired, evidenceFileId } = payload;
@@ -37,6 +20,14 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
       'UTILITY_OBLIGATION_VALIDATION'
     );
   }
+  assertUuid(contractId, 'contractId', 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(utilityType, 'utilityType', 32, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(responsibleParty, 'responsibleParty', 16, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(provider, 'provider', 120, 'UTILITY_OBLIGATION_VALIDATION');
+  assertText(accountNumber, 'accountNumber', 60, 'UTILITY_OBLIGATION_VALIDATION');
+  await assertCompanyFile(evidenceFileId, companyId, 'evidenceFileId', 'UTILITY_OBLIGATION_EVIDENCE_NOT_FOUND', transaction);
+  await assertCompanyPerson(payload.transferFromPersonId, 'transferFromPersonId', 'UTILITY_OBLIGATION_VALIDATION', transaction);
+  await assertCompanyPerson(payload.transferToPersonId, 'transferToPersonId', 'UTILITY_OBLIGATION_VALIDATION', transaction);
   const normalizedType = String(utilityType).toUpperCase();
   const normalizedParty = String(responsibleParty).toUpperCase();
   if (!UTILITY_TYPES.includes(normalizedType)) {
@@ -47,6 +38,8 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
   }
   const contract = await Contract.findByPk(contractId, { transaction });
   if (!contract) throw AppError.notFound('Contrato não encontrado.', 'UTILITY_OBLIGATION_CONTRACT_NOT_FOUND');
+  // Fechamento M5 (Caderno §12): toda obrigação tem periodicidade (informada ou o padrão configurado por tipo).
+  const schedule = await resolvePeriodicity(normalizedType, payload, { groupId, companyId }, transaction);
 
   const obligation = await UtilityObligation.create(
     {
@@ -59,6 +52,8 @@ async function createUtilityObligation(payload, actorUserId, transaction) {
       accountNumber: accountNumber || null,
       transferRequired: Boolean(transferRequired),
       evidenceFileId: evidenceFileId || null,
+      periodicity: schedule.periodicity,
+      dueDay: schedule.dueDay,
       status: transferRequired ? 'TRANSFER_PENDING' : 'ACTIVE',
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
@@ -130,6 +125,9 @@ async function listUtilityObligations(transaction, filters = {}) {
  * passa a TRANSFER_PENDING e o encerramento do contrato fica bloqueado até a conclusão.
  */
 async function requestOwnershipTransfer(utilityObligationId, payload, actorUserId, transaction) {
+  assertUuid(utilityObligationId, 'id', 'UTILITY_OBLIGATION_VALIDATION');
+  await assertCompanyPerson(payload && payload.fromPersonId, 'fromPersonId', 'OWNERSHIP_TRANSFER_VALIDATION', transaction);
+  await assertCompanyPerson(payload && payload.toPersonId, 'toPersonId', 'OWNERSHIP_TRANSFER_VALIDATION', transaction);
   const obligation = await UtilityObligation.findByPk(utilityObligationId, { transaction, lock: transaction.LOCK.UPDATE });
   if (!obligation) throw AppError.notFound('Obrigação de utilidade não encontrada.', 'UTILITY_OBLIGATION_NOT_FOUND');
 
@@ -187,6 +185,10 @@ async function createUtilityAccount(payload, actorUserId, transaction) {
       'UTILITY_ACCOUNT_VALIDATION'
     );
   }
+  assertUuid(utilityObligationId, 'utilityObligationId', 'UTILITY_ACCOUNT_VALIDATION');
+  assertText(provider, 'provider', 120, 'UTILITY_ACCOUNT_VALIDATION');
+  assertText(accountNumber, 'accountNumber', 60, 'UTILITY_ACCOUNT_VALIDATION');
+  await assertCompanyPerson(holderPersonId, 'holderPersonId', 'UTILITY_ACCOUNT_VALIDATION', transaction);
   await getUtilityObligation(utilityObligationId, transaction);
 
   const account = await UtilityAccount.create(
@@ -238,6 +240,8 @@ async function completeOwnershipTransfer(taskId, payload, actorUserId, transacti
   // sem evidência nenhuma de que ela de fato aconteceu. Fail closed: exige os dois.
   const evidenceFileId = payload?.evidenceFileId || null;
   const toPersonId = payload?.toPersonId || task.toPersonId || null;
+  assertUuid(evidenceFileId, 'evidenceFileId', 'OWNERSHIP_TRANSFER_EVIDENCE_NOT_FOUND', { optional: true });
+  await assertCompanyPerson(payload?.toPersonId, 'toPersonId', 'OWNERSHIP_TRANSFER_RECIPIENT_REQUIRED', transaction);
   if (!evidenceFileId) {
     throw AppError.badRequest(
       'É preciso anexar o comprovante da transferência de titularidade antes de concluir.',
@@ -311,164 +315,24 @@ async function completeOwnershipTransfer(taskId, payload, actorUserId, transacti
 }
 
 /**
- * recordUtilityPayment — a imobiliária paga uma conta de utilidade. Se `paidByParty` for
- * DIFERENTE do `responsibleParty` da obrigação, gera AUTOMATICAMENTE um
- * UtilityReimbursement (a receber da parte responsável) + FinancialEntry RECEIVABLE real —
- * nunca fica só um registro informativo sem lançamento contábil correspondente.
+ * Obrigação locatícia vencida (livro §12/§18, DEC-074): ciclo sem comprovante, troca de titularidade atrasada e reembolso não
+ * recebido publicam lease.obligation.overdue (uma vez por pendência) e abrem alerta e cobrança — obligations/leaseObligationOverdue.js.
+ * Mantido com este nome porque o job da cobrança e o módulo jurídico (lease-obligation.service) já o chamam.
  */
-async function recordUtilityPayment(utilityObligationId, payload, actorUserId, transaction) {
-  const obligation = await getUtilityObligation(utilityObligationId, transaction);
-  const { amount, paidByParty } = payload;
-  if (amount === undefined || amount === null || !paidByParty) {
-    throw AppError.badRequest('Os campos "amount" e "paidByParty" são obrigatórios.', 'UTILITY_PAYMENT_VALIDATION');
-  }
-  const numericAmount = Number(amount);
-  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-    throw AppError.badRequest('"amount" deve ser um número positivo.', 'UTILITY_PAYMENT_VALIDATION');
-  }
-  const normalizedPaidBy = String(paidByParty).toUpperCase();
-
-  if (normalizedPaidBy === obligation.responsibleParty) {
-    // A parte certa pagou — nada a reembolsar, apenas confirma via auditoria.
-    await registrarAuditoria(
-      {
-        groupId: obligation.groupId,
-        companyId: obligation.companyId,
-        actorUserId,
-        action: 'billing.utility_payment.record',
-        entityType: 'UtilityObligation',
-        entityId: obligation.id,
-        beforeJson: { ...obligation.toJSON(), pagamentoRegistrado: false },
-        afterJson: { ...obligation.toJSON(), pagamentoRegistrado: true, amount: numericAmount, paidByParty: normalizedPaidBy, reembolso: 'não se aplica (pago pela parte responsável)' },
-        reason: `Pagamento de utilidade de ${formatMoneyBR(numericAmount)} registrado — pago pela parte responsável ("${normalizedPaidBy}"), sem reembolso.`,
-      },
-      transaction
-    );
-    return { reimbursement: null, financialEntry: null };
-  }
-
-  const owedByParty = obligation.responsibleParty;
-
-  const resultCenter = await getOrCreateDefaultResultCenter(
-    obligation.groupId,
-    obligation.companyId,
-    UTILITIES_RESULT_CENTER_CODE,
-    'Locação — reembolso de utilidades',
-    transaction
-  );
-  const financialEntry = await createFinancialEntry(
-    {
-      groupId: obligation.groupId,
-      companyId: obligation.companyId,
-      contractId: obligation.contractId,
-      entryType: 'CREDIT',
-      nature: 'RECEIVABLE',
-      amount: numericAmount,
-      description: `Reembolso de ${UTILITY_TYPE_LABELS[obligation.utilityType] || 'despesa do imóvel'} pago por ${PARTY_LABELS[normalizedPaidBy] || 'uma das partes'}, a cobrar de ${PARTY_LABELS[owedByParty] || 'outra parte'}.`,
-      dueAt: new Date(),
-      idempotencyKey: `utility_reimbursement:${obligation.id}:${Date.now()}`,
-      resultCenterId: resultCenter.id,
-    },
-    actorUserId,
-    transaction
-  );
-
-  const reimbursement = await UtilityReimbursement.create(
-    {
-      groupId: obligation.groupId,
-      companyId: obligation.companyId,
-      utilityObligationId: obligation.id,
-      paidByParty: normalizedPaidBy,
-      owedByParty,
-      amount: numericAmount,
-      financialEntryId: financialEntry.id,
-      status: 'PENDING',
-      createdBy: actorUserId || null,
-      updatedBy: actorUserId || null,
-    },
-    { transaction }
-  );
-
-  await publishReimbursementCreated(reimbursement, transaction);
-
-  await registrarAuditoria(
-    {
-      groupId: obligation.groupId,
-      companyId: obligation.companyId,
-      actorUserId,
-      action: 'billing.utility_reimbursement.create',
-      entityType: 'UtilityReimbursement',
-      entityId: reimbursement.id,
-      afterJson: reimbursement.toJSON(),
-      reason: `Reembolso de ${formatMoneyBR(numericAmount)} criado: pago por "${normalizedPaidBy}", a cobrar de "${owedByParty}".`,
-    },
-    transaction
-  );
-
-  return { reimbursement, financialEntry };
-}
-
-/**
- * M45 (Caderno M5 §12 "Pendência gera alerta/cobrança; não some quando contrato encerra" e
- * §18 "lease.obligation.overdue"): troca de titularidade pendente há mais de
- * OVERDUE_TRANSFER_DAYS vira obrigação locatícia VENCIDA — publica o evento uma única vez por
- * tarefa (idempotência no outbox) e registra auditoria. Nada é apagado nem fechado: a tarefa
- * continua PENDING até a conclusão com comprovante (completeOwnershipTransfer). Roda dentro do
- * job de cadência de cobrança, na transação com o contexto do tenant (RLS).
- */
-const OVERDUE_TRANSFER_DAYS = 30;
-async function flagOverdueLeaseObligations(transaction, { now = new Date(), overdueDays = OVERDUE_TRANSFER_DAYS } = {}) {
-  const { Op } = require('sequelize');
-  const { publishDomainEvent } = require('../../engines/events/outbox');
-  const { OutboxEvent } = require('../../models');
-  const limit = new Date(now.getTime() - overdueDays * 24 * 60 * 60 * 1000);
-  const tasks = await OwnershipTransferTask.findAll({ where: { status: 'PENDING', created_at: { [Op.lt]: limit } }, transaction });
-  let flagged = 0;
-  for (const task of tasks) {
-    const idempotencyKey = `lease.obligation.overdue:${task.id}`;
-    if (await OutboxEvent.findOne({ where: { idempotencyKey }, transaction })) continue;
-    const obligation = await UtilityObligation.findByPk(task.utilityObligationId, { transaction });
-    await publishDomainEvent(
-      {
-        groupId: task.groupId,
-        companyId: task.companyId,
-        aggregateType: 'OwnershipTransferTask',
-        aggregateId: task.id,
-        eventType: 'lease.obligation.overdue',
-        payload: { id: task.id, utilityObligationId: task.utilityObligationId, contractId: obligation ? obligation.contractId : null, utilityType: obligation ? obligation.utilityType : null, pendingSince: task.createdAt },
-        idempotencyKey,
-      },
-      transaction
-    );
-    await registrarAuditoria(
-      {
-        groupId: task.groupId,
-        companyId: task.companyId,
-        actorUserId: null,
-        action: 'billing.lease_obligation.overdue',
-        entityType: 'OwnershipTransferTask',
-        entityId: task.id,
-        beforeJson: { status: task.status, pendingSince: task.createdAt, vencida: false },
-        afterJson: { status: task.status, pendingSince: task.createdAt, overdueDays, vencida: true },
-        reason: `Troca de titularidade pendente há mais de ${overdueDays} dias — obrigação locatícia vencida.`,
-      },
-      transaction
-    );
-    flagged += 1;
-  }
-  return { checked: tasks.length, flagged };
+async function flagOverdueLeaseObligations(transaction, options = {}) {
+  const { processLeaseObligations } = require('./obligations/leaseObligationOverdue');
+  return processLeaseObligations(transaction, options);
 }
 
 module.exports = {
   flagOverdueLeaseObligations,
-  OVERDUE_TRANSFER_DAYS,
   createUtilityObligation,
   getUtilityObligation,
   listUtilityObligations,
   createUtilityAccount,
   completeOwnershipTransfer,
   requestOwnershipTransfer,
-  recordUtilityPayment,
+  recordUtilityPayment: (...args) => require('./obligations/utilityPayment.service').recordUtilityPayment(...args),
   UTILITY_TYPES,
   RESPONSIBLE_PARTIES,
 };

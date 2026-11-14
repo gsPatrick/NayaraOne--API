@@ -10,6 +10,10 @@ const RUNTIME_NO_DELETE = Object.freeze([
   '"integration"."webhook_inbox"',
   '"integration"."dispatches"',
   '"integration"."integration_errors"',
+  // Marco 3 §13: matches gravados do Radar são histórico (migration 20260101009972).
+  '"crm"."radar_matches"',
+  // Marco 3, M3-08: histórico de preço é append-only (migration 20260101010311, que também tem gatilho).
+  '"real_estate"."property_price_history"',
 ]);
 
 const revokeDeleteSql = (role) => RUNTIME_NO_DELETE.map((tabela) => `REVOKE DELETE ON ${tabela} FROM ${role}`);

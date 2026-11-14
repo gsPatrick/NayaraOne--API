@@ -4,7 +4,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
-const contractsService = require('../src/features/legal/contracts.service');
+const { paymentProof } = require('./m5fech.locacao.helpers'); // Fechamento M5 (§12): pagamento é de um vencimento, com comprovante
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const rentAdjustmentService = require('../src/features/billing/rentAdjustment.service');
@@ -214,7 +215,7 @@ test('billing: reembolso é criado quando a imobiliária paga utilidade da respo
     // Cenário 1: a própria parte responsável paga -> sem reembolso.
     const noReimbursement = await utilitiesService.recordUtilityPayment(
       obligation.id,
-      { amount: 120, paidByParty: 'TENANT' },
+      { amount: 120, paidByParty: 'TENANT', ...(await paymentProof(tenant, transaction, '2026-09-10')) },
       tenant.userId,
       transaction
     );
@@ -223,7 +224,7 @@ test('billing: reembolso é criado quando a imobiliária paga utilidade da respo
     // Cenário 2: a imobiliária paga uma conta que era do locatário -> gera reembolso + FinancialEntry.
     const withReimbursement = await utilitiesService.recordUtilityPayment(
       obligation.id,
-      { amount: 150, paidByParty: 'AGENCY' },
+      { amount: 150, paidByParty: 'AGENCY', ...(await paymentProof(tenant, transaction, '2026-10-10')) },
       tenant.userId,
       transaction
     );
@@ -413,12 +414,12 @@ test('billing: closeout sem pendências avança o contrato ACTIVE até CLOSED', 
 // (antes o financeiro concluía e só o jurídico ficava bloqueado: dois gates diferentes).
 test('billing: closeout bloqueado por garantia ACTIVE pendente (gate único de encerramento)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const guaranteesService = require('../src/features/legal/guarantees.service');
+    const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
     const contract = await createLeaseContract(transaction);
     await activateContract(contract, transaction);
     await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE' },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { value: 500, status: 'ACTIVE' }),
       tenant.userId,
       transaction
     );
@@ -793,7 +794,7 @@ test('billing: duas conclusões CONCORRENTES da última tarefa de transferência
   } finally {
     await withCommitted(async (t) => {
       await sequelize.query('DELETE FROM finance.ownership_transfer_tasks WHERE utility_obligation_id = :id', { replacements: { id: obligationId }, transaction: t });
-      await sequelize.query('DELETE FROM finance.utility_obligations WHERE id = :id', { replacements: { id: obligationId }, transaction: t });
+      await sequelize.query('DELETE FROM legal.lease_obligations WHERE id = :id', { replacements: { id: obligationId }, transaction: t });
       await sequelize.query('DELETE FROM legal.contracts WHERE id = :id', { replacements: { id: contractId }, transaction: t });
     });
   }
@@ -821,7 +822,6 @@ test('billing: RLS está corretamente configurada (ENABLE+FORCE+policy tenant_is
     'rent_adjustments',
     'guaranteed_rent_contracts',
     'rent_advances',
-    'utility_obligations',
     'utility_accounts',
     'utility_reimbursements',
     'ownership_transfer_tasks',
@@ -851,4 +851,8 @@ test('billing: RLS está corretamente configurada (ENABLE+FORCE+policy tenant_is
     assert.equal(row.policyname, 'tenant_isolation');
     assert.match(row.qual, /company_id/);
   }
+
+  // Fechamento M5 (Caderno §4): a obrigação da locação mora em legal.lease_obligations (finance.utility_obligations é visão).
+  const [[lease]] = await sequelize.query(`SELECT c.relrowsecurity, c.relforcerowsecurity, (SELECT count(*)::int FROM pg_policies p WHERE p.schemaname = 'legal' AND p.tablename = 'lease_obligations' AND p.policyname = 'tenant_isolation') AS policies FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'legal' AND c.relname = 'lease_obligations'`);
+  assert.deepEqual([lease.relrowsecurity, lease.relforcerowsecurity, lease.policies], [true, true, 1]);
 });

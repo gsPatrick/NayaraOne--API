@@ -8,10 +8,11 @@ const {
   sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createManualSettlementEvidence,
 } = require('./testHelpers');
 const { User, BankAccount } = require('../src/models');
-const entries = require('../src/features/finance/financialEntries.service');
-const approvals = require('../src/features/finance/approvals.service');
-const intents = require('../src/features/finance/paymentIntents.service');
-const bankPayments = require('../src/features/finance/bankPayments.service');
+const entries = require('../src/modules/finance/application/services/financial-entry.service');
+const settlementEvidence = require('../src/modules/finance/application/services/settlement-evidence.service');
+const approvals = require('../src/modules/finance/application/services/approvals.service');
+const intents = require('../src/modules/finance/application/services/payment.service');
+const bankPayments = require('../src/modules/finance/application/services/bank-submission.service');
 
 let tenant;
 let approver;
@@ -42,7 +43,7 @@ test('R2: anexar comprovante depois do pedido invalida o pedido pendente e liber
   await withRollbackTenantTransaction(tenant, async (t) => {
     const e = await payable(t);
     const r1 = await request(t, e.id);
-    await entries.attachSettlementEvidence(e.id, await createManualSettlementEvidence(tenant, tenant.userId, t), tenant.userId, t);
+    await settlementEvidence.attachSettlementEvidence(e.id, await createManualSettlementEvidence(tenant, tenant.userId, t), tenant.userId, t);
     await r1.reload({ transaction: t });
     assert.equal(r1.status, 'STALE');
     const r2 = await request(t, e.id);
@@ -100,7 +101,7 @@ test('R5: troca de conta invalida intenção aprovada e o envio ao banco de inte
     const other = await bank(t);
     await entries.updateFinancialEntry(e.id, { bankAccountId: other.id }, tenant.userId, t);
     await i.reload({ transaction: t });
-    assert.equal(i.status, 'CANCELLED');
+    assert.equal(i.status, 'CANCELED');
     await assert.rejects(bankPayments.submitPaymentIntentToBank(i.id, 'PIX', { userId: tenant.userId }, t), (err) => err.code === 'FINANCE_PAYMENT_INTENT_NOT_APPROVED');
   });
 });
@@ -111,7 +112,7 @@ test('R5: submit sandbox de intenção aprovada fica SUBMITTED e o lançamento c
     const i = await intents.createPaymentIntent({ financialEntryId: e.id }, tenant.userId, t);
     await intents.approvePaymentIntent(i.id, approver.id, t);
     const sent = await bankPayments.submitPaymentIntentToBank(i.id, 'PIX', { userId: tenant.userId }, t);
-    assert.ok(['SUBMITTED', 'SUBMITTING'].includes(sent.status));
+    assert.ok(['EXECUTING'].includes(sent.status));
     const cur = await entries.getFinancialEntry(e.id, t);
     assert.equal(cur.status, 'PENDING');
   });

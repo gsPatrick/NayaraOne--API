@@ -6,7 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, createTestResultCenter } = require('../../testHelpers');
-const financialEntriesService = require('../../../src/features/finance/financialEntries.service');
+const financialEntriesService = require('../../../src/modules/finance/application/services/financial-entry.service');
 const { startOfBusinessDay } = require('../../../src/utils/businessDate');
 const numbers = require('../../../src/features/ai/orchestrator/numbers');
 const { validateGrounding } = require('../../../src/features/ai/orchestrator/grounding');

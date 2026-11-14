@@ -37,17 +37,28 @@ const AppError = require('../../utils/AppError');
 const FILE_REFERENCES = [
   { table: 'legal.contract_versions', column: 'document_file_id', kind: 'uuid', permissions: ['legal:read'] },
   { table: 'legal.contract_versions', column: 'signed_document_file_id', kind: 'uuid', permissions: ['legal:read'] },
-  { table: 'legal.contract_amendments', column: 'document_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.contract_versions', column: 'content_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.addenda', column: 'document_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.addendum_signatures', column: 'evidence_file_id', kind: 'uuid', permissions: ['legal:read'] },
   { table: 'legal.contract_requirements', column: 'satisfied_by_file_id', kind: 'uuid', permissions: ['legal:read'] },
   { table: 'legal.legal_deadlines', column: 'conclusion_evidence_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.legal_deadlines', column: 'source_file_id', kind: 'uuid', permissions: ['legal:read'] }, // Guia §12: arquivo de origem do prazo
+  { table: 'legal.notice_versions', column: 'content_file_id', kind: 'uuid', permissions: ['legal:read'] }, // versões da notificação (migration 9998)
   { table: 'legal.notices', column: 'content_file_id', kind: 'uuid', permissions: ['legal:read'] },
   { table: 'legal.notices', column: 'delivery_evidence_file_id', kind: 'uuid', permissions: ['legal:read'] },
   { table: 'legal.key_deliveries', column: 'photos_file_ids', kind: 'jsonb_array', permissions: ['legal:read'] },
+  // Fechamento M5 (3ª rodada): arquivos das garantias (§9), via assinada do termo de entrega (§10) e mídias da vistoria (§4).
+  { table: 'legal.key_deliveries', column: 'term_evidence_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.guarantees', column: 'acceptance_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.guarantees', column: 'policy_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.guarantees', column: 'certificate_file_id', kind: 'uuid', permissions: ['legal:read'] },
+  { table: 'legal.guarantees', column: 'document_file_ids', kind: 'jsonb_array', permissions: ['legal:read'] },
+  { table: 'legal.inspection_media', column: 'file_id', kind: 'uuid', permissions: ['legal:read'] },
   { table: 'finance.financial_entries', column: 'settlement_evidence_file_id', kind: 'uuid', permissions: ['finance:read'] },
   { table: 'finance.tax_documents', column: 'file_id', kind: 'uuid', permissions: ['correspondent:fiscal', 'finance:read'] },
   { table: 'finance.tax_documents', column: 'xml_file_id', kind: 'uuid', permissions: ['correspondent:fiscal', 'finance:read'] },
   { table: 'finance.tax_documents', column: 'pdf_file_id', kind: 'uuid', permissions: ['correspondent:fiscal', 'finance:read'] },
-  { table: 'finance.utility_obligations', column: 'evidence_file_id', kind: 'uuid', permissions: ['billing:read'] },
+  { table: 'legal.lease_obligations', column: 'evidence_file_id', kind: 'uuid', permissions: ['billing:read'] },
   { table: 'finance.ownership_transfer_tasks', column: 'evidence_file_id', kind: 'uuid', permissions: ['billing:read'] },
   { table: 'inventory.inventory_movements', column: 'evidence_file_id', kind: 'uuid', permissions: ['inventory:read'] },
   { table: 'inventory.loss_cases', column: 'evidence_file_ids', kind: 'uuid_array', permissions: ['inventory:read'] },
@@ -55,6 +66,9 @@ const FILE_REFERENCES = [
   { table: 'procurement.supplier_qualifications', column: 'document_file_ids', kind: 'jsonb_array', permissions: ['procurement:read'] },
   { table: 'correspondent.case_documents', column: 'file_id', kind: 'uuid', permissions: ['correspondent:read'] },
   { table: 'people.person_documents', column: 'file_id', kind: 'uuid', permissions: ['people:read'] },
+  // Marco 3 (M3-06): documento e mídia do imóvel com arquivo real (migration 20260101010310).
+  { table: 'real_estate.property_documents', column: 'file_id', kind: 'uuid', permissions: ['properties:read'] },
+  { table: 'real_estate.property_media', column: 'file_id', kind: 'uuid', permissions: ['properties:read'] },
   { table: 'construction.change_orders', column: 'evidence_file_ids', kind: 'uuid_array', permissions: ['construction:read'] },
   { table: 'construction.daily_reports', column: 'evidence_file_ids', kind: 'uuid_array', permissions: ['construction:read'] },
   { table: 'construction.daily_workers', column: 'document_file_ids', kind: 'uuid_array', permissions: ['construction:read'] },
@@ -65,10 +79,11 @@ const FILE_REFERENCES = [
 ];
 
 // people.file_links: vínculo genérico arquivo ↔ entidade. Só os tipos que o código de fato grava
-// (inspections.service, insurance.service, assets.service). Tipo desconhecido não dá permissão:
+// (inspections.service, insurance.service, assets.service, legalCaseDocuments.service). Tipo desconhecido não dá permissão:
 // o arquivo conta como "com dono" e ninguém lê até o tipo ser mapeado aqui (fail closed).
 const FILE_LINK_ENTITY_PERMISSIONS = {
   InspectionItem: ['legal:read'],
+  LegalCase: ['legal:read'], // documentos e provas do processo (Caderno M5 §14)
   InsurancePolicy: ['procurement:read'],
   AssetMovement: ['inventory:read'],
 };
@@ -80,6 +95,7 @@ const CATEGORY_PERMISSIONS = {
   inspections: ['legal:read'],
   'people-documents': ['people:read'],
   'property-documents': ['properties:read'],
+  'property-media': ['properties:read'],
   insurance: ['procurement:read'],
   'inventory-invoices': ['inventory:read'],
   correspondent: ['correspondent:read'],
@@ -121,6 +137,7 @@ const REFERENCES_QUERY = buildReferencesQuery();
 async function resolveFileOwnership(fileId, transaction) {
   const [rows] = await sequelize.query(REFERENCES_QUERY, { replacements: { fileId }, transaction });
   const permissions = new Set();
+  const origins = []; // Fechamento M5 (JUR-010 "origem"): onde o arquivo está ligado, 'schema.tabela.coluna' ou 'people.file_links:<Tipo>'
   let hasOwner = false;
   let restricted = false;
   for (const row of rows) {
@@ -131,11 +148,13 @@ async function resolveFileOwnership(fileId, transaction) {
     hasOwner = true;
     if (row.ref === -1) {
       (FILE_LINK_ENTITY_PERMISSIONS[row.related_entity_type] || []).forEach((p) => permissions.add(p));
+      origins.push(`people.file_links:${row.related_entity_type}`);
     } else {
       FILE_REFERENCES[row.ref].permissions.forEach((p) => permissions.add(p));
+      origins.push(`${FILE_REFERENCES[row.ref].table}.${FILE_REFERENCES[row.ref].column}`);
     }
   }
-  return { hasOwner, permissions, restricted };
+  return { hasOwner, permissions, restricted, origins: [...new Set(origins)] };
 }
 
 // A categoria do upload não tem coluna própria: fica no primeiro segmento do storageKey
@@ -209,7 +228,7 @@ async function assertCanReadFile(fileId, auth, transaction) {
       'FILE_ACCESS_FORBIDDEN'
     );
   }
-  return { file, restricted: ownership.restricted };
+  return { file, restricted: ownership.restricted, ownership };
 }
 
 /**

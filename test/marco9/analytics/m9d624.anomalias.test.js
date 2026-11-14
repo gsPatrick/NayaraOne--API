@@ -5,7 +5,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env624 = require('../_helpers/m9d624Env');
 const { anomaliesFromSource } = require('../_helpers/m9d624Oracle');
-const anomalyCases = require('../../../src/features/finance/anomalyCases.service');
+const anomalyCases = require('../../../src/modules/finance/application/services/anomaly-cases.service');
 
 const { anomaly, refresh, kpis, readKpi, dayAt } = env624;
 const CODE = 'fin.anomalies_open';

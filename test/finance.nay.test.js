@@ -21,10 +21,10 @@ const {
 } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Company } = require('../src/models');
-const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
-const { createBankAccount } = require('../src/features/finance/bankAccounts.service');
-const { createBankTransaction } = require('../src/features/finance/bankTransactions.service');
-const { getFinanceInsights } = require('../src/features/finance/financeNay.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
+const { createBankAccount } = require('../src/modules/finance/application/services/bank-accounts.service');
+const { createBankTransaction } = require('../src/modules/finance/application/services/bank-transactions.service');
+const { getFinanceInsights } = require('../src/modules/finance/application/services/finance-nay.service');
 
 let tenant;
 let fresh; // empresa nova, mesmo grupo, sem nenhum dado financeiro
@@ -176,7 +176,8 @@ test('NAY-FIN-03: dados incompletos — sem conta, conta sem extrato do mês e e
     const comExtrato = await getFinanceInsights(fresh, fresh.userId, t);
     assert.ok(!comExtrato.motivosParcial.some((m) => /sem extrato importado/.test(m)), 'motivo de extrato some');
     assert.ok(comExtrato.motivosParcial.some((m) => /sem conciliação/.test(m)), 'extrato sem conciliação ainda torna parcial');
-    assert.equal(comExtrato.explicacoes.fluxoCaixa.numeros.find((n) => n.indicador === 'caixaLivre').valor, 1234.56);
+    // Caderno §19 "Caixa disponível — saldos conciliados próprios" (M4LR, DI-M4LR-7): extrato ainda sem conciliação não é caixa disponível.
+    assert.equal(comExtrato.explicacoes.fluxoCaixa.numeros.find((n) => n.indicador === 'caixaLivre').valor, 0);
   });
 });
 

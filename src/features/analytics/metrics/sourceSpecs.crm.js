@@ -13,7 +13,7 @@ const OPPORTUNITIES = {
   type: 'OPPORTUNITIES', table: 'crm.opportunities',
   columns: { equals: { deletedAt: 'deleted_at', origin: 'lead_source', brokerId: 'owner_user_id' } },
 };
-const CLOSED_STAGES = ['CLOSED_WON', 'CLOSED_LOST', 'WITHDRAWN']; // CLOSED_LIKE_STAGES de crm/dashboard.service.js
+const CLOSED_STAGES = ['WON', 'LOST', 'WITHDRAWN']; // CLOSED_LIKE_STAGES de crm/dashboard.service.js
 const TASK_ENTITY = 'crm.opportunities';
 const TASK_CLOSED = ['DONE', 'CANCELED'];
 const day = (iso) => (iso ? String(iso).slice(0, 10) : null);

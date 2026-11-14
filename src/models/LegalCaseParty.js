@@ -3,7 +3,7 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * LegalCaseParty — tabela "legal"."legal_case_parties"
+ * LegalCaseParty — tabela "legal"."case_parties" (antes legal_case_parties; renomeada na migration 9996, nome do livro §4)
  * Parte formal de um processo jurídico (PLAINTIFF|DEFENDANT|WITNESS|THIRD_PARTY).
  */
 module.exports = (sequelize) => {
@@ -21,7 +21,7 @@ module.exports = (sequelize) => {
     },
     {
       schema: 'legal',
-      tableName: 'legal_case_parties',
+      tableName: 'case_parties',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',

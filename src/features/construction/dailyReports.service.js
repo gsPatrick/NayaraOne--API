@@ -4,6 +4,8 @@ const { DailyReport, DailyWorker, DailyMaterial, Project } = require('../../mode
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { publishDailyLogCreated } = require('./constructionEvents.service');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
+const { assertPersonsInCompany } = require('./companyRefs');
 // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): a checagem de reuso suspeito de
 // evidência por hash (`detectEvidenceReuse`, nonconformities.service.js — M6-59) nunca tinha sido
 // conectada ao Diário de Obra, apesar do RDO também gravar `evidenceFileIds`. Reusa o MESMO
@@ -52,11 +54,18 @@ function normalizeShiftCode(shiftCode) {
   return shiftCode ? String(shiftCode).toUpperCase() : DEFAULT_SHIFT_CODE;
 }
 
+// M6Q-DEF-1 (esteira de qualidade, 11/11/2026): 1e12 passava e estourava o INTEGER da coluna (500). O efetivo é um inteiro
+// entre 0 e o limite técnico da coluna; fora disso, 422 antes de qualquer gravação.
+const WORKFORCE_COLUMN_MAX = 2147483647; // scanner:allow — limite técnico do INTEGER do PostgreSQL, não regra de negócio
+
 function validateWorkforceCount(workforceCount) {
   if (workforceCount === undefined || workforceCount === null) return;
   const numericWorkforce = Number(workforceCount);
   if (!Number.isFinite(numericWorkforce) || numericWorkforce < 0) {
     throw AppError.badRequest('"workforceCount" deve ser um número maior ou igual a zero.', 'DAILY_REPORT_WORKFORCE_INVALID');
+  }
+  if (!Number.isInteger(numericWorkforce) || numericWorkforce > WORKFORCE_COLUMN_MAX) {
+    throw AppError.unprocessable('"workforceCount" deve ser um número inteiro de pessoas, dentro do limite do campo.', 'DAILY_REPORT_WORKFORCE_OUT_OF_RANGE', { max: WORKFORCE_COLUMN_MAX });
   }
 }
 
@@ -66,6 +75,16 @@ function validateWorkforceCount(workforceCount) {
  */
 async function replaceDailyWorkers(dailyReportId, workers, tenant, actorUserId, transaction) {
   if (!Array.isArray(workers)) return;
+  // Caderno §6 "Prestador/equipe vinculado a Pessoa/Fornecedor e documentação correspondente" (verificação independente
+  // M6-08): o prestador é Pessoa da MESMA empresa (FK ignora RLS) e cada documento é arquivo real da empresa, examinado
+  // pelo antivírus no envio — um ID sem arquivo é recusado. Tudo conferido antes de apagar/gravar a equipe.
+  for (const worker of workers) {
+    if (!worker || !worker.personId) {
+      throw AppError.badRequest('Cada item de "workers" precisa de "personId".', 'DAILY_WORKER_VALIDATION');
+    }
+    await assertEvidenceFilesExist(worker.documentFileIds, tenant.companyId, transaction, 'workers[].documentFileIds', { requireClean: true });
+  }
+  await assertPersonsInCompany(workers.map((w) => w.personId), tenant.companyId, transaction);
   await DailyWorker.destroy({ where: { dailyReportId }, transaction, force: true });
   for (const worker of workers) {
     if (!worker || !worker.personId) {
@@ -189,6 +208,7 @@ async function createDailyReport(projectId, payload, actorUserId, transaction) {
   }
 
   const resolvedEvidenceFileIds = Array.isArray(evidenceFileIds) ? evidenceFileIds : [];
+  await assertEvidenceFilesExist(resolvedEvidenceFileIds, companyId, transaction, 'evidenceFileIds');
 
   // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-08): checagem de reuso suspeito de
   // evidência por hash, mesmo padrão do M6-59 (nonconformities.service.js) — gera alerta, nunca
@@ -353,6 +373,7 @@ async function correctDailyReport(id, payload, actorUserId, transaction) {
   const original = await getCurrentDailyReport(id, transaction);
   const { weather, workforceCount, occurrences, blockages, servicesPerformed, workers, materials, evidenceFileIds } = payload;
   validateWorkforceCount(workforceCount);
+  if (Array.isArray(evidenceFileIds)) await assertEvidenceFilesExist(evidenceFileIds, original.companyId, transaction, 'evidenceFileIds');
 
   const revision = await DailyReport.create(
     {

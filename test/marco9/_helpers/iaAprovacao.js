@@ -11,9 +11,9 @@ const { runToolCall } = require('../../../src/features/ai/orchestrator/toolCallP
 const { buildUserContext } = require('../../../src/features/ai/orchestrator/executionContext');
 const { criarOportunidade } = require('./aiToolsEnv');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
-const costCentersService = require('../../../src/features/finance/costCenters.service');
-const bankAccountsService = require('../../../src/features/finance/bankAccounts.service');
-const financialEntriesService = require('../../../src/features/finance/financialEntries.service');
+const costCentersService = require('../../../src/modules/finance/application/services/cost-centers.service');
+const bankAccountsService = require('../../../src/modules/finance/application/services/bank-accounts.service');
+const financialEntriesService = require('../../../src/modules/finance/application/services/financial-entry.service');
 
 const LIMITES = Object.freeze({ stringMax: 500, arrayMax: 50 });
 const TOOLS_PADRAO = ['crm.createFollowUpTask', 'finance.proposePayment', 'legal.draftContract', 'crm.getOpportunity'];

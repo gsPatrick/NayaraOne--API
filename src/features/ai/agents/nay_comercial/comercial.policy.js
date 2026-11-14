@@ -33,6 +33,8 @@ const READ_ONLY_MESSAGE = 'Neste momento posso apenas consultar e sugerir; a alt
 const DRAFT_ONLY_MESSAGE = 'Neste momento posso apenas redigir o rascunho e sugerir; o envio ou a publicação deve ser feito por você no CRM.';
 const OUT_OF_SCOPE_MESSAGE = 'Isso foge do que este assistente pode fazer.';
 const DENIED_MESSAGE = 'Você não tem permissão para consultar estes dados.';
+/** Livro do Marco 3 §12 "Não inferir atributo sensível do cliente" (LGPD, art. 5º, II): recusa do pedido, sem consultar nada. */
+const SENSITIVE_MESSAGE = 'Não infiro nem registro dado pessoal sensível do cliente (LGPD, art. 5º, II). Posso ajudar com o histórico comercial, a próxima ação, o cadastro e os imóveis.';
 
 /** Proibições do livro: código, o que é e a recusa devolvida. */
 const PROHIBITIONS = Object.freeze([
@@ -40,6 +42,7 @@ const PROHIBITIONS = Object.freeze([
   { code: 'ALTERAR_ETAPA', label: 'mudar a etapa da oportunidade', message: READ_ONLY_MESSAGE },
   { code: 'ENVIAR_MENSAGEM', label: 'enviar mensagem ao cliente', message: DRAFT_ONLY_MESSAGE },
   { code: 'PUBLICAR_DESCRICAO', label: 'publicar descrição de imóvel', message: DRAFT_ONLY_MESSAGE },
+  { code: 'INFERIR_ATRIBUTO_SENSIVEL', label: 'inferir atributo sensível do cliente', message: SENSITIVE_MESSAGE },
 ]);
 
 const TASKS = Object.freeze({
@@ -48,9 +51,15 @@ const TASKS = Object.freeze({
   RADAR: 'listar_imoveis_radar',
   PROPERTY_DRAFT: 'rascunhar_descricao_imovel',
   RECOVERY_DRAFT: 'rascunhar_recuperacao_cliente',
+  // Livro do Marco 3 §16 e §12 (rodada M3CB): classificação do cadastro, leads esquecidos, resumo de mensagem recebida (apoio) e proposta de
+  // envio de mensagem conferindo regras e consentimento.
+  QUALITY: 'classificar_cadastro',
+  FORGOTTEN: 'detectar_leads_esquecidos',
+  MESSAGE_SUMMARY: 'resumir_mensagem_recebida',
+  SEND_PROPOSAL: 'propor_envio_mensagem',
 });
 
 module.exports = {
   CODE, CRITICALITY, PURPOSE, SYSTEM_POLICY, MODEL_POLICY, DATA_SCOPES, LIMITS, TOOL_NAMES, TOOLS, PROPOSAL_TOOL, PROHIBITIONS, TASKS,
-  READ_ONLY_MESSAGE, DRAFT_ONLY_MESSAGE, OUT_OF_SCOPE_MESSAGE, DENIED_MESSAGE,
+  READ_ONLY_MESSAGE, DRAFT_ONLY_MESSAGE, OUT_OF_SCOPE_MESSAGE, DENIED_MESSAGE, SENSITIVE_MESSAGE,
 };

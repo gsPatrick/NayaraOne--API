@@ -44,6 +44,8 @@ async function pessoa(tenant, phone = `+55119${String(Math.floor(Math.random() *
 /** Envia pelo serviço do CRM. Texto e mídia precisam da janela de atendimento aberta (M9-D230): o apoio a abre, a menos que o teste peça `semJanela`. */
 async function enviarMensagem(tenant, input) {
   const { semJanela, auth, ...pedido } = input;
+  // M3-18: o envio exige a finalidade declarada; quando o teste não trata de finalidade, o apoio declara TRANSACTIONAL (como o pedido real faria).
+  if (!('purpose' in pedido)) pedido.purpose = 'TRANSACTIONAL';
   if (pedido.kind !== 'template' && pedido.personId && !semJanela) await abrirJanela(tenant, pedido.personId, 1);
   return comTenant(tenant, (t) => messaging.sendMessage(ctxDe(tenant), pedido, tenant.userId, t, auth ? { auth } : undefined));
 }

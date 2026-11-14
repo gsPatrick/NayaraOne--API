@@ -6,8 +6,8 @@ const { authenticator } = require('otplib');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter } = require('./testHelpers');
 const mfaService = require('../src/features/users/mfa.service');
-const approvalsService = require('../src/features/finance/approvals.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 const { User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
 
@@ -99,7 +99,7 @@ test('MFA-004 ação de alto risco (decideApprovalStep, riskLevel HIGH) sem step
         companyId: tenant.companyId,
         entryType: 'DEBIT',
         nature: 'PAYABLE',
-        amount: 100,
+        amount: 120000, // M4PG (FIN-005): o risco vem do valor — HIGH pelas faixas da DEC-004
         description: 'HOMO QA — lançamento MFA',
         costCenterId: costCenterMfa.id,
       },
@@ -137,7 +137,7 @@ test('MFA-005 ação de alto risco com step-up recente é permitida', async () =
         companyId: tenant.companyId,
         entryType: 'DEBIT',
         nature: 'PAYABLE',
-        amount: 100,
+        amount: 120000, // HIGH pelo valor (FIN-005)
         description: 'HOMO QA — lançamento MFA permitido',
         costCenterId: costCenterMfa.id,
       },
@@ -209,7 +209,7 @@ test('MFA-007 ação de alto risco sem MFA habilitado é bloqueada pedindo habil
         companyId: tenant.companyId,
         entryType: 'DEBIT',
         nature: 'PAYABLE',
-        amount: 100,
+        amount: 250000, // CRITICAL pelo valor (FIN-005)
         description: 'HOMO QA — lançamento sem MFA',
         costCenterId: costCenterMfa.id,
       },

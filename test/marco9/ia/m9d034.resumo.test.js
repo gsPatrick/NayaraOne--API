@@ -65,7 +65,7 @@ test('m9d034_resumo_sem_interacao_conta_desde_a_abertura_e_encerrada_nao_cobra_c
     assert.equal(o.structured.ultimaInteracaoEm, null);
     assert.equal(o.structured.diasSemContato, 3);
     assert.match(o.answer, /nenhuma interação registrada/);
-    await run("UPDATE crm.opportunities SET stage = 'CLOSED_LOST', lost_reason = 'PRICE', closed_at = now() WHERE id = :id", { id: c.opp.id }, tx);
+    await run("UPDATE crm.opportunities SET stage = 'LOST', lost_reason = 'PRICE', closed_at = now() WHERE id = :id", { id: c.opp.id }, tx);
     const { outcome: fechada } = await c.pedir(TASK, 'Resuma');
     assert.equal(fechada.structured.diasSemContato, null, 'oportunidade encerrada não tem dias sem contato a cobrar');
   });

@@ -5,10 +5,25 @@ const { authMiddleware, requirePermission } = require('../../middlewares/auth.mi
 const tenantMiddleware = require('../../middlewares/tenant.middleware');
 const crmController = require('./crm.controller');
 const { validarMensagem } = require('./messages.validate');
+const { requireOpportunityInScope } = require('./opportunityScope.guard');
+const carteira = require('./carteira/carteira.guard');
+const ownerChange = require('./carteira/ownerChange.controller');
+require('./financingStatus.consumer'); // CAD-09: status do financiamento atualiza a oportunidade por evento
+const cartsView = require('./cartsView.controller');
 
 const crmRouter = Router();
 
 crmRouter.use(authMiddleware, tenantMiddleware);
+// CRM-TS-012 / livro §18: corretor só acessa oportunidade da própria carteira, em toda rota com o id da oportunidade.
+crmRouter.use('/opportunities/:id', requireOpportunityInScope);
+// CRM-TS-012 em TODO caminho do CRM (carteira/carteira.scope.js): registro por id fora da carteira = 404; criação com
+// oportunidade alheia no corpo = 404; listagens somam o escopo; painel só com os números da própria carteira.
+crmRouter.use('/visits/:id', carteira.requireRecordInScope('visit'));
+crmRouter.use('/messages/:id', carteira.requireRecordInScope('message'));
+crmRouter.use('/crm/proposals/:id', carteira.requireRecordInScope('proposal'));
+crmRouter.use('/crm/feedback-cases/:id', carteira.requireRecordInScope('feedback'));
+crmRouter.use('/carts/:cartId', carteira.requireRecordInScope('cart', 'cartId'));
+crmRouter.use('/tasks/:id', carteira.requireRecordInScope('task'));
 
 // M3-21 — exportação sensível: permissão DEDICADA (não basta crm:opportunities:read) e
 // sempre auditada. Precisa vir ANTES de '/opportunities/:id' para não ser capturada por ele.
@@ -19,17 +34,17 @@ crmRouter.get(
 );
 
 // --- Propostas (M3-13 / M3-25) ---
-crmRouter.post('/crm/proposals', requirePermission('crm:proposals:create'), crmController.createProposal);
-crmRouter.get('/crm/proposals', requirePermission('crm:proposals:read'), crmController.listProposals);
+crmRouter.post('/crm/proposals', requirePermission('crm:proposals:create'), carteira.requireBodyOpportunityInScope, crmController.createProposal);
+crmRouter.get('/crm/proposals', requirePermission('crm:proposals:read'), carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listProposals);
 crmRouter.get('/crm/proposals/:id', requirePermission('crm:proposals:read'), crmController.getProposal);
 crmRouter.patch('/crm/proposals/:id/status', requirePermission('crm:proposals:update'), crmController.updateProposalStatus);
 
 // --- Painel de indicadores (M3-17) ---
-crmRouter.get('/crm/dashboard', requirePermission('crm:dashboard:read'), require('./dashboard.query.schema').validarConsultaDoPainel, crmController.getDashboard);
+crmRouter.get('/crm/dashboard', requirePermission('crm:dashboard:read'), require('./dashboard.query.schema').validarConsultaDoPainel, carteira.scopeDashboardToCarteira, crmController.getDashboard);
 
 // --- Reclamações, elogios e conflitos (M3-20) ---
-crmRouter.post('/crm/feedback-cases', requirePermission('crm:feedback:create'), crmController.createFeedbackCase);
-crmRouter.get('/crm/feedback-cases', requirePermission('crm:feedback:read'), require('./feedbackCases.schema').validarListagemDeCasos, crmController.listFeedbackCases);
+crmRouter.post('/crm/feedback-cases', requirePermission('crm:feedback:create'), carteira.requireBodyOpportunityInScope, crmController.createFeedbackCase);
+crmRouter.get('/crm/feedback-cases', requirePermission('crm:feedback:read'), require('./feedbackCases.schema').validarListagemDeCasos, carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listFeedbackCases);
 crmRouter.get('/crm/feedback-cases/:id', requirePermission('crm:feedback:read'), crmController.getFeedbackCase);
 crmRouter.patch('/crm/feedback-cases/:id/resolve', requirePermission('crm:feedback:update'), crmController.resolveFeedbackCase);
 crmRouter.patch('/crm/feedback-cases/:id/escalate', requirePermission('crm:feedback:update'), crmController.escalateFeedbackCase);
@@ -38,7 +53,8 @@ crmRouter.patch('/crm/feedback-cases/:id/escalate', requirePermission('crm:feedb
 crmRouter.post('/opportunities', requirePermission('crm:opportunities:create'), require('./opportunities.schema').validarCriacaoDeOportunidade, crmController.createOpportunity);
 crmRouter.get('/opportunities', requirePermission('crm:opportunities:read'), crmController.listOpportunities);
 crmRouter.get('/opportunities/:id', requirePermission('crm:opportunities:read'), crmController.getOpportunity);
-crmRouter.patch('/opportunities/:id', requirePermission('crm:opportunities:update'), crmController.updateOpportunity);
+// CAD-18 / livro §18: troca de responsável pelo PATCH exige a permissão específica, motivo e auditoria (carteira/ownerChange.controller.js).
+crmRouter.patch('/opportunities/:id', requirePermission('crm:opportunities:update'), ownerChange.updateOpportunity);
 crmRouter.delete('/opportunities/:id', requirePermission('crm:opportunities:delete'), crmController.removeOpportunity);
 
 // --- Tarefas da oportunidade (M3-11) e timeline unificada (M3-19) ---
@@ -53,18 +69,18 @@ crmRouter.get(
   crmController.getOpportunityTimeline
 );
 
-crmRouter.post('/visits', requirePermission('crm:visits:create'), crmController.createVisit);
-crmRouter.get('/visits', requirePermission('crm:visits:read'), crmController.listVisits);
+crmRouter.post('/visits', requirePermission('crm:visits:create'), carteira.requireBodyOpportunityInScope, crmController.createVisit);
+crmRouter.get('/visits', requirePermission('crm:visits:read'), carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listVisits);
 crmRouter.get('/visits/:id', requirePermission('crm:visits:read'), crmController.getVisit);
 crmRouter.patch('/visits/:id', requirePermission('crm:visits:update'), crmController.updateVisit);
 crmRouter.delete('/visits/:id', requirePermission('crm:visits:delete'), crmController.removeVisit);
 
 // Rodada 5 (DI-M9R-11): cada rota de mensagem passa o pedido inteiro (id do caminho, consulta e corpo) pelo esquema fechado da rota antes do controller.
-crmRouter.post('/messages', requirePermission('crm:messages:create'), validarMensagem('criar'), crmController.createMessage);
-crmRouter.post('/messages/send', requirePermission('crm:messages:create'), validarMensagem('enviar'), crmController.sendMessage);
+crmRouter.post('/messages', requirePermission('crm:messages:create'), validarMensagem('criar'), carteira.requireBodyOpportunityInScope, crmController.createMessage);
+crmRouter.post('/messages/send', requirePermission('crm:messages:create'), validarMensagem('enviar'), carteira.requireBodyOpportunityInScope, crmController.sendMessage);
 crmRouter.post('/messages/:id/send-alternate', requirePermission('crm:messages:create'), validarMensagem('porId'), crmController.sendMessageViaAlternate);
 crmRouter.post('/messages/:id/refresh-status', requirePermission('crm:messages:update'), validarMensagem('porId'), crmController.refreshMessageStatus);
-crmRouter.get('/messages', requirePermission('crm:messages:read'), validarMensagem('listar'), crmController.listMessages);
+crmRouter.get('/messages', requirePermission('crm:messages:read'), validarMensagem('listar'), carteira.requireQueryOpportunityInScope, carteira.attachCarteira, crmController.listMessages);
 crmRouter.get('/messages/:id', requirePermission('crm:messages:read'), validarMensagem('ler'), crmController.getMessage);
 crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update'), validarMensagem('status'), crmController.updateMessageStatus);
 
@@ -72,6 +88,7 @@ crmRouter.patch('/messages/:id/status', requirePermission('crm:messages:update')
 // opportunities (sem permissão nova 'crm:carts:*' — migrations de DDL/seed bloqueadas nesta
 // sessão, ver nota em carts.service.js/propertyMerge.service.js).
 crmRouter.post('/opportunities/:id/carts', requirePermission('crm:opportunities:update'), crmController.createCart);
+crmRouter.get('/opportunities/:id/carts', requirePermission('crm:opportunities:read'), cartsView.listCarts); // tela do carrinho (§14)
 crmRouter.patch('/carts/:cartId/items', requirePermission('crm:opportunities:update'), crmController.updateCartItems);
 crmRouter.post('/carts/:cartId/share-link', requirePermission('crm:opportunities:update'), crmController.generateCartShareLink);
 

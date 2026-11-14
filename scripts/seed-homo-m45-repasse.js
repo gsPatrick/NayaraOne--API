@@ -6,11 +6,12 @@ const { sequelize, Person, Property, PropertyOwner, Contract, ContractParty, Fin
 const personService = require('../src/features/people/person.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const propertyOwnersService = require('../src/features/properties/propertyOwners.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const costCentersService = require('../src/features/finance/costCenters.service');
-const resultCentersService = require('../src/features/finance/resultCenters.service');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const costCentersService = require('../src/modules/finance/application/services/cost-centers.service');
+const resultCentersService = require('../src/modules/finance/application/services/result-centers.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
 const { registrarAuditoria } = require('../src/engines/audit/auditLog.service');
 
 /**
@@ -136,7 +137,7 @@ async function main() {
       );
     }
     if (entry.status === 'PENDING') {
-      entry = await financialEntriesService.settleFinancialEntry(entry.id, ADMIN_USER_ID, t);
+      entry = await receiptService.settleFinancialEntry(entry.id, ADMIN_USER_ID, t);
     }
     summary.financialEntryId = entry.id;
     summary.entryStatus = entry.status;

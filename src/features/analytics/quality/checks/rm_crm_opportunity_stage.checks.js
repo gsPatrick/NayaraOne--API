@@ -5,6 +5,6 @@ const { declareDomainChecks } = require('./domain.declare');
 
 declareDomainChecks({
   model: 'rm_crm_opportunity_stage', short: 'crm_opp_stage', domain: 'CRM', metrics: ['crm.opportunities_by_stage'],
-  completeness: { field: 'broker_id', sql: `SELECT count(*)::int AS total, count(*) FILTER (WHERE owner_user_id IS NULL)::int AS nulls FROM crm.opportunities WHERE company_id = :companyId AND deleted_at IS NULL AND stage NOT IN ('CLOSED_WON','CLOSED_LOST','WITHDRAWN')` },
+  completeness: { field: 'broker_id', sql: `SELECT count(*)::int AS total, count(*) FILTER (WHERE owner_user_id IS NULL)::int AS nulls FROM crm.opportunities WHERE company_id = :companyId AND deleted_at IS NULL AND stage NOT IN ('WON','LOST','WITHDRAWN')` },
   invariant: { rule: 'paradas <= em andamento no estágio', violation: `stalled_count > count` },
 });

@@ -10,6 +10,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { evidenceIds } = require('./constructionEvidenceFixture');
 const { Property, MaintenanceCase } = require('../src/models');
 const service = require('../src/features/construction/maintenanceCases.service');
 const AppError = require('../src/utils/AppError');
@@ -18,8 +19,9 @@ let tenant;
 before(async () => { tenant = await getSeedTenant(); });
 after(async () => { await sequelize.close(); });
 
-const BEFORE = ['11111111-1111-1111-1111-111111111111'];
-const AFTER = ['22222222-2222-2222-2222-222222222222'];
+// Fotos reais (core.files) — desde 10/11/2026 os serviços de Obras recusam ID de arquivo inexistente.
+let BEFORE;
+let AFTER;
 
 const rejectsWith = (code, status) => (err) => {
   assert.ok(err instanceof AppError);
@@ -30,6 +32,8 @@ const rejectsWith = (code, status) => (err) => {
 
 async function closedCase(transaction) {
   const suffix = uniqueSuffix();
+  BEFORE = await evidenceIds(tenant, transaction, 1, 'antes');
+  AFTER = await evidenceIds(tenant, transaction, 1, 'depois');
   const property = await Property.create(
     { groupId: tenant.groupId, companyId: tenant.companyId, title: `Imovel fechado ${suffix}`, internalCode: `CLS-${suffix}`, propertyType: 'HOUSE', createdBy: tenant.userId, updatedBy: tenant.userId },
     { transaction }
@@ -82,18 +86,32 @@ test('NEGATIVO: causa raiz invalida continua recusada em chamado fechado', async
   });
 });
 
+test('NEGATIVO: chamado fechado nao aceita trocar a foto obrigatoria por um ID sem arquivo (CONSTRUCTION_EVIDENCE_FILE_NOT_FOUND); nada e gravado', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const c = await closedCase(t);
+    const semArquivo = '33333333-3333-4333-8333-333333333333';
+    for (const payload of [{ afterMediaFileIds: [semArquivo] }, { beforeMediaFileIds: [semArquivo] }]) {
+      await assert.rejects(() => service.updateMaintenanceCase(c.id, payload, tenant.userId, t), rejectsWith('CONSTRUCTION_EVIDENCE_FILE_NOT_FOUND', 400), JSON.stringify(payload));
+    }
+    const fresh = await MaintenanceCase.findByPk(c.id, { transaction: t });
+    assert.deepEqual(fresh.beforeMediaFileIds, BEFORE);
+    assert.deepEqual(fresh.afterMediaFileIds, AFTER);
+  });
+});
+
 test('POSITIVO: chamado fechado aceita trocar a causa raiz por outra valida, trocar evidencias por outras e editar descricao/custos', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const c = await closedCase(t);
+    const outraFoto = await evidenceIds(tenant, t, 1, 'depois-nova');
     const novo = await service.updateMaintenanceCase(
       c.id,
-      { rootCauseCode: 'WORKMANSHIP', afterMediaFileIds: ['33333333-3333-3333-3333-333333333333'], description: 'Descricao revisada', laborCost: 120 },
+      { rootCauseCode: 'WORKMANSHIP', afterMediaFileIds: outraFoto, description: 'Descricao revisada', laborCost: 120 },
       tenant.userId,
       t
     );
     assert.equal(novo.status, 'CLOSED');
     assert.equal(novo.rootCauseCode, 'WORKMANSHIP');
-    assert.deepEqual(novo.afterMediaFileIds, ['33333333-3333-3333-3333-333333333333']);
+    assert.deepEqual(novo.afterMediaFileIds, outraFoto);
     assert.equal(novo.description, 'Descricao revisada');
   });
 });

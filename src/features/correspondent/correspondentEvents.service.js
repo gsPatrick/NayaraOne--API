@@ -4,7 +4,7 @@ const { publishDomainEvent } = require('../../engines/events/outbox');
 const { OutboxEvent } = require('../../models');
 
 // Publicação dos domain events do módulo correspondent (Transactional Outbox), seguindo o mesmo
-// padrão de src/features/legal/legalEvents.service.js / src/features/finance/financeEvents.service.js
+// padrão de src/modules/legal/shared/legalEvents.service.js / src/modules/finance/application/services/finance-events.service.js
 // — sempre dentro da MESMA transação da operação de negócio que originou o evento.
 
 /**
@@ -190,6 +190,10 @@ function publishFinancingCaseCreated(financingCase, transaction) {
         providerCode: financingCase.providerCode,
         purpose: financingCase.purpose,
         propertyId: financingCase.propertyId,
+        // CAD-09: a oportunidade vinculada recebe o status inicial pelo consumidor do CRM.
+        opportunityId: financingCase.opportunityId || null,
+        status: financingCase.status,
+        changedAt: new Date().toISOString(),
       },
       idempotencyKey: `financing.case.created:${financingCase.id}`,
     },
@@ -270,7 +274,9 @@ const TERMINAL_EVENT_BY_STATUS = {
  * webhooks fora de ordem já tratados por `shouldApplyTransition`), então a key não pode ser só
  * `financingCaseId:status`.
  */
-async function publishFinancingStatusChanged(financingCase, { previousStatus, normalizedStatus, historyId }, transaction) {
+async function publishFinancingStatusChanged(financingCase, { previousStatus, normalizedStatus, historyId, manual = false }, transaction) {
+  // CAD-09 (Marco 3 §9): o CRM se atualiza consumindo ESTE evento (crm/financingStatus.consumer.js). O payload leva só a
+  // referência da oportunidade, o status e o instante — nunca dado bancário (proposta, valores, provider, ids externos).
   await publishDomainEvent(
     {
       groupId: financingCase.groupId,
@@ -278,7 +284,14 @@ async function publishFinancingStatusChanged(financingCase, { previousStatus, no
       aggregateType: 'FinancingCase',
       aggregateId: financingCase.id,
       eventType: 'financing.status.changed',
-      payload: { id: financingCase.id, previousStatus, status: normalizedStatus },
+      payload: {
+        id: financingCase.id,
+        previousStatus,
+        status: normalizedStatus,
+        opportunityId: financingCase.opportunityId || null,
+        changedAt: new Date().toISOString(),
+        manualWorkflow: Boolean(manual),
+      },
       idempotencyKey: `financing.status.changed:${historyId}`,
     },
     transaction

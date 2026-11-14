@@ -3,8 +3,8 @@
 // Dados de leitura dos agentes NAY do livro (M9-D035 e M9-D036): contratos a vencer, recebíveis vencidos e anomalias, criados pelos
 // serviços e modelos reais da empresa informada (RLS do tenant). Todos sintéticos e com prefixo QA-M9.
 const { Contract } = require('../../../src/models');
-const financialEntries = require('../../../src/features/finance/financialEntries.service');
-const anomalyCases = require('../../../src/features/finance/anomalyCases.service');
+const financialEntries = require('../../../src/modules/finance/application/services/financial-entry.service');
+const anomalyCases = require('../../../src/modules/finance/application/services/anomaly-cases.service');
 const { createTestCostCenter, createTestResultCenter, uniqueSuffix } = require('../../testHelpers');
 
 const DIA = 86400000;

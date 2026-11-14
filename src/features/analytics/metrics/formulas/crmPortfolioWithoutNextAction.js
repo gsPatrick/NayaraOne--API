@@ -2,7 +2,7 @@
 
 /**
  * M9-D631 — KPI crm.portfolio_without_next_action (Carteira sem próxima ação), versão 1. Posição no fim do dia-base: contagem e percentual das
- * oportunidades em aberto (fora de CLOSED_WON, CLOSED_LOST e WITHDRAWN) sem próxima ação válida, isto é, sem tarefa aberta com data posterior a hoje e sem
+ * oportunidades em aberto (fora de WON, LOST e WITHDRAWN) sem próxima ação válida, isto é, sem tarefa aberta com data posterior a hoje e sem
  * nextAction preenchida conforme opportunityNextAction.validator.js (texto e data). Percentual = sem ação / em aberto x 100 (2 casas, uma vez).
  * Entrada (rm_crm_next_action): { rows: [{ brokerId, openTotal, without, byStage: { estágio: { open, without } } }] }. Parâmetro: maxNoBrokerPct.
  * Regra de qualidade: oportunidade em aberto sem corretor acima do limite (padrão 0) -> DEGRADED, valor nulo.

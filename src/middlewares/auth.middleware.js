@@ -1,5 +1,6 @@
 'use strict';
 
+const { nextWithDeferredFileAttach } = require('./deferredFileAttach');
 const AppError = require('../utils/AppError');
 const { verifyAccessToken } = require('../utils/jwt');
 
@@ -135,7 +136,8 @@ function requirePermission(permissionCode) {
         )
       );
     }
-    return next();
+    // Permissão confere: a recusa de anexo adiada pelo fileAttachGuard vale agora.
+    return nextWithDeferredFileAttach(req, next);
   };
   // Marca a permissão exigida para que a matriz de permissões da API (scripts/gerarMatrizPermissoes.js)
   // seja gerada do código real, nunca digitada à mão.

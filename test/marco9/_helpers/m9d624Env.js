@@ -50,8 +50,10 @@ async function teardown(env) {
 
 const dayAt = (offset, hour = 15) => new Date(Date.UTC(2026, 9, 28 + offset, hour)).toISOString();
 
+// Cada transação sintética tem o próprio id do provedor: desde a conciliação do Marco 4 (Guia M4 §10) o extrato é UNIQUE(conta, fingerprint)
+// sem condição, e duas linhas iguais (mesmo dia, valor e descrição, sem id do provedor) são a mesma importação repetida.
 const bankTx = (env, t, { account, amount, date, createdAt }) => ledger.insert(env, 'bank_transactions', t, {
-  bank_account_id: account, amount, transaction_date: date, ...(createdAt ? { created_at: createdAt } : {}),
+  bank_account_id: account, amount, transaction_date: date, external_transaction_id: `m9d624-${ledger.uuid()}`, ...(createdAt ? { created_at: createdAt } : {}),
 });
 const reconcile = (env, t, txId) => ledger.insert(env, 'reconciliations', t, { financial_entry_id: ledger.uuid(), bank_transaction_id: txId, matched_at: dayAt(0) });
 const statementImport = (env, t, { account, createdAt }) => ledger.insert(env, 'bank_statement_imports', t, {

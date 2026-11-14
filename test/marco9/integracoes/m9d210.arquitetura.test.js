@@ -38,14 +38,14 @@ test('arquitetura_sdk_apenas_em_providers', () => {
   assert.deepEqual(DEFAULT_SDK_DENYLIST.slice(0, 3), ['twilio', '@sendgrid/mail', 'aws-sdk']);
   const r = scan({
     'features/crm/x.js': "const twilio = require('twilio');\n",
-    'features/finance/y.js': "const { S3 } = require('@aws-sdk/client-s3');\n",
+    'modules/finance/application/services/y.js': "const { S3 } = require('@aws-sdk/client-s3');\n",
     'features/legal/z.js': "import Stripe from 'stripe';\n",
     'features/integrations/providers/messaging/twilio/twilio.adapter.js': "const twilio = require('twilio');\n",
   });
   assert.deepEqual(r.map((x) => [x.code, x.file, x.line]), [
     ['ARCH_SDK_OUTSIDE_ADAPTER', 'src/features/crm/x.js', 1],
-    ['ARCH_SDK_OUTSIDE_ADAPTER', 'src/features/finance/y.js', 1],
     ['ARCH_SDK_OUTSIDE_ADAPTER', 'src/features/legal/z.js', 1],
+    ['ARCH_SDK_OUTSIDE_ADAPTER', 'src/modules/finance/application/services/y.js', 1],
   ], 'só o adapter dentro de providers pode importar o SDK; o arquivo e a linha saem no relatório');
   assert.ok(isSdkPackage('@aws-sdk/client-s3/dist/x') && isSdkPackage('googleapis') && !isSdkPackage('express'));
   // A lista é o parâmetro integration.sdk.denylist: um pacote acrescentado pela empresa também vale.

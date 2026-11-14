@@ -2,9 +2,11 @@
 
 const { ChangeOrder, Budget, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertEvidenceFilesExist } = require('./evidenceFiles');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const marginRulesService = require('./marginRules.service');
 const { computeMarginProjection } = require('./projectHealth.service');
+const { createBudgetRevision, listBudgetRevisions } = require('./budgetRevisions.service');
 
 const STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED'];
 
@@ -67,6 +69,8 @@ async function createChangeOrder(projectId, payload, actorUserId, transaction) {
       'CHANGE_ORDER_VALIDATION'
     );
   }
+
+  await assertEvidenceFilesExist(evidenceFileIds, companyId, transaction, 'evidenceFileIds');
 
   // BUG REAL CORRIGIDO ("ciclos até secar", Ciclo 17, Frente A, 09/10/2026): lock pessimista na
   // linha do Project, serializando contra removeProject concorrente (ver comentário detalhado
@@ -204,9 +208,11 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
     return changeOrder;
   }
 
-  // APPROVE: única forma de alterar valor de orçamento já aprovado (M6-17). Lock pessimista
-  // também no orçamento — evita que dois Change Orders aplicados ao mesmo tempo sobre o mesmo
-  // orçamento causem lost update na soma do impacto.
+  // APPROVE: única forma de mudar o valor de um orçamento já aprovado (Caderno §2). Guia §3: "Nunca UPDATE no baseline
+  // aprovado" — a aprovação NÃO toca em budgets.baseline_amount/total_amount nem em projects.budget_amount (o banco
+  // recusa: gatilho budgets_baseline_immutable, migration 20260101006602). O aditivo vira uma REVISÃO nova, append-only
+  // (construction.budget_revisions), com o total anterior, o impacto e o total novo. Lock pessimista no orçamento:
+  // dois Change Orders aprovados ao mesmo tempo não podem gerar o mesmo número de revisão.
   const budget = await Budget.findOne({
     where: { projectId: changeOrder.projectId },
     transaction,
@@ -219,19 +225,8 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
     );
   }
 
-  const budgetBeforeJson = budget.toJSON();
-  const newBaseline = Number(budget.baselineAmount) + Number(changeOrder.budgetImpact);
-  if (newBaseline < 0) {
-    throw AppError.badRequest('Aplicar este Change Order deixaria o orçamento com valor negativo.', 'CHANGE_ORDER_NEGATIVE_RESULT');
-  }
-
-  // TAREFA (auditoria externa Nayara, item A9/caderno técnico p.161 seção 5): mesmo gate de
-  // bloqueio configurável de approveBudget (budgets.service.js), aplicado aqui antes de
-  // confirmar a aprovação do Change Order. `extraApprovedChanges: changeOrder.budgetImpact`
-  // projeta o efeito de APROVAR ESTE Change Order especificamente — ele ainda está
-  // PENDING_APPROVAL neste ponto (só vira APPROVED/entra em getApprovedChangeOrdersTotal mais
-  // abaixo), então sem o delta a margem projetada ficaria subestimada em relação ao que
-  // realmente vai acontecer caso a aprovação siga adiante.
+  // Mesmo gate de bloqueio configurável de approveBudget (Caderno §5 "Margem abaixo da regra gera alerta/bloqueio
+  // configurado"): projeta a margem COMO FICARIA com este aditivo (ele ainda está PENDING_APPROVAL aqui).
   const marginRule = await marginRulesService.getActiveMarginRule(changeOrder.groupId, changeOrder.companyId, transaction);
   if (marginRule.enforcementMode === 'BLOCK') {
     const projection = await computeMarginProjection(changeOrder.projectId, transaction, {
@@ -245,27 +240,7 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
     }
   }
 
-  budget.baselineAmount = newBaseline;
-  budget.totalAmount = newBaseline;
-  budget.updatedBy = actorUserId || null;
-  await budget.save({ transaction });
-
-  // BUG REAL CORRIGIDO (auditoria "loop até secar", rodada 48, 2026-10-05): approveBudget (R46)
-  // já sincroniza project.budgetAmount com o baseline aprovado, porque o contrato (TAB-0700)
-  // trata projects.budget_amount como o orçamento oficial da obra — mas a ÚNICA outra forma de
-  // mudar um baseline já aprovado (Change Order, M6-17) nunca replicava essa sincronização.
-  // Depois do primeiro Change Order aprovado, project.budgetAmount ficava desatualizado em
-  // relação ao baseline real, afetando qualquer leitura (ex.: projectHealth.service.js usa
-  // project.budgetAmount como baselineBudget pra calcular margem/custo projetado).
-  const project = await Project.findByPk(changeOrder.projectId, {
-    transaction,
-    lock: transaction ? transaction.LOCK.UPDATE : undefined,
-  });
-  if (project) {
-    project.budgetAmount = newBaseline;
-    project.updatedBy = actorUserId || null;
-    await project.save({ transaction });
-  }
+  const revision = await createBudgetRevision(budget, changeOrder, actorUserId, transaction);
 
   changeOrder.status = 'APPROVED';
   changeOrder.decidedBy = actorUserId || null;
@@ -282,8 +257,8 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
       entityType: 'ChangeOrder',
       entityId: changeOrder.id,
       beforeJson,
-      afterJson: changeOrder.toJSON(),
-      reason: `Change Order ${changeOrder.id} aprovado — baseline do orçamento ${budget.id} alterada de ${budgetBeforeJson.baselineAmount} para ${newBaseline}.`,
+      afterJson: { ...changeOrder.toJSON(), budgetRevision: revision.toJSON() },
+      reason: `Change Order ${changeOrder.id} aprovado — revisão ${revision.revisionNumber} do orçamento ${budget.id}: ${revision.previousTotal} → ${revision.newTotal} (baseline aprovada ${budget.baselineAmount} intacta).`,
     },
     transaction
   );
@@ -291,4 +266,4 @@ async function decideChangeOrder(id, payload, actorUserId, transaction) {
   return changeOrder;
 }
 
-module.exports = { createChangeOrder, listChangeOrders, getChangeOrder, decideChangeOrder, STATUSES };
+module.exports = { createChangeOrder, listChangeOrders, getChangeOrder, decideChangeOrder, listBudgetRevisions, STATUSES };

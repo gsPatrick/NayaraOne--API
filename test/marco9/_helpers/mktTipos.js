@@ -4,7 +4,7 @@
 // de chaves, obra com etapa pública e eventos do outbox em formato de consumidor. Tudo dentro da transação do teste. Não é teste.
 const fx = require('../../helpers/m9d405Fixtures');
 const env = require('./mktPolicyEnv');
-const contractsService = require('../../../src/features/legal/contracts.service');
+const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
 
 const { uid, q } = fx;
 const base = (tenant) => ({ g: tenant.groupId, c: tenant.companyId });

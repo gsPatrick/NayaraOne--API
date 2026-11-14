@@ -6,6 +6,8 @@ const registry = require('../../../src/features/integrations/registry/registry.s
 const { getSecretStore } = require('../../../src/features/integrations/secrets');
 const { modelo, MODELO_EMBED, paraConfig } = require('./iaAdapterCtx');
 const { sequelize } = require('../../helpers/aiAgents');
+const { gravarParametroSensivel } = require('../../helpers/mfaRecente');
+const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
 
 const suf = () => Math.random().toString(16).slice(2, 10);
 const comAdmin = (tenant) => ({ groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId, permissions: ['ai:admin'] });
@@ -17,7 +19,7 @@ async function prepararAmbiente(tenant) {
   await sequelize.transaction(async (t) => {
     await sequelize.query('SET LOCAL app.group_id = :g', { replacements: { g: tenant.groupId }, transaction: t });
     await sequelize.query('SET LOCAL app.company_id = :c', { replacements: { c: tenant.companyId }, transaction: t });
-    await upsertSetting('integration.admin.mfa_on_prod_connection_change', false, tenant, tenant.userId, t);
+    await gravarParametroSensivel('integration.admin.mfa_on_prod_connection_change', false, tenant, t); // sensível: operador com MFA recente real
   });
 }
 
@@ -38,7 +40,8 @@ async function ativarConexao(tenant, tx, opts) {
   return c;
 }
 
-const ajustar = (tenant, chave, valor, tx) => upsertSetting(chave, valor, tenant, tenant.userId, tx);
+// Parâmetro sensível (requiresMfa, ex.: ia.fallback.max_saltos) é gravado por um operador com MFA recente real; os demais, pelo usuário do seed.
+const ajustar = (tenant, chave, valor, tx) => (SETTINGS_SCHEMA[chave] && SETTINGS_SCHEMA[chave].requiresMfa ? gravarParametroSensivel(chave, valor, tenant, tx) : upsertSetting(chave, valor, tenant, tenant.userId, tx));
 
 async function recusa(promessa, code, status) {
   const assert = require('node:assert/strict');

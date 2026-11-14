@@ -181,6 +181,7 @@ Corpo de erro único: `{"success":false,"error":{"code","message","details?","tr
 | `GOV_LINK_UNAVAILABLE` | 404 | Link indisponível. | dlp | 1.0.0 | não |
 | `GOV_LINK_WATERMARK_UNSUPPORTED` | 422 | Este tipo de arquivo não aceita a marca d'água exigida para esta classificação. | dlp | 1.0.0 | não |
 | `GOV_MERGE_FIELD_CHOICE_REQUIRED` | 400 | Escolha o valor que fica em cada campo em conflito. | data-quality | 1.0.0 | não |
+| `GOV_MERGE_PROTECTED_REFERENCE` | 409 | Não foi possível unir: há registro protegido contra alteração que aponta para o cadastro que sai. Peça ajuda a quem administra o sistema. | data-quality | 1.3.0 | não |
 | `GOV_MERGE_REFERENCE_CONFLICT` | 409 | Não foi possível unir: um dado ligado aos dois cadastros entra em conflito ao ser unificado. Revise os cadastros. | data-quality | 1.0.0 | não |
 | `GOV_MERGE_SURVIVOR_INVALID` | 400 | O registro mantido deve ser um dos dois do par. | data-quality | 1.0.0 | não |
 | `GOV_MODULE_DISABLED` | 403 | Este módulo de governança está desativado pelo administrador. | core-governance | 1.0.0 | não |

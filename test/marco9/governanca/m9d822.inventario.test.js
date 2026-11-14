@@ -20,7 +20,8 @@ test('m9d822 a varredura realmente acha os geradores conhecidos (não é um pass
     if (item.isDirectory()) walk(full); else if (item.name.endsWith('.js') && catalog.GENERATOR_PATTERN.test(fs.readFileSync(full, 'utf8'))) hits.push(path.relative(SRC, full).split(path.sep).join('/'));
   });
   walk(SRC);
-  for (const expected of ['features/crm/opportunitiesExport.service.js', 'features/correspondent/fiscal/dimob.service.js', 'features/legal/contractPdf.service.js', 'features/legal/inspections.service.js', 'features/correspondent/adapters/NfseAdapter.js', 'features/analytics/exports/export.generate.js']) {
+  // DI-M3CB-3: o gerador síncrono de CSV do CRM saiu (a exportação de oportunidades é só pelo POST /exports); o arquivo do CRM só coleta as linhas.
+  for (const expected of ['features/correspondent/fiscal/dimob.service.js', 'modules/legal/contracts/application/contractPdf.service.js', 'modules/legal/inspections/inspection.service.js', 'features/correspondent/adapters/NfseAdapter.js', 'features/analytics/exports/export.generate.js']) {
     assert.ok(hits.includes(expected), expected);
   }
   assert.deepEqual(catalog.scanUncovered(), [], 'e todos estão no catálogo');

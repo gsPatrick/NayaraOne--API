@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestCostCenter } = require('./testHelpers');
 const { FinancialEntry, InsuranceRenewalTask, Notification } = require('../src/models');
-const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
 const insuranceService = require('../src/features/procurement/insurance.service');
 const { alertDueRenewals } = require('../src/engines/jobs/insuranceRenewalAlertJob');
 const AppError = require('../src/utils/AppError');

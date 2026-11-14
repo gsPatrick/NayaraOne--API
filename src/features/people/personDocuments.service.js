@@ -3,6 +3,8 @@
 const legalHold = require('../core-governance/data-quality/legalHold.guard');
 const { PersonDocument, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { readDocumentParams } = require('./personDocument.settings');
+const { sessionCompanyId } = require('./personView');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { onlyDigits, isValidTaxIdDigits } = require('./personDocumentFormat.service');
 const { replaceDocumentFile } = require('./personDocumentReplacement.service');
@@ -47,7 +49,7 @@ function normalizeManualField(field, raw) {
  * e auditados). O resultado da leitura é o que está gravado, nunca o que vem na mesma requisição. Devolve os campos
  * informados à mão, já normalizados. `reading` é a leitura gravada (null quando o documento não passou pela leitura).
  */
-function assertReadingAllowsVerification(documentType, reading, manualFieldsInput) {
+function assertReadingAllowsVerification(documentType, reading, manualFieldsInput, camposCriticos = null) {
   // Carregado aqui porque documentIngestion.service também importa este módulo (dependência circular).
   const { CRITICAL_FIELDS_BY_TYPE, validateCriticalFields } = require('./documentIngestion.service');
   if (reading && reading.illegible === true) {
@@ -56,7 +58,8 @@ function assertReadingAllowsVerification(documentType, reading, manualFieldsInpu
       'PERSON_DOCUMENT_ILLEGIBLE'
     );
   }
-  const critical = CRITICAL_FIELDS_BY_TYPE[String(documentType).toUpperCase()] || [];
+  const mapa = camposCriticos || CRITICAL_FIELDS_BY_TYPE; // parâmetro people.documentos.campos_criticos da empresa (DI-M3PE-6)
+  const critical = mapa[String(documentType).toUpperCase()] || [];
   const read = (reading && reading.fields) || {};
   const manual = manualFieldsInput && typeof manualFieldsInput === 'object' ? manualFieldsInput : {};
   const entries = [];
@@ -77,7 +80,7 @@ function assertReadingAllowsVerification(documentType, reading, manualFieldsInpu
   }
   // Valores lidos e informados juntos precisam passar nas mesmas regras de formato do cadastro.
   const merged = { ...read, ...Object.fromEntries(entries) };
-  const check = validateCriticalFields(String(documentType).toUpperCase(), merged);
+  const check = validateCriticalFields(String(documentType).toUpperCase(), merged, mapa);
   if (!check.valid) {
     throw AppError.unprocessable(`Não é possível verificar: ${check.missing.join(', ')}.`, 'PERSON_DOCUMENT_CRITICAL_FIELDS_MISSING');
   }
@@ -124,7 +127,8 @@ async function createDocument(personId, payload, actorUserId, transaction) {
   let finalExtracted = extractedDataJson || null;
   if (finalStatus === 'VERIFIED') {
     // Documento criado já verificado: não há leitura gravada pelo servidor, então os campos críticos vêm de quem verifica.
-    const entries = assertReadingAllowsVerification(documentType, null, payload.manualFields);
+    const { camposCriticos } = await readDocumentParams({ groupId: person.groupId, companyId: await sessionCompanyId(person, transaction) }, transaction);
+    const entries = assertReadingAllowsVerification(documentType, null, payload.manualFields, camposCriticos);
     if (entries.length) {
       finalExtracted = { ...(finalExtracted || {}), manualFields: Object.fromEntries(entries), manualFieldsConfirmedBy: actorUserId || null, manualFieldsConfirmedAt: new Date().toISOString() };
     }
@@ -132,7 +136,7 @@ async function createDocument(personId, payload, actorUserId, transaction) {
   return PersonDocument.create(
     {
       groupId: person.groupId,
-      companyId: person.companyId,
+      companyId: await sessionCompanyId(person, transaction), // DI-M9I-3: o dado é da empresa da sessão (vinculada ou responsável)
       personId,
       documentType: String(documentType).toUpperCase(),
       fileId,
@@ -185,7 +189,8 @@ async function updateDocument(personId, documentId, payload, actorUserId, transa
       // Campos que a pessoa digitou na revisão (extractedDataJson.fields desta requisição) valem como informados à mão:
       // só preenchem o que a leitura gravada não achou e passam pelas mesmas validações.
       const digitados = { ...((extractedDataJson && extractedDataJson.fields) || {}), ...(payload.manualFields || {}) };
-      manualEntries = assertReadingAllowsVerification(document.documentType, document.extractedDataJson, digitados);
+      const { camposCriticos } = await readDocumentParams({ groupId: document.groupId, companyId: document.companyId }, transaction);
+      manualEntries = assertReadingAllowsVerification(document.documentType, document.extractedDataJson, digitados, camposCriticos);
     }
     document.verificationStatus = normalized;
     if (normalized !== 'PENDING') document.verifiedBy = verifiedBy || actorUserId || null;

@@ -18,22 +18,24 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, waiveAllContractRequirements, uniqueSuffix } = require('./testHelpers');
+const { uploadTestFile } = require('./m5fech.locacao.helpers');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const peopleService = require('../src/features/people/people.service');
 const personContactsService = require('../src/features/people/personContacts.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');
 const proposalsService = require('../src/features/crm/proposals.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const contractVersionsService = require('../src/features/legal/contractVersions.service');
-const signaturesService = require('../src/features/legal/signatures.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const contractVersionsService = require('../src/modules/legal/contracts/application/contractVersions.service');
+const signaturesService = require('../src/modules/legal/signatures/signature.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
-const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../src/features/legal/adapters/SignatureAdapter');
+const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../src/modules/legal/signatures/providers');
 const {
   File,
   FileLink,
@@ -49,6 +51,7 @@ let tenant;
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 
 after(async () => {
@@ -81,8 +84,8 @@ async function clearSignatureSettings(transaction) {
 
 async function createDocumentFile(transaction, prefix = 'm5b2') {
   const suffix = uniqueSuffix();
-  return File.create(
-    {
+  return File.create({ checksumSha256: require('crypto').randomBytes(32).toString('hex'), // fechamento M5: arquivo com hash (Caderno §11)
+      
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       storageKey: `${prefix}/${suffix}.pdf`,
@@ -256,7 +259,7 @@ test('M5-10: garantia cadastrada mas NENHUMA ACTIVE bloqueia a ativação; sem n
     const fiador = await createPerson(transaction, 'M5-10 Fiador');
     const guarantee = await guaranteesService.createGuarantee(
       comGarantia.contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: fiador.id, value: 7500, endsAt: new Date(Date.now() + 365 * 86400000) },
+      await require('./m5fech.locacao.helpers').completeGuarantor(tenant, transaction, fiador.id, { value: 7500, endsAt: new Date(Date.now() + 365 * 86400000) }),
       tenant.userId,
       transaction
     );
@@ -470,7 +473,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
         companyId: tenant.companyId,
         personId: lessee.id,
         propertyId: property.id,
-        stage: 'NEGOTIATION',
+        stage: 'PROPOSAL',
         nextAction: 'Fechar contrato de locação',
         nextActionDueAt: new Date(Date.now() + 86400000),
       },
@@ -524,7 +527,8 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     // 6) Garantia (fiador) ACTIVE.
     const guarantee = await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 8400, startsAt: new Date(), endsAt: new Date(Date.now() + 365 * 86400000) },
+      // Fechamento M5 (Caderno §9): fiador ACTIVE com documentos e termo de aceite.
+      { guaranteeType: 'GUARANTOR', guarantorPersonId: guarantor.id, value: 8400, startsAt: new Date(), endsAt: new Date(Date.now() + 365 * 86400000), documentFileIds: [(await uploadTestFile(tenant, transaction, 'docs-fiador.pdf')).id], acceptanceFileId: (await uploadTestFile(tenant, transaction, 'aceite-fiador.pdf')).id, acceptedAt: new Date() },
       tenant.userId,
       transaction
     );
@@ -583,8 +587,8 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
       tenant.userId,
       transaction
     );
-    const photo = await File.create(
-      {
+    const photo = await File.create({ checksumSha256: require('crypto').randomBytes(32).toString('hex'), // fechamento M5: arquivo com hash (Caderno §11)
+      
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         storageKey: `e2e-inspection/${suffix}.jpg`,
@@ -612,7 +616,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
       transaction
     );
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, {}, tenant.userId, transaction),
+      async () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 2, keysIdentification: 'Chave principal', termSignedByPersonId: lessee.id, termEvidenceFileId: (await uploadTestFile(tenant, transaction)).id }, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_BLOCKED');
         return true;
@@ -636,7 +640,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     // 12) Agora a chave sai — com quem entregou, quem recebeu e quando.
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: lessee.id },
+      { keysCount: 2, keysIdentification: 'Chave principal + controle do portão', termSignedByPersonId: lessee.id, termEvidenceFileId: (await uploadTestFile(tenant, transaction)).id },
       tenant.userId,
       transaction
     );
@@ -692,7 +696,7 @@ test('M5-34: jornada E2E jurídica — processo, prazo, alerta, escalonamento, d
     // 2) Prazo processual que vence em 12h -> severidade DUE_SOON.
     const deadline = await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() + 12 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado' },
+      { description: `Contestação ${suffix}`, dueAt: new Date(Date.now() + 12 * 60 * 60 * 1000) , sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );

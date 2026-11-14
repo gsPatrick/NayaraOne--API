@@ -9,6 +9,7 @@ process.env.PORT = process.env.LEGAL_DEADLINE_FINAL_HTTP_TEST_PORT || '21634';
 
 const app = require('../app'); // eslint-disable-line no-unused-vars
 const { getSeedTenant, withTenantTransaction } = require('./testHelpers');
+const { prepararOrigem } = require('./helpers/prazoOrigem');
 const { sequelize, newUser, concludedCriticalWithoutCaseResponsible: setup, snapshot } = require('./legal.deadlineFinalState.helpers');
 const { signAccessToken } = require('../src/utils/jwt');
 
@@ -18,6 +19,7 @@ let token;
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
   baseUrl = `http://127.0.0.1:${process.env.PORT}/api/v1`;
   token = signAccessToken({
     sub: tenant.userId,

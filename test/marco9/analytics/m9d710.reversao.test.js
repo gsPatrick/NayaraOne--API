@@ -74,8 +74,8 @@ test('m9d710 contrato cancelado depois de assinado e ganho desfeito também gera
   assert.deepEqual([(await kpi(t, 'legal.contracts_signed')).value, (await kpi(t, 'crm.opportunities_won')).value], ['3', '3']);
   await kit.update(env, 'legal.contracts', contracts.grande, { status: 'CANCELLED' });
   await kit.apply(t, kit.makeEvent(t, 'legal.contract.status_changed', { id: contracts.grande, fromStatus: 'SIGNED', toStatus: 'CANCELLED' }));
-  await kit.update(env, 'crm.opportunities', opps.a, { stage: 'CLOSED_LOST', deleted_at: null });
-  await kit.apply(t, kit.makeEvent(t, 'crm.opportunity.stage_changed', { id: opps.a, fromStage: 'CLOSED_WON', toStage: 'CLOSED_LOST' }));
+  await kit.update(env, 'crm.opportunities', opps.a, { stage: 'LOST', deleted_at: null });
+  await kit.apply(t, kit.makeEvent(t, 'crm.opportunity.stage_changed', { id: opps.a, fromStage: 'WON', toStage: 'LOST' }));
   for (const id of [contracts.grande, opps.a]) {
     const rows = await factRows(t, id);
     assert.deepEqual(rows.map((r) => [r.revision, r.is_reversal, r.count_effect]), [[0, false, 1], [1, true, -1]], id);

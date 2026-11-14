@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * M9-D619 (3.2) — eventos que atualizam os read models do Jurídico e do Correspondente Bancário. Nomes conferidos em src/features/legal
+ * M9-D619 (3.2) — eventos que atualizam os read models do Jurídico e do Correspondente Bancário. Nomes conferidos em src/modules/legal
  * (legalEvents.service.js, legalDeadlineCalendarEvents.service.js, legalBiEvents.service.js) e src/features/correspondent
  * (correspondentEvents.service.js). DI-D619-1: os nomes do caderno `legal.deadline.*`, `legal.case.*`, `legal.contract_requirement.*`,
  * `correspondent.financing_case.status_changed`, `correspondent.proposal.*` e `correspondent.commission.*` valem como família; o código publica

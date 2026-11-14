@@ -11,8 +11,8 @@ async function seed(env, tenant) {
   const broker = src.uuid();
   const o1 = await src.opportunity(env, tenant, { owner: broker, source: 'SITE', stage: 'NEW', created: iso('2026-10-20'), nextAction: 'Ligar' });
   const o2 = await src.opportunity(env, tenant, { owner: broker, source: 'SITE', stage: 'QUALIFIED', created: iso('2026-10-21'), updated: iso('2026-10-22') });
-  const won = await src.opportunity(env, tenant, { owner: broker, source: 'INDICACAO', stage: 'CLOSED_WON', created: iso('2026-10-10'), closedAt: iso('2026-10-18') });
-  const lost = await src.opportunity(env, tenant, { owner: broker, stage: 'CLOSED_LOST', created: iso('2026-10-11'), closedAt: iso('2026-10-19'), lostReason: 'PRICE' });
+  const won = await src.opportunity(env, tenant, { owner: broker, source: 'INDICACAO', stage: 'WON', created: iso('2026-10-10'), closedAt: iso('2026-10-18') });
+  const lost = await src.opportunity(env, tenant, { owner: broker, stage: 'LOST', created: iso('2026-10-11'), closedAt: iso('2026-10-19'), lostReason: 'PRICE' });
   await src.message(env, tenant, { opportunity: o1, created: iso('2026-10-20', '15:10:00') });
   const prop = await src.property(env, tenant, { createdBy: broker, publishedAt: iso('2026-10-15'), created: iso('2026-10-14') });
   const visit = await src.visit(env, tenant, { at: iso('2026-10-26'), status: 'DONE', property: prop });

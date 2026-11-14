@@ -20,12 +20,11 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
-const contractsService = require('../src/features/legal/contracts.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
 const billingScheduleService = require('../src/features/billing/billingSchedule.service');
-const { getSetting } = require('../src/features/settings/settings.service');
 const { evaluateRule } = require('../src/engines/rules/rulesEngine');
 
 let tenant;
@@ -135,7 +134,9 @@ test('dossiê: pacote de evidências a partir de anexos reais do contrato grava 
       extraManifestItems: [{ type: 'AUDIT_NOTE', description: 'Nota de auditoria externa', referenceId: null, hash: 'abc123' }],
     });
     assert.equal(pkg.manifestJson.length, 1);
-    assert.equal(pkg.manifestJson[0].hash, 'abc123');
+    // Fechamento M5 (M5-A0207): o hash do item sem arquivo é calculado pelo servidor; o 'abc123' do chamador não é aceito.
+    assert.notEqual(pkg.manifestJson[0].hash, 'abc123');
+    assert.equal(pkg.manifestJson[0].source, 'declaracao_manual');
     assert.ok(pkg.packageHash);
 
     // Nenhum acesso ainda.
@@ -218,17 +219,26 @@ test('dossiê: outra empresa não enxerga o processo jurídico, o pacote de evid
 // ---------------------------------------------------------------------------
 
 test('JUR-012: não existe nenhum módulo de execução jurídica acessível por "NAY" fora das rotas HTTP protegidas; decisões/criações críticas sempre exigem ator humano autenticado', () => {
-  const legalDir = path.join(__dirname, '..', 'src', 'features', 'legal');
-  const files = fs.readdirSync(legalDir).filter((f) => f.endsWith('.js'));
+  // Árvore do Guia M5 §2 (src/modules/legal): a varredura percorre todas as subpastas do módulo.
+  const legalDir = path.join(__dirname, '..', 'src', 'modules', 'legal');
+  const listar = (d, base = '') => fs.readdirSync(path.join(legalDir, base)).flatMap((n) => {
+    const rel = base ? `${base}/${n}` : n;
+    return fs.statSync(path.join(legalDir, rel)).isDirectory() ? listar(d, rel) : (n.endsWith('.js') ? [rel] : []);
+  });
+  const files = listar(legalDir);
 
   // Exceção controlada (NAY Jurídica, Caderno §17, 19/10/2026): o módulo de leitura
   // legalNay.service.js (travado logo abaixo) e as linhas de rota /legal/nay/* — todas
   // exigindo legal:read, conferidas abaixo.
+  // Verificação M5 linha 124 (Caderno §17 "Sugere minuta"; DI-M5CT-5): a minuta sugerida (cases/nayDraft/) é a segunda exceção
+  // controlada — a NAY grava só a SUGESTÃO (pendente) e o run; a versão do contrato nasce apenas no aceite por pessoa (rota
+  // protegida, ator obrigatório), travado mais abaixo.
   const nayRouteRe = /^legalRouter\.(get|post)\('\/legal\/nay\/[^']+', requirePermission\('legal:read'\), legalController\.nay\w+\);$/;
+  const nayDraftRouteRe = /^legalRouter\.(get|post)\('\/legal\/nay\/(contracts\/:id\/draft-suggestions|draft-suggestions\/:id\/(accept|discard))', requirePermission\('legal:(read|create)'\), nayDraftController\.\w+\);$/;
   for (const file of files) {
-    if (file === 'legalNay.service.js') continue;
+    if (file === 'cases/legalNay.service.js' || file.startsWith('cases/nayDraft/')) continue;
     let content = fs.readFileSync(path.join(legalDir, file), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    if (file === 'legal.routes.js') content = content.split('\n').filter((l) => !nayRouteRe.test(l)).join('\n');
+    if (file === 'shared/legal.routes.js') content = content.split('\n').filter((l) => !nayRouteRe.test(l) && !nayDraftRouteRe.test(l) && !/nayDraftController = require/.test(l)).join('\n');
     assert.ok(
       !/\bNAY\b/i.test(content),
       `${file} não deveria referenciar NAY fora de comentário — nenhum agente de IA tem caminho de execução no jurídico.`
@@ -237,13 +247,24 @@ test('JUR-012: não existe nenhum módulo de execução jurídica acessível por
 
   // NAY Jurídica é SOMENTE LEITURA por construção: só importa modelos + AppError + o registrador de run por regra (M9-D005),
   // a única escrita é a auditoria da execução (recordRuleRun) e não usa SQL cru.
-  const nay = fs.readFileSync(path.join(legalDir, 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../models', '../../features/ai/orchestrator/runs', '../../utils/AppError'].sort());
+  const nay = fs.readFileSync(path.join(legalDir, 'cases', 'legalNay.service.js'), 'utf8').replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.deepEqual([...nay.matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).sort(), ['../../../models', '../../../features/ai/orchestrator/runs', '../../../utils/AppError', '../contracts/application/clauseHomologation.service'].sort());
   assert.equal((nay.match(/\.(create|update|save|destroy|bulkCreate|upsert|increment|decrement|restore|query)\(/g) || []).length, 0, 'nenhuma escrita direta em modelo');
   assert.equal((nay.match(/recordRuleRun\(/g) || []).length, 1, 'a única escrita é o run por regra');
-  const routeLines = fs.readFileSync(path.join(legalDir, 'legal.routes.js'), 'utf8').split('\n').filter((l) => /\/legal\/nay\//.test(l));
-  assert.equal(routeLines.length, 6);
-  for (const l of routeLines) assert.match(l, nayRouteRe);
+  const routeLines = fs.readFileSync(path.join(legalDir, 'shared', 'legal.routes.js'), 'utf8').split('\n').filter((l) => /^legalRouter.*\/legal\/nay\//.test(l));
+  // Fechamento M5 (§11): + POST /legal/nay/inspections/compare (a NAY compara entrada x saída; a lógica fica em features/ai).
+  // Contratos M5: + 4 rotas da minuta da NAY. Total 11.
+  assert.equal(routeLines.length, 11);
+  for (const l of routeLines) assert.ok(nayRouteRe.test(l) || nayDraftRouteRe.test(l), l);
+  // Minuta: escrever só exige legal:create (nunca legal:approve/sign); o aceite exige pessoa e a sugestão não cria versão do contrato.
+  const draftRoutes = routeLines.filter((l) => nayDraftRouteRe.test(l));
+  assert.equal(draftRoutes.length, 4);
+  assert.ok(draftRoutes.filter((l) => /^legalRouter\.post/.test(l)).every((l) => l.includes("requirePermission('legal:create')")));
+  const draftSvc = fs.readFileSync(path.join(legalDir, 'cases', 'nayDraft', 'nayDraft.service.js'), 'utf8');
+  const suggestBody = draftSvc.slice(draftSvc.indexOf('async function suggestDraft'), draftSvc.indexOf('async function listDraftSuggestions'));
+  assert.ok(!/createContractVersion|ContractVersion\.create|\.approve|transitionContractStatus/.test(suggestBody), 'sugerir não cria nem aprova versão do contrato');
+  const acceptBody = draftSvc.slice(draftSvc.indexOf('async function acceptDraftSuggestion'), draftSvc.indexOf('async function discardDraftSuggestion'));
+  assert.match(acceptBody, /if \(!actorUserId\) throw AppError\.forbidden\([^)]*'LEGAL_NAY_DRAFT_HUMAN_REQUIRED'\)/, 'o aceite exige pessoa identificada');
 
   // Toda criação/decisão jurídica crítica (processo, dossiê, mudança de status de contrato,
   // decisão de aprovação) exige actorUserId e passa por controller->rota protegida — nunca é
@@ -314,19 +335,17 @@ test('multa/juros: cálculo do caso de cobrança bate exatamente com a regra pub
 
     const daysPastDue = 15;
 
-    // Lê a MESMA fonte de verdade que o serviço usa (regra publicada + settings do tenant),
-    // sem adivinhar o percentual — se a regra ou o setting mudar, o teste continua correto.
+    // Fechamento M5 (M5-A0330): a fonte é SÓ a ação da versão vigente das regras (REG-LOC-002 carência, REG-LOC-001 multa/juros);
+    // a configuração da aba Cobrança publica versão nova da regra (penaltyRules.service), não entra no cálculo por fora.
+    // O caso alinha antes a regra a algum número já gravado na configuração; o teste faz o mesmo antes de ler a regra.
+    await require('../src/features/billing/penaltyRules.service').syncPenaltyRulesFromSettings(tenant, tenant.userId, transaction);
     const graceEvaluation = await evaluateRule('REG-LOC-002', { gracePeriodRuleActive: true }, tenant, { transaction });
-    const configuredGraceDays = await getSetting('billing.grace_period_days', tenant, transaction, 3);
-    const graceDays = graceEvaluation.decision === 'APPLY' ? graceEvaluation.action.graceDays ?? configuredGraceDays : 0;
+    const graceDays = graceEvaluation.decision === 'APPLY' ? Number(graceEvaluation.action.graceDays || 0) : 0;
     assert.ok(daysPastDue > graceDays, 'pré-condição do teste: dias em atraso deve exceder a carência real para abrir o caso');
 
     const penaltyEvaluation = await evaluateRule('REG-LOC-001', { isOverdue: true }, tenant, { transaction });
-    const configuredPenaltyPercentage = await getSetting('billing.penalty_percentage', tenant, transaction, 2);
-    const configuredInterestPercentage = await getSetting('billing.interest_percentage', tenant, transaction, 1);
-    const penaltyPercentage = penaltyEvaluation.decision === 'APPLY' ? penaltyEvaluation.action.penaltyPercentage ?? configuredPenaltyPercentage : 0;
-    const monthlyInterestPercentage =
-      penaltyEvaluation.decision === 'APPLY' ? penaltyEvaluation.action.monthlyInterestPercentage ?? configuredInterestPercentage : 0;
+    const penaltyPercentage = penaltyEvaluation.decision === 'APPLY' ? Number(penaltyEvaluation.action.penaltyPercentage || 0) : 0;
+    const monthlyInterestPercentage = penaltyEvaluation.decision === 'APPLY' ? Number(penaltyEvaluation.action.monthlyInterestPercentage || 0) : 0;
 
     const balance = 2000;
     const overdueDays = daysPastDue - graceDays;

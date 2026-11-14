@@ -28,17 +28,19 @@ const {
   approveFinancialEntryForSettlement,
   prepareManualSettlement,
 } = require('./testHelpers');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const legalDeadlinesService = require('../src/features/legal/legalDeadlines.service');
+const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const guaranteesService = require('../src/features/legal/guarantees.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const keyDeliveriesService = require('../src/features/legal/keyDeliveries.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const guaranteesService = require('../src/modules/legal/leasing/guarantee.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 const AppError = require('../src/utils/AppError');
 const { Notification, User, UserMembership } = require('../src/models');
 
@@ -46,6 +48,7 @@ let tenant;
 
 before(async () => {
   tenant = await getSeedTenant();
+  await prepararOrigem(tenant);
 });
 
 after(async () => {
@@ -83,7 +86,7 @@ test('R3-1: prazo OVERDUE com responsável próprio, processo SEM responsável �
       {
         description: `R3-1 prazo vencido ${suffix}`,
         dueAt: new Date('2020-01-01'),
-        sourceDocument: 'decisão fictícia (teste automatizado)',
+        sourceDocument: 'decisão fictícia (teste automatizado)', sourceFileId: origem(tenant),
         responsibleUserId: deadlineOwner.id,
       },
       tenant.userId,
@@ -117,7 +120,7 @@ test('R3-1 (controle): prazo sem responsável próprio continua notificando o re
     // Prazo futuro (não exige responsável próprio) que entra na janela DUE_SOON.
     await legalDeadlinesService.createLegalDeadline(
       legalCase.id,
-      { description: `R3-1b prazo próximo ${suffix}`, dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado' },
+      { description: `R3-1b prazo próximo ${suffix}`, dueAt: new Date(Date.now() + 24 * 60 * 60 * 1000), sourceEvent: 'teste automatizado', sourceFileId: origem(tenant) },
       tenant.userId,
       transaction
     );
@@ -176,7 +179,7 @@ test('R3-2: lançamento editado DEPOIS da aprovação invalida a aprovação —
     );
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
@@ -186,7 +189,7 @@ test('R3-2: lançamento editado DEPOIS da aprovação invalida a aprovação —
     );
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntryPartial(entry.id, 40, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'FINANCE_ENTRY_PAYABLE_REQUIRES_PAYMENT_INTENT_APPROVAL');
@@ -203,7 +206,7 @@ test('R3-2 (controle): aprovação sem edição posterior continua liberando a b
     const entry = await createPayableEntry(transaction, suffix);
         // F03 (conferência 18/10/2026): baixa direta de pagamento bancário exige comprovante.
     const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
+    const settled = await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });
 });
@@ -223,7 +226,7 @@ test('R3-2 (reaprovação): depois de editar, uma NOVA aprovação sobre a vers�
 
     // Nova rodada de revisão sobre a versão ATUAL — caminho legítimo pós-edição.
         const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
-    const settled = await financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
+    const settled = await receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction, { manualSettlement });
     assert.equal(settled.status, 'SETTLED');
   });
 });
@@ -269,17 +272,19 @@ async function createActiveLeaseWithInspection(transaction) {
   await inspectionsService.signInspection(inspection.id, { partyRole: 'LANDLORD', signaturePayload: 'r3-locador' }, tenant.userId, transaction);
   await inspectionsService.signInspection(inspection.id, { partyRole: 'TENANT', signaturePayload: 'r3-locatario' }, tenant.userId, transaction);
 
-  return { contract, inspection, tenantPerson };
+  // Fechamento M5: checklist da etapa KEY_DELIVERY dispensado e via assinada do termo (gates do livro).
+  const termEvidenceFileId = await require('./m5fech.locacao.helpers').keyDeliveryReady(tenant, contract.id, transaction);
+  return { contract, inspection, tenantPerson, termEvidenceFileId };
 }
 
 test('R3-3: garantia ACTIVE com startsAt no FUTURO bloqueia a entrega de chaves', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const nextYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE', startsAt: tomorrow, endsAt: nextYear },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { status: 'ACTIVE', startsAt: tomorrow, endsAt: nextYear, renewalDueAt: nextYear }),
       tenant.userId,
       transaction
     );
@@ -290,7 +295,7 @@ test('R3-3: garantia ACTIVE com startsAt no FUTURO bloqueia a entrega de chaves'
     );
 
     await assert.rejects(
-      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, termSignedByPersonId: tenantPerson.id }, tenant.userId, transaction),
+      () => keyDeliveriesService.releaseKeyDelivery(keyDelivery.id, { keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id, termEvidenceFileId }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'LEGAL_KEY_DELIVERY_GUARANTEE_INVALID');
@@ -303,12 +308,12 @@ test('R3-3: garantia ACTIVE com startsAt no FUTURO bloqueia a entrega de chaves'
 
 test('R3-3 (controle): garantia ACTIVE com vigência corrente (startsAt ontem, endsAt futuro) libera normalmente', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const { contract, inspection, tenantPerson } = await createActiveLeaseWithInspection(transaction);
+    const { contract, inspection, tenantPerson, termEvidenceFileId } = await createActiveLeaseWithInspection(transaction);
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     const nextYear = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await guaranteesService.createGuarantee(
       contract.id,
-      { guaranteeType: 'DEPOSIT', value: 500, status: 'ACTIVE', startsAt: yesterday, endsAt: nextYear },
+      await require('./m5fech.locacao.helpers').completeInsurance(tenant, transaction, { status: 'ACTIVE', startsAt: yesterday, endsAt: nextYear, renewalDueAt: nextYear }),
       tenant.userId,
       transaction
     );
@@ -319,7 +324,7 @@ test('R3-3 (controle): garantia ACTIVE com vigência corrente (startsAt ontem, e
     );
     const released = await keyDeliveriesService.releaseKeyDelivery(
       keyDelivery.id,
-      { keysCount: 1, termSignedByPersonId: tenantPerson.id },
+      { keysCount: 1, keysIdentification: 'Chaves de teste', termSignedByPersonId: tenantPerson.id, termEvidenceFileId },
       tenant.userId,
       transaction
     );

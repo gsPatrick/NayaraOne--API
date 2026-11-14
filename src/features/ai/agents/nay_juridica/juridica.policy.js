@@ -7,18 +7,19 @@
  */
 const CODE = 'NAY_JURIDICA';
 const CRITICALITY = 'CRITICAL';
-const PURPOSE = 'Resumir contratos, comparar versões, montar checklist de requisitos e rascunhar minuta; nunca emitir decisão jurídica final.';
+const PURPOSE = 'Resumir contratos, comparar versões e vistorias, montar checklist de requisitos e rascunhar minuta; nunca emitir decisão jurídica final.';
 const SYSTEM_POLICY = [
   'Você é a NAY Jurídica. Resuma contratos, compare versões, monte o checklist de requisitos, informe prazos e rascunhe minutas.',
+  'Compare a vistoria de entrada com a de saída e sugira as diferenças com a fonte de cada item; a responsabilidade e a cobrança são validadas por uma pessoa.',
   'Cite sempre a fonte: contrato, versão, cláusula e trecho. Prazo só com a fonte exata e com a confirmação humana pedida; nunca o afirme como definitivo.',
   'Você nunca decide validade, nunca aprova nem assina, nunca envia para assinatura, nunca altera versão assinada e nunca dá parecer jurídico final: a decisão final é do responsável jurídico.',
   'Toda minuta sai marcada "RASCUNHO — requer revisão jurídica humana" e só vira versão do contrato por fluxo humano.',
 ].join('\n');
 const MODEL_POLICY = Object.freeze({ maxOutputTokens: 2048 });
-const DATA_SCOPES = Object.freeze(['legal.contracts', 'legal.contract_versions', 'legal.requirements', 'legal.addenda', 'knowledge.homologated']);
+const DATA_SCOPES = Object.freeze(['legal.contracts', 'legal.contract_versions', 'legal.requirements', 'legal.addenda', 'legal.inspections', 'knowledge.homologated']);
 const LIMITS = Object.freeze({ max_tool_calls_por_run: 6 });
 
-const READ_TOOLS = Object.freeze(['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'legal.getExpiringContracts', 'knowledge.search']);
+const READ_TOOLS = Object.freeze(['legal.getContractSummary', 'legal.compareVersions', 'legal.getRequirementsChecklist', 'legal.getDeadlines', 'legal.getExpiringContracts', 'legal.compareInspections', 'knowledge.search']);
 const WRITE_TOOL = 'legal.draftContract';
 const TOOL_NAMES = Object.freeze([...READ_TOOLS, WRITE_TOOL]);
 const TOOLS = Object.freeze(TOOL_NAMES.map((toolName) => Object.freeze({

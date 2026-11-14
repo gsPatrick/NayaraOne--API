@@ -3,6 +3,7 @@
 const { CommunicationConsent, Person } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { sessionCompanyId } = require('./personView');
 
 const VALID_CHANNELS = ['PHONE', 'WHATSAPP', 'EMAIL'];
 const VALID_STATUSES = ['OPT_IN', 'OPT_OUT'];
@@ -44,10 +45,11 @@ async function recordConsent(personId, payload, actorUserId, transaction, option
     throw AppError.badRequest(`O campo "status" deve ser um de: ${VALID_STATUSES.join(', ')}.`, 'PERSON_CONSENT_VALIDATION');
   }
 
+  const companyId = await sessionCompanyId(person, transaction); // DI-M9I-3: consentimento é da empresa da sessão
   const consent = await CommunicationConsent.create(
     {
       groupId: person.groupId,
-      companyId: person.companyId,
+      companyId,
       personId,
       channel: normalizedChannel,
       purpose: String(purpose).toUpperCase(),
@@ -62,7 +64,7 @@ async function recordConsent(personId, payload, actorUserId, transaction, option
   await registrarAuditoria(
     {
       groupId: person.groupId,
-      companyId: person.companyId,
+      companyId,
       actorUserId,
       action: 'people.consent.record',
       entityType: 'CommunicationConsent',
@@ -76,7 +78,7 @@ async function recordConsent(personId, payload, actorUserId, transaction, option
   // OPT_OUT (M9-D419): na MESMA transação, o Marketing cria a supressão, cancela o agendado e emite customer.opted_out. Quem já é o
   // serviço do opt-out (a supressão do Marketing) registra o consentimento com skipOptOutHandler para não entrar em laço.
   if (normalizedStatus === 'OPT_OUT' && optOutHandler && !options.skipOptOutHandler) {
-    await optOutHandler({ person, consent, actorUserId: actorUserId || null }, transaction);
+    await optOutHandler({ person: { id: person.id, groupId: person.groupId, companyId }, consent, actorUserId: actorUserId || null }, transaction);
   }
   return consent;
 }
@@ -133,11 +135,29 @@ async function resolveConsent(personId, channel, purpose, transaction) {
  *     finalidades operacionais (ex.: TRANSACTIONAL — aviso de visita agendada) são permitidas
  *     por padrão, pois o Caderno só exige consentimento explícito para contato de alto
  *     impacto/marketing ("Não envia mensagem de alto impacto sem regras/consentimento.").
+ *
+ * M3-18 (CRMX-008 "Comunicação respeita opt-in/opt-out e finalidade"): a política vem por uma porta (Pessoas não conhece o Marketing):
+ * o CRM a registra em `crm/messagePurpose.js` (carregado aqui se o processo ainda não o carregou). Com o parâmetro
+ * `crm.mensagens.finalidade_obrigatoria` DESLIGADO (padrão) é a regra do Marco 9: toda finalidade é conhecida e só MARKETING, CADENCE
+ * e CAMPAIGN exigem OPT_IN. LIGADO, vale a LISTA ÚNICA da empresa (`marketing.consent.exige_opt_in_para` / `marketing.consent.sem_opt_in_para`,
+ * M9-D418) e finalidade fora das duas listas nunca autoriza o contato (fail closed).
  */
-const PURPOSES_REQUIRING_OPT_IN = new Set(['MARKETING', 'CADENCE', 'CAMPAIGN']);
+let purposePolicy = null;
 
-function purposeRequiresConsent(purpose) {
-  return PURPOSES_REQUIRING_OPT_IN.has(String(purpose || '').toUpperCase());
+/** Porta da política de finalidades: fn(purpose, tenant, transaction) -> { known, requiresOptIn }. */
+function registerPurposePolicy(fn) {
+  if (fn !== null && typeof fn !== 'function') throw new TypeError('A política de finalidades deve ser uma função.');
+  purposePolicy = fn;
+}
+
+/** A finalidade exige OPT_IN? true/false; null quando a finalidade não é conhecida (ou não há política registrada). */
+async function purposeRequiresConsent(purpose, tenant, transaction) {
+  // A política mora no CRM (crm/messagePurpose.js registra ao carregar). Processo que ainda não carregou o CRM (um worker, por exemplo)
+  // carrega aqui: sem isso toda finalidade viraria "desconhecida" e nenhum contato seria autorizado.
+  if (!purposePolicy) require('../crm/messagePurpose');
+  if (!purposePolicy) return null;
+  const policy = await purposePolicy(String(purpose || '').toUpperCase(), tenant, transaction);
+  return policy && policy.known ? Boolean(policy.requiresOptIn) : null;
 }
 
 async function canContact(person, channel, purpose, transaction) {
@@ -154,7 +174,9 @@ async function canContact(person, channel, purpose, transaction) {
   const generalOptOut = await resolveConsent(person.id, normalizedChannel, 'ALL', transaction);
   if (generalOptOut && generalOptOut.status === 'OPT_OUT') return false;
 
-  if (purposeRequiresConsent(normalizedPurpose) && (!specificConsent || specificConsent.status !== 'OPT_IN')) {
+  const requiresOptIn = await purposeRequiresConsent(normalizedPurpose, { groupId: person.groupId, companyId: person.companyId }, transaction);
+  if (requiresOptIn === null) return false; // finalidade desconhecida: nunca autoriza
+  if (requiresOptIn && (!specificConsent || specificConsent.status !== 'OPT_IN')) {
     return false;
   }
 
@@ -168,6 +190,7 @@ module.exports = {
   resolveConsent,
   canContact,
   purposeRequiresConsent,
+  registerPurposePolicy,
   VALID_CHANNELS,
   VALID_STATUSES,
 };

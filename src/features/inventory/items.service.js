@@ -3,6 +3,7 @@
 const { Op } = require('sequelize');
 const { InventoryItem, InventoryLocation, InventoryMovement, InventoryStockBalance, Project } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertProjectInCompany } = require('../construction/companyRefs'); // verificação do Marco 6: obra da mesma empresa
 const { publishItemCreated } = require('./inventoryEvents.service');
 const { createMinStockRule } = require('./minStockRules.service');
 
@@ -181,6 +182,7 @@ async function createLocation(payload, actorUserId, transaction) {
   if (locationType === 'PROJECT_SITE' && !projectId) {
     throw AppError.badRequest('Local do tipo "obra" (PROJECT_SITE) exige a obra vinculada ("projectId").', 'INVENTORY_LOCATION_PROJECT_REQUIRED');
   }
+  await assertProjectInCompany(projectId, companyId, transaction);
   return InventoryLocation.create(
     {
       groupId,
@@ -229,6 +231,7 @@ async function updateLocation(locationId, payload, actorUserId, groupId, company
     if (location.locationType === 'PROJECT_SITE' && !projectId) {
       throw AppError.badRequest('Local do tipo "canteiro de obra" precisa de uma obra vinculada.', 'INVENTORY_LOCATION_VALIDATION');
     }
+    await assertProjectInCompany(projectId, companyId, transaction);
     location.projectId = projectId || null;
   }
 

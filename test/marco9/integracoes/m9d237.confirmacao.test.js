@@ -4,7 +4,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const env = require('../_helpers/m9d237Env');
-const financeController = require('../../../src/features/finance/finance.controller');
+const financeController = require('../../../src/modules/finance/presentation/http/finance.controller');
 const { resolveError } = require('../../../src/features/integrations/errors');
 const { transitionDispatch } = require('../../../src/features/integrations/dispatch');
 
@@ -24,7 +24,7 @@ test('banco_webhook_paid_confirma', async () => {
     const r = await webhook(t, { externalSubmissionId: intent.externalSubmissionId, status: 'paid', amount: '1250.00', externalEventId: evento() });
     assert.deepEqual([r.processed, r.mismatch], [true, undefined]);
     await intent.reload({ transaction: t });
-    assert.equal(intent.status, 'EXECUTED');
+    assert.equal(intent.status, 'CONFIRMED');
     assert.equal((await entry.reload({ transaction: t })).status, 'SETTLED');
     const [d] = await env.envios(t, intent.id);
     assert.equal(d.status, 'CONFIRMED', 'o status final assinado confirma o envio, sem exigir o extrato');
@@ -40,7 +40,7 @@ test('banco_valor_divergente_nao_confirma', async () => {
     const r = await webhook(t, { externalSubmissionId: intent.externalSubmissionId, status: 'paid', amount: '1205.00', externalEventId: evento() });
     assert.deepEqual([r.processed, r.mismatch, r.code], [false, true, 'INTEGRATION_BANK_AMOUNT_MISMATCH']);
     await intent.reload({ transaction: t });
-    assert.equal(intent.status, 'SUBMITTED', 'o valor diferente não confirma');
+    assert.equal(intent.status, 'EXECUTING', 'o valor diferente não confirma');
     assert.equal((await entry.reload({ transaction: t })).status, 'PENDING');
     const [d] = await env.envios(t, intent.id);
     assert.equal(d.status, 'SUBMITTED', 'o envio permanece onde estava');
@@ -86,15 +86,15 @@ test('banco_confirmed_por_status_sem_exigir_extrato_e_mismatch_mantem_dispatch',
     // 1. a consulta de status (STATUS_QUERY) confirma sem nenhuma entrada de extrato
     const a = await env.intencaoEnviada(t);
     const r = await env.bankPayments.reconcilePaymentIntent(a.intent.id, { userId: null }, t);
-    assert.equal(r.intent.status, 'EXECUTED');
+    assert.equal(r.intent.status, 'CONFIRMED');
     assert.equal((await env.envios(t, a.intent.id))[0].status, 'CONFIRMED');
     assert.equal(r.intent.reconciledAt || null, null, 'sem extrato o pagamento confirmado ainda não está conciliado');
     // 2. envio incerto (UNKNOWN) + valor divergente: o envio continua UNKNOWN e a resolução humana leva a FAILED
     const b = await env.intencaoEnviada(t, { amount: 80 });
     const [d] = await env.envios(t, b.intent.id);
     await sequelize.query("UPDATE integration.dispatches SET status = 'UNKNOWN', unknown_since = now() WHERE id = :id", { replacements: { id: d.id }, transaction: t });
-    const m = await env.bankPayments.confirmBankPayment(b.intent.externalSubmissionId, 'PAID', t, { amount: '8.00', source: 'WEBHOOK_SIGNED' });
-    assert.equal(m.status, 'SUBMITTED');
+    const m = await env.paymentService.confirmBankPayment(b.intent.externalSubmissionId, 'PAID', t, { amount: '8.00', source: 'WEBHOOK_SIGNED' });
+    assert.equal(m.status, 'EXECUTING');
     assert.equal((await env.envios(t, b.intent.id))[0].status, 'UNKNOWN');
     const [erro] = await env.erros(t, 'INTEGRATION_BANK_AMOUNT_MISMATCH');
     await resolveError(erro.id, { note: 'Pagamento não vale.', decision: 'REJECT_PAYMENT' }, env.ctxDe(), t);

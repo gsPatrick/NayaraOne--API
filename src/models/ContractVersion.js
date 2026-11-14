@@ -65,6 +65,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'signed_document_file_id',
       },
+      // Matriz M5 (Guia §4/§6): estado da versão, aprovação da versão, arquivo armazenado com os bytes do hash
+      // e a versão do modelo que a gerou (migrations 9981/9982).
+      status: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'DRAFT', field: 'status' },
+      approvedBy: { type: DataTypes.UUID, allowNull: true, field: 'approved_by' },
+      approvedAt: { type: DataTypes.DATE, allowNull: true, field: 'approved_at' },
+      contentFileId: { type: DataTypes.UUID, allowNull: true, field: 'content_file_id' },
+      templateVersionId: { type: DataTypes.UUID, allowNull: true, field: 'template_version_id' },
       templateId: {
         type: DataTypes.UUID,
         allowNull: true,

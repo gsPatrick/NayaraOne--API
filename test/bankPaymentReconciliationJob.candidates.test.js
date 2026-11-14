@@ -9,8 +9,8 @@ const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, createTestCostCenter, uniqueSuffix } = require('./testHelpers');
 const { BankAccount } = require('../src/models');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const paymentIntentsService = require('../src/features/finance/paymentIntents.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const paymentIntentsService = require('../src/modules/finance/application/services/payment.service');
 const { findReconcileCandidates } = require('../src/engines/jobs/bankPaymentReconciliationJob');
 
 let tenant;
@@ -37,10 +37,11 @@ async function newIntent(t) {
   return paymentIntentsService.createPaymentIntent({ financialEntryId: entry.id }, tenant.userId, t);
 }
 
-async function setState(t, id, status, minutesAgo) {
+// Guia M4 §3 (DEC-056): enviando/enviado ao banco = EXECUTING com a fase em submission_phase; pago = CONFIRMED.
+async function setState(t, id, status, phase, minutesAgo) {
   await sequelize.query(
-    "UPDATE finance.payment_intents SET status = :status, updated_at = now() - (:min * interval '1 minute') WHERE id = :id",
-    { replacements: { status, min: minutesAgo, id }, transaction: t }
+    "UPDATE finance.payment_intents SET status = :status, submission_phase = :phase, updated_at = now() - (:min * interval '1 minute') WHERE id = :id",
+    { replacements: { status, phase, min: minutesAgo, id }, transaction: t }
   );
 }
 
@@ -50,16 +51,16 @@ test('job de reconciliação bancária: a consulta de candidatos executa e devol
     const presoSubmitted = await newIntent(t);
     const recente = await newIntent(t);
     const outroStatus = await newIntent(t);
-    await setState(t, preso.id, 'SUBMITTING', 60);
-    await setState(t, presoSubmitted.id, 'SUBMITTED', 60);
-    await setState(t, recente.id, 'SUBMITTING', 0);
-    await setState(t, outroStatus.id, 'EXECUTED', 60);
+    await setState(t, preso.id, 'EXECUTING', 'SUBMITTING', 60);
+    await setState(t, presoSubmitted.id, 'EXECUTING', 'SUBMITTED', 60);
+    await setState(t, recente.id, 'EXECUTING', 'SUBMITTING', 0);
+    await setState(t, outroStatus.id, 'CONFIRMED', 'SUBMITTED', 60);
 
     const candidates = await findReconcileCandidates({ groupId: tenant.groupId, companyId: tenant.companyId }, t);
     const ids = candidates.map((c) => c.id);
     assert.ok(ids.includes(preso.id), 'SUBMITTING antigo precisa ser candidato');
     assert.ok(ids.includes(presoSubmitted.id), 'SUBMITTED antigo precisa ser candidato');
     assert.ok(!ids.includes(recente.id), 'SUBMITTING recente (abaixo da idade mínima) não é candidato');
-    assert.ok(!ids.includes(outroStatus.id), 'EXECUTED não é candidato');
+    assert.ok(!ids.includes(outroStatus.id), 'CONFIRMED (pago) não é candidato');
   });
 });

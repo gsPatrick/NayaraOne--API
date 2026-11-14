@@ -3,6 +3,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
+const { randomCpf } = require('./helpers/pessoasVinculo');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const peopleService = require('../src/features/people/people.service');
 const AppError = require('../src/utils/AppError');
@@ -19,7 +20,7 @@ after(async () => {
 
 test('dedup: cria pessoa, tenta duplicata por CPF, espera 409 (allowDuplicate NÃO contorna match forte)', async () => {
   const suffix = uniqueSuffix();
-  const taxIdNormalized = `11122233${suffix}`.slice(0, 11).padEnd(11, '0');
+  const taxIdNormalized = randomCpf(); // M3-01: CPF com dígito verificador certo
 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const first = await peopleService.createPerson(
@@ -70,8 +71,11 @@ test('dedup: cria pessoa, tenta duplicata por CPF, espera 409 (allowDuplicate N�
         ),
       (err) => {
         assert.ok(err instanceof AppError);
+        // Match forte é recusado ANTES de tentar gravar (livro §4: bloqueia e oferece o existente), com ou sem allowDuplicate (DI-M3PE-4).
         assert.equal(err.statusCode, 409);
-        assert.equal(err.code, 'PERSON_DUPLICATE_TAX_ID');
+        assert.equal(err.code, 'PERSON_DUPLICATE');
+        assert.equal(err.details.nivel, 'FORTE');
+        assert.equal(err.details.existingPersonId, first.id);
         return true;
       }
     );

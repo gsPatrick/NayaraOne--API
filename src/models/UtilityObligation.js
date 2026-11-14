@@ -3,7 +3,8 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * UtilityObligation — tabela "finance"."utility_obligations". Obrigação recorrente de
+ * UtilityObligation — tabela "legal"."lease_obligations" (nome do livro, Caderno M5 §4; antes
+ * finance.utility_obligations, que continua existindo como visão gravável). Obrigação recorrente de
  * utilidade (água/energia/gás/condomínio/IPTU/SPU/outro) vinculada a um contrato de locação.
  */
 module.exports = (sequelize) => {
@@ -20,6 +21,11 @@ module.exports = (sequelize) => {
       accountNumber: { type: DataTypes.STRING(60), allowNull: true, field: 'account_number' },
       transferRequired: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false, field: 'transfer_required' },
       evidenceFileId: { type: DataTypes.UUID, allowNull: true, field: 'evidence_file_id' },
+      // Fechamento M5 (Caderno §12 "Cada obrigação possui responsável, periodicidade, comprovante e status").
+      periodicity: { type: DataTypes.STRING(16), allowNull: true, field: 'periodicity' },
+      dueDay: { type: DataTypes.SMALLINT, allowNull: true, field: 'due_day' },
+      startsOn: { type: DataTypes.DATEONLY, allowNull: true, field: 'starts_on' },
+      nextDueOn: { type: DataTypes.DATEONLY, allowNull: true, field: 'next_due_on' },
       status: { type: DataTypes.STRING(32), allowNull: false, defaultValue: 'ACTIVE', field: 'status' },
       lockVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0, field: 'lock_version' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
@@ -27,8 +33,8 @@ module.exports = (sequelize) => {
       deletedBy: { type: DataTypes.UUID, allowNull: true, field: 'deleted_by' },
     },
     {
-      schema: 'finance',
-      tableName: 'utility_obligations',
+      schema: 'legal',
+      tableName: 'lease_obligations',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',

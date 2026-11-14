@@ -36,6 +36,8 @@ module.exports = (sequelize) => {
       satisfiedByFileId: { type: DataTypes.UUID, allowNull: true, field: 'satisfied_by_file_id' },
       satisfiedAt: { type: DataTypes.DATE, allowNull: true, field: 'satisfied_at' },
       waivedReason: { type: DataTypes.TEXT, allowNull: true, field: 'waived_reason' },
+      requiredStage: { type: DataTypes.STRING(24), allowNull: false, defaultValue: 'LEGAL_REVIEW', field: 'required_stage' },
+      ruleVersionId: { type: DataTypes.UUID, allowNull: true, field: 'rule_version_id' },
       createdBy: { type: DataTypes.UUID, allowNull: true, field: 'created_by' },
       updatedBy: { type: DataTypes.UUID, allowNull: true, field: 'updated_by' },
     },

@@ -37,16 +37,17 @@ const {
   uniqueSuffix,
 } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
-const { createFinancialEntry } = require('../src/features/finance/financialEntries.service');
-const { createPaymentIntent, approvePaymentIntent } = require('../src/features/finance/paymentIntents.service');
-const { submitPaymentIntentToBank, confirmBankPayment } = require('../src/features/finance/bankPayments.service');
-const approvalsService = require('../src/features/finance/approvals.service');
+const { createFinancialEntry } = require('../src/modules/finance/application/services/financial-entry.service');
+const { createPaymentIntent, approvePaymentIntent } = require('../src/modules/finance/application/services/payment.service');
+const { submitPaymentIntentToBank } = require('../src/modules/finance/application/services/bank-submission.service');
+const { confirmBankPayment } = require('../src/modules/finance/application/services/payment.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
 const filesService = require('../src/features/files/files.service');
 const propertiesService = require('../src/features/properties/properties.service');
-const contractsService = require('../src/features/legal/contracts.service');
-const inspectionsService = require('../src/features/legal/inspections.service');
-const legalCasesService = require('../src/features/legal/legalCases.service');
-const evidencePackagesService = require('../src/features/legal/evidencePackages.service');
+const contractsService = require('../src/modules/legal/contracts/application/contract.service');
+const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
+const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { BankAccount, User, FinancialEntry, EvidencePackageAccessLog, Group, Company } = require('../src/models');
 
 let tenant;
@@ -159,6 +160,12 @@ before(async () => {
 const A = () => fixtures[tenant.companyId];
 
 after(async () => {
+  // Limpa o passo recente de MFA que o teste gravou (uma linha por usuário, presa pela RLS à empresa onde ficou): outra execução no MESMO banco não o
+  // enxergaria a partir das empresas novas e o INSERT daria UNIQUE (visto ao rodar o arquivo nos estágios 15 e 16 da esteira do Financeiro).
+  if (stepUpCompany) {
+    const { MfaStepUp } = require('../src/models');
+    await withTenantTransaction(stepUpCompany, (transaction) => MfaStepUp.destroy({ where: { userId: tenant.userId }, transaction }));
+  }
   await sequelize.close();
   // Mesmo padrão dos demais testes que sobem ../app (app.listen incondicional).
   process.exit(0);
@@ -236,7 +243,7 @@ test('F06-PAY-03 recuperação após falha DEFINITIVA: nova tentativa confirmada
 
     const second = await submitPaymentIntentToBank((await approvedIntentFor(entry.id, t)).id, 'PIX', { userId: tenant.userId }, t);
     const executed = await confirmBankPayment(second.externalSubmissionId, 'CONFIRMED', t);
-    assert.equal(executed.status, 'EXECUTED');
+    assert.equal(executed.status, 'CONFIRMED');
 
     await confirmBankPayment(second.externalSubmissionId, 'CONFIRMED', t);
     await confirmBankPayment(first.externalSubmissionId, 'CONFIRMED', t);
@@ -271,7 +278,7 @@ test(
       const entry = await makePayable(t);
       const submitted = await submitPaymentIntentToBank((await approvedIntentFor(entry.id, t)).id, 'PIX', { userId: tenant.userId }, t);
       const uncertain = await confirmBankPayment(submitted.externalSubmissionId, 'PROCESSING', t);
-      assert.notEqual(uncertain.status, 'EXECUTED', 'resposta incerta nunca vira sucesso');
+      assert.notEqual(uncertain.status, 'CONFIRMED', 'resposta incerta nunca vira sucesso');
       await confirmBankPayment(submitted.externalSubmissionId, 'CONFIRMED', t);
       await entry.reload({ transaction: t });
       assert.equal(entry.status, 'SETTLED', 'a confirmação real posterior precisa ser registrada');
@@ -313,7 +320,12 @@ const EXPORT_QUERY = `?purpose=AUDITORIA&justification=${encodeURIComponent('Con
 let stepUpCompany = null;
 async function grantRecentMfa(ctx) {
   const { MfaStepUp } = require('../src/models');
-  if (stepUpCompany && stepUpCompany.companyId !== ctx.companyId) {
+  if (!stepUpCompany) {
+    // Primeira chamada do arquivo: apaga um passo recente que outro teste tenha deixado para o mesmo usuário nas empresas deste arquivo (o after() limpa o deste).
+    for (const empresa of [tenant, sameGroupTenant, otherGroupTenant]) {
+      await withTenantTransaction(empresa, (transaction) => MfaStepUp.destroy({ where: { userId: tenant.userId }, transaction }));
+    }
+  } else if (stepUpCompany.companyId !== ctx.companyId) {
     await withTenantTransaction(stepUpCompany, (transaction) => MfaStepUp.destroy({ where: { userId: tenant.userId }, transaction }));
   }
   await withTenantTransaction(ctx, async (transaction) => {
@@ -327,12 +339,12 @@ async function grantRecentMfa(ctx) {
 test('F06-IDOR-01 outra empresa real com legal:read não exporta o dossiê de A pela rota (404) e não deixa rastro na cadeia de custódia', async () => {
   for (const [label, attacker] of attackers()) {
     const own = fixtures[attacker.companyId];
-    assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read']), 404, `${label} → dossiê de A`);
+    assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read', 'legal:evidence:export']), 404, `${label} → dossiê de A`);
     await grantRecentMfa(attacker);
-    assert.equal(await http(`/legal/evidence-packages/${own.evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read']), 200, `controle positivo: ${label} exporta o próprio dossiê`);
+    assert.equal(await http(`/legal/evidence-packages/${own.evidencePackageId}/export${EXPORT_QUERY}`, attacker, ['legal:read', 'legal:evidence:export']), 200, `controle positivo: ${label} exporta o próprio dossiê`);
   }
   await grantRecentMfa(tenant);
-  assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, tenant, ['legal:read']), 200, 'controle positivo: A exporta o próprio dossiê');
+  assert.equal(await http(`/legal/evidence-packages/${A().evidencePackageId}/export${EXPORT_QUERY}`, tenant, ['legal:read', 'legal:evidence:export']), 200, 'controle positivo: A exporta o próprio dossiê');
   const exported = await withTenantTransaction(tenant, (t) =>
     EvidencePackageAccessLog.count({ where: { evidencePackageId: A().evidencePackageId, action: 'EXPORTED' }, transaction: t })
   );

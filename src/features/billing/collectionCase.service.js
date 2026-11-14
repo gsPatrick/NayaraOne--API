@@ -2,11 +2,15 @@
 
 const { CollectionCase, BillingSchedule } = require('../../models');
 const AppError = require('../../utils/AppError');
+const { assertUuid, assertText } = require('../../utils/inputGuards');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
 const { evaluateRule } = require('../../engines/rules/rulesEngine');
 const billingScheduleService = require('./billingSchedule.service');
 const { publishChargeOverdue } = require('./billingEvents.service');
-const { getSetting } = require('../settings/settings.service');
+const { syncPenaltyRulesFromSettings } = require('./penaltyRules.service');
+
+// Número da ação da regra (ausente ou inválido = 0, fail closed).
+const ruleNumber = (action, field) => (Number.isFinite(Number(action && action[field])) ? Number(action[field]) : 0);
 
 /**
  * openCollectionCase — abre um caso de cobrança para uma competência (billing_schedule) em
@@ -15,18 +19,10 @@ const { getSetting } = require('../settings/settings.service');
  * para o tenant, evaluateRule retorna DENY e usamos 0 dias de carência / 0% de multa e juros
  * (mais conservador — nunca aplicamos um valor "adivinhado").
  *
- * DECISÃO DE ENGENHARIA — como conectar o painel de settings ao Motor de Regras: o
- * `evaluateRule` resolve a decisão (APLICA/NÃO APLICA a regra para este tenant) a partir de um
- * AST/actionJson fixo de uma `RuleVersion` PUBLICADA — publicar uma nova versão é um fluxo
- * próprio (aprovação, versionamento, auditoria, ver engines/rules), com um propósito diferente
- * do painel de settings ("o cliente ajusta um número simples sem passar pelo fluxo de
- * publicação de regra"). Por isso NÃO alteramos o motor de regras para ler settings: ele
- * continua decidindo SE a multa/juros/carência se aplicam (fail-closed, 0 se a regra não
- * estiver publicada). O QUANTO (percentual/dias) usado no CÁLCULO, uma vez que a regra decidiu
- * "aplica", agora vem de `getSetting(...)` com o valor hardcoded de scripts/seedBillingRules.js
- * como default (preserva o comportamento atual quando o tenant não configurou nada no painel).
- * Isso mantém a auditabilidade do motor de regras (penalty_rule_version_id/graceRuleVersionId
- * continuam gravados) e ainda assim torna o número ajustável por tenant sem publicar regra nova.
+ * Fechamento M5 (M5-A0330, livro "Multa/juros/grace/cadência via Motor de Regras"): os percentuais e a carência vêm SÓ da
+ * ação da versão vigente das regras (REG-LOC-001 penaltyPercentage/monthlyInterestPercentage, REG-LOC-002 graceDays); não há
+ * número de reserva no código. Os números que o administrador grava na aba Cobrança viram versões novas dessas regras
+ * (penaltyRules.service.js), e o caso grava a versão usada (penalty_rule_version_id / grace_rule_version_id).
  */
 async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, transaction) {
   // FIX (concorrência): sem lock pessimista aqui, duas chamadas concorrentes de
@@ -38,6 +34,9 @@ async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, t
   // compatível com o LEFT JOIN de `items` que getBillingSchedule usa. Travar a linha de
   // billing_schedule serializa as duas chamadas concorrentes: a segunda só prossegue depois da
   // primeira commitar, e aí enxerga o CollectionCase já criado pela primeira.
+  // Fechamento M5 (pentest): id e dias com tipo errado viram 400, nunca 500.
+  assertUuid(billingScheduleId, 'billingScheduleId', 'COLLECTION_CASE_VALIDATION');
+  if (!Number.isFinite(daysPastDue) || daysPastDue < 0) throw AppError.badRequest('"daysPastDue" deve ser um número de dias maior ou igual a zero.', 'COLLECTION_CASE_VALIDATION');
   await BillingSchedule.findByPk(billingScheduleId, { transaction, lock: transaction.LOCK.UPDATE });
 
   const billingSchedule = await billingScheduleService.getBillingSchedule(billingScheduleId, transaction);
@@ -47,12 +46,10 @@ async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, t
 
   const tenant = { groupId: billingSchedule.groupId, companyId: billingSchedule.companyId };
 
+  // Empresa que já tinha números gravados na configuração antes desta mudança: a regra é alinhada a eles (publicação auditada).
+  await syncPenaltyRulesFromSettings(tenant, actorUserId, transaction);
   const graceEvaluation = await evaluateRule('REG-LOC-002', { gracePeriodRuleActive: true }, tenant, { transaction });
-  const configuredGraceDays = await getSetting('billing.grace_period_days', tenant, transaction, 3);
-  const graceDays =
-    graceEvaluation.decision === 'APPLY'
-      ? Number(configuredGraceDays !== null && configuredGraceDays !== undefined ? configuredGraceDays : graceEvaluation.action.graceDays || 0)
-      : 0;
+  const graceDays = graceEvaluation.decision === 'APPLY' ? ruleNumber(graceEvaluation.action, 'graceDays') : 0;
 
   if (daysPastDue < graceDays) {
     throw AppError.conflict(
@@ -67,24 +64,8 @@ async function openCollectionCase(billingScheduleId, daysPastDue, actorUserId, t
   }
 
   const penaltyEvaluation = await evaluateRule('REG-LOC-001', { isOverdue: true }, tenant, { transaction });
-  const configuredPenaltyPercentage = await getSetting('billing.late_fee_percentage', tenant, transaction, 2);
-  const configuredInterestPercentage = await getSetting('billing.interest_percentage', tenant, transaction, 1);
-  const penaltyPercentage =
-    penaltyEvaluation.decision === 'APPLY'
-      ? Number(
-          configuredPenaltyPercentage !== null && configuredPenaltyPercentage !== undefined
-            ? configuredPenaltyPercentage
-            : penaltyEvaluation.action.penaltyPercentage || 0
-        )
-      : 0;
-  const monthlyInterestPercentage =
-    penaltyEvaluation.decision === 'APPLY'
-      ? Number(
-          configuredInterestPercentage !== null && configuredInterestPercentage !== undefined
-            ? configuredInterestPercentage
-            : penaltyEvaluation.action.monthlyInterestPercentage || 0
-        )
-      : 0;
+  const penaltyPercentage = penaltyEvaluation.decision === 'APPLY' ? ruleNumber(penaltyEvaluation.action, 'penaltyPercentage') : 0;
+  const monthlyInterestPercentage = penaltyEvaluation.decision === 'APPLY' ? ruleNumber(penaltyEvaluation.action, 'monthlyInterestPercentage') : 0;
 
   const balance = Number(billingSchedule.balance);
   const penaltyAmount = round2((balance * penaltyPercentage) / 100);
@@ -168,6 +149,10 @@ async function createAgreement(collectionCaseId, payload, actorUserId, transacti
   if (!installments || !agreedAmount) {
     throw AppError.badRequest('Os campos "installments" e "agreedAmount" são obrigatórios.', 'COLLECTION_AGREEMENT_VALIDATION');
   }
+  if (!Number.isInteger(Number(installments)) || Number(installments) <= 0 || typeof installments === 'object' || typeof agreedAmount === 'object' || !Number.isFinite(Number(agreedAmount)) || Number(agreedAmount) <= 0) {
+    throw AppError.badRequest('"installments" deve ser um inteiro positivo e "agreedAmount" um valor maior que zero.', 'COLLECTION_AGREEMENT_VALIDATION');
+  }
+  assertText(notes, 'notes', 2000, 'COLLECTION_AGREEMENT_VALIDATION');
   const beforeJson = collectionCase.toJSON();
 
   const previousAgreements = Array.isArray(collectionCase.agreementsJson) ? collectionCase.agreementsJson : [];

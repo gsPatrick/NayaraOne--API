@@ -31,9 +31,12 @@ async function readBudget(companyId, projectId, fallback, transaction) {
 
 async function readLedgerAndRevenue(companyId, projectId, dayEnd, statuses, transaction) {
   const [[actual]] = await sequelize.query(
-    `SELECT COALESCE(SUM(amount), 0)::text AS actual_cost FROM finance.financial_entries
-      WHERE company_id = :companyId AND construction_project_id = :projectId AND nature = 'PAYABLE' AND status = 'SETTLED'
-        AND reversal_of_entry_id IS NULL AND NOT is_third_party_funds AND settled_at < CAST(:dayEnd AS timestamptz)`,
+    // Saída liquidada = movimento de caixa: a baixa parcial filha (que carrega a obra desde M6-97) entra pela própria data; a
+    // obrigação quitada por baixas parciais não entra de novo (nada é somado duas vezes).
+    `SELECT COALESCE(SUM(f.amount), 0)::text AS actual_cost FROM finance.financial_entries f
+      WHERE f.company_id = :companyId AND f.construction_project_id = :projectId AND f.nature = 'PAYABLE' AND f.status = 'SETTLED'
+        AND f.reversal_of_entry_id IS NULL AND NOT f.is_third_party_funds AND f.settled_at < CAST(:dayEnd AS timestamptz)
+        AND NOT EXISTS (SELECT 1 FROM finance.financial_entries c WHERE c.parent_entry_id = f.id AND c.status = 'SETTLED' AND c.nature = f.nature)`,
     { replacements: { companyId, projectId, dayEnd }, transaction }
   );
   const [[revenue]] = await sequelize.query(

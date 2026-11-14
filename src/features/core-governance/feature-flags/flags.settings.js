@@ -35,7 +35,8 @@ const FLAGS_SETTINGS_SCHEMA = {
   [KEYS.expiryHour]: { type: 'integer', min: 0, max: 23 },
   [KEYS.expiryMinute]: { type: 'integer', min: 0, max: 59 },
   [KEYS.expiryReminder]: { type: 'boolean' },
-  [KEYS.killDays]: { type: 'integer', min: 1, max: 365 },
+  // parametros.csv tem a chave duas vezes (P9-EF-060 com MFA, M9-D872 sem): vale a mais restritiva, MFA recente para alterar (settings/settingMfa.js).
+  [KEYS.killDays]: { type: 'integer', min: 1, max: 365, requiresMfa: true },
   [KEYS.killHour]: { type: 'integer', min: 0, max: 23 },
   [KEYS.killMinute]: { type: 'integer', min: 0, max: 59 },
   [KEYS.killToleranceMin]: { type: 'integer', min: 1, max: 1440 },

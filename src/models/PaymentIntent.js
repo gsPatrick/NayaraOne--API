@@ -26,16 +26,21 @@ module.exports = (sequelize) => {
       // M9-D228: o que a tela mostra enquanto a ordem espera o banco (fila, envio incerto ou aceita sem status final): nunca "pago" por presunção.
       statusMessage: {
         type: DataTypes.VIRTUAL,
-        get() { return ['SUBMITTING', 'SUBMITTED'].includes(this.getDataValue('status')) ? 'Aguardando confirmação do banco' : null; },
+        get() { return this.getDataValue('status') === 'EXECUTING' && this.getDataValue('submissionPhase') !== 'NOT_STARTED' ? 'Aguardando confirmação do banco' : null; },
       },
       snapshotHash: { type: DataTypes.STRING(64), allowNull: false, field: 'snapshot_hash' },
       status: {
         type: DataTypes.STRING(32),
         allowNull: false,
-        defaultValue: 'PENDING',
+        defaultValue: 'DRAFT',
         field: 'status',
-        comment: 'PENDING|APPROVED|SUBMITTED|EXECUTED|FAILED|CANCELLED',
+        comment: 'DRAFT|PENDING_APPROVAL|APPROVED|EXECUTING|CONFIRMED|FAILED|CANCELED (Guia M4 §3, DEC-056)',
       },
+      // DEC-056: fase do envio ao banco enquanto EXECUTING (NOT_STARTED|SUBMITTING|SUBMITTED|UNCERTAIN).
+      submissionPhase: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'NOT_STARTED', field: 'submission_phase' },
+      // Guia §3 amount / Caderno §8.2: o valor (parcela) desta intenção, que pode ser parte do saldo do lançamento.
+      amount: { type: DataTypes.DECIMAL(18, 2), allowNull: true, field: 'amount' },
+      installmentNumber: { type: DataTypes.INTEGER, allowNull: true, field: 'installment_number' },
       bankAccountId: { type: DataTypes.UUID, allowNull: true, field: 'bank_account_id' },
       beneficiarySnapshot: { type: DataTypes.JSONB, allowNull: true, field: 'beneficiary_snapshot' },
       paymentMethod: { type: DataTypes.STRING(16), allowNull: true, field: 'payment_method' },

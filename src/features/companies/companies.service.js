@@ -13,6 +13,21 @@ const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
  * qualquer grupo por id. Toda query aqui roda dentro da `transaction` aberta por
  * `req.withTenantTransaction` (SET LOCAL app.group_id/...), nunca fora dela.
  */
+/**
+ * O audit_log tem RLS por company_id: o evento de uma empresa pertence a ela mesma, mas a transação da requisição está no
+ * contexto da empresa ATUAL de quem age. Antes, só a criação trocava o contexto; alterar ou inativar OUTRA empresa do
+ * grupo pela rota dava 500 (RLS do audit_log). O contexto é trocado só para o INSERT da auditoria e restaurado em seguida.
+ */
+async function auditarNaEmpresa(company, entry, transaction) {
+  const [[{ atual }]] = await sequelize.query("SELECT current_setting('app.company_id', true) AS atual", { transaction });
+  await sequelize.query("SELECT set_config('app.company_id', :companyId, true)", { replacements: { companyId: company.id }, transaction });
+  try {
+    await registrarAuditoria({ groupId: company.groupId, companyId: company.id, entityType: 'Company', entityId: company.id, ...entry }, transaction);
+  } finally {
+    await sequelize.query("SELECT set_config('app.company_id', :companyId, true)", { replacements: { companyId: atual || '' }, transaction });
+  }
+}
+
 async function createCompany(payload, actorUserId, transaction) {
   const { groupId, name, legalName, taxId, status } = payload;
   if (!groupId || !name) {
@@ -44,18 +59,9 @@ async function createCompany(payload, actorUserId, transaction) {
   // usando o contexto de tenant original), trocamos o contexto pra empresa recém-criada só
   // para este INSERT — semanticamente correto: o evento "esta empresa foi criada" pertence a
   // ela mesma.
-  await sequelize.query('SET LOCAL app.company_id = :companyId', { replacements: { companyId: company.id }, transaction });
-  await registrarAuditoria(
-    {
-      groupId,
-      companyId: company.id,
-      actorUserId,
-      action: 'company.create',
-      entityType: 'Company',
-      entityId: company.id,
-      afterJson: company.toJSON(),
-      reason: `Empresa "${company.name}" cadastrada.`,
-    },
+  await auditarNaEmpresa(
+    company,
+    { actorUserId, action: 'company.create', afterJson: company.toJSON(), reason: `Empresa "${company.name}" cadastrada.` },
     transaction
   );
 
@@ -83,20 +89,7 @@ async function updateCompany(id, payload, actorUserId, transaction) {
   company.updatedBy = actorUserId || null;
   await company.save({ transaction });
 
-  await registrarAuditoria(
-    {
-      groupId: company.groupId,
-      companyId: company.id,
-      actorUserId,
-      action: 'company.update',
-      entityType: 'Company',
-      entityId: company.id,
-      beforeJson,
-      afterJson: company.toJSON(),
-      reason: `Empresa "${company.name}" atualizada.`,
-    },
-    transaction
-  );
+  await auditarNaEmpresa(company, { actorUserId, action: 'company.update', beforeJson, afterJson: company.toJSON(), reason: `Empresa "${company.name}" atualizada.` }, transaction);
 
   return company;
 }
@@ -109,19 +102,7 @@ async function deleteCompany(id, actorUserId, transaction) {
   await company.save({ transaction });
   await company.destroy({ transaction });
 
-  await registrarAuditoria(
-    {
-      groupId: company.groupId,
-      companyId: company.id,
-      actorUserId,
-      action: 'company.delete',
-      entityType: 'Company',
-      entityId: company.id,
-      beforeJson,
-      reason: `Empresa "${company.name}" excluída.`,
-    },
-    transaction
-  );
+  await auditarNaEmpresa(company, { actorUserId, action: 'company.delete', beforeJson, afterJson: company.toJSON(), reason: `Empresa "${company.name}" inativada (exclusão lógica).` }, transaction);
 
   return { id };
 }

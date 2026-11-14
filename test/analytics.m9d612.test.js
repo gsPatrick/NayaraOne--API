@@ -208,7 +208,7 @@ test('m9d612 lint proíbe import de serviço de escrita em analytics', async () 
     return (await eslint.lintText(code, { filePath: path.join(API_ROOT, file) }))[0].messages;
   };
   const proibidos = [
-    'src/features/finance/financialEntry.service', 'src/features/crm/crm.service',
+    'src/modules/finance/application/services/financial-entry.service', 'src/features/crm/crm.service',
     'src/features/marketing/campaigns/campaign.service', 'src/features/ai/tools/x',
   ];
   for (const target of proibidos) {
@@ -219,12 +219,12 @@ test('m9d612 lint proíbe import de serviço de escrita em analytics', async () 
   const permitidos = [
     'src/models/index', 'src/utils/AppError', 'src/engines/audit/auditLog.service', 'src/middlewares/auth.middleware',
     'src/features/analytics/metricStore.service', 'src/features/analytics/metrics/index',
-    'src/features/settings/settings.service', 'src/features/finance/finance.readRepository',
+    'src/features/settings/settings.service', 'src/modules/finance/infrastructure/repositories/finance.readRepository',
   ];
   for (const target of permitidos) {
     assert.ok(!(await lint(target, 'src/features/analytics/dashboards/x.js')).some((m) => m.ruleId === RULE), `não deveria reprovar: ${target}`);
   }
-  const fora = await lint('src/features/finance/financialEntry.service', 'src/features/marketing/x.js');
+  const fora = await lint('src/modules/finance/application/services/financial-entry.service', 'src/features/marketing/x.js');
   assert.ok(!fora.some((m) => m.ruleId === RULE), 'a regra vale só para o analytics');
 });
 

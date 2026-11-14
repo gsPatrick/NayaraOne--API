@@ -16,12 +16,14 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix, createTestCostCenter, settleFinancialEntryWithApproval, prepareManualSettlement } = require('./testHelpers');
-const financialEntriesService = require('../src/features/finance/financialEntries.service');
-const bankAccountsService = require('../src/features/finance/bankAccounts.service');
-const bankTransactionsService = require('../src/features/finance/bankTransactions.service');
-const reconciliationService = require('../src/features/finance/reconciliation.service');
-const approvalsService = require('../src/features/finance/approvals.service');
-const antifraudService = require('../src/features/finance/financeAntifraud.service');
+const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const receiptService = require('../src/modules/finance/application/services/receipt.service');
+const ledgerBalance = require('../src/modules/finance/application/services/ledger-balance.service');
+const bankAccountsService = require('../src/modules/finance/application/services/bank-accounts.service');
+const bankTransactionsService = require('../src/modules/finance/application/services/bank-transactions.service');
+const reconciliationService = require('../src/modules/finance/application/services/reconciliation.service');
+const approvalsService = require('../src/modules/finance/application/services/approvals.service');
+const antifraudService = require('../src/modules/finance/application/services/finance-antifraud.service');
 const { FinancialEntry, Company, User } = require('../src/models');
 
 let tenant;
@@ -198,15 +200,15 @@ test('ADV-F06 valor com mais de 2 casas decimais não "cria dinheiro": é arredo
     const manualSettlement = await prepareManualSettlement(tenant, entry.id, tenant.userId, transaction);
 
     // Tentar sacar a fração "extra" que o atacante acha que sobrou.
-    await financialEntriesService.settleFinancialEntryPartial(entry.id, 10.01, tenant.userId, transaction, { manualSettlement });
+    await receiptService.settleFinancialEntryPartial(entry.id, 10.01, tenant.userId, transaction, { manualSettlement });
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 0.01, tenant.userId, transaction, { manualSettlement }),
+      () => receiptService.settleFinancialEntryPartial(entry.id, 0.01, tenant.userId, transaction, { manualSettlement }),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS');
         return true;
       }
     );
-    assert.equal(await financialEntriesService.computeRemainingAmount(entry.id, transaction), '0.00');
+    assert.equal(await ledgerBalance.computeRemainingAmount(entry.id, transaction), '0.00');
   });
 });
 
@@ -303,7 +305,7 @@ test('ADV-F11 lançamento já liquidado não pode ser editado nem "re-liquidado"
       }
     );
 
-    const { original, reversal } = await financialEntriesService.reverseFinancialEntry(entry.id, 'QA ADV', tenant.userId, transaction);
+    const { original, reversal } = await receiptService.reverseFinancialEntry(entry.id, 'QA ADV', tenant.userId, transaction);
     assert.equal(original.status, 'REVERSED');
     assert.equal(String(original.amount), '250.00', 'o original continua no ledger com o valor original');
     assert.equal(String(reversal.amount), '250.00');
@@ -319,17 +321,18 @@ test('ADV-F12 baixa parcial em lançamento REVERSED/CANCELLED é recusada (não 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 300, bankAccountId: account.id });
-    await financialEntriesService.reverseFinancialEntry(entry.id, 'QA ADV', tenant.userId, transaction);
+    // M4LR (Caderno §6): lançamento nunca realizado — o estorno só anula o previsto (sem ledger), a pedido explícito.
+    await receiptService.reverseFinancialEntry(entry.id, 'QA ADV', tenant.userId, transaction, { voidNotRealized: true });
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 10, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntryPartial(entry.id, 10, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS');
         return true;
       }
     );
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_INVALID_STATUS');
         return true;
@@ -526,8 +529,12 @@ test('ADV-F19 tentar limpar o flag de revisão manual pelo update de agenda (sem
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await createEntry(transaction, { amount: 30000, bankAccountId: account.id });
+    // Fechamento do Marco 4 (10/11/2026, §17): o antifraude passou a ser chamado na CRIAÇÃO do
+    // pagamento — o lançamento de 30.000 numa conta sem histórico já nasce retido; chamar a regra de
+    // novo não duplica a retenção.
+    assert.equal(entry.requiresManualReview, true);
     const flag = await antifraudService.flagAnomalousPayment(entry, transaction);
-    assert.equal(flag.flagged, true);
+    assert.equal(flag.alreadyFlagged, true);
 
     // Payload hostil tentando desligar o antifraude por um endpoint "inofensivo".
     await financialEntriesService.updateFinancialEntry(
@@ -556,7 +563,7 @@ test('ADV-F19 tentar limpar o flag de revisão manual pelo update de agenda (sem
     await approvalsService.decideApprovalStep(approvalRequest.id, { decision: 'APPROVED' }, approverF19.id, transaction);
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_ENTRY_REQUIRES_MANUAL_REVIEW');
         return true;
@@ -586,14 +593,14 @@ test('ADV-F20 pagar para conta bancária BLOQUEADA depois da criação do lança
     await approvalsService.decideApprovalStep(approvalRequestF20.id, { decision: 'APPROVED' }, approverF20.id, transaction);
 
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntry(entry.id, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntry(entry.id, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_BANK_ACCOUNT_BLOCKED');
         return true;
       }
     );
     await assert.rejects(
-      () => financialEntriesService.settleFinancialEntryPartial(entry.id, 10, tenant.userId, transaction),
+      () => receiptService.settleFinancialEntryPartial(entry.id, 10, tenant.userId, transaction),
       (err) => {
         assert.equal(err.code, 'FINANCE_BANK_ACCOUNT_BLOCKED');
         return true;
@@ -643,8 +650,8 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
     // em vez de a chamada inteira falhar. O saldo do lançamento original continua nunca ficando
     // negativo (garantia que o teste existe para provar).
     const resultados = await Promise.allSettled([
-      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
-      withCommitted((t) => financialEntriesService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
+      withCommitted((t) => receiptService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
+      withCommitted((t) => receiptService.settleFinancialEntryPartial(entryId, 60, tenant.userId, t, { manualSettlement })),
     ]);
     const sucessos = resultados.filter((r) => r.status === 'fulfilled');
     assert.equal(sucessos.length, 2, 'sob o novo contrato, recebimento nunca é rejeitado — ambas as baixas concorrentes são aceitas');
@@ -653,7 +660,7 @@ test('ADV-F21 baixas parciais CONCORRENTES não conseguem sacar mais que o total
     assert.equal(String(comExcedente.value.classificationPending.amount), '20.00');
 
     await withCommitted(async (t) => {
-      const restante = await financialEntriesService.computeRemainingAmount(entryId, t);
+      const restante = await ledgerBalance.computeRemainingAmount(entryId, t);
       assert.equal(restante, '0.00', 'o saldo restante nunca fica negativo (e aqui fecha em zero, nunca abaixo)');
       const reloaded = await FinancialEntry.findByPk(entryId, { transaction: t });
       assert.equal(reloaded.status, 'SETTLED');

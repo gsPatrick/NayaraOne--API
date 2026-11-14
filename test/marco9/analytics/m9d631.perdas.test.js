@@ -53,7 +53,7 @@ test('m9d631 loss_reasons - timezone: perda às 23:30 de São Paulo cai no mês 
   const ids = [];
   const closed = {};
   for (const closedAt of ['2026-11-01T02:30:00Z', '2026-10-01T02:30:00Z']) { // 23:30 de 31/10 (outubro) e 23:30 de 30/09 (setembro) em SP
-    const id = await opp(env, t, { owner: src.uuid(), stage: 'CLOSED_LOST', created: '2026-08-01T15:00:00Z', closedAt, lostReason: 'PRICE' });
+    const id = await opp(env, t, { owner: src.uuid(), stage: 'LOST', created: '2026-08-01T15:00:00Z', closedAt, lostReason: 'PRICE' });
     ids.push(id);
     closed[id] = 'lost';
   }
@@ -79,7 +79,7 @@ test('m9d631 reproduz crm.portfolio_without_next_action a partir dos registros-f
   for (let i = 0; i < 3; i += 1) await add({ owner: b1, stage: 'NEW', nextAction: 'Ligar' }); // texto sem data: inválida pelo validador
   for (let i = 0; i < 2; i += 1) { const id = await add({ owner: b1, stage: 'VISIT_SCHEDULED' }); await task(env, t, { opportunity: id, status: 'DONE', dueAt: '2026-10-30T15:00:00Z' }); } // tarefa concluída não vale
   for (let i = 0; i < 2; i += 1) { const id = await add({ owner: b2, stage: 'VISIT_SCHEDULED' }); taskIds.push({ id, task: await task(env, t, { opportunity: id, dueAt: '2026-10-28T21:00:00Z' }) }); } // tarefa de hoje: não é posterior a hoje
-  await add({ owner: b1, stage: 'CLOSED_WON', closedAt: at(20) }); // encerrada não conta
+  await add({ owner: b1, stage: 'WON', closedAt: at(20) }); // encerrada não conta
   const gone = await add({ owner: b1, stage: 'NEW' });
   await src.update(env, 'crm.opportunities', gone, { deleted_at: at(21) }); // excluída não conta
   await kit.refreshAll(t, ids);

@@ -42,7 +42,7 @@ const PROFILES = [
     permissions: [
       'procurement:approve', 'procurement:read', 'procurement:create',
       'finance:approve', 'finance:read', 'finance:create',
-      'legal:approve', 'legal:read', 'legal:create',
+      'legal:approve', 'contracts.version.approve', 'legal:read', 'legal:create',
     ],
   },
   { key: 'leitura', roleName: 'CI LEITURA', permissions: ['procurement:read', 'finance:read', 'legal:read'] },
@@ -54,10 +54,11 @@ const PROFILES = [
     roleName: 'CI GESTOR',
     permissions: [
       'finance:read', 'finance:create', 'finance:update', 'finance:settle', 'finance:approve',
-      'finance:reconcile', 'finance:bankAccounts', 'finance:chartOfAccounts',
-      'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'legal:deliverKeys', 'legal:waive',
+      'finance:reconcile', 'finance:bankAccounts', 'finance:chartOfAccounts', 'finance:reverse', // M4PG: pedir estorno (DEC-062); reabrir período fica só com o ADMIN
+      'legal:read', 'legal:create', 'legal:update', 'legal:sign', 'legal:approve', 'contracts.version.approve', 'legal:deliverKeys', 'lease.keys.deliver', 'legal:waive', 'legal:evidence:export',
       'billing:read', 'billing:create', 'billing:update', 'billing:approve', 'billing:cadence:manage',
       'people:read', 'people:create', 'people:update', 'properties:read', 'properties:create', 'properties:update',
+      'users:read', // telas de responsável (escolher usuário) — só leitura, não muda nenhum 403 de ação
     ],
   },
   // Prova de máscara em tela (M9-D825, roteiro QA-M9): lê Pessoas, Imóveis e contas bancárias SEM a

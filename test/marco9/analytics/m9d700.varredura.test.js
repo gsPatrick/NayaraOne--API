@@ -20,7 +20,7 @@ test('m9d700 a varredura reprova os caminhos de contorno (fixtures)', () => {
   assert.equal(scanSource('src/features/ai/tools/x.js', "q('SELECT 1 FROM analytics.metric_snapshots')").map((v) => v.rule).join(), 'R3');
   assert.equal(scanSource('src/features/analytics/exports/x.js', "q('SELECT 1 FROM analytics.export_jobs')").map((v) => v.rule).join(), 'R3');
   assert.equal(scanSource('src/features/analytics/briefs/x.js', "q('UPDATE analytics.executive_briefs SET x=1')").map((v) => v.rule).join(), 'R3');
-  assert.equal(scanSource('src/features/finance/x.js', 'analytics.rm_finance_health').map((v) => v.rule).join(), 'R1');
+  assert.equal(scanSource('src/modules/finance/application/services/x.js', 'analytics.rm_finance_health').map((v) => v.rule).join(), 'R1');
   assert.equal(scanSource('src/features/analytics/read-models/finance.js', "q('SELECT 1 FROM analytics.rm_finance_health')").map((v) => v.rule).join(), 'R2');
   assert.deepEqual(scanSource('src/features/analytics/read-models/finance.js', "const s = require('../security');\nq('SELECT 1 FROM analytics.rm_finance_health')"), []);
   assert.deepEqual(scanSource('src/features/analytics/stores.js', "q('SELECT 1 FROM analytics.metric_definitions')"), []);

@@ -3,12 +3,13 @@
 const { InventoryLossCase, InventoryItem, Asset, AssetMovement, InventoryToolLoan, InventoryMaintenanceOrder, File, FinancialEntry, Person, ApprovalThreshold } = require('../../models');
 const { Op } = require('sequelize');
 const AppError = require('../../utils/AppError');
+const { assertProjectInCompany } = require('../construction/companyRefs'); // verificação do Marco 6: obra da mesma empresa
 const { registrarAuditoria, registrarTentativaBloqueada } = require('../../engines/audit/auditLog.service');
 const { recordMovement } = require('./movements.service');
 const { publishLossOpened } = require('./inventoryEvents.service');
 const { computeEstimatedCurrentValue } = require('./assets.service');
-const financialEntriesService = require('../finance/financialEntries.service');
-const { getOrCreateDefaultResultCenter } = require('../finance/resultCenters.service');
+const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
+const { getOrCreateDefaultResultCenter } = require('../../modules/finance/application/services/result-centers.service');
 // GAP 3 (fechamento de auditoria externa Nayara, Marco 6): alçada por VALOR, mesmo padrão já
 // aprovado/testado em construction/lossRecords.service.js (M6-14/M6-29/M6-60) — perda de
 // item/asset de Estoque hoje só tinha alçada por PERMISSÃO fixa (inventory:approve, igual pra
@@ -115,6 +116,7 @@ async function openLossCase(payload, actorUserId, transaction) {
   if (!inventoryItemId && !assetId) {
     throw AppError.badRequest('Informe "inventoryItemId" ou "assetId".', 'LOSS_CASE_VALIDATION');
   }
+  await assertProjectInCompany(projectId, companyId, transaction);
   // EST-TS-10: loss sem evidência é bloqueado quando o item for CONSUMABLE/TOOL de alto valor —
   // como o Caderno não fixa o limiar de valor em código (regra pertence ao Motor de Regras),
   // aplicamos aqui o mínimo seguro do próprio EST-TS-10: ao menos uma evidência é sempre exigida.
@@ -346,8 +348,9 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
     if (!responsiblePersonId) {
       throw AppError.badRequest('Para cobrar o responsável, informe "responsiblePersonId" (ninguém foi responsabilizado neste caso).', 'LOSS_CASE_CHARGE_RESPONSIBLE_REQUIRED');
     }
+    // Visível pelo RLS = cadastrada por esta empresa ou vinculada a ela (DI-M9I-3, CRMX-015); a de outra empresa não aparece.
     responsiblePerson = await Person.findByPk(responsiblePersonId, { transaction });
-    if (!responsiblePerson || responsiblePerson.companyId !== lossCase.companyId) {
+    if (!responsiblePerson) {
       throw AppError.badRequest('Responsável informado não encontrado no cadastro de pessoas desta empresa.', 'LOSS_CASE_RESPONSIBLE_NOT_FOUND');
     }
   }

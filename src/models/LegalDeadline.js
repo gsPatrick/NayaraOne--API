@@ -97,6 +97,15 @@ module.exports = (sequelize) => {
       // M45 (Caderno M5 §15): criticidade; vencido HIGH/CRITICAL abre ocorrência (tarefa).
       criticality: { type: DataTypes.STRING(16), allowNull: false, defaultValue: 'MEDIUM', field: 'criticality' },
       occurrenceTaskId: { type: DataTypes.UUID, allowNull: true, field: 'occurrence_task_id' },
+      // Guia §12 / migration 9997: origem verificável (arquivo íntegro ou evento real da empresa), tarefa do
+      // responsável criada com o prazo e cancelamento com motivo.
+      sourceFileId: { type: DataTypes.UUID, allowNull: true, field: 'source_file_id' },
+      sourceEventId: { type: DataTypes.UUID, allowNull: true, field: 'source_event_id' },
+      sourceEventType: { type: DataTypes.STRING(32), allowNull: true, field: 'source_event_type' },
+      taskId: { type: DataTypes.UUID, allowNull: true, field: 'task_id' },
+      cancelledAt: { type: DataTypes.DATE, allowNull: true, field: 'cancelled_at' },
+      cancelledBy: { type: DataTypes.UUID, allowNull: true, field: 'cancelled_by' },
+      cancelReason: { type: DataTypes.TEXT, allowNull: true, field: 'cancel_reason' },
       createdBy: {
         type: DataTypes.UUID,
         allowNull: true,

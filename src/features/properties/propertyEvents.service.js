@@ -120,6 +120,23 @@ function publishPropertyPublicSourceChanged(property, transaction) {
   );
 }
 
+// CRMX-007: a oferta mudou de status (ex.: PAUSED -> ACTIVE) — o Radar refaz o matching do imóvel por evento. Só ids e status.
+function publishPropertyOfferStatusChanged(offer, previousStatus, transaction) {
+  const version = offer.lockVersion !== undefined && offer.lockVersion !== null ? offer.lockVersion : Date.now();
+  return publishDomainEvent(
+    {
+      groupId: offer.groupId,
+      companyId: offer.companyId,
+      aggregateType: 'PropertyOffer',
+      aggregateId: offer.id,
+      eventType: 'property.offer.status.changed',
+      payload: { id: offer.id, propertyId: offer.propertyId, offerType: offer.offerType, previousStatus, status: offer.status },
+      idempotencyKey: `property.offer.status.changed:${offer.id}:${previousStatus}:${offer.status}:${version}`,
+    },
+    transaction
+  );
+}
+
 const publishPropertySold = (property, transaction) => publishPropertyAvailabilityEvent('property.sold', property, transaction);
 const publishPropertyRented = (property, transaction) => publishPropertyAvailabilityEvent('property.rented', property, transaction);
 
@@ -132,4 +149,5 @@ module.exports = {
   publishPropertyPriceChanged,
   publishPropertyUpdated,
   publishPropertyPublicSourceChanged,
+  publishPropertyOfferStatusChanged,
 };

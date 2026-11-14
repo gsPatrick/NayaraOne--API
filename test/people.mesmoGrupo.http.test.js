@@ -149,14 +149,16 @@ test('HTTP mesmo grupo: empresa B não lê nem grava a pessoa da empresa A (404 
   assert.equal(contA.body.data.length, 0, 'nenhum contato pode ter entrado em A');
 });
 
-test('HTTP mesmo grupo: o mesmo CPF na empresa B é recusado com 409 sem entregar a pessoa de A', async (t) => {
+test('HTTP mesmo grupo: o mesmo CPF na empresa B é recusado com 409 PERSON_TAX_ID_IN_GROUP sem entregar a pessoa de A (o caminho é o vínculo, DI-M9I-2)', async (t) => {
   if (skipReason) return t.skip(skipReason);
   const cpf = randomCpf();
   await pessoaComConsentimento('A', `Pessoa A CPF ${SUFIXO}`, cpf);
   const r = await call('B', 'POST', '/people', { personType: 'PF', legalName: 'Mesmo CPF em B', taxIdNormalized: cpf });
   assert.equal(r.status, 409, JSON.stringify(r.body));
-  assert.equal(r.body.error.code, 'PERSON_DUPLICATE_TAX_ID');
+  assert.equal(r.body.error.code, 'PERSON_TAX_ID_IN_GROUP');
   assert.ok(!JSON.stringify(r.body).includes('existingPersonId'), 'a recusa não pode entregar o id da pessoa da empresa A');
+  assert.ok(!JSON.stringify(r.body).includes(`Pessoa A CPF ${SUFIXO}`), 'a recusa não traz o nome da pessoa de A');
+  assert.equal(r.body.error.details.podeVincular, false, 'sem people:link a tela não oferece o vínculo');
 });
 
 test('HTTP mesmo grupo: fluxo legítimo intacto em cada empresa e A também não vê a pessoa de B', async (t) => {

@@ -1,0 +1,152 @@
+'use strict';
+
+const L = require('../../shared/legalLabels');
+
+const { Op } = require('sequelize');
+const { Contract, ContractAmendment, Notice, CollectionCase, Inspection, InspectionItem, AuditLog, MaintenanceCase } = require('../../../../models');
+const AppError = require('../../../../utils/AppError');
+
+/**
+ * contractTimeline.service.js — FIX AUD-017 (auditoria externa Nayara, 11/10/2026, JUR-012
+ * "Timeline consolidada com aditivos, notificações, inadimplência e reparos — Não encontrada
+ * como timeline unificada"): cada fonte vivia isolada (aditivos em ContractAmendment,
+ * notificações em Notice, inadimplência em CollectionCase, reparo/dano em InspectionItem) —
+ * quem olhava o contrato precisava abrir 4 telas pra reconstruir a história dele.
+ *
+ * Mesma decisão de engenharia já usada em crm/opportunityTimeline.service.js (M3-19):
+ * timeline DERIVADA na leitura, não uma tabela nova de eventos — nada a sincronizar, nenhum
+ * risco de divergir das entidades de origem, RLS de cada tabela de origem continua valendo
+ * (um contrato de outra empresa nem é encontrado).
+ */
+
+const TYPES = {
+  AMENDMENT: 'AMENDMENT',
+  NOTICE: 'NOTICE',
+  DELINQUENCY: 'DELINQUENCY',
+  REPAIR: 'REPAIR',
+  STATUS_CHANGE: 'STATUS_CHANGE',
+};
+
+function createdAtOf(record) {
+  return record.createdAt || record.get('created_at') || null;
+}
+
+// M9-D809 (AUD-017): `overdueSince` é DATEONLY (AAAA-MM-DD) e o contrato OpenAPI declara `occurredAt` como date-time. A data vira o início desse dia em Brasília (UTC-3).
+function dateOnlyToDateTime(value) {
+  if (!value) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? new Date(`${value}T00:00:00-03:00`).toISOString() : value;
+}
+
+function toTime(value) {
+  return value ? new Date(value).getTime() : 0;
+}
+
+async function getContractTimeline(contractId, transaction) {
+  if (!contractId) {
+    throw AppError.badRequest('O campo "contractId" é obrigatório.', 'LEGAL_CONTRACT_TIMELINE_VALIDATION');
+  }
+  const contract = await Contract.findByPk(contractId, { transaction });
+  if (!contract) {
+    throw AppError.notFound('Contrato não encontrado.', 'LEGAL_CONTRACT_NOT_FOUND');
+  }
+
+  const items = [];
+
+  // Aditivos.
+  const amendments = await ContractAmendment.findAll({ where: { contractId }, transaction });
+  for (const amendment of amendments) {
+    items.push({
+      type: TYPES.AMENDMENT,
+      occurredAt: createdAtOf(amendment),
+      referenceId: amendment.id,
+      summary: `Aditivo nº ${amendment.amendmentNumber} (${L.amendmentStatusLabel(amendment.status)}): ${amendment.reason}`,
+      details: { status: amendment.status },
+    });
+  }
+
+  // Notificações (extrajudiciais, avisos de inadimplência, comunicações formais).
+  const notices = await Notice.findAll({ where: { contractId }, transaction });
+  for (const notice of notices) {
+    items.push({
+      type: TYPES.NOTICE,
+      occurredAt: notice.sentAt || createdAtOf(notice),
+      referenceId: notice.id,
+      summary: `Notificação por ${L.noticeChannelLabel(notice.channel)} (${L.noticeStatusLabel(notice.status)})${notice.isLegallySensitive ? ' — sensível' : ''}`,
+      details: { channel: notice.channel, status: notice.status },
+    });
+  }
+
+  // Inadimplência (fila de cobrança em atraso).
+  const collectionCases = await CollectionCase.findAll({ where: { contractId }, transaction });
+  for (const collectionCase of collectionCases) {
+    items.push({
+      type: TYPES.DELINQUENCY,
+      occurredAt: dateOnlyToDateTime(collectionCase.overdueSince) || createdAtOf(collectionCase),
+      referenceId: collectionCase.id,
+      summary: `Inadimplência (${L.collectionStatusLabel(collectionCase.status)}): saldo em atraso de ${collectionCase.currentBalance}, desde ${collectionCase.overdueSince}`,
+      details: { status: collectionCase.status },
+    });
+  }
+
+  // Reparos (dano identificado em vistoria vinculada ao contrato).
+  const inspections = await Inspection.findAll({ where: { contractId }, transaction });
+  for (const inspection of inspections) {
+    const damagedItems = await InspectionItem.findAll({ where: { inspectionId: inspection.id, condition: 'DAMAGED' }, transaction });
+    for (const item of damagedItems) {
+      items.push({
+        type: TYPES.REPAIR,
+        occurredAt: createdAtOf(item),
+        referenceId: item.id,
+        details: { inspectionType: inspection.inspectionType },
+        summary: `Dano em "${item.itemName}" (vistoria de ${L.inspectionTypeLabel(inspection.inspectionType)}): ${item.damageDescription || 'sem descrição'}${item.estimatedBudget ? `, orçamento estimado ${item.estimatedBudget}` : ''}`,
+      });
+    }
+  }
+
+  // Fechamento M5 (JUR-012 "reparos"): além do dano apontado em vistoria, o REGISTRO de reparo do imóvel do contrato aberto
+  // durante a vigência (chamado de manutenção/assistência técnica, construction.maintenance_cases), com a situação dele.
+  if (contract.propertyId) {
+    const since = contract.startsAt || createdAtOf(contract);
+    const until = ['TERMINATED', 'CLOSED'].includes(contract.status) && contract.endsAt ? contract.endsAt : null;
+    const repairs = await MaintenanceCase.findAll({
+      where: { propertyId: contract.propertyId, ...(since || until ? { created_at: { ...(since ? { [Op.gte]: since } : {}), ...(until ? { [Op.lte]: until } : {}) } } : {}) },
+      transaction,
+    });
+    for (const repair of repairs) {
+      items.push({
+        type: TYPES.REPAIR,
+        occurredAt: createdAtOf(repair),
+        referenceId: repair.id,
+        details: { source: 'construction.maintenance_cases', status: repair.status, category: repair.category || null },
+        summary: `Reparo registrado no imóvel (${repair.category || 'manutenção'}, situação ${repair.status}): ${repair.description || 'sem descrição'}`,
+      });
+    }
+  }
+
+  // Mudanças de status do próprio contrato (vêm do audit log, registro permanente append-only).
+  const statusChanges = await AuditLog.findAll({
+    // Matriz M5: inclui as transições dedicadas (suspender, reativar, rescindir, arquivar), também mudanças de estado.
+    where: { entityType: 'Contract', entityId: contractId, action: ['legal.contract.status_change', 'legal.contract.suspend', 'legal.contract.reactivate', 'legal.contract.terminate', 'legal.contract.close'] },
+    transaction,
+  });
+  for (const log of statusChanges) {
+    const before = log.beforeJson && log.beforeJson.status;
+    const after = log.afterJson && log.afterJson.status;
+    items.push({
+      type: TYPES.STATUS_CHANGE,
+      occurredAt: log.occurredAt || createdAtOf(log),
+      referenceId: log.id,
+      summary: `Situação do contrato mudou de "${L.contractStatusLabel(before)}" para "${L.contractStatusLabel(after)}"`,
+      details: { fromStatus: before || null, toStatus: after || null },
+    });
+  }
+
+  items.sort((a, b) => toTime(a.occurredAt) - toTime(b.occurredAt));
+
+  return { contractId, items };
+}
+
+module.exports = {
+  TYPES,
+  getContractTimeline,
+};

@@ -104,8 +104,11 @@ test('ISO-8: no contexto da empresa B do mesmo grupo, nenhum filho de B aceita p
       const pg = r.erro && (r.erro.parent || r.erro.original || r.erro);
       resultado[t] = r.erro ? `${pg.code} ${pg.constraint || pg.message}` : 'ACEITO';
     }
-    const esperado = Object.fromEntries(FILHOS.map((t) => [t, `23503 ${t}_person_same_company_fkey`]));
-    assert.deepEqual(resultado, esperado, `com company_id = B e person_id da empresa A (ACEITO = vínculo cruzado gravado): ${JSON.stringify(resultado)}`);
+    // Integração com o vínculo da pessoa por empresa (m9fix/pessoas-vinculo, migration 10941, prevista na 9966): sem vínculo de B com a
+    // pessoa de A, a gravação é recusada pela política RESTRICTIVE do vínculo (42501) ou pela chave composta para o vínculo (23503).
+    for (const t of FILHOS) {
+      assert.ok(new RegExp(`^(42501 |23503 ${t}_person_company_link_fkey$)`).test(resultado[t]), `${t}: com company_id = B e person_id da empresa A sem vínculo devia ser recusado (ACEITO = vínculo cruzado gravado): ${resultado[t]}`);
+    }
 
     // a empresa A continua sem nenhum filho de B na pessoa dela
     await usarEmpresa(transaction, tenant.companyId);
@@ -116,19 +119,22 @@ test('ISO-8: no contexto da empresa B do mesmo grupo, nenhum filho de B aceita p
   });
 });
 
-test('ISO-8: as cinco chaves compostas existem, validadas, apontando para persons (id, company_id)', async () => {
+test('ISO-8: as cinco chaves compostas existem, validadas, apontando para o vínculo da pessoa com a empresa (person_id, company_id)', async () => {
   const [linhas] = await sequelize.query(`SELECT con.conname, con.convalidated, c.relname AS tabela,
       (SELECT array_agg(a.attname::text ORDER BY k.i) FROM unnest(con.conkey) WITH ORDINALITY k(n, i) JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.n) AS cols,
       (SELECT array_agg(a.attname::text ORDER BY k.i) FROM unnest(con.confkey) WITH ORDINALITY k(n, i) JOIN pg_attribute a ON a.attrelid = con.confrelid AND a.attnum = k.n) AS ref
     FROM pg_constraint con JOIN pg_class c ON c.oid = con.conrelid JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE con.contype = 'f' AND n.nspname = 'people' AND con.confrelid = 'people.persons'::regclass AND array_length(con.conkey, 1) = 2`);
+    WHERE con.contype = 'f' AND n.nspname = 'people' AND con.confrelid = 'people.person_company_links'::regclass AND array_length(con.conkey, 1) = 2`);
   const porTabela = Object.fromEntries(linhas.map((l) => [l.tabela, l]));
   for (const t of FILHOS) {
     const l = porTabela[t];
-    assert.ok(l, `${t}: sem FK composta para people.persons`);
-    assert.equal(l.conname, `${t}_person_same_company_fkey`);
+    assert.ok(l, `${t}: sem FK composta para people.person_company_links`);
+    assert.equal(l.conname, `${t}_person_company_link_fkey`);
     assert.equal(l.convalidated, true);
     assert.deepEqual(l.cols, ['person_id', 'company_id']);
-    assert.deepEqual(l.ref, ['id', 'company_id']);
+    assert.deepEqual(l.ref, ['person_id', 'company_id']);
   }
+  // A chave da 9966 (filho só da empresa da pessoa) foi substituída pela do vínculo: as duas juntas impediriam a empresa vinculada.
+  const [[antiga]] = await sequelize.query("SELECT count(*)::int AS n FROM pg_constraint WHERE conname LIKE '%_person_same_company_fkey'");
+  assert.equal(antiga.n, 0);
 });

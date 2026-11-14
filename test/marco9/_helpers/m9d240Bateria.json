@@ -9,9 +9,9 @@
     "test/correspondent.caseDocuments.test.js": "4572ff018251c69d353a6127f151ca72616e33d1372d471a9e63bbc95df0f88f",
     "test/correspondent.commissions.test.js": "d5c6e60841db26b149d3dc4b8249835c19db521ba932f3d17c00aa00a147ef9d",
     "test/correspondent.documentPipeline.test.js": "5b99d9452e0826796ab2307df7353080fa4772fea90497b7bf9446e2f34925d7",
-    "test/correspondent.domainEvents.test.js": "163dd7ad0f40d6aa993890482b0363fedb03016cbeab06d0b0cffde5d231bd6d",
+    "test/correspondent.domainEvents.test.js": "5242514ec3edde87623ca2cb16daad896dbff357db9b350dfaf8cb2f1fbaf4f0",
     "test/correspondent.eligibility.test.js": "858920f35b96c0f8a9fd20754b28b7c5bcd4c1881b3058ddff614ddf0280b151",
-    "test/correspondent.financingCases.test.js": "f9b9529a18ae2f0be742195cf8978b3ea45c145cead362d463b71197fdbddd51",
+    "test/correspondent.financingCases.test.js": "9d9ffd3855f4def8245ee8d326897d7b77326ff371130bd276915f3283ee8fae",
     "test/correspondent.fiscal.test.js": "c3f9b0ab49db67ad1d8f57b730b2831ba0055e133f4906cb0022b6b7b8381f3e",
     "test/correspondent.httpRoutes.test.js": "074099fa64fd1444e398963bccad328d456f0a248c979bc88f7708260e027fab",
     "test/correspondent.nay.test.js": "e5b0f9376f5d31d831c1b02f5fcc0b013595a8ee45bdd509d3c8e5ce58c45936",
@@ -22,5 +22,31 @@
     "test/correspondent.submissions.test.js": "c14c9ddeadc4213c5bd0f126ee60e068ec227c41f1e6428c7931cacb9ab4b50d",
     "test/correspondent.webhooks.test.js": "7f0aca2369f7f356872ae7cfce9469ae5f6a1cfe5588e3e41d0e42e361e7d02b",
     "test/integrations/errors/errors.correspondente.test.js": "41e9084e7befe1e525bace772c26be94f554e40b5cb3bdd83a634b6d471fd9ae"
-  }
+  },
+  "alteracoesPosteriores": [
+    {
+      "data": "2026-11-11",
+      "arquivo": "test/correspondent.domainEvents.test.js",
+      "commit": "71a99c84",
+      "motivo": "Marco 3 §10: o funil passou ao catálogo fechado de etapas do livro e a etapa NEGOTIATION deixou de existir. O teste CORRESPONDENT-EVT-07 cria a oportunidade na etapa FINANCING em vez de NEGOTIATION. A expectativa é a mesma: o módulo de financiamento nunca escreve direto na etapa da oportunidade (a etapa recarregada é igual à criada).",
+      "hashAnterior": "163dd7ad0f40d6aa993890482b0363fedb03016cbeab06d0b0cffde5d231bd6d",
+      "hashNovo": "d2a4551bccbcec4adb3286f25d538b6cb078f7ca94c9caf7c9c2de0a1f0c4eb8"
+    },
+    {
+      "data": "2026-11-11",
+      "arquivo": "test/correspondent.financingCases.test.js",
+      "commit": "71a99c84",
+      "motivo": "Marco 3 §10: a etapa NEGOTIATION deixou de existir no funil do livro; a oportunidade de apoio do teste é criada na etapa FINANCING. Só o dado de preparação mudou; nenhuma asserção mudou.",
+      "hashAnterior": "f9b9529a18ae2f0be742195cf8978b3ea45c145cead362d463b71197fdbddd51",
+      "hashNovo": "9d9ffd3855f4def8245ee8d326897d7b77326ff371130bd276915f3283ee8fae"
+    },
+    {
+      "data": "2026-11-13",
+      "arquivo": "test/correspondent.domainEvents.test.js",
+      "commit": "b5faa131",
+      "motivo": "Marco 3 CAD-09 (livro: o status do financiamento atualiza a oportunidade por evento), integração dos Marcos 3 a 6 com o Marco 9: o webhook do Correspondente só publica financing.status.changed (com a oportunidade) e o consumidor do CRM aplica no despacho do outbox, em vez de gravar a linha do tempo da oportunidade na mesma chamada. CORRESPONDENT-EVT-07 confere o evento publicado, nenhuma escrita no CRM antes do despacho, a linha do tempo e o retrato do financiamento depois dele, sem duplicar no reprocesso, e a mesma regra de antes: o Correspondente nunca escreve direto na etapa da oportunidade. As demais expectativas da bateria não mudam.",
+      "hashAnterior": "d2a4551bccbcec4adb3286f25d538b6cb078f7ca94c9caf7c9c2de0a1f0c4eb8",
+      "hashNovo": "5242514ec3edde87623ca2cb16daad896dbff357db9b350dfaf8cb2f1fbaf4f0"
+    }
+  ]
 }

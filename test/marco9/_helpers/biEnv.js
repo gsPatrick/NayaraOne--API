@@ -13,7 +13,7 @@ const TODAY = '2026-10-28';
 
 const SOURCE_TABLES = [
   'crm.messages', 'crm.visits', 'crm.proposals', 'crm.feedback_cases', 'crm.opportunities', 'real_estate.property_price_history', 'real_estate.property_offers', 'real_estate.properties',
-  'legal.key_deliveries', 'legal.inspections', 'legal.guarantees', 'legal.contract_requirements', 'legal.contract_parties', 'legal.contracts', 'finance.utility_obligations',
+  'legal.key_deliveries', 'legal.inspections', 'legal.guarantees', 'legal.contract_requirements', 'legal.contract_parties', 'legal.contracts', 'legal.lease_obligations',
   'finance.owner_repasses', 'finance.financial_entries', 'construction.maintenance_cases', 'construction.projects',
 ];
 

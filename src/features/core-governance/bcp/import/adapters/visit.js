@@ -2,6 +2,8 @@
 
 const { createVisit, deleteVisit } = require('../../../../crm/visits.service');
 const { deletePerson } = require('../../../../people/person.service');
+const { deleteOpportunity } = require('../../../../crm/opportunity.service');
+const { ensureOpportunity } = require('./proposal');
 const { Visit } = require('../../../../../models');
 const { findOrCreatePerson } = require('../people');
 const { resolveRef } = require('../refs');
@@ -15,14 +17,18 @@ async function execute({ tenant, actorUserId, operation, payload, transaction })
   const when = parseOccurredAt(payload.dataHoraVisita);
   if (!when) throw commandRejected('a data e hora da visita é inválida');
   const { person, created } = await findOrCreatePerson({ tenant, actorUserId, name: payload.nomeCliente, phone: payload.telefone }, transaction);
+  // M3-13: a visita é sempre de uma oportunidade — a aberta do cliente no imóvel, ou uma nova pelo serviço normal.
+  const { opportunity, created: opportunityCreated } = await ensureOpportunity({
+    tenant, actorUserId, operation, person, property, nextAction: `Acompanhar a visita do formulário ${operation.manualReference}`,
+  }, transaction);
   const visit = await createVisit({
-    groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, personId: person.id, scheduledAt: when, status: when.getTime() <= Date.now() ? 'DONE' : 'SCHEDULED',
+    groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, opportunityId: opportunity.id, personId: person.id, scheduledAt: when, status: when.getTime() <= Date.now() ? 'DONE' : 'SCHEDULED',
     feedback: `Origem BCP ${operation.manualReference}. Corretor: ${payload.corretor}.${payload.observacao ? ` ${payload.observacao}` : ''}`.slice(0, 2000),
   }, actorUserId, transaction);
   const saved = await Visit.findByPk(visit.id, { transaction });
   return {
     commandRef: `Visit:${saved.id}`,
-    undo: { visitId: saved.id, personId: created ? person.id : null },
+    undo: { visitId: saved.id, opportunityId: opportunityCreated ? opportunity.id : null, personId: created ? person.id : null },
     comparisons: [
       { field: 'nomeCliente', label: 'Cliente', paper: normalize.text(payload.nomeCliente), command: normalize.text(person.legalName), kind: 'text' },
       { field: 'imovel', label: 'Imóvel', paper: normalize.id(property.id), command: normalize.id(saved.propertyId), kind: 'ref' },
@@ -31,9 +37,10 @@ async function execute({ tenant, actorUserId, operation, payload, transaction })
   };
 }
 
-/** Estorno: a visita é excluída pelo serviço normal (cancelamento publicado) e a pessoa criada só por esta importação também. */
+/** Estorno: a visita é excluída pelo serviço normal (cancelamento publicado); a oportunidade e a pessoa criadas só por esta importação também saem. */
 async function reverse({ actorUserId, effect, transaction }) {
   await deleteVisit(effect.visitId, actorUserId, transaction);
+  if (effect.opportunityId) await deleteOpportunity(effect.opportunityId, actorUserId, transaction);
   if (effect.personId) await deletePerson(effect.personId, actorUserId, transaction);
 }
 

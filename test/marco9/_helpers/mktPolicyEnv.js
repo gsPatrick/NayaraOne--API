@@ -25,10 +25,10 @@ async function addConsent(t, tenant, personId, channel, purpose, status, recorde
   return row.id;
 }
 
-async function addMessage(t, tenant, { personId, channel = 'WHATSAPP', purpose = 'MARKETING', status = 'SENT', at, direction = 'OUTBOUND', actionKey = null }) {
+async function addMessage(t, tenant, { personId, channel = 'WHATSAPP', purpose = 'MARKETING', status = 'SENT', at, direction = 'OUTBOUND', actionKey = null, authorType = null }) {
   const [row] = await q(t, `INSERT INTO crm.messages (id, group_id, company_id, person_id, channel, direction, author_type, status, purpose, action_key, created_at)
     VALUES (gen_random_uuid(), :g, :c, :p, :ch, :d, :a, :s, :pu, :k, :at) RETURNING id`,
-  { g: tenant.groupId, c: tenant.companyId, p: personId, ch: channel, d: direction, a: direction === 'INBOUND' ? 'CLIENT' : 'NAY', s: status, pu: direction === 'INBOUND' ? null : purpose, k: actionKey, at });
+  { g: tenant.groupId, c: tenant.companyId, p: personId, ch: channel, d: direction, a: authorType || (direction === 'INBOUND' ? 'CLIENT' : 'NAY'), s: status, pu: direction === 'INBOUND' ? null : purpose, k: actionKey, at });
   return row.id;
 }
 

@@ -11,9 +11,9 @@ const LEGACY_ADAPTERS = Object.freeze([
   { file: 'src/features/correspondent/adapters/FinancingProviderAdapter.js', className: 'ManualWorkflowFinancingProviderAdapter', providerCode: 'financing-manual' },
   { file: 'src/features/correspondent/adapters/NfseAdapter.js', className: 'SandboxNfseAdapter', providerCode: 'fiscal-sandbox' },
   { file: 'src/features/procurement/adapters/InsuranceAdapter.js', className: 'SandboxInsuranceAdapter', providerCode: 'insurance-sandbox' },
-  { file: 'src/features/finance/adapters/BankAdapter.js', className: 'SandboxBankAdapter', providerCode: 'bank-sandbox' },
-  { file: 'src/features/legal/adapters/SignatureAdapter.js', className: 'SandboxSignatureAdapter', providerCode: 'signature-sandbox' },
-  { file: 'src/features/legal/adapters/SignatureAdapter.js', className: 'ClicksignSignatureAdapter', providerCode: 'signature-clicksign' },
+  { file: 'src/modules/finance/infrastructure/bank/providers/sandbox.provider.js', className: 'SandboxBankAdapter', providerCode: 'bank-sandbox' },
+  { file: 'src/modules/legal/signatures/providers/sandbox.provider.js', className: 'SandboxSignatureAdapter', providerCode: 'signature-sandbox' },
+  { file: 'src/modules/legal/signatures/providers/clicksign.provider.js', className: 'ClicksignSignatureAdapter', providerCode: 'signature-clicksign' },
 ]);
 
 /** Código usado pelo Correspondente -> código do catálogo. */

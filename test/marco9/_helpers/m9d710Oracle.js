@@ -41,7 +41,7 @@ async function opportunitiesFromSource(env, t, w) {
   const [rows] = await env.admin.query(
     `SELECT o.id, o.closed_at AS at, o.owner_user_id AS broker, o.lead_source AS origin,
             (SELECT p.value::text FROM crm.proposals p WHERE p.opportunity_id = o.id AND p.status = 'ACCEPTED' ORDER BY p.decided_at DESC LIMIT 1) AS value
-       FROM crm.opportunities o WHERE o.company_id = :c AND o.deleted_at IS NULL AND o.stage = 'CLOSED_WON'`, { replacements: { c: t.companyId } }
+       FROM crm.opportunities o WHERE o.company_id = :c AND o.deleted_at IS NULL AND o.stage = 'WON'`, { replacements: { c: t.companyId } }
   );
   const out = totals(rows.map((r) => ({ ...r, at: r.at ? new Date(r.at) : null })), w, (r) => r.value);
   return { ...out, withoutValue: out.items.filter((r) => r.value === null).length };
