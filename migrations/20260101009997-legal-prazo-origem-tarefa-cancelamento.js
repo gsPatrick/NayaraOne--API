@@ -1,5 +1,6 @@
 'use strict';
 
+const { validarSeLimpo } = require('../src/shared/db/validarSeLimpo');
 /**
  * Caderno M5 §15 + Guia do Marcelo §12 (createDeadline: `if (!input.sourceFileId && !input.sourceEventId) throw
  * DEADLINE_SOURCE_REQUIRED`; `tasks.create({ responsibleUserId, dueAt, severity, sourceType: 'LEGAL_DEADLINE', sourceId })`):
@@ -36,6 +37,8 @@ module.exports = {
       END $c$`);
       await q(`CREATE INDEX IF NOT EXISTS legal_deadlines_task_id_idx ON ${TABLE} (task_id)`);
       await q(`CREATE INDEX IF NOT EXISTS legal_deadlines_source_file_id_idx ON ${TABLE} (source_file_id)`);
+      // NOT VALID só enquanto houver linha antiga fora da regra (src/shared/db/validarSeLimpo.js).
+      await validarSeLimpo(q, 'legal.legal_deadlines', 'legal_deadlines_status_chk', '20260101009997');
     });
   },
 

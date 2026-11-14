@@ -1,5 +1,6 @@
 'use strict';
 
+const { validarSeLimpo } = require('../../../../../shared/db/validarSeLimpo');
 /**
  * Fechamento M5 — Obrigações da locação com o nome e os dados do livro (Caderno M5 §4 "legal.lease_obligations",
  * §12 "Cada obrigação possui responsável, periodicidade, comprovante e status"; M5-D102/M5-D350/M5-D103):
@@ -59,6 +60,9 @@ module.exports = {
           IF has_table_privilege('nayara_runtime', 'legal.lease_obligations', 'DELETE') THEN GRANT DELETE ON finance.utility_obligations TO nayara_runtime; END IF;
         END IF;
       END $$`);
+      // NOT VALID só enquanto houver linha antiga fora da regra (src/shared/db/validarSeLimpo.js).
+      await validarSeLimpo(q, 'legal.lease_obligations', 'lease_obligations_periodicity_chk', '20260101009992');
+      await validarSeLimpo(q, 'legal.lease_obligations', 'lease_obligations_due_day_chk', '20260101009992');
     });
   },
 

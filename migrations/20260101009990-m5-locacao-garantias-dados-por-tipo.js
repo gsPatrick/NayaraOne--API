@@ -1,5 +1,6 @@
 'use strict';
 
+const { validarSeLimpo } = require('../src/shared/db/validarSeLimpo');
 /**
  * Fechamento M5 — Garantias locatícias com os códigos e os dados do livro (Caderno M5 §9):
  *  GUARANTOR (pessoas, documentos, vigência, aceite) · INSURANCE (provider/apólice, vigência, parcelas, renovação) ·
@@ -57,6 +58,8 @@ module.exports = {
         WHERE finance_entry_id IS NOT NULL AND deleted_at IS NULL`);
       await q(`CREATE UNIQUE INDEX IF NOT EXISTS guarantees_policy_uq ON legal.guarantees (company_id, lower(provider_name), policy_number)
         WHERE policy_number IS NOT NULL AND deleted_at IS NULL`);
+      // NOT VALID só enquanto houver linha antiga fora da regra (src/shared/db/validarSeLimpo.js).
+      await validarSeLimpo(q, 'legal.guarantees', 'guarantees_type_livro_chk', '20260101009990');
     });
   },
 

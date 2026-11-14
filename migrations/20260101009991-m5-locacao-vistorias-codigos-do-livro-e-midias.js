@@ -1,5 +1,6 @@
 'use strict';
 
+const { validarSeLimpo } = require('../src/shared/db/validarSeLimpo');
 const { applyLegalTenantRls } = require('./_helpers/legalTenantTable');
 
 /**
@@ -75,6 +76,9 @@ module.exports = {
           JOIN people.files f ON f.id = fl.file_id
          WHERE fl.related_entity_type = 'InspectionItem' AND fl.deleted_at IS NULL AND f.checksum_sha256 IS NOT NULL
         ON CONFLICT (item_id, file_id) DO NOTHING`);
+      // NOT VALID só enquanto houver linha antiga fora da regra (src/shared/db/validarSeLimpo.js).
+      await validarSeLimpo(q, 'legal.inspections', 'inspections_type_livro_chk', '20260101009991');
+      await validarSeLimpo(q, 'legal.inspection_items', 'inspection_items_condition_livro_chk', '20260101009991');
     });
   },
 
