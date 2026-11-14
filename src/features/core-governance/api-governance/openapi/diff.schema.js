@@ -11,10 +11,11 @@ const change = (rule, ruleNumber, where, detail) => ({ rule, ruleNumber, where, 
 const sameShape = (a, b) => Boolean(a && b) && a.type === b.type && (a.format || null) === (b.format || null);
 const list = (value) => (Array.isArray(value) ? value : []);
 
-function compareEnum(base, cand, where, out) {
+function compareEnum(base, cand, where, out, direction) {
   if (!Array.isArray(base.enum) || !Array.isArray(cand.enum)) return;
   for (const value of base.enum) if (!cand.enum.includes(value)) out.push(change(RULE.ENUM_VALUE_REMOVED, 6, where, `valor "${value}" removido`));
-  if (base['x-closed'] === true || cand['x-closed'] === true) {
+  // Regra 6: valor novo em enum fechado só é breaking na RESPOSTA; "adicionar valor de enum em requisição nunca é breaking".
+  if (direction === 'response' && (base['x-closed'] === true || cand['x-closed'] === true)) {
     for (const value of cand.enum) if (!base.enum.includes(value)) out.push(change(RULE.ENUM_VALUE_ADDED_CLOSED, 6, where, `valor "${value}" adicionado em enum fechado (x-closed)`));
   }
 }
@@ -62,7 +63,7 @@ function compareSchema(baseDoc, candDoc, baseNode, candNode, ctx, out = []) {
   if (base.type && cand.type && base.type !== cand.type) out.push(change(RULE.TYPE_CHANGED, 5, ctx.where, `tipo ${base.type} -> ${cand.type}`));
   else if (base.type && (base.format || null) !== (cand.format || null)) out.push(change(RULE.TYPE_CHANGED, 5, ctx.where, `formato ${base.format || 'nenhum'} -> ${cand.format || 'nenhum'}`));
   if (ctx.direction === 'response' && cand.nullable === true && base.nullable !== true) out.push(change(RULE.FIELD_NULLABLE, 4, ctx.where, 'campo da resposta passou a aceitar nulo'));
-  compareEnum(base, cand, ctx.where, out);
+  compareEnum(base, cand, ctx.where, out, ctx.direction);
   if (ctx.direction === 'request') compareConstraints(base, cand, ctx.where, out);
   if (base.type === 'array' || base.items) { if (base.items && cand.items) compareSchema(baseDoc, candDoc, base.items, cand.items, { ...ctx, where: `${ctx.where}[]` }, out); }
   if (base.properties || cand.properties) compareProperties(baseDoc, candDoc, base, cand, ctx, out);
