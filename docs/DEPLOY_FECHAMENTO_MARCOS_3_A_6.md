@@ -7,6 +7,7 @@ homologação de hoje (que já tem o plano do Marco 9 inteiro, `docs/DEPLOY_MARC
 2. **Com os dados da homologação**: o backup de 13/11/2026 08:14 (`backups/homolog-antes-marco9-20261113-0814.dump`, SHA-256 `a3b253f2…`) restaurado num
    PostgreSQL local, as 7 migrations do Marco 9 (como no deploy do Marco 9) e então as 57 da integração, com o usuário dono das tabelas com os
    mesmos atributos da homologação (superusuário e BYPASSRLS, conferido por consulta somente leitura). Todas aplicam, em cerca de 4 s.
+   Repetido em 14/11/2026 com as correções do verificador independente (commit `d45eeb43` e seguintes): 57 aplicadas, 0 pendentes, mesmos números abaixo.
 
 A API anterior (Marco 9 sem os Marcos 3 a 6) NÃO funciona depois destas migrations (nomes de tabela do livro do Marco 5, colunas novas). Elas sobem
 junto com a API e o Front da integração, com a API parada, como no `docs/DEPLOY_FECHAMENTO_MARCO_5.md`.
@@ -14,6 +15,8 @@ junto com a API e o Front da integração, com a API parada, como no `docs/DEPLO
 ## Ordem
 
 1. Backup novo imediatamente antes (`pg_dump -Fc`, com SHA-256), guardado fora do servidor.
+   Conferir que o mês do deploy está ABERTO no Financeiro (a 10520 grava os estornos de correção com a competência do dia do deploy):
+   `SELECT company_id, reference_month, status FROM finance.period_closures WHERE reference_month = to_char(now(), 'YYYY-MM') AND status <> 'OPEN';` -> nenhuma linha.
 2. Parar a API.
 3. Aplicar as migrations: `node scripts/migrate.js up` no console do serviço da API (o mesmo executor do boot com `RUN_MIGRATIONS_ON_BOOT`).
    Conferir `node scripts/migrate.js status`: nenhuma `down`.
@@ -39,12 +42,20 @@ junto com a API e o Front da integração, com a API parada, como no `docs/DEPLO
   SELECT id, company_id, total_amount, created_at FROM construction.stage_measurements
    WHERE status = 'PAYABLE' AND payable_financial_entry_id IS NULL ORDER BY created_at;
   ```
-- Regras do livro do Marco 5 criadas sem validar o passado (valem para linha nova ou alterada): `guarantees_type_livro_chk`, `inspections_type_livro_chk`,
-  `inspection_items_condition_livro_chk`, `lease_obligations_periodicity_chk`, `lease_obligations_due_day_chk`, `legal_deadlines_status_chk`.
+- Regras do livro do Marco 5 (`guarantees_type_livro_chk`, `inspections_type_livro_chk`, `inspection_items_condition_livro_chk`, `lease_obligations_periodicity_chk`,
+  `lease_obligations_due_day_chk`, `legal_deadlines_status_chk`): nascem NOT VALID e a própria migration as VALIDA quando nenhuma linha antiga as viola
+  (`src/shared/db/validarSeLimpo.js`). No ensaio com o backup: 0 linha fora da regra, as 6 validadas. Depois do deploy, a única CHECK nova sem validar é a da medição
+  (acima). Conferir: `SELECT conrelid::regclass, conname FROM pg_constraint WHERE NOT convalidated;` (as 15 que já existiam antes da integração continuam iguais).
+- `20260101010520`: os 4 estornos de correção ficam com a competência do mês do deploy (no ensaio, 2026-11, aberto); nenhum período fechado é alterado.
+- Mudanças de dado sem `down` que desfaça o dado (o `down` desfaz só a estrutura): 9975 e 31001 (etapas do funil), 9988 e 9989 (DEC-007), 6608 (vínculo da
+  medição com a conta), 9973 (permissão concedida), parte da 6602 (baseline). Por isso a reversão é pelo backup (abaixo).
 
 ## Usuário das migrations
 
 Na homologação o dono das tabelas é superusuário com BYPASSRLS (conferido em 13/11/2026), então as cargas de dados das migrations enxergam todas as empresas.
+As migrations precisam rodar com o MESMO usuário dono das tabelas: as políticas `*_checagem_do_dono` (10940 e 10960) valem `TO CURRENT_USER`, o papel que roda a
+migration e é dono das funções `SECURITY DEFINER` criadas no mesmo comando (as funções leem com o papel de quem as criou).
+Quando uma migration falha no meio, o erro mostrado é o ORIGINAL (`src/shared/db/forceRestaurado.js`); antes, o "transaction is aborted" da devolução do FORCE o escondia.
 Em outro ambiente em que o dono NÃO tenha BYPASSRLS, as cargas que leem tabelas com RLS forçado não enxergam linha nenhuma; as migrations 9966, 9971, 10940 e
 6603 já tiram o FORCE só durante a carga, as demais precisam do mesmo cuidado antes de rodar nesse ambiente.
 
@@ -52,6 +63,9 @@ Em outro ambiente em que o dono NÃO tenha BYPASSRLS, as cargas que leem tabelas
 
 Restaurar o backup do passo 1 e reimplantar a API e o Front do Marco 9 (`9863bee2` / Front `a26d3da`). As migrations têm `down`, mas várias renomeiam tabelas e
 corrigem dados; o caminho seguro de volta é o backup.
+
+**Proibido** `db:migrate:undo:all --to <migration>` na homologação: pelo nome (ordem), `--to 20260101006600` desfaria também cerca de 90 migrations do Marco 9
+(numeradas entre 6600 e 31002). Desfazer só por backup.
 
 ## Migrations (57, na ordem em que aplicam sobre a homologação)
 
