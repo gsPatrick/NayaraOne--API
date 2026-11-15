@@ -20,7 +20,7 @@ on:
 
 jobs:
   esteira-ai:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production

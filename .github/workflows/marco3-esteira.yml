@@ -15,7 +15,7 @@ on:
 
 jobs:
   esteira-marco3:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -57,7 +57,7 @@ jobs:
     # Tag m3-release-*: deploy_DEV e deploy_LAB (hook do environment + conferencia do commit em /api/version).
     if: ${{ startsWith(github.ref, 'refs/tags/m3-release-') }}
     needs: esteira-marco3
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: lab
     env:
       M3_CI_DEV_DEPLOY_HOOK: ${{ secrets.DEV_API_DEPLOY_HOOK_URL }}
@@ -84,7 +84,7 @@ jobs:
     # Etapa 17 (production_approval): o environment tem revisor obrigatorio e pausa o job ate a aprovacao. Este job NAO executa deploy.
     if: ${{ startsWith(github.ref, 'refs/tags/m3-release-') }}
     needs: release-marco3
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: marco3-aprovacao
     steps:
       - uses: actions/checkout@v4

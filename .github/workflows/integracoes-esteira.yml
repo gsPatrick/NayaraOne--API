@@ -13,7 +13,7 @@ on:
 
 jobs:
   esteira-integracoes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -49,7 +49,7 @@ jobs:
     # Só em tag de release de um provider: DEV, LAB e failure drill (etapas 10 a 12).
     if: ${{ startsWith(github.ref, 'refs/tags/int-release-') }}
     needs: esteira-integracoes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -101,7 +101,7 @@ jobs:
     # de aprovação; a liberação do provider em produção e o deploy são feitos por ele, fora do CI.
     if: ${{ startsWith(github.ref, 'refs/tags/int-release-') }}
     needs: release-lab
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: integracoes-aprovacao
     steps:
       - uses: actions/checkout@v4

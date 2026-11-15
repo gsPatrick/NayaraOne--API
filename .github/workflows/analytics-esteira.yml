@@ -24,7 +24,7 @@ on:
 jobs:
   # Os 15 testes adversariais (um nome fixo cada) e a suíte que vigia nomes, skip/only e mutação. Sem needs: roda mesmo com a esteira vermelha.
   bi-adversarial:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -68,7 +68,7 @@ jobs:
 
   # Etapas 1 a 11, na ordem do livro; a primeira vermelha bloqueia as seguintes. A etapa 2 compila as telas de BI do Front, então o Front vai ao lado da API.
   bi-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -114,7 +114,7 @@ jobs:
   bi-promocao:
     needs: [bi-pipeline, bi-adversarial]
     if: github.event_name == 'workflow_dispatch' && inputs.executar_promocao
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: bi-promocao
     env:
       NODE_ENV: test

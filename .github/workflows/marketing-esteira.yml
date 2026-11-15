@@ -14,7 +14,7 @@ on:
 jobs:
   esteira-marketing:
     name: Estágios 1 a 11
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -70,7 +70,7 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/heads/entrega/') || startsWith(github.ref, 'refs/tags/mkt-release-') }}
     name: Estágios 12 a 14
     needs: esteira-marketing
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production

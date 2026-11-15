@@ -18,7 +18,7 @@ on:
 
 jobs:
   esteira-obras:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -52,7 +52,7 @@ jobs:
     # Tag obr-release-*: etapa LAB (hook do environment lab + conferencia do commit em /api/version). Sem os secrets a etapa fica vermelha.
     if: ${{ startsWith(github.ref, 'refs/tags/obr-release-') }}
     needs: esteira-obras
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: lab
     env:
       OBR_CI_LAB_DEPLOY_HOOK: ${{ secrets.LAB_API_DEPLOY_HOOK_URL }}

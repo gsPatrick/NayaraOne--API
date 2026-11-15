@@ -28,7 +28,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     services:
       postgres:
@@ -448,7 +448,7 @@ jobs:
   # (etapas 1 a 11, em banco descartável local: nenhuma etapa escreve no banco compartilhado). O resultado de cada etapa (log + resumo.json)
   # sobe como artifact. Segredo nunca aparece no log (redigido pelos padrões da varredura M9-D246).
   bi-pipeline:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -510,7 +510,7 @@ jobs:
   # mutação) como JOB PRÓPRIO, independente da esteira (sem `needs`): roda mesmo quando uma etapa da bi-pipeline reprova e dá o seu próprio resultado
   # no GitHub. Em banco descartável; sem skip (o arquivo é lido por scripts/analytics/ci/gates/suiteAdversarial.js).
   bi-adversarial:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -535,7 +535,7 @@ jobs:
   # como JOB PRÓPRIO, sem `needs`: roda no provider sandbox, em banco descartável, e reprova o merge se qualquer um dos 15 falhar. O relatório
   # adversarial-report.json (por teste: passou, duração, evidência, com o commit) fica anexado ao resultado e alimenta a liberação (D046).
   ai-adversarial:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -568,7 +568,7 @@ jobs:
   bi-promocao:
     needs: [bi-pipeline, deploy-dev]
     if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: lab
     env:
       NODE_ENV: test
@@ -597,7 +597,7 @@ jobs:
   deploy-dev:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Disparar deploy da API no DEV
         env:
@@ -617,7 +617,7 @@ jobs:
   deploy-lab:
     needs: [test, deploy-dev]
     if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: lab
     steps:
       - name: Disparar deploy da API no LAB
@@ -635,7 +635,7 @@ jobs:
   deploy-production:
     needs: test
     if: (github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # O environment "production" com required reviewers pausa este job até a aprovação manual.
     environment: production
     steps:

@@ -13,7 +13,7 @@ on:
 jobs:
   calendar-idempotency:
     name: Calendar idempotency (D801 a D803)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -42,7 +42,7 @@ jobs:
 
   lineage-coverage:
     name: Lineage coverage (D811)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -66,7 +66,7 @@ jobs:
 
   dlp:
     name: DLP (D820 a D825)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -99,7 +99,7 @@ jobs:
 
   bcp-replay:
     name: BCP replay (D831 a D834)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -128,7 +128,7 @@ jobs:
 
   openapi-breaking:
     name: OpenAPI breaking e contract test (D840, D842)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -157,7 +157,7 @@ jobs:
 
   feature-expiry:
     name: Feature expiry (D871)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -181,7 +181,7 @@ jobs:
 
   finops-thresholds:
     name: FinOps thresholds (D861, D862, D863)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -210,7 +210,7 @@ jobs:
 
   accessibility:
     name: Accessibility, checagens automatizadas (D851)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -241,7 +241,7 @@ jobs:
 
   aud-regression:
     name: Regressão AUD-013 a AUD-020 (D809), nono job, fora dos controles do Guia §8
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -270,7 +270,7 @@ jobs:
 
   adversarial-map:
     name: Mapa dos 10 testes adversariais do livro (D890)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
@@ -298,7 +298,7 @@ jobs:
 
   dod-bloco-f:
     name: Fechamento do bloco F (D940)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
