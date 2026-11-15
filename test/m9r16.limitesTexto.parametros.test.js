@@ -1,4 +1,6 @@
 'use strict';
+// Lê a pasta irmã Maturacao/ (só no ambiente de quem desenvolve): no CI que declara CI_SEM_REPOS_IRMAOS=1 e não a tem, sai NAO_APLICAVEL_NO_CI (test/helpers/repoIrmao.js).
+const { opcoesComIrmaos } = require('./helpers/repoIrmao');
 
 // DI-M9R-16 (verificação do Marco 9, rodada 6): o tamanho máximo do texto livre das mensagens é parâmetro da empresa, com o teto do canal. Cada chave está no
 // dicionário de Configurações (a API valida a faixa), no catálogo Maturacao/demandas/parametros.csv, na tela do Front e é lida por código de produção.
@@ -19,7 +21,7 @@ const CHAVES = {
   'integration.messaging.record_body_max_chars': { min: 1, max: 1048576, padrao: mensageria.PADROES.recordBodyMaxChars, esperado: 65536, leitor: 'src/features/crm/messaging/messaging.params.js' },
 };
 
-test('m9r16 cada limite está no dicionário com a faixa do canal, no parametros.csv com o mesmo padrão, na tela do Front e é lido pelo código', () => {
+test('m9r16 cada limite está no dicionário com a faixa do canal, no parametros.csv com o mesmo padrão, na tela do Front e é lido pelo código', opcoesComIrmaos(['Maturacao/demandas/parametros.csv']), () => {
   const csv = fs.readFileSync(path.join(RAIZ, '..', 'Maturacao', 'demandas', 'parametros.csv'), 'utf8');
   const tela = fs.readFileSync(path.join(RAIZ, '..', 'NayaraOne--FRONT', 'app', 'painel', 'configuracoes', 'integracoesMensageriaGroups.js'), 'utf8');
   for (const [chave, { min, max, padrao, esperado, leitor }] of Object.entries(CHAVES)) {

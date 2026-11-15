@@ -1,4 +1,6 @@
 'use strict';
+// Lê a pasta irmã Maturacao/ (só no ambiente de quem desenvolve): no CI que declara CI_SEM_REPOS_IRMAOS=1 e não a tem, sai NAO_APLICAVEL_NO_CI (test/helpers/repoIrmao.js).
+const { opcoesComIrmaos } = require('./helpers/repoIrmao');
 
 // M9-D613 — estrutura de src/features/analytics e regras de dependência entre camadas. Testes estáticos (sem banco).
 const { test } = require('node:test');
@@ -80,7 +82,7 @@ function lerDemandas() {
 
 const PASSOS = require('../scripts/lib/analyticsBuildOrder');
 
-test('m9d613 ordem exata dos 11 passos respeitada pelas demandas', () => {
+test('m9d613 ordem exata dos 11 passos respeitada pelas demandas', opcoesComIrmaos(['Maturacao/demandas/marco-9']), () => {
   assert.equal(PASSOS.length, 11);
   const dem = lerDemandas();
   for (const p of PASSOS) for (const d of p.demandas) assert.ok(d in dem, `demanda D${d} do passo ${p.passo} não existe`);

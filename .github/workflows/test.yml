@@ -342,6 +342,12 @@ jobs:
           # próprio, migra pelo executor único (scripts/migrate.js), compara o schema com o retrato de antes e apaga o banco.
           # Só esse teste lê esta variável; a suíte continua rodando com o usuário de privilégio mínimo acima.
           M4D140_ADMIN_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
+          # A pasta irmã Maturacao/ (catálogo de parâmetros e demandas) não tem remoto: o que depende dela sai NAO_APLICAVEL_NO_CI,
+          # visível no log (test/helpers/repoIrmao.js), e segue exigido na suíte local. O Front está ao lado (checkout acima) e roda inteiro.
+          CI_SEM_REPOS_IRMAOS: '1'
+          # Cada arquivo de teste num banco clonado do banco migrado e semeado (scripts/ci-estagios-marco8.sh): nenhum depende da ordem.
+          # Só o script usa esta URL (para clonar e apagar); os testes continuam com o usuário de privilégio mínimo acima.
+          CI_ISOLAR_ADMIN_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
           DB_USER: nayara_ci_app
           DB_PASSWORD: nayara_ci_app_password
           # FIX (18/10/2026): sem NODE_ENV=test, qualquer arquivo de teste que importa app.js

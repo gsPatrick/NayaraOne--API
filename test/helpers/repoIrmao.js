@@ -30,4 +30,10 @@ function testeComIrmaos(caminhos, base = require('node:test').test) {
   };
 }
 
-module.exports = { MARCADOR, irmao, motivoNaoAplicavel, testeComIrmaos };
+/** Opções do `test` com o mesmo pulo: `test(nome, opcoesComIrmaos(caminhos), fn)` (mantém a declaração `test(` contada pelo inventário da bateria). */
+function opcoesComIrmaos(caminhos, opcoes = {}) {
+  const motivo = motivoNaoAplicavel(caminhos);
+  return motivo ? { ...opcoes, skip: motivo } : opcoes;
+}
+
+module.exports = { MARCADOR, irmao, motivoNaoAplicavel, testeComIrmaos, opcoesComIrmaos };

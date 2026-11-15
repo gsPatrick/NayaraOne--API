@@ -1,4 +1,6 @@
 'use strict';
+// Lê a pasta irmã Maturacao/ (só no ambiente de quem desenvolve): no CI que declara CI_SEM_REPOS_IRMAOS=1 e não a tem, sai NAO_APLICAVEL_NO_CI (test/helpers/repoIrmao.js).
+const { opcoesComIrmaos } = require('./helpers/repoIrmao');
 
 // M9-D800 — Alicerce da governança (rotas HTTP, módulos por empresa e exceções ao prefixo GOV_).
 // Rodar SEMPRE em banco descartável (nunca no .env remoto):
@@ -135,7 +137,7 @@ test('m9d800 a lista de exceções ao prefixo GOV_ configurada pelo administrado
   assert.equal(restaurado.body.error.code, 'PERMISSION_DENIED');
 });
 
-test('m9d800 configurações de governança registradas no dicionário com os padrões do catálogo', () => {
+test('m9d800 configurações de governança registradas no dicionário com os padrões do catálogo', opcoesComIrmaos(['Maturacao/demandas/parametros.csv']), () => {
   const { SETTINGS_SCHEMA } = require('../src/features/settings/settings.service');
   const gov = require('../src/features/core-governance/governance.settings');
   assert.equal(SETTINGS_SCHEMA['governanca.erros.excecoes_prefixo_gov'].type, 'string');

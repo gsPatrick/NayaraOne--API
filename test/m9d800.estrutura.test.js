@@ -1,4 +1,6 @@
 'use strict';
+// Lê a pasta irmã Maturacao/ (só no ambiente de quem desenvolve): no CI que declara CI_SEM_REPOS_IRMAOS=1 e não a tem, sai NAO_APLICAVEL_NO_CI (test/helpers/repoIrmao.js).
+const { opcoesComIrmaos } = require('./helpers/repoIrmao');
 
 // M9-D800 — Alicerce da governança (estrutura de pastas, README, eventos, erros e ordem de construção).
 // Rodar SEMPRE em banco descartável (nunca no .env remoto):
@@ -89,7 +91,7 @@ test('m9d800 corpo de erro de governança tem formato único com error.traceId e
   assert.deepEqual(offenders, [], 'códigos sem prefixo GOV_ fora da lista fechada');
 });
 
-test('m9d800 a tabela de ordem 3.5 coincide com o campo Dependências das demandas do bloco', () => {
+test('m9d800 a tabela de ordem 3.5 coincide com o campo Dependências das demandas do bloco', opcoesComIrmaos(['Maturacao/demandas/marco-9']), () => {
   // Dependências esperadas, transcritas da tabela 3.5 (cada passo: ordem interna; a primeira depende das últimas do passo anterior).
   const esperado = {
     D801: ['D800'], D803: ['D801'], D802: ['D801', 'D803'],
