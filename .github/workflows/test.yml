@@ -345,11 +345,6 @@ jobs:
           # A pasta irmã Maturacao/ (catálogo de parâmetros e demandas) não tem remoto: o que depende dela sai NAO_APLICAVEL_NO_CI,
           # visível no log (test/helpers/repoIrmao.js), e segue exigido na suíte local. O Front está ao lado (checkout acima) e roda inteiro.
           CI_SEM_REPOS_IRMAOS: '1'
-          # Cada arquivo de teste num banco clonado do banco migrado e semeado (scripts/ci-estagios-marco8.sh): nenhum depende da ordem.
-          # Só o script usa esta URL (para clonar e apagar); os testes continuam com o usuário de privilégio mínimo acima.
-          CI_ISOLAR_ADMIN_URL: postgres://nayara_ci:nayara_ci_password@localhost:5432/nayara_one_ci
-          DB_USER: nayara_ci_app
-          DB_PASSWORD: nayara_ci_app_password
           # FIX (18/10/2026): sem NODE_ENV=test, qualquer arquivo de teste que importa app.js
           # (harness HTTP) dispara os ~16 jobs periódicos de setInterval — as guardas de app.js
           # são todas `NODE_ENV !== 'test'`. Os timers continuam vivos depois do fim da suíte e
@@ -367,10 +362,15 @@ jobs:
             echo "# commit avaliado (branch): ${EVIDENCE_SHA}"
             echo "# commit de merge temporário do PR (só em pull_request): ${EVIDENCE_MERGE_SHA:-n/a}"
             echo "# run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-            echo "# usuário do banco na suíte: nayara_ci_app (NOSUPERUSER NOBYPASSRLS)"
+            echo "# usuário do banco na suíte: nayara_runtime do banco descartável (NOSUPERUSER NOBYPASSRLS)"
             echo "#"
           } > test-results.log
-          bash scripts/ci-estagios-marco8.sh test-results.log
+          # A suíte roda como a entrega e as esteiras: banco PostgreSQL DESCARTÁVEL (scripts/withDisposableDb.js: migrations do zero, seeds,
+          # papel de runtime NOSUPERUSER/NOBYPASSRLS e a URL de administrador que os testes de banco usam) e cada arquivo num clone dele
+          # (CI_ISOLAR_ADMIN_URL, scripts/ci-estagios-marco8.sh). No banco de serviço, sem a URL de administrador, os testes de banco não
+          # montavam o ambiente (15/11/2026: 244 falhas e um teste parado até o teto). O banco de serviço continua provando migrations e seeds acima.
+          node scripts/withDisposableDb.js -- env CI_TENANT_USERS_PASSWORD=ci-tenant-users-password-not-for-production CLAMAV_HOST=127.0.0.1 CLAMAV_PORT=3310 \
+            bash -c 'node scripts/seed-ci-two-tenants.js >/dev/null && CI_ISOLAR_ADMIN_URL="$DATABASE_ADMIN_URL" bash scripts/ci-estagios-marco8.sh test-results.log'
 
       # Conferência Nayara 19/10/2026: o log de teste não pode carregar segredo. A API agora
       # redige Authorization/Cookie/tokens nos logs de requisição; este passo FALHA o build se
@@ -378,7 +378,8 @@ jobs:
       - name: Verificar que o log de testes não contém segredos
         if: always()
         run: |
-          if grep -nE 'Bearer ey|eyJ|postgres://[^ ]*:[^ ]*@' test-results.log | grep -v 'nayara_ci_app_password' | head -5 | grep -q .; then
+          # JWT de verdade (cabeçalho.corpo), não qualquer "eyJ" (um ETag pode conter a sequência por acaso, visto em 15/11/2026).
+          if grep -nE 'Bearer ey|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|postgres://[^ ]*:[^ ]*@' test-results.log | grep -v 'nayara_ci_app_password' | head -5 | grep -q .; then
             echo "::error::test-results.log contém padrão de segredo (JWT ou string de conexão)"; exit 1
           fi
           echo "test-results.log sem padrões de segredo (Bearer ey, eyJ, string de conexão)."
