@@ -58,15 +58,33 @@ async function countReferences(entityType, otherId, transaction) {
  * personMerge.references) — segue só se nenhuma linha que a união moveria aponta para o absorvido; senão recusa (nunca referência órfã
  * em silêncio, nunca erro 500 de permissão).
  */
-async function updateAllowed(table, column, otherId, keep, transaction) {
+const PROTECTED_MESSAGE = 'Não foi possível unir: há registro protegido contra alteração que aponta para o cadastro que sai. Peça ajuda a quem administra o sistema.';
+
+/** 'ok' (tem UPDATE), 'skip' (sem UPDATE e nada a mover) ou 'blocked' (sem UPDATE e há linha a mover, ou nem SELECT para conferir). */
+async function protectionOf(table, column, otherId, keep, transaction) {
   const [priv] = await sequelize.query(`SELECT has_table_privilege(CAST(:t AS text), 'UPDATE') AS pode_update, has_table_privilege(CAST(:t AS text), 'SELECT') AS pode_select`,
     { type: QueryTypes.SELECT, transaction, replacements: { t: table } });
-  if (priv.pode_update) return true;
-  const blocked = () => govError(409, 'GOV_MERGE_PROTECTED_REFERENCE', 'Não foi possível unir: há registro protegido contra alteração que aponta para o cadastro que sai. Peça ajuda a quem administra o sistema.', { reference: `${table}.${column}` });
-  if (!priv.pode_select) throw blocked();
+  if (priv.pode_update) return 'ok';
+  if (!priv.pode_select) return 'blocked';
   const [{ n }] = await sequelize.query(`SELECT count(*)::int AS n FROM ${qualified(table)} WHERE ${ident(column)} = :otherId${keep}`, { type: QueryTypes.SELECT, transaction, replacements: { otherId } });
-  if (n > 0) throw blocked();
-  return false;
+  return n > 0 ? 'blocked' : 'skip';
+}
+
+async function updateAllowed(table, column, otherId, keep, transaction) {
+  const state = await protectionOf(table, column, otherId, keep, transaction);
+  if (state === 'blocked') throw govError(409, 'GOV_MERGE_PROTECTED_REFERENCE', PROTECTED_MESSAGE, { reference: `${table}.${column}` });
+  return state === 'ok';
+}
+
+/** Impedimentos que a decisão daria por tabela protegida (para a rota /impact avisar antes da confirmação). */
+async function protectedBlockers(entityType, otherId, transaction) {
+  const found = [];
+  for (const { table, column } of await allReferences(entityType, transaction)) {
+    const keep = movedRowsFilter(table, column);
+    if (keep === null) continue;
+    if ((await protectionOf(table, column, otherId, keep, transaction)) === 'blocked') found.push({ code: 'GOV_MERGE_PROTECTED_REFERENCE', message: PROTECTED_MESSAGE, reference: `${table}.${column}` });
+  }
+  return found;
 }
 
 async function update(table, column, survivorId, otherId, transaction) {
@@ -115,4 +133,4 @@ async function remapLeftovers(entityType, survivorId, otherId, transaction) {
   return moved;
 }
 
-module.exports = { foreignReferences, countReferences, remapLeftovers };
+module.exports = { foreignReferences, countReferences, remapLeftovers, protectedBlockers };

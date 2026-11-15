@@ -20,6 +20,8 @@ const { User, UserMembership, Role, Permission, RolePermission } = require('../s
 const F = require('./helpers/mensagensFormas');
 // A lista de canais aceita vem do código (a integração dos Marcos 3 a 6 acrescentou SITE, Guia M3 §12): o banco é compartilhado com outros arquivos que gravam interação pelo site.
 const { CHANNELS } = require('../src/features/crm/messages.constants');
+// A lista do código é exatamente a do Marco 9 mais SITE: um canal acrescentado sem passar por aqui reprova o teste.
+const CANAIS_ESPERADOS = ['WHATSAPP', 'EMAIL', 'SMS', 'PHONE', 'IN_PERSON', 'PORTAL', 'SITE', 'INSTAGRAM', 'OTHER'];
 
 const PERMISSOES = ['crm:messages:read', 'crm:messages:create', 'crm:messages:update'];
 const SUFIXO = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
@@ -106,6 +108,7 @@ test('POST /messages: cada campo, em todas as formas erradas, dá 400 MESSAGE_VA
   assert.deepEqual([r.body.data.authorUserId, r.body.data.companyId, r.body.data.deliveryStatus], [userId, A.companyId, null]);
   verificar(t);
   const [lixo] = await env.sql(A, "SELECT count(*)::int AS n FROM crm.messages WHERE company_id = :c AND (status IN ('[OBJECT OBJECT]', '', 'TRUE') OR channel NOT IN (:canais))", { c: A.companyId, canais: CHANNELS });
+  assert.deepEqual([...CHANNELS].sort(), [...CANAIS_ESPERADOS].sort(), 'canais aceitos = os do Marco 9 + SITE (Guia M3 §12)');
   assert.equal(lixo.n, 0, 'nenhum valor fora da lista gravado');
 });
 

@@ -87,7 +87,8 @@ async function createPerson(payload, actorUserId, transaction, options = {}) {
     );
     await sp('RELEASE SAVEPOINT pessoa_cadastro');
   } catch (error) {
-    await sp('ROLLBACK TO SAVEPOINT pessoa_cadastro');
+    // Desfaz e fecha o savepoint (como killswitch.savepoint.js). Se a própria volta falhar (conexão caída), o erro que sobe é o original.
+    try { await sp('ROLLBACK TO SAVEPOINT pessoa_cadastro'); await sp('RELEASE SAVEPOINT pessoa_cadastro'); } catch (_e) { throw error; }
     // UNIQUE(group_id, tax_id_normalized) é a identidade rígida do banco (TAB-0100) e nada a contorna. O portão já recusou o CPF/CNPJ
     // desta empresa e o das outras empresas do grupo; chegar aqui é corrida com um cadastro gravado ao mesmo tempo. Gravado NESTA empresa:
     // a mesma resposta do portão (match forte, abrir o existente). Gravado em OUTRA empresa do grupo: o caminho é o vínculo.

@@ -11,7 +11,8 @@ const q = (sql, transaction, replacements) => sequelize.query(sql, { type: Query
 
 /** O que impede a união (as mesmas travas dos serviços de cada módulo), para o aviso antes da confirmação. */
 async function blockers(entityType, survivorId, otherId, transaction) {
-  const found = [];
+  // Tabela que o papel da aplicação não pode alterar, com linha do cadastro que sai: a decisão daria 409 GOV_MERGE_PROTECTED_REFERENCE.
+  const found = await references.protectedBlockers(entityType, otherId, transaction);
   if (entityType === 'PROPERTY') {
     const [row] = await q('SELECT count(*)::int AS n FROM real_estate.properties a, real_estate.properties b WHERE a.id = :s AND b.id = :o AND a.registry_number IS NOT NULL AND b.registry_number IS NOT NULL AND a.registry_number <> b.registry_number', transaction, { s: survivorId, o: otherId });
     if (row.n) found.push({ code: BLOCKERS.PROPERTY_REGISTRY, message: 'Os dois imóveis têm matrículas preenchidas e distintas.' });

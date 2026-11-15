@@ -94,13 +94,26 @@ jobs:
       # M9-D705: o repositório do Front fica ao lado da API (../NayaraOne--FRONT), como no desenvolvimento, para as guardas 1 e 5 do "Não improvisar"
       # varrerem o código de BI de verdade. Sem o Front a etapa FALHA (os testes m9d614 regra1 e regra5 não podem ficar pulados no CI). Repositório
       # privado: o segredo FRONT_REPO_TOKEN dá leitura; sem ele vale o token do próprio workflow.
+      # A branch do Front com o mesmo nome da API (no pull request, a de origem), como scripts/governance-ci/prepararFront.sh; se ela não
+      # existir no Front, a branch padrão, com aviso visível (o checkout com ref inexistente derrubaria o job). Antes pegava sempre a padrão,
+      # que não tem as telas de BI do Marco 9 (a etapa 2 do BI reprovava). O nome da branch entra por variável, nunca no texto do comando.
+      - name: Branch do Front (mesmo nome da API, ou a padrão)
+        id: front_ref
+        env:
+          QUERO: ${{ github.head_ref || github.ref_name }}
+          FRONT_URL: https://github.com/${{ github.repository_owner }}/NayaraOne--FRONT.git
+        run: |
+          if git ls-remote --exit-code --heads "$FRONT_URL" "refs/heads/$QUERO" >/dev/null 2>&1; then
+            echo "ref=$QUERO" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Front na branch padrão::o NayaraOne--FRONT não tem a branch $QUERO; o checkout usa a branch padrão."
+            echo "ref=" >> "$GITHUB_OUTPUT"
+          fi
       - name: Checkout do Front de BI (NayaraOne--FRONT)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/NayaraOne--FRONT
-          # A branch do Front com o mesmo nome da API (no pull request, a de origem), como scripts/governance-ci/prepararFront.sh.
-          # Sem isto o checkout pegava a branch padrão do Front, que não tem as telas de BI do Marco 9 (etapa 2 do BI reprovava).
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ steps.front_ref.outputs.ref }}
           token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
           path: front-checkout
 
@@ -321,6 +334,8 @@ jobs:
       # como artifact do run — fica baixável e comprovável por hash/commit depois do workflow
       # terminar, não só visível (e perdível) no log ao vivo do Actions.
       - name: Run test suite (RLS real, sem bypass — mesmo usuário de privilégio mínimo da produção)
+        # Teto do passo (a suíte em série leva bem menos): travamento aparece como falha em vez de prender o runner por 6 h.
+        timeout-minutes: 180
         env:
           DATABASE_URL: postgres://nayara_ci_app:nayara_ci_app_password@localhost:5432/nayara_one_ci
           # M4-D140 (test/m4d140.estruturaFinanceiro.test.js, testes 9 e 10): o superusuário do container cria um banco VAZIO
@@ -439,13 +454,26 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      # A branch do Front com o mesmo nome da API (no pull request, a de origem), como scripts/governance-ci/prepararFront.sh; se ela não
+      # existir no Front, a branch padrão, com aviso visível (o checkout com ref inexistente derrubaria o job). Antes pegava sempre a padrão,
+      # que não tem as telas de BI do Marco 9 (a etapa 2 do BI reprovava). O nome da branch entra por variável, nunca no texto do comando.
+      - name: Branch do Front (mesmo nome da API, ou a padrão)
+        id: front_ref
+        env:
+          QUERO: ${{ github.head_ref || github.ref_name }}
+          FRONT_URL: https://github.com/${{ github.repository_owner }}/NayaraOne--FRONT.git
+        run: |
+          if git ls-remote --exit-code --heads "$FRONT_URL" "refs/heads/$QUERO" >/dev/null 2>&1; then
+            echo "ref=$QUERO" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Front na branch padrão::o NayaraOne--FRONT não tem a branch $QUERO; o checkout usa a branch padrão."
+            echo "ref=" >> "$GITHUB_OUTPUT"
+          fi
       - name: Checkout do Front de BI (NayaraOne--FRONT)
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/NayaraOne--FRONT
-          # A branch do Front com o mesmo nome da API (no pull request, a de origem), como scripts/governance-ci/prepararFront.sh.
-          # Sem isto o checkout pegava a branch padrão do Front, que não tem as telas de BI do Marco 9 (etapa 2 do BI reprovava).
-          ref: ${{ github.head_ref || github.ref_name }}
+          ref: ${{ steps.front_ref.outputs.ref }}
           token: ${{ secrets.FRONT_REPO_TOKEN || github.token }}
           path: front-checkout
       - name: Posicionar o Front ao lado da API

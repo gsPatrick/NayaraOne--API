@@ -9,11 +9,14 @@ LOG="${1:-test-results.log}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Um arquivo por vez (--test-concurrency=1), como a bateria por lotes da entrega: os arquivos dividem UM banco e vários mexem em
+# estrutura e permissão (migration desfeita e refeita, REVOKE, LOCK). Em paralelo eles se atropelavam — ensaio de 15/11/2026: 89 falhas
+# e, no GitHub, a suíte parada até o limite de 6 h do runner. Teto por teste (--test-timeout, 15 min): um travamento vira falha visível.
 estagio() {
   local nome="$1"
   shift
   echo "# estagio: ${nome}" | tee -a "$LOG"
-  node --test --test-reporter=spec --test-reporter-destination=stdout "$@" 2>&1 | tee -a "$LOG"
+  node --test --test-concurrency=1 --test-timeout=900000 --test-reporter=spec --test-reporter-destination=stdout "$@" 2>&1 | tee -a "$LOG"
 }
 
 ja_rodou() {

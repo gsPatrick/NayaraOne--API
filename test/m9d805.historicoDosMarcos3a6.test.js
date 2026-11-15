@@ -86,6 +86,8 @@ test('união com tabela que o papel da aplicação não pode alterar (só SELECT
   const [{ pode }] = (await adminQuery(`SELECT has_table_privilege('${papel}', 'marketing.campaign_audience_members', 'UPDATE') AS pode`)).rows;
   await adminQuery(`REVOKE UPDATE ON marketing.campaign_audience_members FROM "${papel}"`);
   try {
+    const [{ depois }] = (await adminQuery(`SELECT has_table_privilege('${papel}', 'marketing.campaign_audience_members', 'UPDATE') AS depois`)).rows;
+    assert.equal(depois, false, 'o REVOKE valeu para o papel da sessão (o caminho sem UPDATE é exercitado de verdade)');
     await env.withRollbackTenantTransaction(A(), async (tx) => {
       const first = await env.person(A(), tx, { legalName: 'Rui Prado Lima' });
       const second = await env.person(A(), tx, { legalName: 'Rui Prado Lima' });
@@ -96,5 +98,33 @@ test('união com tabela que o papel da aplicação não pode alterar (só SELECT
     });
   } finally {
     if (pode) await adminQuery(`GRANT UPDATE ON marketing.campaign_audience_members TO "${papel}"`);
+  }
+});
+
+test('união com tabela sem UPDATE e COM linha do absorvido: /impact já avisa e a decisão dá 409 GOV_MERGE_PROTECTED_REFERENCE, nada gravado', { skip: skip() }, async () => {
+  const { adminQuery } = require('./m9d801.helpers');
+  const impactService = require('../src/features/core-governance/data-quality/merge.impact');
+  const papel = (await env.sequelize.query('SELECT current_user AS u', { plain: true })).u;
+  const [{ pode }] = (await adminQuery(`SELECT has_table_privilege('${papel}', 'legal.legal_cases', 'UPDATE') AS pode`)).rows;
+  await adminQuery(`REVOKE UPDATE ON legal.legal_cases FROM "${papel}"`);
+  try {
+    await env.withRollbackTenantTransaction(A(), async (tx) => {
+      const p1 = await env.property(A(), tx);
+      const p2 = await env.property(A(), tx);
+      const item = await env.candidate(A(), tx, 'PROPERTY', p1.id, p2.id, { reason: 'PROPERTY_REGISTRY', score: 95 });
+      const { actor } = await env.steward(A(), tx);
+      const absorvido = item.primary_id === p1.id ? p2 : p1;
+      await env.query(`INSERT INTO legal.legal_cases (id, group_id, company_id, case_type, status, summary, responsible_user_id, property_id, created_at, updated_at)
+        VALUES (gen_random_uuid(), :g, :c, 'LITIGATION', 'OPEN', 'Processo do imóvel absorvido', :u, :p, now(), now())`, { g: A().groupId, c: A().companyId, u: A().userId, p: absorvido.id }, tx);
+      const impacto = await impactService.impactOf(A(), item.id, item.primary_id, tx);
+      assert.deepEqual(impacto.blockers.map((b) => [b.code, b.reference]), [['GOV_MERGE_PROTECTED_REFERENCE', 'legal.legal_cases.property_id']]);
+      await env.query('SAVEPOINT decisao', {}, tx);
+      const erro = await mergeService.decide(A(), actor, item.id, { decision: 'MERGED', survivorId: item.primary_id }, tx).then(() => null, (e) => e);
+      await env.query('ROLLBACK TO SAVEPOINT decisao', {}, tx);
+      assert.deepEqual([erro && erro.statusCode, erro && erro.code], [409, 'GOV_MERGE_PROTECTED_REFERENCE']);
+      assert.equal((await env.query('SELECT merged_into_id FROM real_estate.properties WHERE id = :id', { id: absorvido.id }, tx))[0].merged_into_id, null, 'nada gravado');
+    });
+  } finally {
+    if (pode) await adminQuery(`GRANT UPDATE ON legal.legal_cases TO "${papel}"`);
   }
 });

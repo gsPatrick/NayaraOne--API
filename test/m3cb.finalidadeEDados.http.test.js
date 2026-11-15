@@ -145,7 +145,7 @@ test('M3-18 com o parâmetro desligado a lista da empresa NÃO vale no canContac
   }
 });
 
-test('canContact num processo que ainda não carregou o CRM carrega a política sozinho (antes, sem ela, nenhum contato era autorizado)', () => {
+test('canContact num processo que ainda não carregou o CRM carrega a política sozinho (antes, sem ela, nenhum contato era autorizado)', { skip: H.SKIP }, () => {
   const { spawnSync } = require('node:child_process');
   const codigo = `
     const path = require('path');

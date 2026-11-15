@@ -57,8 +57,8 @@ As migrations precisam rodar com o MESMO usuário dono das tabelas: as política
 migration e é dono das funções `SECURITY DEFINER` criadas no mesmo comando (as funções leem com o papel de quem as criou).
 Quando uma migration falha no meio, o erro mostrado é o ORIGINAL (`src/shared/db/forceRestaurado.js`); antes, o "transaction is aborted" da devolução do FORCE o escondia.
 Em outro ambiente em que o dono NÃO tenha BYPASSRLS, as cargas que leem tabelas com RLS forçado não enxergam linha nenhuma. Tiram o FORCE só durante a carga (e o
-devolvem): 9966 e 9971 (Marco 9) e, da integração, 6602, 6603, 6604, 6605, 9973, 9975, 9999, 10312, 10410, 10411, 10412, 10940, 10942, 10960, 11400, 15103,
-31001 e 31002. Uma migration nova com carga de dados precisa do mesmo cuidado antes de rodar nesse ambiente (os bancos descartáveis do CI rodam assim e as 57 passam).
+devolvem): 9966, 9971 e 9976 (Marco 9) e, da integração, 6602, 6603, 6604, 6605, 6608, 9973, 9975, 9988, 9989, 9993, 9998, 9999, 10312, 10410, 10411, 10412,
+10940, 10941, 10942, 10944, 10960, 11400, 15101, 15103, 15104, 31001 e 31002 (conferido por busca de `NO FORCE ROW LEVEL SECURITY` nas 57). Uma migration nova com carga de dados precisa do mesmo cuidado antes de rodar nesse ambiente (os bancos descartáveis do CI rodam assim e as 57 passam).
 
 ## Plano de reversão
 
