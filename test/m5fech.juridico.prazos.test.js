@@ -59,6 +59,19 @@ test('JR prazo: concluir exige evidência ou nota com texto; evidência de outra
   });
 });
 
+test('JR prazo: evidência informada SEM concluir (prazo pendente) também precisa ser arquivo desta empresa; o id alheio não é gravado (pentest M5, PT-2159)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const legalCase = await newCase(tenant, t);
+    const d = await newDeadline(legalCase.id, tenant, t);
+    const alheio = '00000000-0000-4000-8000-000000000000'; // arquivo inexistente ou de outra empresa: a RLS e a conferência por empresa não o acham
+    await assert.rejects(legalDeadlinesService.updateLegalDeadline(d.id, { status: 'PENDING', conclusionEvidenceFileId: alheio }, tenant.userId, t), codeIs('LEGAL_DEADLINE_EVIDENCE_FILE_NOT_FOUND'));
+    assert.equal((await LegalDeadline.findByPk(d.id, { transaction: t })).conclusionEvidenceFileId, null, 'nada gravado');
+    const file = await fakeFile(tenant, t);
+    const ok = await legalDeadlinesService.updateLegalDeadline(d.id, { conclusionEvidenceFileId: file.id }, tenant.userId, t);
+    assert.equal(ok.conclusionEvidenceFileId, file.id, 'arquivo da própria empresa é aceito antes da conclusão');
+  });
+});
+
 test('JR prazo: remarcar sem motivo é 400; com motivo a auditoria preserva o vencimento anterior e a justificativa (§15)', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const legalCase = await newCase(tenant, t);

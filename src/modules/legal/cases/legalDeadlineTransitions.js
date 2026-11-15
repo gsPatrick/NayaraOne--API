@@ -42,6 +42,11 @@ function assertCancellation({ deadline, legalCase, payload, actorUserId, permiss
  * Prova da conclusão: evidência (arquivo da empresa) ou nota com texto. Reavaliada quando o prazo está sendo concluído
  * agora ou quando, já concluído, a nota/evidência é alterada (prazo concluído não pode perder a prova).
  */
+async function assertEvidenceFileOfCompany(evidenceId, deadline, transaction) {
+  const file = await File.findOne({ where: { id: evidenceId, companyId: deadline.companyId }, transaction });
+  if (!file) throw AppError.badRequest('O arquivo de evidência informado não existe ou não pertence a esta empresa.', 'LEGAL_DEADLINE_EVIDENCE_FILE_NOT_FOUND');
+}
+
 async function assertConclusionProof({ deadline, legalCase, payload, finalStatus, actorUserId, permissions, transaction }) {
   const noteProvided = payload.conclusionNote !== undefined;
   const newNote = noteProvided ? normalizeNote(payload.conclusionNote) : normalizeNote(deadline.conclusionNote);
@@ -54,10 +59,11 @@ async function assertConclusionProof({ deadline, legalCase, payload, finalStatus
     if (!evidenceId && !newNote) {
       throw AppError.unprocessable('Concluir um prazo exige uma evidência anexada ou uma nota (com texto) explicando o que foi feito.', 'LEGAL_DEADLINE_CONCLUSION_PROOF_REQUIRED');
     }
-    if (evidenceId) {
-      const file = await File.findOne({ where: { id: evidenceId, companyId: deadline.companyId }, transaction });
-      if (!file) throw AppError.badRequest('O arquivo de evidência informado não existe ou não pertence a esta empresa.', 'LEGAL_DEADLINE_EVIDENCE_FILE_NOT_FOUND');
-    }
+    if (evidenceId) await assertEvidenceFileOfCompany(evidenceId, deadline, transaction);
+  } else if (payload.conclusionEvidenceFileId) {
+    // Evidência informada fora da conclusão (prazo PENDING ou CANCELLED): o arquivo também precisa ser desta empresa. Antes só a
+    // conclusão conferia, e o id de um arquivo de outra empresa ficava gravado no prazo (pentest M5, integração dos Marcos 3 a 6, PT-2159).
+    await assertEvidenceFileOfCompany(payload.conclusionEvidenceFileId, deadline, transaction);
   }
   return { noteProvided, newNote };
 }
