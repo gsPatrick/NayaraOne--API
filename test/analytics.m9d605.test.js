@@ -142,11 +142,14 @@ test('m9d605 entrada não numérica é recusada com 422 e fórmula não determin
   const fine = { id: 'x.ok', version: 1, compute: (r) => ({ value: String(r.length) }), testCases: [{ name: 'a', input: [1, 2], expected: { value: '2' } }] };
   assert.doesNotThrow(() => assertDeterministicFormula(fine));
   assert.equal(typeof Date.now(), 'number', 'o relógio global volta ao normal');
-  runFormulaTable({ id: 'fin.m9d605_tabela', compute: (rows) => ({ value: money.money(money.sum(rows.map((r) => r.v))) }) }, [
-    { kind: 'empty', name: 'sem linhas', input: [], expected: { value: '0.00' } },
-    { kind: 'single', name: 'uma linha', input: [{ v: '5' }], expected: { value: '5.00' } },
-    { kind: 'typical', name: 'três linhas', input: [{ v: '1.10' }, { v: '2.20' }, { v: '3.30' }], expected: { value: '6.60' } },
-    { kind: 'period_edge', name: 'valor negativo do estorno', input: [{ v: '10' }, { v: '-10' }], expected: { value: '0.00' } },
-    { kind: 'rounding', name: 'meio para cima no fim', input: [{ v: '0.335' }, { v: '0.335' }, { v: '0.335' }], expected: { value: '1.01' } },
-  ]);
 });
+
+// A tabela de casos da fórmula fica no nível do arquivo: chamada de dentro de outro teste sem esperar, no Node 20 (o do CI) os casos eram
+// cancelados quando o teste de fora terminava ("test did not finish before its parent"); no Node 24 passava. Mesmos casos e asserções.
+runFormulaTable({ id: 'fin.m9d605_tabela', compute: (rows) => ({ value: money.money(money.sum(rows.map((r) => r.v))) }) }, [
+  { kind: 'empty', name: 'sem linhas', input: [], expected: { value: '0.00' } },
+  { kind: 'single', name: 'uma linha', input: [{ v: '5' }], expected: { value: '5.00' } },
+  { kind: 'typical', name: 'três linhas', input: [{ v: '1.10' }, { v: '2.20' }, { v: '3.30' }], expected: { value: '6.60' } },
+  { kind: 'period_edge', name: 'valor negativo do estorno', input: [{ v: '10' }, { v: '-10' }], expected: { value: '0.00' } },
+  { kind: 'rounding', name: 'meio para cima no fim', input: [{ v: '0.335' }, { v: '0.335' }, { v: '0.335' }], expected: { value: '1.01' } },
+]);
