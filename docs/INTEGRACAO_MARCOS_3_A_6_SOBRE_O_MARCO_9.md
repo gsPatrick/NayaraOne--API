@@ -116,6 +116,10 @@ não deixa trocar a pessoa da entrega). A entrega fica com o cadastro absorvido,
    da finalidade. Recomendo ligar depois do aceite da Nayara.
 3. **29 medições de obra antigas** marcadas "a pagar" sem a conta a pagar (dados de teste de 08 e 09/10 na homologação): a regra nova fica sem validar
    até a decisão (consulta e comando em `docs/DEPLOY_FECHAMENTO_MARCOS_3_A_6.md`).
+   **Decidido pelo Patrick em 16/11/2026: não apagar, informar o motivo.** Conferido no backup: as 29 são todas de ensaio de falha (obras "FAILURE DRILL" da
+   Empresa Dev, R$ 999,99, 08 a 16/10/2026; o Drill 3 de `test/construction.failureDrills.test.js` rodou contra a homologação e a limpeza do teste apagou a conta).
+   A migration `20260101006609` recria a conta de cada uma já CANCELADA, com o motivo na descrição e na auditoria, liga a medição e valida a CHECK (ensaio: 29
+   contas canceladas, 0 pendência, fora do ledger e dos indicadores). Detalhe em `docs/DEPLOY_FECHAMENTO_MARCOS_3_A_6.md`.
 4. **Contrato OpenAPI v1 com os 3 tipos de contrato do livro** (`ADDENDUM`, `KEY_DELIVERY`, `USED_PROPERTY_DELIVERY`, Caderno M5 §3): o enum `ContractType` é
    fechado (`x-closed`) desde o Marco 9 e, pela regra 6 do M9-D840, valor novo na RESPOSTA de `GET /legal/contracts` é mudança incompatível dentro da major 1 — o
    lint do OpenAPI (Governança) reprova o pull request contra a `marco-9`. A lista do Marco 9 tinha 12 entradas, mas não os 12 tipos do livro (AUD-015 pedia os 12
@@ -130,3 +134,7 @@ não deixa trocar a pessoa da entrega). A entrega fica com o cadastro absorvido,
    vincular um cadastro de outra empresa do grupo). Quem já sabe o CPF e o nome consegue ver a base daquela pessoa (sem empresa responsável, risco nem autoria) e
    cada tentativa conta no limite de tentativas. É o desenho do vínculo do Marco 9 (pedido da homologação); precisa do seu aceite explícito por afrouxar o
    isolamento entre empresas do mesmo grupo.
+   **Decidido pelo Patrick em 16/11/2026: aceito, é o que o livro pede.** Caderno M3 CRMX-001 ("Um CPF/CNPJ corresponde a um cadastro mestre, salvo exceção
+   auditada") e CRMX-015 ("Cliente pode ter relação com mais de uma empresa, mas oportunidades/ofertas mantêm escopo correto"): uma pessoa por CPF/CNPJ no grupo,
+   cada empresa se vincula a ela e vê só a base; contatos, endereços, documentos, oportunidades e mensagens continuam de cada empresa. A prova CPF + nome, a
+   permissão `people:link` (ADMIN), o limite de tentativas e a auditoria são a proteção contra descobrir cadastros por tentativa (DI-M9I-5).
