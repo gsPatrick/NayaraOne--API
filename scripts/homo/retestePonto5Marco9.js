@@ -95,7 +95,7 @@ async function principal() {
     await contatos.conferir(ctx);
     await bloqueio.executar(ctx);
     console.log(`\n--- ${isolamentoFilhos.CENARIO}: perfil somente leitura e outra empresa ---`);
-    await isolamentoGeral.executar({ ...ctx, rel: { ...rel, conferir: (_c, ...a) => rel.conferir(isolamentoFilhos.CENARIO, ...a), aviso: (t) => rel.aviso(t) } });
+    await isolamentoGeral.executar({ ...ctx, rel: { ...rel, conferir: (_c, ...a) => rel.conferir(isolamentoFilhos.CENARIO, ...a), aviso: (t) => rel.aviso(t), item: (...a) => rel.item(...a) } });
     await isolamentoFilhos.executar(ctx);
     await trilha.executar(ctx);
   } finally {
