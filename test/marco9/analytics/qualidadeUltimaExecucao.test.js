@@ -122,3 +122,19 @@ test('qualidade: num GET de BI (READ ONLY marcado) a empresa é lida uma vez só
     assert.equal(leiturasDaTabela, 1);
   });
 });
+
+test('qualidade: a memória do GET nunca devolve o resultado de uma empresa sob outra (troca de empresa na mesma transação, como na consolidação)', async () => {
+  await env.inTx(e.tenantA, {}, async (transaction) => {
+    markReadOnly(transaction);
+    await comoLeitorDoBi(transaction);
+    const deA = await checkQuality(M.um, { companyId: e.tenantA.companyId }, transaction);
+    assert.equal(deA.status, 'DEGRADED');
+    // Mesma transação, sessão trocada para a empresa B (o que consolidation/companyAccess.js faz).
+    await sequelize.query("SELECT set_config('app.company_id', :c, true), set_config('app.group_id', :g, true)",
+      { replacements: { c: e.tenantB.companyId, g: e.tenantB.groupId }, transaction });
+    const deB = await checkQuality(M.um, { companyId: e.tenantB.companyId }, transaction);
+    assert.deepEqual(deB.degradedBy.map((r) => `${r.readModel}/${r.checkCode}`), [`${RM_X}/c1`], 'B vê só a verificação dela');
+    const aSobB = await checkQuality(M.um, { companyId: e.tenantA.companyId }, transaction);
+    assert.equal(aSobB.status, 'OK', 'pedindo A sob a sessão de B, a RLS não deixa ver nada de A; a memória lida sob A não é reaproveitada');
+  });
+});

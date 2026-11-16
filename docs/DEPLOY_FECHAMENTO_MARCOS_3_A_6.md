@@ -150,16 +150,20 @@ corrigem dados; o caminho seguro de volta é o backup.
 - `20260101010520-m4lr-ledger-ddl-minimo`
 - `20260101011400-m4pg-pagamento-estados-aprovacao-estorno-reabertura`
 
-## Correção de desempenho do BI (16/11/2026): migration 20261116210000
+## Correção de desempenho do BI (16/11/2026): migrations 20261116210000 e 20261116220000
 
 O Centro de Comando e o semáforo caíam em 504 ou levavam de 20 a 50 s na homologação. Duas leituras varriam tabelas grandes por causa da RLS (o
 operador usado não é leakproof e o índice não podia ser usado): a unidade de cada alerta (commit 7bcb70c2) e o estado de qualidade de cada
-indicador (este deploy). A migration cria o índice `analytics.data_quality_checks_latest_idx` com `CREATE INDEX CONCURRENTLY` (não bloqueia as
-gravações do BI; não roda em transação) sobre a tabela de verificações (2,1 GB na homologação: pode levar alguns minutos).
+indicador. Migrations, ambas com `CREATE INDEX CONCURRENTLY` (não bloqueiam as gravações do BI; não rodam em transação):
+
+- `20261116210000-analytics-indice-ultima-execucao-da-verificacao.js`: índice `analytics.data_quality_checks_latest_idx` sobre a tabela de
+  verificações (2,1 GB na homologação: pode levar alguns minutos). Aplicada na homologação em 16/11/2026.
+- `20261116220000-analytics-indice-definicao-por-codigo.js`: índice `analytics.metric_definitions_metric_code_idx` (tabela pequena), que
+  substitui a memória da definição de indicador por requisição (retirada: a consolidação do grupo troca de empresa na mesma transação).
 
 1. Rodar a migration no console da API com o usuário dono das tabelas, antes de conferir o painel:
    `DATABASE_URL="$MIGRATIONS_DATABASE_URL" node scripts/migrate.js up` e `... status | grep -c down` -> 0.
    Se o boot (RUN_MIGRATIONS_ON_BOOT, limite de 2 min) interromper a criação, o índice fica inválido; rodar o comando acima de novo: a migration
    remove o índice inválido e cria outra vez.
-2. Conferir: `SELECT indisvalid FROM pg_index WHERE indexrelid = 'analytics.data_quality_checks_latest_idx'::regclass` -> `t`.
+2. Conferir: `SELECT indisvalid FROM pg_index WHERE indexrelid IN ('analytics.data_quality_checks_latest_idx'::regclass, 'analytics.metric_definitions_metric_code_idx'::regclass)` -> `t` nas duas linhas.
 3. Sem o índice o painel continua correto, só lento (a consulta nova cai para leitura sequencial).
