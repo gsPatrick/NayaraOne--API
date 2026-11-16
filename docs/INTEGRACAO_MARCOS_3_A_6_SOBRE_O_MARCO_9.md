@@ -111,6 +111,10 @@ não deixa trocar a pessoa da entrega). A entrega fica com o cadastro absorvido,
    da camada de segurança (m9d700) e quebrava o Marco 9 (M9-D036: a NAY determinística e o agente de IA dão o mesmo número na hora) e a sonda P10 do
    M4LR. Ficou como no Marco 9 (FinanceHealthReport ao vivo, Guia §13), com o realizado pelo ledger (M4LR) e a FIN-005 da DEC-007. Para voltar ao
    retrato do BI, o agente de IA do Marco 9 precisa mudar junto.
+   **Decidido pelo Patrick em 16/11/2026: fica como o livro pede, no FinanceHealthReport.** Caderno M9 §10: "Números financeiros vêm de read
+   models/cálculos determinísticos, não aritmética improvisada do LLM"; Guia M4 §13 define o FinanceHealthReport como o read model que a NAY recebe; a
+   M9-D026 (verificada) registra que `getWeeklyHealthReport` "é o read model do livro". A NAY Financeira, o agente de IA e a NAY Diretoria leem a mesma
+   fonte (mesmo número), calculada pelo sistema em centavos sob a RLS da empresa, com fontes e `sourceSnapshotAt`; nenhum número sai do modelo de linguagem.
 2. **Finalidade obrigatória na mensagem (M3-18)**: virou o parâmetro `crm.mensagens.finalidade_obrigatoria` (aba CRM), padrão DESLIGADO = Marco 9 (sem
    finalidade vale TRANSACTIONAL; finalidade fora das listas segue a regra do Marco 9). Ligado, fecha o contorno do opt-out de marketing por omissão
    da finalidade. Recomendo ligar depois do aceite da Nayara.
