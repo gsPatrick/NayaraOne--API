@@ -69,6 +69,7 @@ Marcos 3 a 6; a coluna da direita diz qual.
 | NAY Comercial e NAY Jurídica: capacidades, escopo, ferramenta `legal.compareInspections`, termos de escopo; job novo de lead esquecido (só com `ia.habilitada`); helper `aiAgentJuridica.js` (só afeta banco novo) | Livros M3 (NAY Comercial) e M5 (comparação de vistorias pela NAY). |
 | Contrato público com 15 tipos de contrato (antes 12); ferramenta da NAY `legalDraftContract` sem `SERVICE` | Caderno M5 §3 (os 12 tipos do livro + 3 legados); ver decisão 4. |
 | Teste `crm.messages.entrada.esquema.http` (DI-M9R-11): a lista de canais aceitos que ele confere vem de `messages.constants.CHANNELS` em vez de uma cópia fixa | O canal SITE (Guia M3 §12, decisão 1): outro arquivo grava interação pelo site no mesmo banco e o teste reprovava conforme a ordem. A conferência (nenhum canal fora da lista gravado) continua a mesma. |
+| Mensagem SAÍDA do CRM para pessoa identificada sem finalidade: 422 `MESSAGE_PURPOSE_REQUIRED` (o Marco 9 aceitava e tratava como TRANSACTIONAL); a finalidade passa a valer pelas listas da empresa e pelas do sistema | Caderno M3 CRMX-008 e decisão do Patrick de 16/11/2026 (parâmetro `crm.mensagens.finalidade_obrigatoria` ligado por padrão). Testes do Marco 9 que gravam mensagem SAÍDA passam a informar a finalidade. |
 | Testes do Marco 9 que leem a pasta irmã `Maturacao/` (`analytics.m9d613` ordem dos passos, `m9d800.estrutura` dependências, `m9d800.http` catálogo, `m9r16` catálogo de parâmetros): no CI que declara `CI_SEM_REPOS_IRMAOS=1` e não tem a pasta, saem pulados com `NAO_APLICAVEL_NO_CI` (`opcoesComIrmaos`, `test/helpers/repoIrmao.js`); localmente rodam inteiros | A `Maturacao/` não tem remoto: no GitHub esses testes falhavam por arquivo ausente. É a regra que o Marco 9 já usava em `m9d417` e `settings.mfaCatalogo.meta`; o inventário da bateria (M4-D140) continua com as mesmas declarações. |
 | Teste `analytics.m9d605` (tabela de casos da fórmula): a chamada `runFormulaTable` sai de dentro de outro teste para o nível do arquivo; mesmos casos e asserções | No Node 20 do CI os casos chamados de dentro de outro teste sem esperar eram cancelados ("test did not finish before its parent"); no Node 24 passava. |
 | Teste `m9d200.legado-somente-leitura`: migration depois da 9964 precisa estar em algum `docs/DEPLOY_*.md` (antes só no do Marco 9) | As migrations da integração estão em `docs/DEPLOY_FECHAMENTO_MARCOS_3_A_6.md`. |
@@ -118,6 +119,13 @@ não deixa trocar a pessoa da entrega). A entrega fica com o cadastro absorvido,
 2. **Finalidade obrigatória na mensagem (M3-18)**: virou o parâmetro `crm.mensagens.finalidade_obrigatoria` (aba CRM), padrão DESLIGADO = Marco 9 (sem
    finalidade vale TRANSACTIONAL; finalidade fora das listas segue a regra do Marco 9). Ligado, fecha o contorno do opt-out de marketing por omissão
    da finalidade. Recomendo ligar depois do aceite da Nayara.
+   **Decidido pelo Patrick em 16/11/2026: LIGADO por padrão, como o livro pede** (Caderno M3 CRMX-008 "Comunicação respeita opt-in/opt-out e
+   finalidade"). Mensagem SAÍDA para pessoa identificada sem finalidade dá 422 `MESSAGE_PURPOSE_REQUIRED`; a finalidade vale pelas listas da empresa
+   (aba Marketing) e, depois delas, pelas que o próprio sistema oferece (MARKETING, CADENCE, CAMPAIGN e COMMERCIAL exigem OPT_IN; TRANSACTIONAL não),
+   para nenhuma opção do sistema (ex.: `ia.comercial.envio.finalidade_consentimento` da NAY Comercial) virar "desconhecida". O Front não grava
+   mensagem (só lista) e o Marketing do Marco 9 já usa finalidades das listas: nenhuma tela trava. No banco da homologação (backup de 13/11): nenhuma
+   empresa mudou esses parâmetros; 12 mensagens SAÍDA antigas sem finalidade ficam como estão (a interação é imutável pelo livro do Marco 3 §18 e
+   foi gravada pela regra que valia); nenhuma automação ou público de campanha com finalidade fora das listas.
 3. **29 medições de obra antigas** marcadas "a pagar" sem a conta a pagar (dados de teste de 08 e 09/10 na homologação): a regra nova fica sem validar
    até a decisão (consulta e comando em `docs/DEPLOY_FECHAMENTO_MARCOS_3_A_6.md`).
    **Decidido pelo Patrick em 16/11/2026: não apagar, informar o motivo.** Conferido no backup: as 29 são todas de ensaio de falha (obras "FAILURE DRILL" da

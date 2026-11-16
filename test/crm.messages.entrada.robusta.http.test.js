@@ -1,4 +1,5 @@
 'use strict';
+// Desde 16/11/2026 a finalidade é obrigatória por padrão (CRMX-008, decisão do Patrick): os envios deste teste informam TRANSACTIONAL.
 
 // Entrada das rotas de mensagem pelo caminho HTTP real (login, JWT, auth, tenant middleware e RLS), verificação independente do Marco 9, rodada 6
 // (`Maturacao/fechamento-m3-m6/verificacao/m9-rodada6.md`): as formas que o teste da rodada 5 não percorria e que davam 500 ou travavam a API.
@@ -54,7 +55,7 @@ before(async () => {
   foto = await env.arquivo({ ...A, userId: user.id });
   manual = await pedir('POST', '/messages', { corpo: JSON.stringify({ channel: 'WHATSAPP', direction: 'INBOUND', authorType: 'CLIENT', body: `robusta ${SUFIXO}` }) });
   assert.equal(manual.status, 201, JSON.stringify(manual.json));
-  enviada = await pedir('POST', '/messages/send', { corpo: JSON.stringify({ kind: 'text', text: `robusta env ${SUFIXO}`, personId: pessoa.id, to: pessoa.phone }) });
+  enviada = await pedir('POST', '/messages/send', { corpo: JSON.stringify({ purpose: 'TRANSACTIONAL', kind: 'text', text: `robusta env ${SUFIXO}`, personId: pessoa.id, to: pessoa.phone }) });
   assert.equal(enviada.status, 202, JSON.stringify(enviada.json));
 });
 
@@ -92,7 +93,7 @@ const contarMensagens = async () => (await env.sql(A, 'SELECT count(*)::int AS n
 
 const rotasDeEscrita = () => [
   ['POST', '/messages', { channel: 'WHATSAPP', direction: 'INBOUND', authorType: 'CLIENT', body: 'r6' }],
-  ['POST', '/messages/send', { kind: 'template', templateName: 'boas_vindas', personId: pessoa.id, to: pessoa.phone }],
+  ['POST', '/messages/send', { purpose: 'TRANSACTIONAL', kind: 'template', templateName: 'boas_vindas', personId: pessoa.id, to: pessoa.phone }],
   ['PATCH', `/messages/${manual.json.data.id}/status`, { status: 'READ' }],
   ['POST', `/messages/${manual.json.data.id}/send-alternate`, {}],
   ['POST', `/messages/${enviada.json.data.messageId}/refresh-status`, {}],
@@ -141,9 +142,9 @@ test('3. caractere nulo ou metade solta de par sub-rogado: 400 INVALID_TEXT_CHAR
   const msgAntes = await contarMensagens();
   const NUL = 'a\u0000b';
   const SUR = 'a\ud800b';
-  const txt = { kind: 'text', text: 'ok', personId: pessoa.id, to: pessoa.phone };
-  const mid = { kind: 'media', mediaRef: foto.id, personId: pessoa.id, to: pessoa.phone };
-  const tpl = { kind: 'template', templateName: UMA_VAR, templateVars: ['ok'], personId: pessoa.id, to: pessoa.phone };
+  const txt = { purpose: 'TRANSACTIONAL', kind: 'text', text: 'ok', personId: pessoa.id, to: pessoa.phone };
+  const mid = { purpose: 'TRANSACTIONAL', kind: 'media', mediaRef: foto.id, personId: pessoa.id, to: pessoa.phone };
+  const tpl = { purpose: 'TRANSACTIONAL', kind: 'template', templateName: UMA_VAR, templateVars: ['ok'], personId: pessoa.id, to: pessoa.phone };
   const casos = [
     ['/messages/send', { ...txt, text: NUL }, 'text'], ['/messages/send', { ...txt, text: SUR }, 'text'], ['/messages/send', { ...txt, text: 'fim \udc00' }, 'text'],
     ['/messages/send', { ...mid, caption: NUL }, 'caption'], ['/messages/send', { ...mid, caption: SUR }, 'caption'],
@@ -174,13 +175,13 @@ test('3. caractere nulo ou metade solta de par sub-rogado: 400 INVALID_TEXT_CHAR
 
 test('4. texto livre acima do limite do canal: 400 MESSAGE_VALIDATION com o campo; o limite é parâmetro da empresa; 20 MB respondem em menos de 2 s', async (t) => {
   if (skipReason) return t.skip(skipReason);
-  const base = { kind: 'text', personId: pessoa.id, to: pessoa.phone };
+  const base = { purpose: 'TRANSACTIONAL', kind: 'text', personId: pessoa.id, to: pessoa.phone };
   const filaAntes = await contarFila();
   const longo = [
     [{ ...base, text: 'x'.repeat(4097) }, 'text', 4096],
     [{ ...base, text: '😀'.repeat(4097) }, 'text', 4096],
-    [{ kind: 'media', mediaRef: foto.id, personId: pessoa.id, to: pessoa.phone, caption: 'c'.repeat(1025) }, 'caption', 1024],
-    [{ kind: 'template', templateName: UMA_VAR, templateVars: ['v'.repeat(1025)], personId: pessoa.id, to: pessoa.phone }, 'templateVars', 1024],
+    [{ purpose: 'TRANSACTIONAL', kind: 'media', mediaRef: foto.id, personId: pessoa.id, to: pessoa.phone, caption: 'c'.repeat(1025) }, 'caption', 1024],
+    [{ purpose: 'TRANSACTIONAL', kind: 'template', templateName: UMA_VAR, templateVars: ['v'.repeat(1025)], personId: pessoa.id, to: pessoa.phone }, 'templateVars', 1024],
   ];
   const fora = [];
   const confere = (rotulo, r, campo, max) => {
@@ -214,7 +215,7 @@ test('4. texto livre acima do limite do canal: 400 MESSAGE_VALIDATION com o camp
   // 20 MB sem espaço (o caso que travava a API): recusado em menos de 2 s, e o servidor responde a outro pedido logo depois
   for (const [caminho, corpo] of [
     ['/messages/send', { ...base, text: 'x'.repeat(20 * 1048576) }],
-    ['/messages/send', { kind: 'template', templateName: UMA_VAR, templateVars: ['z'.repeat(20 * 1048576)], personId: pessoa.id, to: pessoa.phone }],
+    ['/messages/send', { purpose: 'TRANSACTIONAL', kind: 'template', templateName: UMA_VAR, templateVars: ['z'.repeat(20 * 1048576)], personId: pessoa.id, to: pessoa.phone }],
     ['/messages', { channel: 'EMAIL', direction: 'INBOUND', authorType: 'CLIENT', body: 'y'.repeat(20 * 1048576) }],
   ]) {
     const r = await pedir('POST', caminho, { corpo: JSON.stringify(corpo) });
@@ -233,7 +234,7 @@ test('5. consulta nas rotas sem filtro: 400 MESSAGE_VALIDATION com o nome do par
     ['POST', `/messages/${id}/send-alternate?y=1`, undefined, 'y'],
     ['POST', `/messages/${id}/refresh-status?z=1`, undefined, 'z'],
     ['POST', '/messages?direction=INBOUND', JSON.stringify({ channel: 'WHATSAPP', direction: 'INBOUND', authorType: 'CLIENT', body: 'q' }), 'direction'],
-    ['POST', '/messages/send?kind=text', JSON.stringify({ kind: 'text', text: 'q', personId: pessoa.id, to: pessoa.phone }), 'kind'],
+    ['POST', '/messages/send?kind=text', JSON.stringify({ purpose: 'TRANSACTIONAL', kind: 'text', text: 'q', personId: pessoa.id, to: pessoa.phone }), 'kind'],
   ];
   const fora = [];
   for (const [m, caminho, corpo, campo] of casos) {

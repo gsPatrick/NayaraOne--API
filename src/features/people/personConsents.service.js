@@ -138,8 +138,8 @@ async function resolveConsent(personId, channel, purpose, transaction) {
  *
  * M3-18 (CRMX-008 "Comunicação respeita opt-in/opt-out e finalidade"): a política vem por uma porta (Pessoas não conhece o Marketing):
  * o CRM a registra em `crm/messagePurpose.js` (carregado aqui se o processo ainda não o carregou). Com o parâmetro
- * `crm.mensagens.finalidade_obrigatoria` DESLIGADO (padrão) é a regra do Marco 9: toda finalidade é conhecida e só MARKETING, CADENCE
- * e CAMPAIGN exigem OPT_IN. LIGADO, vale a LISTA ÚNICA da empresa (`marketing.consent.exige_opt_in_para` / `marketing.consent.sem_opt_in_para`,
+ * `crm.mensagens.finalidade_obrigatoria` DESLIGADO é a regra do Marco 9: toda finalidade é conhecida e só MARKETING, CADENCE
+ * e CAMPAIGN exigem OPT_IN. LIGADO (o padrão desde 16/11/2026), vale a LISTA ÚNICA da empresa (e as finalidades do próprio sistema) (`marketing.consent.exige_opt_in_para` / `marketing.consent.sem_opt_in_para`,
  * M9-D418) e finalidade fora das duas listas nunca autoriza o contato (fail closed).
  */
 let purposePolicy = null;

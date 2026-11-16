@@ -14,8 +14,10 @@ const AppError = require('../../utils/AppError');
  *   crm.gerencia.permissao                         quem é "a gerência" que recebe os escalonamentos (§11 e §15)
  *   crm.lead_automatico.responsavel_padrao         responsável do lead que chega sem usuário (WhatsApp, parceiro) (§2 CRMX-006)
  *   crm.mensagens.finalidade_obrigatoria           mensagem SAÍDA para pessoa identificada só sai com a finalidade declarada (M3-18, livro do
- *                                                  Marco 3 CRMX-008). Padrão DESLIGADO: igual ao Marco 9 entregue (sem finalidade, o consentimento
- *                                                  é conferido como TRANSACTIONAL); ligado, sem finalidade é 422 MESSAGE_PURPOSE_REQUIRED.
+ *                                                  Marco 3 CRMX-008 "Comunicação respeita opt-in/opt-out e finalidade"). Padrão LIGADO
+ *                                                  (decisão do Patrick, 16/11/2026: o livro manda): sem finalidade é 422 MESSAGE_PURPOSE_REQUIRED
+ *                                                  e o opt-out de marketing não se contorna omitindo a finalidade. Desligado volta à regra do
+ *                                                  Marco 9 entregue (sem finalidade, o consentimento é conferido como TRANSACTIONAL).
  */
 
 const DEFAULT_WON_REASONS = 'PRICE_ACCEPTED=Preço aceito,FAST_DECISION=Decisão rápida,REFERRAL=Indicação,OTHER=Outro motivo';
@@ -45,7 +47,7 @@ const CRM_SETTING_DEFAULTS = Object.freeze({
   [KEYS.taskManagerAfterHours]: 24,
   [KEYS.managerPermission]: 'crm:dashboard:read',
   [KEYS.defaultLeadOwner]: null,
-  [KEYS.purposeRequired]: false,
+  [KEYS.purposeRequired]: true,
 });
 
 const REASON_ITEM = /^([A-Z][A-Z0-9_]{1,39})=([^,=]{1,60})$/;

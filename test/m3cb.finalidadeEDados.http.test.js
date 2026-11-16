@@ -21,14 +21,18 @@ function cpf() {
 }
 const saida = (personId, extra = {}) => ({ personId, direction: 'OUTBOUND', authorType: 'EMPLOYEE', channel: 'WHATSAPP', body: 'Olá! Temos novidades.', ...extra });
 
-// M3-18 vale com o parâmetro crm.mensagens.finalidade_obrigatoria LIGADO; o padrão (desligado) é o comportamento do Marco 9 entregue
-// (integração dos Marcos 3 a 6 com o Marco 9, 13/11/2026). Os testes abaixo ligam o parâmetro na empresa A; o último confere o padrão.
+// M3-18 vale com o parâmetro crm.mensagens.finalidade_obrigatoria LIGADO, o padrão desde 16/11/2026; desligado é o comportamento do
+// Marco 9 entregue. Os testes abaixo ligam o parâmetro na empresa A; os de "desligado" gravam false e o after() volta ao padrão.
 const PURPOSE_KEY = 'crm.mensagens.finalidade_obrigatoria';
 const EMPRESA_A = 'CI — Empresa Fictícia A';
 const ligarFinalidade = () => H.admin(`INSERT INTO core.tenant_settings (id, group_id, company_id, key, value)
   SELECT gen_random_uuid(), c.group_id, c.id, $1, 'true'::jsonb FROM core.companies c WHERE c.name = $2
   ON CONFLICT (company_id, key) DO UPDATE SET value = EXCLUDED.value`, [PURPOSE_KEY, EMPRESA_A]);
-const desligarFinalidade = () => H.admin('DELETE FROM core.tenant_settings WHERE key = $1 AND company_id = (SELECT id FROM core.companies WHERE name = $2)', [PURPOSE_KEY, EMPRESA_A]);
+// Desde 16/11/2026 o padrão é LIGADO (decisão do Patrick, CRMX-008): desligar é gravar false; apagar a linha volta ao padrão (ligado).
+const desligarFinalidade = () => H.admin(`INSERT INTO core.tenant_settings (id, group_id, company_id, key, value)
+  SELECT gen_random_uuid(), c.group_id, c.id, $1, 'false'::jsonb FROM core.companies c WHERE c.name = $2
+  ON CONFLICT (company_id, key) DO UPDATE SET value = EXCLUDED.value`, [PURPOSE_KEY, EMPRESA_A]);
+const padraoFinalidade = () => H.admin('DELETE FROM core.tenant_settings WHERE key = $1 AND company_id = (SELECT id FROM core.companies WHERE name = $2)', [PURPOSE_KEY, EMPRESA_A]);
 
 before(async () => {
   if (!H.DISPOSABLE) return;
@@ -38,7 +42,7 @@ before(async () => {
 after(async () => {
   if (!H.DISPOSABLE || !env) return;
   await H.admin('DELETE FROM core.tenant_settings WHERE key = $1 AND company_id = (SELECT id FROM core.companies WHERE name = $2)', [OPT_IN_KEY, 'CI — Empresa Fictícia A']);
-  await desligarFinalidade();
+  await padraoFinalidade();
   await H.encerrar();
 });
 
@@ -111,7 +115,7 @@ test('M3-18 acesso a dados pessoais pelo CRM: as rotas do CRM não devolvem CPF 
   assert.ok(vistos.length >= 1, 'o acesso ao dado pessoal fica auditado');
 });
 
-test('M3-18 com o parâmetro no padrão (desligado) vale o Marco 9: saída sem finalidade segue e o consentimento é o TRANSACTIONAL', { skip: H.SKIP }, async () => {
+test('M3-18 com o parâmetro desligado vale o Marco 9: saída sem finalidade segue e o consentimento é o TRANSACTIONAL', { skip: H.SKIP }, async () => {
   await desligarFinalidade();
   try {
     const { personId } = await H.oportunidadeDe(env, env.ids.maker, 'Padrao Marco 9');
@@ -159,4 +163,19 @@ test('canContact num processo que ainda não carregou o CRM carrega a política 
   const r = spawnSync(process.execPath, ['-e', codigo], { cwd: require('node:path').join(__dirname, '..'), encoding: 'utf8', env: { ...process.env, NODE_ENV: 'test' }, timeout: 60000 });
   const saidaJson = JSON.parse(r.stdout.slice(r.stdout.lastIndexOf('{')));
   assert.deepEqual(saidaJson, { antes: false, depois: true }, r.stderr);
+});
+
+test('M3-18 o padrão (sem linha na empresa) é LIGADO: saída sem finalidade é 422 MESSAGE_PURPOSE_REQUIRED (decisão do Patrick, 16/11/2026)', { skip: H.SKIP }, async () => {
+  await padraoFinalidade();
+  try {
+    const { personId } = await H.oportunidadeDe(env, env.ids.maker, 'Padrao ligado');
+    const r = await env.call('POST', '/messages', as('gestor'), saida(personId, { body: 'Sem finalidade' }));
+    assert.deepEqual([r.status, r.body.error && r.body.error.code], [422, 'MESSAGE_PURPOSE_REQUIRED']);
+    const ok = await env.call('POST', '/messages', as('gestor'), saida(personId, { body: 'Aviso de serviço', purpose: 'TRANSACTIONAL' }));
+    assert.equal(ok.status, 201, JSON.stringify(ok.body));
+    const nay = await env.call('POST', '/messages', as('gestor'), saida(personId, { body: 'Contato comercial', purpose: 'COMMERCIAL' }));
+    assert.deepEqual([nay.status, nay.body.error && nay.body.error.code], [422, 'MESSAGE_BLOCKED_BY_CONSENT'], 'finalidade do sistema (NAY Comercial) é reconhecida e exige OPT_IN');
+  } finally {
+    await ligarFinalidade();
+  }
 });

@@ -1,4 +1,5 @@
 'use strict';
+// Desde 16/11/2026 a finalidade é obrigatória por padrão (CRMX-008, decisão do Patrick): os envios deste teste informam TRANSACTIONAL.
 
 // Entrada das rotas de mensagem pelo caminho HTTP real (login com senha, JWT, auth, tenant middleware e RLS). Verificação independente de
 // 12/11/2026, rodada 5 (`Maturacao/fechamento-m3-m6/verificacao/m9-rodada5.md`): campo a campo, cada rodada achava outro campo que virava 500
@@ -116,9 +117,9 @@ test('POST /messages/send: cada campo, nas três bases (modelo, texto, mídia), 
   if (skipReason) return t.skip(skipReason);
   R.length = 0;
   const bases = {
-    template: { kind: 'template', templateName: 'boas_vindas', personId: pessoa.id, to: pessoa.phone },
-    text: { kind: 'text', text: 'esquema texto', personId: pessoa.id, to: pessoa.phone },
-    media: { kind: 'media', mediaRef: foto.id, personId: pessoa.id, to: pessoa.phone },
+    template: { purpose: 'TRANSACTIONAL', kind: 'template', templateName: 'boas_vindas', personId: pessoa.id, to: pessoa.phone },
+    text: { purpose: 'TRANSACTIONAL', kind: 'text', text: 'esquema texto', personId: pessoa.id, to: pessoa.phone },
+    media: { purpose: 'TRANSACTIONAL', kind: 'media', mediaRef: foto.id, personId: pessoa.id, to: pessoa.phone },
   };
   for (const [nome, b] of Object.entries(bases)) conferir(`controle send ${nome}`, await call('POST', '/messages/send', b), { status: 202 });
   for (const [nome, campos] of Object.entries(F.CAMPOS_ENVIAR)) {
@@ -136,7 +137,7 @@ test('kind em lista não fura a regra do modelo aprovado (M9-D230 3.1): 400 para
   if (skipReason) return t.skip(skipReason);
   const contar = async () => (await env.sql(A, "SELECT count(*)::int AS n FROM integration.dispatches WHERE company_id = :c AND operation = 'sendTemplate' AND payload_snapshot::text LIKE :m", { c: A.companyId, m: `%${MODELO_NAO_APROVADO}%` }))[0].n;
   const antes = await contar();
-  const pedido = (kind, extra = {}) => ({ kind, templateName: MODELO_NAO_APROVADO, personId: pessoa.id, to: pessoa.phone, ...extra });
+  const pedido = (kind, extra = {}) => ({ purpose: 'TRANSACTIONAL', kind, templateName: MODELO_NAO_APROVADO, personId: pessoa.id, to: pessoa.phone, ...extra });
   // rota HTTP
   for (const kind of [['template'], ['text'], 'toString', 'constructor', '__proto__', 'hasOwnProperty', 'TEMPLATE']) {
     for (const extra of [{}, { caption: 'legenda' }]) {

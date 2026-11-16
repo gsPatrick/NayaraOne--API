@@ -73,7 +73,9 @@ const CAMPOS_ENVIAR = Object.freeze({
     templateName: { tipo: 'texto', aceito: MODELO },
     language: { tipo: 'texto', aceito: MODELO },
     templateVars: { tipo: 'listaDeTextos' },
-    purpose: { tipo: 'formato', aceito: ok(202) },
+    // Finalidade obrigatória e da lista (padrão ligado desde 16/11/2026, CRMX-008): texto no formato mas fora das listas da empresa e das
+    // finalidades do sistema é 422 MESSAGE_PURPOSE_UNKNOWN (nunca 500); a base dos envios usa TRANSACTIONAL.
+    purpose: { tipo: 'formato', aceito: e422('MESSAGE_PURPOSE_UNKNOWN') },
   },
   // Rodada 6 (DI-M9R-16): `text` e `caption` têm o limite do canal (4096 e 1024 caracteres, parâmetros da empresa): o texto longo (5000) é 400.
   text: { kind: { tipo: 'recusa' }, text: { tipo: 'textoLimitado', aceito: ok(202) }, caption: { tipo: 'textoLimitado', aceito: ok(202) } },

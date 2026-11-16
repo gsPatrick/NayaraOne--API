@@ -1,4 +1,5 @@
 'use strict';
+// Desde 16/11/2026 a finalidade é obrigatória por padrão (CRMX-008, decisão do Patrick): os envios deste teste informam TRANSACTIONAL.
 
 // Isolamento da CONVERSA e da MÍDIA EM QUARENTENA citadas pela mensagem, entre duas empresas do MESMO grupo, pelo caminho HTTP real
 // (login com senha, JWT, auth, tenant middleware e RLS). Achado ISO-R2 da verificação independente de 12/11/2026 (rodada 3):
@@ -187,7 +188,7 @@ test('HTTP mesmo grupo: POST /messages/send da empresa B (com conexão de mensag
   await naEmpresa(empresaB.id, (transaction) => transitionConnection(conn.id, 'ACTIVE', ctxB, transaction));
 
   const { conversationId } = await conversaDa('A', empresaA);
-  const envio = (id) => ({ kind: 'template', templateName: MODELO.name, conversationId: id, to: '+5511999990000' });
+  const envio = (id) => ({ purpose: 'TRANSACTIONAL', kind: 'template', templateName: MODELO.name, conversationId: id, to: '+5511999990000' });
   esperar404(await call('B', 'POST', '/messages/send', envio(conversationId)), 'POST /messages/send com a conversa de A pela empresa B', 'CONVERSATION_NOT_FOUND');
   esperar404(await call('B', 'POST', '/messages/send', envio(crypto.randomUUID())), 'POST /messages/send com conversa inexistente pela empresa B', 'CONVERSATION_NOT_FOUND');
   assert.equal(await gravadasPorB('conversation_id', conversationId), 0, 'nenhuma mensagem de B pode apontar para a conversa de A');
@@ -195,6 +196,6 @@ test('HTTP mesmo grupo: POST /messages/send da empresa B (com conexão de mensag
   assert.equal(n, 0, 'nenhum envio pode ter sido enfileirado');
 
   // controle: a mesma conexão de B envia sem conversa (o 404 acima não é falta de conexão nem de modelo)
-  const ok = await call('B', 'POST', '/messages/send', { kind: 'template', templateName: MODELO.name, to: '+5511999990000' });
+  const ok = await call('B', 'POST', '/messages/send', { purpose: 'TRANSACTIONAL', kind: 'template', templateName: MODELO.name, to: '+5511999990000' });
   assert.equal(ok.status, 202, JSON.stringify(ok.body));
 });
