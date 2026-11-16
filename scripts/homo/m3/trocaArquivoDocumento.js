@@ -107,7 +107,7 @@ async function main() {
     : (revisao.status === 200 && revisao.dados.verificationStatus === 'VERIFIED'),
   `${resumo(revisao)}; leitura do arquivo novo: ilegível=${ilegivel}; motivo da revisão na auditoria: ${ev ? String(ev.reason).split('revisão pendente: ')[1] || '-' : '-'}`);
 
-  out.caminhoNaTela = `Pessoas (/painel/pessoas/${pessoa.id}) → aba Documentos: RG versão ${original.versionNo} (arquivo v1, verificado) e RG versão ${nova.versionNo} (arquivo v2, nasceu pendente, depois verificado pela revisão própria); Auditoria (filtro people.document.replace_file).`;
+  out.caminhoNaTela = `Pessoas (/painel/pessoas/${pessoa.id}) → aba Documentos: RG versão ${original.versionNo} (arquivo v1, verificado) e RG versão ${nova.versionNo} (arquivo v2, nasceu pendente; ${ilegivel ? 'leitura ilegível: a verificação foi recusada e a revisão ficou aberta' : 'verificada pela revisão própria'}); Auditoria (filtro people.document.replace_file).`;
   out.resultado = { ok: out.conferencias.filter((c) => c.ok).length, falharam: out.conferencias.filter((c) => !c.ok).length };
   console.log(`\nResultado: ${out.resultado.ok} ok, ${out.resultado.falharam} falharam. IDs: ${JSON.stringify(out.ids)}`);
   if (env.HOMO_SAIDA_JSON) fs.writeFileSync(env.HOMO_SAIDA_JSON, `${JSON.stringify(out, null, 2)}\n`);

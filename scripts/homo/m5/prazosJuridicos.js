@@ -28,7 +28,7 @@ async function main() {
   const passo = (nome, r) => { out.passos.push({ nome, http: r.status, erro: r.erro ? r.erro.code : null }); console.log(`- ${nome}: ${resumo(r)}`); return r; };
   const conferir = (descricao, ok, evidencia) => { out.conferencias.push({ descricao, ok: Boolean(ok), evidencia }); console.log(`  [${ok ? 'OK    ' : 'FALHOU'}] ${descricao} -> ${evidencia}`); };
 
-  const caso = passo('criar processo fictício', await admin.chamar('POST', '/legal/cases', { caseType: 'CONSULTATIVE', summary: `ACEITE-M5 processo fictício para o reteste de prazos (${dia(0)})`, responsibleUserId: admin.userId }));
+  const caso = passo('criar processo fictício', await admin.chamar('POST', '/legal/cases', { caseType: 'CONSULTATIVE', summary: `ACEITE-M5 processo fictício para o reteste de prazos (${dia(0)})`, responsibleUserId: admin.userId, riskLevel: 'LOW', estimatedAmount: '1000.00' }));
   if (caso.status !== 201) throw new PararScript(`Processo não criado: ${resumo(caso)} ${caso.erro ? caso.erro.message : ''}`);
   out.ids.processo = caso.dados.id;
   const arq = passo('enviar a intimação fictícia (origem do prazo)', await admin.chamar('POST', '/files', { fileName: 'aceite-m5-intimacao.pdf', mimeType: 'application/pdf', contentBase64: PDF, category: 'legal' }));
