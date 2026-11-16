@@ -8,6 +8,7 @@ const { getApprovalThreshold } = require('./approvalThresholds.service');
 const { assertPersonInCompany, assertActiveMember } = require('./companyRefs');
 const financialEntriesService = require('../../modules/finance/application/services/financial-entry.service');
 const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
+const { KEYS: DUE_KEYS, generatedDueAt } = require('../../modules/finance/application/services/generated-entry-due-settings');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4): ver getOrCreateDefaultCostCenter em cost-centers.service.js.
 const WARRANTY_COST_CENTER_CODE = 'OBRAS-GARANTIA';
@@ -719,6 +720,8 @@ async function createWarrantyResolutionFinancialEntry(maintenanceCase, actorUser
       idempotencyKey: `warranty.resolution:${maintenanceCase.id}`,
       constructionProjectId: maintenanceCase.projectId || null,
       costCenterId: costCenter.id,
+      // Vencimento: dia da resolução + financeiro.vencimento.resolucao_garantia_dias (padrão 30; o livro não define).
+      dueAt: await generatedDueAt(DUE_KEYS.warranty, { groupId: maintenanceCase.groupId, companyId: maintenanceCase.companyId }, new Date(), transaction),
     },
     actorUserId,
     transaction

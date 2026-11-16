@@ -14,6 +14,9 @@ const procurementService = require('../src/features/procurement/procurement.serv
 const itemsService = require('../src/features/inventory/items.service');
 const movementsService = require('../src/features/inventory/movements.service');
 const financeAntifraud = require('../src/modules/finance/application/services/finance-antifraud.service');
+const settingsService = require('../src/features/settings/settings.service');
+const { KEYS: DUE_KEYS } = require('../src/modules/finance/application/services/generated-entry-due-settings');
+const { startOfBusinessDay } = require('../src/utils/businessDate');
 const {
   User, Person, PurchaseRequest, PurchaseOrderItem, FinancialEntry, ReceiptDiscrepancy, SupplierEvaluation, SupplierQualification,
 } = require('../src/models');
@@ -125,6 +128,28 @@ test('B1: PO 25×R$4, recebe 30 com NF de R$120 e o excedente é aceito → tota
 
     const { total } = await activePayablesOf(goodsReceipt.id, transaction);
     assert.equal(total, 120, 'a NF cobra 30 unidades (R$120); o excedente aceito não pode gerar um segundo pagamento');
+  });
+});
+
+test('Vencimento (16/11/2026): a conta do recebimento vence na confirmação + o prazo do parâmetro (padrão 30) e o valor recalculado herda o vencimento', async () => {
+  const esperado = (dias) => new Date(startOfBusinessDay(new Date(), dias).getTime() + 12 * 3600 * 1000).toISOString();
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const { item, location } = await createItemAndWarehouse(transaction);
+    const { order } = await cycle(transaction, { item });
+    const { goodsReceipt, discrepancies } = await receive(transaction, order, location, 30, { invoiceFingerprint: `NF-VENC-${uniqueSuffix()}`, invoiceTotalAmount: 120 });
+    const original = await FinancialEntry.findOne({ where: { idempotencyKey: `goods-receipt:${goodsReceipt.id}` }, transaction });
+    assert.equal(new Date(original.dueAt).toISOString(), esperado(30), 'padrão: 30 dias depois da confirmação, ao meio-dia de São Paulo');
+    const resolver = await newUser(transaction, 'resolvedor-venc');
+    await resolveAll(discrepancies, 'ACCEPTED', resolver.id, transaction);
+    const { entries } = await activePayablesOf(goodsReceipt.id, transaction);
+    assert.ok(entries.length >= 1);
+    for (const e of entries) assert.equal(new Date(e.dueAt).toISOString(), new Date(original.dueAt).toISOString(), 'o valor recalculado é a mesma obrigação: mesmo vencimento');
+
+    await settingsService.upsertSetting(DUE_KEYS.goodsReceipt, 0, tenant, tenant.userId, transaction);
+    const second = await cycle(transaction, { item });
+    const r2 = await receive(transaction, second.order, location, 25, { invoiceFingerprint: `NF-VENC2-${uniqueSuffix()}`, invoiceTotalAmount: 100 });
+    const c2 = await FinancialEntry.findOne({ where: { idempotencyKey: `goods-receipt:${r2.goodsReceipt.id}` }, transaction });
+    assert.equal(new Date(c2.dueAt).toISOString(), esperado(0), 'prazo 0 gravado pelo administrador: vence no dia da confirmação');
   });
 });
 

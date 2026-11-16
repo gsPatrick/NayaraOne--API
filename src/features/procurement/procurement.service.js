@@ -25,6 +25,7 @@ const { recordMovement } = require('../inventory/movements.service');
 const { createFinancialEntry } = require('../../modules/finance/application/services/financial-entry.service');
 const { reverseFinancialEntry } = require('../../modules/finance/application/services/receipt.service');
 const { getOrCreateDefaultCostCenter } = require('../../modules/finance/application/services/cost-centers.service');
+const { KEYS: DUE_KEYS, generatedDueAt } = require('../../modules/finance/application/services/generated-entry-due-settings');
 const { getActiveSecondApprovalThreshold } = require('./approvalThresholdRules.service');
 // BUG REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07; contrato, Centro Financeiro
 // BLINDADO v1, §4: "Centro de custo obrigatório para despesa"): o payable de recebimento de
@@ -863,6 +864,8 @@ async function confirmGoodsReceipt(purchaseOrderId, groupId, companyId, payload,
         description: `Recebimento de materiais — PO ${order.id}${invoiceFingerprint ? ` (NF ${invoiceFingerprint})` : ''}.`,
         idempotencyKey: `goods-receipt:${goodsReceipt.id}`,
         costCenterId: costCenter.id,
+        // Vencimento: confirmação do recebimento + financeiro.vencimento.recebimento_compra_dias (padrão 30; o livro não define).
+        dueAt: await generatedDueAt(DUE_KEYS.goodsReceipt, { groupId: order.groupId, companyId: order.companyId }, new Date(), transaction),
       },
       actor.userId,
       transaction
@@ -1044,6 +1047,10 @@ async function reconcileGoodsReceiptPayable(goodsReceipt, actor, transaction, tr
         description: `Recebimento de materiais (valor após decisão das divergências)${goodsReceipt.invoiceFingerprint ? ` — NF ${goodsReceipt.invoiceFingerprint}` : ''}.`,
         idempotencyKey: `goods-receipt:${goodsReceipt.id}:reconciled:${triggerDiscrepancyId}`,
         costCenterId: costCenter.id,
+        // É a MESMA obrigação do recebimento, com o valor recalculado: herda o vencimento da conta anulada; sem ele (conta antiga), o prazo
+        // do parâmetro financeiro.vencimento.recebimento_compra_dias conta a partir de agora.
+        dueAt: (currentActive && currentActive.dueAt)
+          || await generatedDueAt(DUE_KEYS.goodsReceipt, { groupId: goodsReceipt.groupId, companyId: goodsReceipt.companyId }, new Date(), transaction),
       },
       actor.userId,
       transaction

@@ -5,6 +5,7 @@ const { registerEventConsumer } = require('../../../../engines/events/consumers'
 const entries = require('../../infrastructure/repositories/financial-entry.repository');
 const financialEntryService = require('./financial-entry.service'); // pela referência do módulo: o drill de falha substitui a função
 const { getOrCreateDefaultCostCenter } = require('./cost-centers.service');
+const { KEYS: DUE_KEYS, generatedDueAt } = require('./generated-entry-due-settings');
 
 /**
  * Consumidor do Financeiro para `measurement.approved` (Caderno Obras §7: "APPROVED gera measurement.approved; consumidor
@@ -15,7 +16,8 @@ const { getOrCreateDefaultCostCenter } = require('./cost-centers.service');
  * Idempotente: o mesmo evento (source_event_id = id do evento no outbox, índice único no banco) nunca cria segunda
  * obrigação; a conta de medição criada antes deste consumidor (chave measurement.payable:<medição>) também é
  * reconhecida. Centro de custo: o da medição/obra que veio no evento; sem ele, o padrão de medições de obra
- * (createFinancialEntry exige centro de custo para despesa). Devolve a conta (nova ou já existente).
+ * (createFinancialEntry exige centro de custo para despesa). Vencimento: dia da aprovação (instante do evento no outbox) + o prazo do parâmetro
+ * financeiro.vencimento.medicao_aprovada_dias (padrão 30; generated-entry-due-settings.js). Devolve a conta (nova ou já existente).
  */
 const EVENT_TYPE = 'measurement.approved';
 const CONSUMER_NAME = 'finance.contas-a-pagar.medicao-aprovada';
@@ -37,6 +39,8 @@ async function onMeasurementApproved(event, transaction) {
     const fallback = await getOrCreateDefaultCostCenter(event.groupId, event.companyId, MEASUREMENT_COST_CENTER_CODE, 'Obras — medições', transaction);
     costCenterId = fallback.id;
   }
+  const tenant = { groupId: event.groupId, companyId: event.companyId };
+  const dueAt = await generatedDueAt(DUE_KEYS.measurement, tenant, payload.approvedAt || event.occurredAt || event.createdAt || event.created_at, transaction);
   return financialEntryService.createFinancialEntry(
     {
       groupId: event.groupId,
@@ -49,6 +53,7 @@ async function onMeasurementApproved(event, transaction) {
       sourceEventId: event.id,
       constructionProjectId: payload.projectId,
       costCenterId,
+      dueAt,
     },
     payload.approvedByUserId || null,
     transaction

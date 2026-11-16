@@ -18,6 +18,8 @@ const dashboardService = require('../src/features/construction/dashboard.service
 const settingsService = require('../src/features/settings/settings.service');
 const { runEventConsumers } = require('../src/engines/events/consumers');
 const receipt = require('../src/modules/finance/application/services/receipt.service');
+const { KEYS: DUE_KEYS } = require('../src/modules/finance/application/services/generated-entry-due-settings');
+const { startOfBusinessDay } = require('../src/utils/businessDate');
 
 let tenant;
 before(async () => {
@@ -94,6 +96,26 @@ test('M6-21: a conta a pagar nasce do consumidor do Financeiro para measurement.
     assert.equal(orfas.n, 0);
     const erro = await sequelize.transaction({ transaction: t }, (sp) => sequelize.query("UPDATE construction.stage_measurements SET payable_financial_entry_id = NULL WHERE id = :id", { replacements: { id: m.id }, transaction: sp })).then(() => null, (e) => e);
     assert.match(String(erro && erro.message), /stage_measurements_payable_has_entry/);
+  });
+});
+
+test('Vencimento (16/11/2026): a conta da medição aprovada vence no dia da aprovação + o prazo do parâmetro (padrão 30 dias; configurável)', async () => {
+  const esperado = (base, dias) => new Date(startOfBusinessDay(new Date(base), dias).getTime() + 12 * 3600 * 1000).toISOString();
+  await H.withRollbackTenantTransaction(tenant, async (t) => {
+    const { stage } = await projectWithApprovedBudget(tenant, t);
+    const m1 = await medicaoRevisada(t, stage, { valor: 1000, evidenceFileIds: await evidenceIds(tenant, t) });
+    const a1 = await measurementsService.decideStageMeasurement(m1.id, { decision: 'APPROVED' }, tenant.userId, t);
+    const ev1 = await OutboxEvent.findOne({ where: { eventType: 'measurement.approved', aggregateId: m1.id }, transaction: t });
+    const c1 = await FinancialEntry.findByPk(a1.payableFinancialEntryId, { transaction: t });
+    assert.ok(c1.dueAt, 'a conta gerada pelo sistema nunca nasce sem vencimento');
+    assert.equal(new Date(c1.dueAt).toISOString(), esperado(ev1.occurredAt, 30), 'padrão: 30 dias depois da aprovação, ao meio-dia de São Paulo');
+
+    await settingsService.upsertSetting(DUE_KEYS.measurement, 5, tenant, tenant.userId, t);
+    const m2 = await medicaoRevisada(t, stage, { valor: 2000, evidenceFileIds: await evidenceIds(tenant, t) });
+    const a2 = await measurementsService.decideStageMeasurement(m2.id, { decision: 'APPROVED' }, tenant.userId, t);
+    const ev2 = await OutboxEvent.findOne({ where: { eventType: 'measurement.approved', aggregateId: m2.id }, transaction: t });
+    const c2 = await FinancialEntry.findByPk(a2.payableFinancialEntryId, { transaction: t });
+    assert.equal(new Date(c2.dueAt).toISOString(), esperado(ev2.occurredAt, 5), 'o prazo gravado pelo administrador vale para a próxima medição');
   });
 });
 

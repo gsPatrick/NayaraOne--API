@@ -12,7 +12,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./testHelpers');
 const { W, createMember, setThresholds, evidenceIds } = require('./constructionM6vFixture');
-const { AuditLog, ApprovalThreshold, MaintenanceCase } = require('../src/models');
+const { AuditLog, ApprovalThreshold, MaintenanceCase, FinancialEntry } = require('../src/models');
+const { startOfBusinessDay } = require('../src/utils/businessDate');
 const { signAccessToken } = require('../src/utils/jwt');
 const { upsertApprovalThreshold, getApprovalThreshold } = require('../src/features/construction/approvalThresholds.service');
 const lossRecordsService = require('../src/features/construction/lossRecords.service');
@@ -106,5 +107,8 @@ test('M6-107: desconto de garantia acima da alçada não se autoaprova e quem pr
     assert.equal(aprovada.resolutionStatus, 'APPROVED');
     assert.equal(aprovada.resolutionApprovedByUserId, aprovador.id);
     assert.ok(aprovada.resolutionFinancialEntryId);
+    // Vencimento (16/11/2026): a conta gerada pela resolução vence na aprovação + financeiro.vencimento.resolucao_garantia_dias (padrão 30).
+    const conta = await FinancialEntry.findByPk(aprovada.resolutionFinancialEntryId, { transaction: t });
+    assert.equal(new Date(conta.dueAt).toISOString(), new Date(startOfBusinessDay(new Date(), 30).getTime() + 12 * 3600 * 1000).toISOString());
   });
 });
