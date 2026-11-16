@@ -12,6 +12,7 @@ const { parseAlertQuery, SEVERITIES, STATUSES } = require('./alert.query');
 const { readableDomains } = require('./alert.access');
 const { formatValue, normalizeDecimal } = require('./list.format');
 const { linkOf } = require('./open.effects');
+const { ALERT_UNIT_LATERAL_SQL } = require('./alertUnit.sql');
 
 const COLUMNS = `i.id, d.alert_code, COALESCE(i.metric_code, d.metric_code) AS metric_code, i.severity, i.status, i.opened_at, i.occurrence_count, i.last_value::text AS last_value,
          d.owner_user_id, d.owner_role, i.acknowledged_by, i.acknowledged_at, i.task_id, i.company_id, i.group_id, u.unit`;
@@ -20,8 +21,7 @@ const FROM_SQL = `
     JOIN analytics.alert_definitions d ON d.id = i.alert_definition_id
     LEFT JOIN LATERAL (SELECT m.domain FROM analytics.metric_definitions m WHERE m.metric_code = COALESCE(i.metric_code, d.metric_code) AND m.status <> 'RETIRED'
                         ORDER BY (m.company_id IS NULL), (m.group_id IS NULL) LIMIT 1) md ON true
-    LEFT JOIN LATERAL (SELECT v.unit FROM analytics.metric_snapshots s JOIN analytics.metric_versions v ON v.id = s.metric_version_id
-                        WHERE s.id = COALESCE(i.last_snapshot_id, i.metric_snapshot_id)) u ON true`;
+    ${ALERT_UNIT_LATERAL_SQL}`;
 const SELECT = `SELECT ${COLUMNS}${FROM_SQL}`;
 
 function whereOf(f) {

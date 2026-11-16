@@ -6,6 +6,7 @@
  * o owner da definição e a unidade do último valor. Só lê o schema analytics; nunca a tabela de origem de nenhum módulo.
  */
 const { sequelize } = require('../../models');
+const { ALERT_UNIT_LATERAL_SQL } = require('./alerts/alertUnit.sql');
 
 async function listCommandAlerts({ companyId, from, to }, transaction) {
   const [rows] = await sequelize.query(
@@ -16,8 +17,7 @@ async function listCommandAlerts({ companyId, from, to }, transaction) {
        JOIN analytics.alert_definitions d ON d.id = i.alert_definition_id
        LEFT JOIN LATERAL (SELECT m.domain FROM analytics.metric_definitions m WHERE m.metric_code = COALESCE(i.metric_code, d.metric_code) AND m.status <> 'RETIRED'
                            ORDER BY (m.company_id IS NULL), (m.group_id IS NULL) LIMIT 1) md ON true
-       LEFT JOIN LATERAL (SELECT v.unit FROM analytics.metric_snapshots s JOIN analytics.metric_versions v ON v.id = s.metric_version_id
-                           WHERE s.id = COALESCE(i.last_snapshot_id, i.metric_snapshot_id)) u ON true
+       ${ALERT_UNIT_LATERAL_SQL}
       WHERE i.company_id = :companyId
         AND (i.status IN ('OPEN', 'ACKNOWLEDGED') OR (i.opened_at >= :from AND i.opened_at < :to) OR (i.resolved_at >= :from AND i.resolved_at < :to))
       ORDER BY CASE i.severity WHEN 'CRITICAL' THEN 0 WHEN 'WARNING' THEN 1 ELSE 2 END, i.opened_at, i.id`,
