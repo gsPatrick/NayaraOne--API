@@ -122,6 +122,10 @@ não deixa trocar a pessoa da entrega). A entrega fica com o cadastro absorvido,
    do caderno). Caminhos: (a) aceitar como correção do contrato da v1 (a rota é interna, está no contrato por M9-D809; nenhum integrador externo a consome; o Front
    sobe junto) — depois da junção na `marco-9` o lint compara com o contrato novo e volta a passar; ou (b) abrir a v2 (`openapi.v2.yaml`) com a v1 deprecada e data
    de desligamento (M9-D840 §3.3). Recomendo (a).
+   **Decidido pelo Patrick em 16/11/2026: caminho (a).** Os 12 tipos do Caderno M5 §3 ficam na v1; contrato novo só nasce com um deles
+   (`src/modules/legal/contracts/domain/contractTypes.js`); os 3 códigos legados (SALE, LEASE, SERVICE) continuam no enum só porque contratos
+   antigos gravados com eles ainda são lidos (SALE e LEASE na entrada são convertidos para o código do livro, com auditoria; SERVICE novo é
+   recusado). Depois da junção na `marco-9` (`26d7328d`) a esteira de Governança passou.
 5. **Vínculo de pessoa por empresa (DI-M9I, migration 10940)**: a leitura de pessoas do Marco 9 passa a aceitar a prova CPF/CNPJ + primeiro e último nome (para
    vincular um cadastro de outra empresa do grupo). Quem já sabe o CPF e o nome consegue ver a base daquela pessoa (sem empresa responsável, risco nem autoria) e
    cada tentativa conta no limite de tentativas. É o desenho do vínculo do Marco 9 (pedido da homologação); precisa do seu aceite explícito por afrouxar o
