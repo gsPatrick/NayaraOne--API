@@ -19,8 +19,12 @@ junto com a API e o Front da integração, com a API parada, como no `docs/DEPLO
    Conferir que o mês do deploy está ABERTO no Financeiro (a 10520 grava os estornos de correção com a competência do dia do deploy):
    `SELECT company_id, reference_month, status FROM finance.period_closures WHERE reference_month = to_char(now(), 'YYYY-MM') AND status <> 'OPEN';` -> nenhuma linha.
 2. Parar a API.
-3. Aplicar as migrations: `node scripts/migrate.js up` no console do serviço da API (o mesmo executor do boot com `RUN_MIGRATIONS_ON_BOOT`).
-   Conferir `node scripts/migrate.js status`: nenhuma `down`.
+3. Aplicar as migrations com o USUÁRIO DONO DAS TABELAS, no console do serviço da API:
+   `DATABASE_URL="$MIGRATIONS_DATABASE_URL" node scripts/migrate.js up` e conferir
+   `DATABASE_URL="$MIGRATIONS_DATABASE_URL" node scripts/migrate.js status | grep -c down` -> 0.
+   O `DATABASE_URL` do serviço é o `nayara_runtime` (privilégio mínimo): com ele a migration falha com "must be owner of table" (visto no deploy
+   de 16/11/2026). Não depender só do `RUN_MIGRATIONS_ON_BOOT`: ele tem limite de 2 minutos e, se falhar ou estourar, deixa a API subir com o
+   banco pela metade (no deploy de 16/11 parou depois da 6608); conferir sempre o `status`.
 4. Deploy da API e do Front da integração; conferir `/api/version` (commit da integração) e `/api/health`.
 5. Reteste do ponto 5 do Marco 9 na homologação (`scripts/homo/retestePonto5Marco9.js`) e fumaça dos Marcos 3 a 6.
 
