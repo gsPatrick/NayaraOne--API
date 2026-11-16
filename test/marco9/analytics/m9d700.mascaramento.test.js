@@ -130,3 +130,13 @@ test('m9d700 CPF, CNPJ e telefone sem pontuação em texto livre são mascarados
   assert.ok(data.obs.includes('**.***.***/0001-**') && !/11222333|98765|987654321/.test(data.obs));
   assert.equal(data.protocolo, 'pedido 12345678900', 'número de 11 dígitos sem dígito verificador válido não é CPF');
 });
+
+test('m9d700 data (Date) atravessa o mascaramento intacta, em linha de detalhamento e em lista (antes virava {})', () => {
+  const quando = new Date('2026-11-16T22:00:00.000Z');
+  const { data, maskedCount } = maskRestricted([{ id: 'x', fields: { window_start: quando, calls_total: 5, email: 'ana@x.com' } }]);
+  assert.ok(data[0].fields.window_start instanceof Date, 'continua Date');
+  assert.equal(data[0].fields.window_start.toISOString(), '2026-11-16T22:00:00.000Z');
+  assert.equal(JSON.parse(JSON.stringify(data))[0].fields.window_start, '2026-11-16T22:00:00.000Z', 'na resposta JSON sai a data, não {}');
+  assert.equal(data[0].fields.email, 'a***@x.com', 'o resto continua mascarado');
+  assert.equal(maskedCount, 1);
+});

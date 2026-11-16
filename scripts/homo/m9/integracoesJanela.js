@@ -64,7 +64,7 @@ async function ler(admin, out) {
   if (ref && ref.filterHash && ref.filterSignature) {
     const q = new URLSearchParams({ filter: JSON.stringify(ref.filter), filterHash: ref.filterHash, filterSignature: ref.filterSignature, pageSize: '50' });
     const d = await admin.chamar('GET', `/analytics/metrics/${CODE}/drilldown?${q}`);
-    const linhas = (d.dados && d.dados.rows) || [];
+    const linhas = ((d.dados && d.dados.rows) || []).map((r) => r.fields || r); // o detalhamento devolve cada linha em { id, fields, ... }
     const chamadas = linhas.reduce((s, l) => s + Number(l.calls_total || 0), 0);
     const falhas = linhas.reduce((s, l) => s + Number(l.calls_failed || 0), 0);
     out.origem = { http: d.status, linhas: linhas.map((l) => ({ fornecedor: l.provider_code, janela: horaSP(l.window_start), chamadas: l.calls_total, falhas: l.calls_failed })), chamadas, falhas };

@@ -131,6 +131,9 @@ function maskString(s) {
 
 function maskValue(key, value, extra, state) {
   const nk = normKey(key);
+  // Data não é dado restrito e não tem campos enumeráveis: percorrida como objeto virava {} (o detalhamento e a exportação perdiam toda
+  // coluna de data, ex.: window_start de tec.integration_errors; achado do reteste de 16/11/2026). Vai intacta.
+  if (value instanceof Date) return value;
   if (value !== null && typeof value === 'object') return walk(value, extra, state);
   if (value === null || value === undefined || typeof value === 'boolean') return value;
   const rule = keyRule(key);
