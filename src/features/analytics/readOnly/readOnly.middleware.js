@@ -7,6 +7,7 @@ const { writeBlockedError, queryTimeoutError } = require('./readOnly.errors');
 const { getSetting } = require('../../../features/settings/settings.service');
 const { QUERY_TIMEOUT_SETTING_KEY, READ_ONLY_SETTING_DEFAULTS } = require('./readOnly.settings');
 const { shouldUseReaderRole, assumeReaderRole } = require('./readOnly.readerRole');
+const { markReadOnly } = require('./requestMemo');
 
 const READ_METHODS = new Set(['GET', 'HEAD']);
 const PG_READ_ONLY_VIOLATION = '25006';
@@ -19,6 +20,7 @@ function pgCode(err) {
 /** Primeira coisa da transação de um GET de BI: READ ONLY (livro BI-001) e, se disponível e ligado, o role sem escrita. */
 async function applyReadOnly(transaction, tenant) {
   await sequelize.query('SET TRANSACTION READ ONLY', { transaction });
+  markReadOnly(transaction); // leituras repetidas do mesmo GET podem ser memorizadas (requestMemo.js)
   // Tempo máximo das consultas do GET (M9-D698 3.4): parâmetro da empresa, aplicado à transação inteira.
   const timeoutMs = await getSetting(QUERY_TIMEOUT_SETTING_KEY, tenant, transaction, READ_ONLY_SETTING_DEFAULTS[QUERY_TIMEOUT_SETTING_KEY]);
   const ms = Number.isInteger(timeoutMs) && timeoutMs >= 100 ? timeoutMs : READ_ONLY_SETTING_DEFAULTS[QUERY_TIMEOUT_SETTING_KEY];

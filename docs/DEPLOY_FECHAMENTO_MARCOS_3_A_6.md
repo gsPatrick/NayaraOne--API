@@ -149,3 +149,17 @@ corrigem dados; o caminho seguro de volta é o backup.
 - `20260101010412-finance-extrato-origem-confiavel`
 - `20260101010520-m4lr-ledger-ddl-minimo`
 - `20260101011400-m4pg-pagamento-estados-aprovacao-estorno-reabertura`
+
+## Correção de desempenho do BI (16/11/2026): migration 20261116210000
+
+O Centro de Comando e o semáforo caíam em 504 ou levavam de 20 a 50 s na homologação. Duas leituras varriam tabelas grandes por causa da RLS (o
+operador usado não é leakproof e o índice não podia ser usado): a unidade de cada alerta (commit 7bcb70c2) e o estado de qualidade de cada
+indicador (este deploy). A migration cria o índice `analytics.data_quality_checks_latest_idx` com `CREATE INDEX CONCURRENTLY` (não bloqueia as
+gravações do BI; não roda em transação) sobre a tabela de verificações (2,1 GB na homologação: pode levar alguns minutos).
+
+1. Rodar a migration no console da API com o usuário dono das tabelas, antes de conferir o painel:
+   `DATABASE_URL="$MIGRATIONS_DATABASE_URL" node scripts/migrate.js up` e `... status | grep -c down` -> 0.
+   Se o boot (RUN_MIGRATIONS_ON_BOOT, limite de 2 min) interromper a criação, o índice fica inválido; rodar o comando acima de novo: a migration
+   remove o índice inválido e cria outra vez.
+2. Conferir: `SELECT indisvalid FROM pg_index WHERE indexrelid = 'analytics.data_quality_checks_latest_idx'::regclass` -> `t`.
+3. Sem o índice o painel continua correto, só lento (a consulta nova cai para leitura sequencial).

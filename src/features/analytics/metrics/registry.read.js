@@ -12,6 +12,7 @@ const { assertCanRead } = require('./registry.permission');
 const { natureLabel } = require('./registry.natures');
 const { presentSnapshot } = require('./freshness.present');
 const { assertDomainAccess, loadDomainMap, domainPermissionOf, has } = require('../security');
+const { memoInReadOnly } = require('../readOnly/requestMemo');
 
 const ORDER_SCOPE = 'ORDER BY (d.company_id IS NULL), (d.group_id IS NULL)';
 
@@ -34,12 +35,16 @@ async function listRegistry(ctx, { domain = null, status = null, includeRetired 
 }
 
 async function findDefinition(code, transaction) {
-  const [rows] = await sequelize.query(
-    `SELECT d.* FROM analytics.metric_definitions d WHERE d.metric_code = :code ${ORDER_SCOPE} LIMIT 1`,
-    { replacements: { code }, transaction }
-  );
-  if (!rows[0]) throw AppError.notFound('Métrica não encontrada.', 'ANALYTICS_METRIC_NOT_FOUND');
-  return rows[0];
+  // No mesmo GET de BI a mesma definição era lida dezenas de vezes (Centro de Comando: 142 leituras de 32 códigos): memorizada na requisição.
+  const row = await memoInReadOnly(transaction, `metric_definition:${code}`, async () => {
+    const [rows] = await sequelize.query(
+      `SELECT d.* FROM analytics.metric_definitions d WHERE d.metric_code = :code ${ORDER_SCOPE} LIMIT 1`,
+      { replacements: { code }, transaction }
+    );
+    return rows[0] || null;
+  });
+  if (!row) throw AppError.notFound('Métrica não encontrada.', 'ANALYTICS_METRIC_NOT_FOUND');
+  return { ...row };
 }
 
 /** Definição + histórico de versões (mais nova primeiro). Métrica RETIRED continua legível. */
