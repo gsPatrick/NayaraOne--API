@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // NAY Financeira (Caderno Marco 4 §18; DoD "NAY sem permissão de execução financeira"; Guia §13).
 // Postgres real, NODE_ENV=test. Os testes de serviço rodam numa empresa NOVA e real (dados
 // determinísticos) dentro de transação com rollback; o teste HTTP sobe o app e usa JWT real.
@@ -63,7 +64,7 @@ function monthsAgo(n) {
 }
 
 async function entry(t, ctx, data) {
-  return createFinancialEntry({ groupId: ctx.groupId, companyId: ctx.companyId, ...data }, ctx.userId, t);
+  return createFinancialEntry({ dueAt: vencimentoDeTeste(), groupId: ctx.groupId, companyId: ctx.companyId, ...data }, ctx.userId, t);
 }
 
 // Marca como liquidado numa data escolhida (status/settled_at são colunas mutáveis e auditadas

@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 require('dotenv').config();
 
 const { sequelize, Group, Company, User } = require('../src/models');
@@ -253,7 +254,7 @@ async function createCommissionSource(tenant, transaction, { baseAmount, percent
   );
   const resultCenter = await createTestResultCenter(tenant, transaction);
   const source = await financialEntriesService.createFinancialEntry(
-    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: baseAmount, resultCenterId: resultCenter.id, description: `Fato gerador de comissão ${uniqueSuffix()}` },
+    { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: baseAmount, resultCenterId: resultCenter.id, description: `Fato gerador de comissão ${uniqueSuffix()}` },
     tenant.userId,
     transaction
   );

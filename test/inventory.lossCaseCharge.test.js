@@ -11,6 +11,7 @@ const lossCasesService = require('../src/features/inventory/lossCases.service');
 const filesService = require('../src/features/files/files.service');
 const { FinancialEntry, ResultCenter, Person, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: a cobrança de perda exige o vencimento
 
 // GAP CORRIGIDO (auditoria de conformidade Marco 7, contrato §11): "Investigação e decisão
 // humana determinam responsabilidade. Qualquer desconto financeiro segue regra/aprovação e
@@ -76,7 +77,7 @@ test('§11: aprovar perda cobrando o responsável cria FinancialEntry RECEIVABLE
     const person = await employee(transaction);
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 450.75 });
 
-    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true });
+    const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste() });
     assert.equal(decided.status, 'APPROVED');
 
     const key = lossCasesService.lossChargeIdempotencyKey(lossCase.id);
@@ -87,6 +88,7 @@ test('§11: aprovar perda cobrando o responsável cria FinancialEntry RECEIVABLE
     assert.equal(entry.entryType, 'CREDIT');
     assert.equal(Number(entry.amount), 450.75);
     assert.equal(entry.status, 'PENDING', 'nasce pendente — cobrança/desconto segue o fluxo do Financeiro');
+    assert.ok(entry.dueAt, 'a cobrança nasce com o vencimento informado na decisão (DI-BI2-6)');
     assert.match(entry.description, new RegExp(person.legalName));
 
     const resultCenter = await ResultCenter.findByPk(entry.resultCenterId, { transaction });
@@ -121,7 +123,7 @@ test('§11: aprovador ajusta o valor e atribui o responsável na própria decis�
     const person = await employee(transaction);
 
     const decided = await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, {
-      chargeResponsible: true,
+      chargeResponsible: true, chargeDueAt: vencimentoDeTeste(),
       responsiblePersonId: person.id,
       chargeAmount: 60,
     });
@@ -151,27 +153,27 @@ test('§11: cobrança exige perda aprovada, responsável real e valor > 0', asyn
 
     const { lossCase: rejected } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 100 });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(rejected.id, tenant.groupId, tenant.companyId, 'REJECTED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(rejected.id, tenant.groupId, tenant.companyId, 'REJECTED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste() }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_REQUIRES_APPROVAL'
     );
 
     const { lossCase: noResponsible } = await openAssetLossCase(transaction, { estimatedCost: 100 });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noResponsible.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(noResponsible.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste() }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_RESPONSIBLE_REQUIRED'
     );
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noResponsible.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, responsiblePersonId: '00000000-0000-4000-8000-000000000000' }),
+      () => lossCasesService.decideLossCase(noResponsible.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste(), responsiblePersonId: '00000000-0000-4000-8000-000000000000' }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_RESPONSIBLE_NOT_FOUND'
     );
 
     const { lossCase: noEstimate } = await openAssetLossCase(transaction, { responsiblePersonId: person.id });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noEstimate.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(noEstimate.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste() }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_AMOUNT_REQUIRED'
     );
     await assert.rejects(
-      () => lossCasesService.decideLossCase(noEstimate.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeAmount: -5 }),
+      () => lossCasesService.decideLossCase(noEstimate.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste(), chargeAmount: -5 }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_AMOUNT_INVALID'
     );
 
@@ -186,7 +188,7 @@ test('§11: cobrança exige inventory:approve (mesma alçada da decisão)', asyn
     const person = await employee(transaction);
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 100 });
     await assert.rejects(
-      () => lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: false }, transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', { userId: tenant.userId, canApprove: false }, transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste() }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_APPROVAL_REQUIRED'
     );
   });
@@ -196,11 +198,11 @@ test('§11: cobrança é idempotente por caso — redecidir/reprocessar nunca du
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const person = await employee(transaction);
     const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 80 });
-    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true });
+    await lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste() });
 
     // Segunda decisão do mesmo caso é bloqueada pela máquina de estados...
     await assert.rejects(
-      () => lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true }),
+      () => lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt: vencimentoDeTeste() }),
       (err) => err instanceof AppError && err.code === 'LOSS_CASE_INVALID_TRANSITION'
     );
     // ...e a chave de idempotência é única no Financeiro.
@@ -231,7 +233,7 @@ test('§11 (HTTP): controller repassa chargeResponsible/responsiblePersonId/char
 
     const { statusCode, body } = await callController(inventoryController.decideLossCase, {
       params: { id: lossCase.id },
-      body: { decision: 'APPROVED', chargeResponsible: true, responsiblePersonId: person.id, chargeAmount: 125.5 },
+      body: { decision: 'APPROVED', chargeResponsible: true, chargeDueAt: vencimentoDeTeste(), responsiblePersonId: person.id, chargeAmount: 125.5 },
       auth: { userId: secondApproverId, groupId: tenant.groupId, companyId: tenant.companyId, permissions: ['inventory:approve'] },
       withTenantTransaction: (fn) => fn(transaction),
     });
@@ -240,6 +242,48 @@ test('§11 (HTTP): controller repassa chargeResponsible/responsiblePersonId/char
     assert.equal(body.data.responsiblePersonId, person.id);
     assert.equal(body.data.chargeFinancialEntry.amount, 125.5);
     assert.equal(body.data.chargeFinancialEntry.nature, 'RECEIVABLE');
+    const entry = await FinancialEntry.findOne({ where: { idempotencyKey: lossCasesService.lossChargeIdempotencyKey(lossCase.id) }, transaction });
+    assert.equal(new Date(entry.dueAt).toISOString(), new Date(vencimentoDeTeste()).toISOString(), 'chargeDueAt do corpo chega ao lançamento');
+  });
+});
+
+// Segunda leva (16/11/2026, DI-BI2-6): a conta a receber do responsável é própria e em aberto — sem vencimento ela some de
+// "recebíveis 7/30/60" e da inadimplência (Caderno M4 §19). A forma antiga (cobrar sem chargeDueAt, lançamento sem vencimento) é recusada.
+test('DI-BI2-6: cobrar o responsável sem o vencimento da cobrança dá 422 LOSS_CASE_CHARGE_DUE_REQUIRED, sem decidir nem lançar nada', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const person = await employee(transaction);
+    for (const chargeDueAt of [undefined, null, '', '  ']) {
+      const { lossCase } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 90 });
+      await assert.rejects(
+        () => lossCasesService.decideLossCase(lossCase.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: true, chargeDueAt }),
+        (err) => err instanceof AppError && err.code === 'LOSS_CASE_CHARGE_DUE_REQUIRED' && err.statusCode === 422,
+        `chargeDueAt ${JSON.stringify(chargeDueAt)}`
+      );
+      await lossCase.reload({ transaction });
+      assert.notEqual(lossCase.status, 'APPROVED', 'a decisão recusada não muda o caso');
+      assert.equal(await FinancialEntry.count({ where: { idempotencyKey: lossCasesService.lossChargeIdempotencyKey(lossCase.id) }, transaction }), 0);
+    }
+    // Aprovar SEM cobrar continua sem pedir vencimento (não há conta a receber).
+    const { lossCase: semCobranca } = await openAssetLossCase(transaction, { responsiblePersonId: person.id, estimatedCost: 90 });
+    const decided = await lossCasesService.decideLossCase(semCobranca.id, tenant.groupId, tenant.companyId, 'APPROVED', approver(), transaction, { chargeResponsible: false });
+    assert.equal(decided.status, 'APPROVED');
+  });
+});
+
+test('DI-BI2-6 (HTTP): o controller sem chargeDueAt responde 422 com o código da regra', async () => {
+  await withRollbackTenantTransaction(tenant, async (transaction) => {
+    const inventoryController = require('../src/features/inventory/inventory.controller');
+    const person = await employee(transaction);
+    const { lossCase } = await openAssetLossCase(transaction, { estimatedCost: 200 });
+    const err = await callController(inventoryController.decideLossCase, {
+      params: { id: lossCase.id },
+      body: { decision: 'APPROVED', chargeResponsible: true, responsiblePersonId: person.id, chargeAmount: 125.5 },
+      auth: { userId: secondApproverId, groupId: tenant.groupId, companyId: tenant.companyId, permissions: ['inventory:approve'] },
+      withTenantTransaction: (fn) => fn(transaction),
+    }).then(() => null, (e) => e);
+    assert.ok(err, 'sem vencimento a decisão com cobrança não passa');
+    assert.equal(err.code, 'LOSS_CASE_CHARGE_DUE_REQUIRED');
+    assert.equal(err.statusCode, 422);
   });
 });
 

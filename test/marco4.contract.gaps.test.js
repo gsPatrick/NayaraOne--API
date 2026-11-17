@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Testes da auditoria externa de 2026-10-07 (contrato bruto, Anexo I, Centro Financeiro) —
 // cobre os gaps confirmados pelo auditor lendo o contrato literal (não os checklists internos
 // já resumidos):
@@ -55,6 +56,7 @@ async function createEntry(transaction, overrides = {}) {
   }
   return financialEntriesService.createFinancialEntry(
     {
+      dueAt: vencimentoDeTeste(),
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       entryType: 'DEBIT',
@@ -836,7 +838,7 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
     );
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: `M4-20b aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: `M4-20b aluguel ${suffix}`, resultCenterId: resultCenter.id },
       tenant.userId, transaction
     );
     await receiptService.settleFinancialEntry(recebimento.id, tenant.userId, transaction);
@@ -851,7 +853,9 @@ test('M4-20b: getWeeklyHealthReport cobre os indicadores que faltavam (30/60 dia
     for (let i = 0; i < 5; i += 1) {
       await FinancialEntry.create({ groupId: tenant.groupId, companyId: tenant.companyId, bankAccountId: anomalyAccount.id, costCenterId: historyCc.id, entryType: 'DEBIT', nature: 'PAYABLE', amount: 1000, description: `M4-20b histórico ${i} ${suffix}`, status: 'SETTLED', settledAt: new Date(), competenceMonth: new Date().toISOString().slice(0, 7) }, { transaction });
     }
-    const anomalyEntry = await createEntry(transaction, { amount: 90000, bankAccountId: anomalyAccount.id });
+    // DI-BI2-6: a conta a pagar agora sempre tem vencimento; vencendo em 90 dias ela fica fora das janelas 30/60 medidas acima
+    // (antes ficava fora por não ter vencimento).
+    const anomalyEntry = await createEntry(transaction, { amount: 90000, bankAccountId: anomalyAccount.id, dueAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString() });
     await antifraudService.flagAnomalousPayment(anomalyEntry, transaction);
 
     const afterReport = await financialHealthReportService.getWeeklyHealthReport(transaction, { companyId: tenant.companyId });
@@ -934,14 +938,14 @@ test('M4-20c: freeCash soma o extrato bancário real e exclui dinheiro de tercei
     // Margem por setor: um centro de resultado com receita 500 e custo 120 -> margem 380.
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const receita = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, resultCenterId: resultCenter.id, description: `M4-20c receita ${suffix}` },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, resultCenterId: resultCenter.id, description: `M4-20c receita ${suffix}` },
       tenant.userId,
       transaction
     );
     await receiptService.settleFinancialEntry(receita.id, tenant.userId, transaction);
     const custoCostCenter = await createTestCostCenter(tenant, transaction);
     const custo = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 120, costCenterId: custoCostCenter.id, resultCenterId: resultCenter.id, description: `M4-20c custo ${suffix}` },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 120, costCenterId: custoCostCenter.id, resultCenterId: resultCenter.id, description: `M4-20c custo ${suffix}` },
       tenant.userId,
       transaction
     );

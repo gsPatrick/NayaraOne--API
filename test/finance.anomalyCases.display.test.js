@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // R7 (reconferência ao vivo 20/10/2026) — antifraude: "Aberto em data não registrada", sem quem
 // resolveu, sem o lançamento e título genérico. A API agora devolve createdAt correto (o model
 // usa created_at underscored), quem resolveu, o lançamento relacionado e o título em português.
@@ -18,7 +19,7 @@ after(async () => { await sequelize.close(); });
 async function entry(transaction) {
   const cc = await createTestCostCenter(tenant, transaction);
   return financialEntriesService.createFinancialEntry(
-    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 88, description: `R7 lanc ${uniqueSuffix()}`, costCenterId: cc.id },
+    { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 88, description: `R7 lanc ${uniqueSuffix()}`, costCenterId: cc.id },
     tenant.userId, transaction
   );
 }

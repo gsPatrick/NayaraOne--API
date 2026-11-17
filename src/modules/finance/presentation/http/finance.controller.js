@@ -153,7 +153,9 @@ const listFinancialEntryClassificationPendings = catchAsync(async (req, res) => 
 });
 const resolveFinancialEntryClassificationPending = catchAsync(async (req, res) => {
   const item = await req.withTenantTransaction((t) =>
-    classificationPendings.resolveClassificationPending(req.params.id, req.body.finalNature, req.auth.userId, t, { costCenterId: req.body.costCenterId })
+    classificationPendings.resolveClassificationPending(req.params.id, req.body.finalNature, req.auth.userId, t, {
+      costCenterId: req.body.costCenterId, resultCenterId: req.body.resultCenterId, dueAt: req.body.dueAt, // DI-BI2-6: receita com centro de resultado, despesa com vencimento
+    })
   );
   return success(res, { data: item });
 });

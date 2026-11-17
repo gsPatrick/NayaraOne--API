@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // R8 (reconferência ao vivo 20/10/2026) — a URL de download do comprovante de baixa
 // (finance.financial_entries.settlement_evidence_file_id) responde 403 para quem não tem acesso
 // ao Financeiro, 200 para quem tem finance:read, e 404 em outra empresa.
@@ -32,7 +33,7 @@ before(async () => {
   await withTenantTransaction(tenant, async (t) => {
     const cc = await createTestCostCenter(tenant, t);
     const entry = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 12, description: 'R8 comprovante', costCenterId: cc.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 12, description: 'R8 comprovante', costCenterId: cc.id },
       tenant.userId, t
     );
     await sequelize.query('UPDATE finance.financial_entries SET settlement_evidence_file_id = :f WHERE id = :e', {

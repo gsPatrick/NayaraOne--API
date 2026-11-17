@@ -25,6 +25,8 @@ const { evaluatePayableAnomaly } = require('./payment-anomaly-gate'); // §17 va
 const { assertCompetenceOpen, assertPeriodOpenForEntry, resolveCompetenceMonth } = require('./competence-guard');
 const { resolveThirdPartyLinks } = require('./third-party-funds.service');
 const { invalidateStaleOpenPaymentIntents } = require('./payment-intent-invalidation');
+const { dueDateEdit, assertOwnOpenEntryHasDueDate, assertEditKeepsRequiredFields } = require('./open-entry-guards'); // DI-BI2-6 (M4 §4 e §19)
+const { isBlank } = require('../../domain/open-entry-required');
 
 function assertPositiveAmount(amount) {
   if (!isPositiveAmount(amount)) {
@@ -37,7 +39,7 @@ function assertPositiveAmount(amount) {
 // validação de faixa existia sobre `dueAt`. Fail closed: vencimento precisa estar num intervalo
 // humano plausível (domain/financial-entry.js).
 function assertReasonableDueDate(dueAt) {
-  if (dueAt === undefined || dueAt === null || dueAt === '') return;
+  if (isBlank(dueAt)) return; // ausente ou em branco: a obrigatoriedade é de open-entry-guards.js
   const parsed = new Date(dueAt);
   if (Number.isNaN(parsed.getTime())) {
     throw AppError.badRequest('O vencimento informado não é uma data válida.', 'FINANCE_ENTRY_VALIDATION');
@@ -57,7 +59,8 @@ function assertReasonableDueDate(dueAt) {
  */
 async function createFinancialEntry(payload, actorUserId, transaction, options = {}) {
   const { groupId, companyId, bankAccountId, costCenterId, resultCenterId, constructionProjectId, originRef } = payload;
-  const { entryType, nature, amount, description, dueAt, competenceMonth, idempotencyKey, chartOfAccountId, sourceEventId } = payload;
+  const { entryType, nature, amount, description, competenceMonth, idempotencyKey, chartOfAccountId, sourceEventId } = payload;
+  const dueAt = isBlank(payload.dueAt) ? null : payload.dueAt; // texto em branco = sem vencimento (DI-BI2-6)
 
   if (!groupId || !companyId || !entryType || !nature || amount === undefined || amount === null) {
     throw AppError.badRequest(
@@ -90,6 +93,7 @@ async function createFinancialEntry(payload, actorUserId, transaction, options =
   // M4-16 / F04 / D2 / D3 — dinheiro de terceiro: referência, origem, contrato, titular e dívida compensada.
   const links = await resolveThirdPartyLinks(payload, normalizedNature, options, transaction);
   const { thirdPartyRelease, resolvedReleaseType, compensatedDebt } = links;
+  assertOwnOpenEntryHasDueDate({ nature: normalizedNature, isThirdPartyFunds: links.normalizedThirdParty, dueAt }); // 422 sem vencimento (§19)
 
   // §4 (Frente 3): a classificação gravada é a VERSÃO da conta vigente na data do fato
   // (`factDate` informado, senão o vencimento, senão agora) — não a conta "como está hoje".
@@ -194,9 +198,9 @@ async function getFinancialEntry(id, transaction) {
 }
 
 /**
- * updateFinancialEntry — só permite editar campos "de agenda" (vencimento, centro de custo/
- * resultado, conta bancária) enquanto o lançamento estiver PENDING. Uma vez SETTLED/REVERSED,
- * o registro é histórico — qualquer correção de valor precisa passar por estorno.
+ * updateFinancialEntry — só permite editar campos "de agenda" (centro de custo/resultado, conta
+ * bancária; o vencimento só é preenchido quando faltava) enquanto o lançamento estiver PENDING.
+ * Uma vez SETTLED/REVERSED, o registro é histórico — correção de valor passa por estorno.
  */
 async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   const entry = await getFinancialEntry(id, transaction);
@@ -207,8 +211,11 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
     );
   }
   const beforeJson = entry.toJSON();
-  const { bankAccountId, costCenterId, resultCenterId, dueAt, description, chartOfAccountId, competenceMonth } = payload;
+  const { bankAccountId, costCenterId, resultCenterId, description, chartOfAccountId, competenceMonth } = payload;
+  const dueAt = payload.dueAt === undefined || !isBlank(payload.dueAt) ? payload.dueAt : null; // texto em branco = nulo
   if (dueAt !== undefined) assertReasonableDueDate(dueAt);
+  assertEditKeepsRequiredFields(entry, payload); // não apaga vencimento nem centro obrigatório; vencimento gravado não é trocado
+  const fillsDueAt = dueDateEdit(entry.dueAt, dueAt) === 'fill';
 
   // A1 (revisão independente, provado): a conta de um pagamento pode ser trocada
   // (redirecionamento, com revisão manual), nunca removida.
@@ -267,7 +274,7 @@ async function updateFinancialEntry(id, payload, actorUserId, transaction) {
   if (bankAccountId !== undefined) entry.bankAccountId = bankAccountId;
   if (costCenterId !== undefined) entry.costCenterId = costCenterId;
   if (resultCenterId !== undefined) entry.resultCenterId = resultCenterId;
-  if (dueAt !== undefined) entry.dueAt = dueAt;
+  if (fillsDueAt) entry.dueAt = dueAt;
   if (description !== undefined) entry.description = description;
   entry.updatedBy = actorUserId || null;
   if (isBankAccountRedirect) {

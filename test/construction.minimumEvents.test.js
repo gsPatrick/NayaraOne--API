@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Matriz de fechamento do Marco 6 (10/11/2026): Caderno "Construção + Obras + Pós-obra" §11 — eventos
 // mínimos. Até aqui só 9 dos 15 nomes tinham asserção em teste; este arquivo percorre a jornada inteira
 // e confere, na Outbox, que CADA um dos 15 nomes foi gravado com o nome exato do livro, na mesma
@@ -100,7 +101,7 @@ test('M6-69..M6-80: a jornada da obra grava na Outbox os 15 eventos mínimos do 
     const { costCenterId } = await FinancialEntry.findByPk(approved.payableFinancialEntryId, { transaction: t });
     await assert.rejects(
       () => financialEntriesService.createFinancialEntry(
-        W({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 18000, description: 'Reprocesso do evento', idempotencyKey: `measurement.payable:${m.id}`, constructionProjectId: project.id, costCenterId }),
+        W({ dueAt: vencimentoDeTeste(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 18000, description: 'Reprocesso do evento', idempotencyKey: `measurement.payable:${m.id}`, constructionProjectId: project.id, costCenterId }),
         tenant.userId,
         t
       ),

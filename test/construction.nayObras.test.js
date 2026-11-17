@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -166,7 +167,7 @@ test('GAP 3 — risco de medição PAYABLE sem pagamento processado há muito te
     // Medição PAYABLE sempre aponta para a conta a pagar (CHECK stage_measurements_payable_has_entry, verificação do Marco 6).
     const costCenter = await createTestCostCenter(tenant, transaction);
     const conta = await require('../src/modules/finance/application/services/financial-entry.service').createFinancialEntry(
-      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 100, costCenterId: costCenter.id, constructionProjectId: project.id }),
+      withTenant({ dueAt: vencimentoDeTeste(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 100, costCenterId: costCenter.id, constructionProjectId: project.id }),
       tenant.userId,
       transaction
     );

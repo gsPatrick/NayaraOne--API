@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 /**
  * Revisão independente da conferência Nayara 18/10/2026 — Pagamentos, baixa e caução
  * (Maturacao/FRENTES_PENDENTES_MARCOS4_5.md, seção 1): A1-A4, B1-B6, D1-D4, E1.
@@ -194,7 +195,7 @@ test('A3: excedente classificado como PAYABLE vira obrigação PENDENTE (com cen
   await withRollbackTenantTransaction(tenant, async (t) => {
     const rc = await createTestResultCenter(tenant, t);
     const entry = await financialEntriesService.createFinancialEntry(
-      W({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 100, description: 'PAY1810 recebível', resultCenterId: rc.id }),
+      W({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 100, description: 'PAY1810 recebível', resultCenterId: rc.id }),
       tenant.userId,
       t
     );
@@ -202,8 +203,11 @@ test('A3: excedente classificado como PAYABLE vira obrigação PENDENTE (com cen
     const pendingId = result.classificationPending.id;
     await expectCode(classificationPendings.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t), 'FINANCE_ENTRY_COST_CENTER_REQUIRED');
     const cc = await createTestCostCenter(tenant, t);
-    const resolved = await classificationPendings.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t, { costCenterId: cc.id });
+    // DI-BI2-6 (16/11/2026): a despesa vira conta a pagar própria em aberto — sem vencimento, 422.
+    await expectCode(classificationPendings.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t, { costCenterId: cc.id }), 'FINANCE_ENTRY_DUE_DATE_REQUIRED');
+    const resolved = await classificationPendings.resolveClassificationPending(pendingId, 'PAYABLE', tenant.userId, t, { costCenterId: cc.id, dueAt: vencimentoDeTeste() });
     assert.equal(resolved.nature, 'PAYABLE');
+    assert.equal(new Date(resolved.dueAt).toISOString(), new Date(vencimentoDeTeste()).toISOString(), 'o vencimento da classificação é gravado');
     assert.equal(resolved.status, 'PENDING', 'devolução do excedente segue o fluxo normal de pagamento');
     assert.equal(resolved.settledAt, null);
   });
@@ -574,7 +578,7 @@ test('D3: compensação aponta a dívida do titular, exige aprovação, não mov
     const d = await deposit(t, { contract, holder, amount: 1000 });
     const rc = await createTestResultCenter(tenant, t);
     const debt = await financialEntriesService.createFinancialEntry(
-      W({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 300, description: 'PAY1810 dano de vistoria', resultCenterId: rc.id, contractId: contract.id }),
+      W({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 300, description: 'PAY1810 dano de vistoria', resultCenterId: rc.id, contractId: contract.id }),
       tenant.userId,
       t
     );

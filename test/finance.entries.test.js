@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -43,6 +44,7 @@ async function createEntry(transaction, actorUserId, overrides = {}) {
   }
   return financialEntriesService.createFinancialEntry(
     {
+      dueAt: vencimentoDeTeste(),
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       entryType: 'DEBIT',

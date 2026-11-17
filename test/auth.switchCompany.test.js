@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // R9 (reconferência ao vivo 20/10/2026) — "Trocar de empresa" ficava desativado. Prova, pelo
 // caminho HTTP real (login com senha -> tokens reais -> rotas reais), que:
 //   1. GET /auth/companies lista só as empresas com vínculo ATIVO do usuário;
@@ -53,7 +54,7 @@ before(async () => {
   const entryA = await withTenantTransaction({ ...tenant, companyId: A.id }, async (t) => {
     const cc = await createTestCostCenter({ ...tenant, companyId: A.id }, t);
     return financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: A.id, nature: 'PAYABLE', entryType: 'DEBIT', amount: 10, description: 'R9 lanc A', costCenterId: cc.id, idempotencyKey: `r9-${suffix}` },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: A.id, nature: 'PAYABLE', entryType: 'DEBIT', amount: 10, description: 'R9 lanc A', costCenterId: cc.id, idempotencyKey: `r9-${suffix}` },
       tenant.userId, t
     );
   });

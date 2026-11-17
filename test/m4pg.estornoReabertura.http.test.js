@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // M4PG — por HTTP real contra o app Express (empresa isolada, banco descartável; MFA recente por linhas no banco, nunca pelo endpoint):
 //  - Guia M4 §8 / §15 "POST /finance/ledger/:id/reverse — Estorno controlado"; DEC-003 e DEC-062: o estorno é PEDIDO (finance:reverse + MFA)
 //    e só é lançado quando OUTRA pessoa aprova o caso (finance:approve + MFA), com a chave `reversal:<original>:<caso>`.
@@ -49,7 +50,7 @@ const base = () => ({ groupId: tenant.groupId, companyId: tenant.companyId });
 
 async function settledReceivable(amount, month) {
   return inTenant(async (t) => {
-    const e = await fe.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, description: `m4pg estorno ${T.uniqueSuffix()}`, ...(month ? { competenceMonth: month, dueAt: `${month}-12T15:00:00.000Z` } : {}) }, u.pede.id, t);
+    const e = await fe.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, description: `m4pg estorno ${T.uniqueSuffix()}`, ...(month ? { competenceMonth: month, dueAt: `${month}-12T15:00:00.000Z` } : {}) }, u.pede.id, t);
     return require('../src/modules/finance/application/services/receipt.service').settleFinancialEntry(e.id, u.pede.id, t);
   });
 }

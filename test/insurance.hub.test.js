@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -134,7 +135,7 @@ test('Insurance Hub: emitir a apólice gera as parcelas do prêmio (installments
     assert.ok(firstInstallment.financialEntryId, 'parcela nasce vinculada ao próprio payable do prêmio');
     const costCenter1 = await createTestCostCenter(tenant, transaction);
     const intruderEntry = await createFinancialEntry(
-      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(firstInstallment.amount), description: 'Pagamento de parcela de seguro (teste)', costCenterId: costCenter1.id }),
+      withTenant({ dueAt: vencimentoDeTeste(), entryType: 'DEBIT', nature: 'PAYABLE', amount: Number(firstInstallment.amount), description: 'Pagamento de parcela de seguro (teste)', costCenterId: costCenter1.id }),
       tenant.userId,
       transaction
     );

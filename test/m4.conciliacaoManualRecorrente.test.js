@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Caderno M4 §17 "Conciliação manual recorrente -> Alerta gerencial" (§17.7). Defeito achado na
 // captura ao vivo do fechamento do Marco 4 (10/11/2026): checkRecurringManualReconciliationAlert
 // era código morto (sem chamada, sem rota). Agora toda conciliação MANUAL confirmada conta; ao
@@ -67,7 +68,7 @@ after(async () => {
 
 async function pair(amount, extra = {}) {
   return inTenant(async (t) => {
-    const entry = await financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: account.id, description: `§17.7 ${T.uniqueSuffix()}`, ...(extra.entry || {}) }, tenant.userId, t);
+    const entry = await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: account.id, description: `§17.7 ${T.uniqueSuffix()}`, ...(extra.entry || {}) }, tenant.userId, t);
     const tx = await bankTransactionsService.createBankTransaction({ ...base(), bankAccountId: account.id, amount, transactionDate: new Date(), ...(extra.tx || {}) }, tenant.userId, t, extra.origin);
     return { entry, tx };
   });
@@ -97,8 +98,8 @@ test('M4-§17.7 conciliação automática e sugestão confirmada sem escolha nã
 });
 
 test('M4-§17.7 ao atingir o limiar na janela abre UM caso RECURRING_MANUAL_RECONCILIATION (MEDIUM, rótulo em português) em GET /finance/anomaly-cases e no relatório semanal; a próxima conciliação manual não abre outro', async () => {
-  const a = await inTenant((t) => financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, resultCenterId, bankAccountId: account.id, description: `§17.7 grupo A ${T.uniqueSuffix()}` }, tenant.userId, t));
-  const b = await inTenant((t) => financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 15, resultCenterId, bankAccountId: account.id, description: `§17.7 grupo B ${T.uniqueSuffix()}` }, tenant.userId, t));
+  const a = await inTenant((t) => financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, resultCenterId, bankAccountId: account.id, description: `§17.7 grupo A ${T.uniqueSuffix()}` }, tenant.userId, t));
+  const b = await inTenant((t) => financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 15, resultCenterId, bankAccountId: account.id, description: `§17.7 grupo B ${T.uniqueSuffix()}` }, tenant.userId, t));
   const gtx = await inTenant((t) => bankTransactionsService.createBankTransaction({ ...base(), bankAccountId: account.id, amount: 25, transactionDate: new Date() }, tenant.userId, t));
   const group = await http('POST', '/finance/reconciliations/group', token, { financialEntryIds: [a.id, b.id], bankTransactionIds: [gtx.id] });
   assert.equal(group.status, 201, JSON.stringify(group.body));
@@ -106,7 +107,7 @@ test('M4-§17.7 ao atingir o limiar na janela abre UM caso RECURRING_MANUAL_RECO
   assert.equal((await openAlerts()).length, 0);
 
   const e1 = await pair(77);
-  const e2 = await inTenant((t) => financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 77, resultCenterId, bankAccountId: account.id, description: `§17.7 outro ${T.uniqueSuffix()}` }, tenant.userId, t));
+  const e2 = await inTenant((t) => financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 77, resultCenterId, bankAccountId: account.id, description: `§17.7 outro ${T.uniqueSuffix()}` }, tenant.userId, t));
   const choice = await http('POST', `/finance/reconciliation/${e1.tx.id}/confirm`, token, { financialEntryId: e2.id });
   assert.equal(choice.status, 201, JSON.stringify(choice.body));
   assert.equal(await methodOf(e1.tx.id), 'MANUAL_CHOICE');

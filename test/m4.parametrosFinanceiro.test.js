@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Caderno M4 §17 "Conciliação manual recorrente -> Alerta gerencial" (§17.7): o livro pede o alerta e não fixa limiar nem janela, então são parâmetros do
 // administrador (aba "Financeiro" de Configurações), gravados pelo mesmo caminho das outras abas (PUT /settings/:key, settings:update, SETTINGS_SCHEMA com
 // faixa). O teste grava e lê pela API, confere a recusa de valor fora da faixa e de perfil sem a permissão, e prova que o alerta passa a usar o valor gravado.
@@ -43,7 +44,7 @@ async function manualCount() {
 
 async function manualReconciliation(amount) {
   const { entry, tx } = await inTenant(async (t) => ({
-    entry: await financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: account.id, description: `§17.7 parâmetro ${T.uniqueSuffix()}` }, tenant.userId, t),
+    entry: await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: account.id, description: `§17.7 parâmetro ${T.uniqueSuffix()}` }, tenant.userId, t),
     tx: await bankTransactionsService.createBankTransaction({ ...base(), bankAccountId: account.id, amount, transactionDate: new Date() }, tenant.userId, t),
   }));
   const res = await http('POST', '/finance/reconciliations', admin, { financialEntryId: entry.id, bankTransactionId: tx.id });

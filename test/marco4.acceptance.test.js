@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Testes de aceite do Marco 4 (Financeiro) — fechando itens PARCIAIS da matriz M4-01 a M4-28
 // que já tinham implementação real, só faltava prova automatizada.
 
@@ -31,7 +32,7 @@ test('M4-05 updateFinancialEntry bloqueia edição de lançamento SETTLED — le
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const costCenterM405 = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 150, costCenterId: costCenterM405.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 150, costCenterId: costCenterM405.id },
       tenant.userId,
       transaction
     );
@@ -100,7 +101,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
     // Recebimento real do locatário (aluguel), já liquidado — é isso que forma o teto elegível.
     const resultCenterM415 = await createTestResultCenter(tenant, transaction);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `M4-15 aluguel recebido ${suffix}`, resultCenterId: resultCenterM415.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `M4-15 aluguel recebido ${suffix}`, resultCenterId: resultCenterM415.id },
       tenant.userId,
       transaction
     );
@@ -144,7 +145,7 @@ test('M4-15/contrato §12 createOwnerRepasse calcula líquido = min(bruto, teto 
 
     // Tentar repasse acima do teto elegível (sem formalAdjustment) é bloqueado.
     const outroRecebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 200, description: `M4-15 aluguel 2 ${suffix}`, resultCenterId: resultCenterM415.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 200, description: `M4-15 aluguel 2 ${suffix}`, resultCenterId: resultCenterM415.id },
       tenant.userId,
       transaction
     );
@@ -214,7 +215,7 @@ test('FIN-TS-015: repasse gera exatamente UM lançamento a pagar (na aprovação
     );
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `FIN-TS-015 aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `FIN-TS-015 aluguel ${suffix}`, resultCenterId: resultCenter.id },
       tenant.userId,
       transaction
     );

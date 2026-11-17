@@ -274,7 +274,7 @@ async function createLossChargeFinancialEntry(lossCase, person, amount, dueAt, a
       nature: 'RECEIVABLE',
       amount,
       description,
-      dueAt: dueAt || null,
+      dueAt, // obrigatório (DI-BI2-6): conferido em decideLossCase antes de qualquer gravação
       idempotencyKey,
       constructionProjectId: lossCase.projectId || null,
       resultCenterId: resultCenter.id,
@@ -290,7 +290,8 @@ async function createLossChargeFinancialEntry(lossCase, person, amount, dueAt, a
  *   - chargeResponsible: boolean — cobrar o responsável (só com decision APPROVED);
  *   - responsiblePersonId: UUID de people.persons — atribui/troca o responsável na decisão;
  *   - chargeAmount: número > 0 — valor cobrado; default = estimatedCost do caso;
- *   - chargeDueAt: data de vencimento do lançamento a receber (opcional).
+ *   - chargeDueAt: data de vencimento do lançamento a receber — OBRIGATÓRIA quando cobra (segunda leva 16/11/2026, DI-BI2-6:
+ *     conta a receber própria sem vencimento some de "recebíveis 7/30/60" e da inadimplência, Caderno M4 §19).
  */
 async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, transaction, options = {}) {
   if (!['APPROVED', 'REJECTED'].includes(decision)) {
@@ -368,6 +369,10 @@ async function decideLossCase(lossCaseId, groupId, companyId, decision, actor, t
       throw AppError.badRequest('"chargeAmount" precisa ser um número maior que zero.', 'LOSS_CASE_CHARGE_AMOUNT_INVALID');
     }
     chargeAmount = Math.round(chargeAmount * 100) / 100;
+    const due = options.chargeDueAt;
+    if (due === undefined || due === null || (typeof due === 'string' && due.trim() === '')) {
+      throw AppError.unprocessable('Informe o vencimento da cobrança ("chargeDueAt"): a conta a receber do responsável precisa da data de vencimento.', 'LOSS_CASE_CHARGE_DUE_REQUIRED', { field: 'chargeDueAt' });
+    }
   }
 
   // GAP REAL CORRIGIDO (auditoria EST-010, 2026-10-08): recordMovement agora exige que o

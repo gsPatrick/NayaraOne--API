@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Frente 3 — Regras do Financeiro (Marco 4). Caderno §4, §12, §14, §15 + revisão independente
 // 18/10/2026 (itens 4, 5, 12, 13). Tudo contra o Postgres de homologação pelo usuário de runtime
 // (RLS FORCE), dentro de transações que SEMPRE fazem rollback (nada fica gravado).
@@ -90,7 +91,7 @@ async function newFile(transaction, companyId = tenant.companyId) {
 async function newReceivable(transaction, amount, extra = {}) {
   const rc = await createTestResultCenter(tenant, transaction);
   return financialEntriesService.createFinancialEntry(
-    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId: rc.id, description: `F3 receber ${uniqueSuffix()}`, ...extra },
+    { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId: rc.id, description: `F3 receber ${uniqueSuffix()}`, ...extra },
     tenant.userId,
     transaction
   );
@@ -115,7 +116,7 @@ async function settlePayableWithEvidence(transaction, entryId) {
 async function newSettledPayable(transaction, amount) {
   const cc = await createTestCostCenter(tenant, transaction);
   const entry = await financialEntriesService.createFinancialEntry(
-    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId: cc.id, description: `F3 pagar ${uniqueSuffix()}` },
+    { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId: cc.id, description: `F3 pagar ${uniqueSuffix()}` },
     tenant.userId,
     transaction
   );
@@ -526,7 +527,8 @@ test('F3-PC1 cada alteração gera versão append-only; o lançamento usa a clas
     assert.equal(versions[1].effectiveUntil, null);
     assert.equal(versions[1].changeReason, 'Reclassificação');
 
-    const today = await newReceivable(t, 10, { chartOfAccountId: account.id });
+    // Fato de hoje = agora (o vencimento de teste é hoje ao meio-dia, que pode ser antes da reclassificação feita agora).
+    const today = await newReceivable(t, 10, { chartOfAccountId: account.id, factDate: new Date() });
     assert.equal(today.chartOfAccountVersionId, versions[1].id, 'fato de hoje usa a versão vigente hoje');
     const past = await newReceivable(t, 10, { chartOfAccountId: account.id, factDate: pastFact });
     assert.equal(past.chartOfAccountVersionId, versions[0].id, 'fato anterior à reclassificação usa a versão daquela data');
@@ -536,7 +538,7 @@ test('F3-PC1 cada alteração gera versão append-only; o lançamento usa a clas
     versions = await chartService.listAccountVersions(account.id, t);
     assert.equal(versions.length, 3);
     assert.equal(versions[2].isActive, false);
-    await expectCode(() => newReceivable(t, 10, { chartOfAccountId: account.id }), 'FINANCE_CHART_ACCOUNT_INACTIVE');
+    await expectCode(() => newReceivable(t, 10, { chartOfAccountId: account.id, factDate: new Date() }), 'FINANCE_CHART_ACCOUNT_INACTIVE');
     const late = await newReceivable(t, 10, { chartOfAccountId: account.id, factDate: pastFact });
     assert.equal(late.chartOfAccountVersionId, versions[0].id);
 

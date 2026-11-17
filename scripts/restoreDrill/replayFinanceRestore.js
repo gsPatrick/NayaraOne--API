@@ -88,7 +88,7 @@ async function main() {
     console.log('\n--- Replay 3: lançamento com idempotencyKey já existente ---');
     const e0 = await nEntries();
     const dup = await attempt(() => inTenant(A, (t) => financialEntries.createFinancialEntry(
-      W({ entryType: 'DEBIT', nature: 'PAYABLE', amount: '1234.56', description: 'DRILL replay do mesmo pagamento', costCenterId: A.costCenterId, bankAccountId: A.bankAccountId, idempotencyKey: p.idempotencyKey }), A.userId, t
+      W({ dueAt: new Date(), entryType: 'DEBIT', nature: 'PAYABLE', amount: '1234.56', description: 'DRILL replay do mesmo pagamento', costCenterId: A.costCenterId, bankAccountId: A.bankAccountId, idempotencyKey: p.idempotencyKey }), A.userId, t
     )));
     const cols = (await target.query("SELECT column_name FROM information_schema.columns WHERE table_schema = 'finance' AND table_name = 'financial_entries' AND column_name <> 'id' ORDER BY ordinal_position")).rows.map((r) => `"${r.column_name}"`).join(', ');
     const app = new Client({ connectionString: args['target-app-url'] });
@@ -126,7 +126,7 @@ async function main() {
 
     console.log('\n--- Período CLOSED restaurado ---');
     const cp = await attempt(() => inTenant(A, (t) => financialEntries.createFinancialEntry(
-      W({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '10.00', resultCenterId: A.resultCenterId, description: 'DRILL lançamento novo no mês fechado', competenceMonth: A.closedPeriod.referenceMonth }), A.userId, t
+      W({ dueAt: new Date(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '10.00', resultCenterId: A.resultCenterId, description: 'DRILL lançamento novo no mês fechado', competenceMonth: A.closedPeriod.referenceMonth }), A.userId, t
     )));
     const ed = await attempt(() => inTenant(A, (t) => financialEntries.updateFinancialEntry(A.closedPeriod.insideEntryId, { description: 'edição no mês fechado' }, A.userId, t)));
     rec.check('período fechado (destino)', `lançamento novo em ${A.closedPeriod.referenceMonth}: ${cp.error ? cp.error.code : 'ACEITO (errado)'}`, cp.error && cp.error.code === 'FINANCE_PERIOD_CLOSED');

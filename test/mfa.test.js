@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { authenticator } = require('otplib');
@@ -95,6 +96,7 @@ test('MFA-004 ação de alto risco (decideApprovalStep, riskLevel HIGH) sem step
     const costCenterMfa = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         entryType: 'DEBIT',
@@ -133,6 +135,7 @@ test('MFA-005 ação de alto risco com step-up recente é permitida', async () =
     const costCenterMfa = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         entryType: 'DEBIT',
@@ -205,6 +208,7 @@ test('MFA-007 ação de alto risco sem MFA habilitado é bloqueada pedindo habil
     const costCenterMfa = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         entryType: 'DEBIT',

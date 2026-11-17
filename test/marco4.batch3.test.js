@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Testes de aceite do Marco 4 — terceiro lote (M4-03 competência, M4-06 liquidação parcial,
 // M4-13 conciliação N:N, M4-21 antifraude/revisão manual, M4-28 jornada E2E financeira).
 //
@@ -45,6 +46,7 @@ async function createEntry(transaction, overrides = {}) {
   }
   return financialEntriesService.createFinancialEntry(
     {
+      dueAt: vencimentoDeTeste(),
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       entryType: 'DEBIT',
@@ -105,12 +107,27 @@ test('M4-03 competência explícita diferente do mês de vencimento é gravada e
   });
 });
 
-test('M4-03 sem competência informada, deriva do mês de vencimento; sem vencimento, do mês de criação', async () => {
+test('M4-03 sem competência informada, deriva do mês de vencimento; conta própria sem vencimento é recusada (DI-BI2-6); ajuste sem vencimento deriva do mês de criação', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const comDue = await createEntry(transaction, { dueAt: new Date(Date.UTC(2027, 2, 28)) });
     assert.equal(comDue.competenceMonth, '2027-03', 'derivou do vencimento');
 
-    const semDue = await createEntry(transaction, { dueAt: null });
+    // Segunda leva (16/11/2026): a forma antiga (conta a pagar/receber própria sem vencimento, competência do mês de criação) é recusada
+    // com 422 — o Caderno M4 §19 mede contas e recebíveis em 7/30/60 dias e a inadimplência pelo vencimento.
+    for (const nature of ['PAYABLE', 'RECEIVABLE']) {
+      for (const dueAt of [null, undefined, '', '   ']) {
+        await assert.rejects(
+          () => createEntry(transaction, { nature, entryType: nature === 'PAYABLE' ? 'DEBIT' : 'CREDIT', dueAt }),
+          (err) => {
+            assert.equal(err.code, 'FINANCE_ENTRY_DUE_DATE_REQUIRED', `${nature} com dueAt ${JSON.stringify(dueAt)}`);
+            assert.equal(err.statusCode, 422);
+            return true;
+          }
+        );
+      }
+    }
+
+    const semDue = await createEntry(transaction, { nature: 'ADJUSTMENT', entryType: 'CREDIT', dueAt: null });
     const agora = new Date();
     const esperado = `${agora.getUTCFullYear()}-${String(agora.getUTCMonth() + 1).padStart(2, '0')}`;
     assert.equal(semDue.competenceMonth, esperado, 'sem vencimento, derivou do mês de criação');

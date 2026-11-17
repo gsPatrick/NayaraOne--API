@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // M4-D022 seção 8, testes 12, 15 a 19, 22 a 25 (parâmetros do antifraude da DEC-007): cada parâmetro é lido pelo leitor único, o resultado muda quando
 // o valor gravado muda e o valor fora da faixa do catálogo é recusado (422 SETTING_INVALID_VALUE, DI-DEC007-2). O teste 25 é a guarda estática (X45-D097)
 // dos arquivos desta demanda. Também prova a duplicidade do pagamento sem vencimento (DI-DEC007-4). Serviço real, empresa isolada do banco descartável,
@@ -100,15 +101,22 @@ test('m4d022_param_antifraude_duplicidade_janela_dias_muda_comportamento: o igua
 test('dec007b_duplicidade_sem_vencimento_usa_a_competencia_como_data_de_referencia (DI-DEC007-4)', async () => {
   await rollback(async (t) => {
     const acc = await K.account(t);
-    const first = await pay(t, '480.00', { bankAccountId: acc.id, competenceMonth: '2027-02' });
-    assert.equal(first.requiresManualReview, false);
-    const twin = await pay(t, '480.00', { bankAccountId: acc.id, competenceMonth: '2027-02' });
-    assert.deepEqual(await K.casesOf(t, twin.id), ['DUPLICATE_PAYMENT_SUSPECT:HIGH'], 'sem vencimento, mesma competência: duplicidade');
+    // Segunda leva (16/11/2026, DI-BI2-6): conta a pagar própria não nasce mais sem vencimento (422); o lançamento sem vencimento
+    // é o ANTIGO, gravado antes da regra. A duplicidade contra ele continua conferida pela competência.
+    await assert.rejects(pay(t, '480.00', { bankAccountId: acc.id, competenceMonth: '2027-02', dueAt: null }), (err) => err.code === 'FINANCE_ENTRY_DUE_DATE_REQUIRED');
+    const { FinancialEntry } = require('../src/models');
+    await FinancialEntry.create(
+      { ...K.base(), bankAccountId: acc.id, costCenterId, entryType: 'DEBIT', nature: 'PAYABLE', amount: '480.00', description: `DEC-007 antigo sem vencimento ${T.uniqueSuffix()}`, status: 'PENDING', competenceMonth: '2027-02' },
+      { transaction: t }
+    );
+    const twin = await pay(t, '480.00', { bankAccountId: acc.id, dueAt: '2027-02-20T15:00:00.000Z', competenceMonth: '2027-02' });
+    assert.deepEqual(await K.casesOf(t, twin.id), ['DUPLICATE_PAYMENT_SUSPECT:HIGH'], 'com vencimento contra um antigo sem vencimento da mesma competência: duplicidade');
     assert.match(twin.manualReviewReason, /sem vencimento em um deles: vale a competência 2027-02/);
     await assert.rejects(gate.evaluateAndAssertPreparable(twin, t), (err) => err.code === 'FINANCE_DUPLICATE_PAYMENT_SUSPECT');
-    assert.equal((await pay(t, '480.00', { bankAccountId: acc.id, competenceMonth: '2027-03' })).requiresManualReview, false, 'outra competência (pagamento recorrente) não é duplicidade');
-    const withDue = await pay(t, '480.00', { bankAccountId: acc.id, dueAt: '2027-02-20T15:00:00.000Z', competenceMonth: '2027-02' });
-    assert.deepEqual(await K.casesOf(t, withDue.id), ['DUPLICATE_PAYMENT_SUSPECT:HIGH'], 'com vencimento contra um sem vencimento da mesma competência também confere');
+    assert.equal(
+      (await pay(t, '480.00', { bankAccountId: acc.id, dueAt: '2027-03-20T15:00:00.000Z', competenceMonth: '2027-03' })).requiresManualReview, false,
+      'outra competência e outro vencimento (pagamento recorrente) não é duplicidade'
+    );
   });
 });
 
@@ -136,7 +144,7 @@ test('m4d022_param_antifraude_fornecedor_novo_valor_minimo_muda_comportamento: 1
 
 async function manualMatch(t, actor, amount) {
   const acc = await bankAccountsService.createBankAccount({ ...K.base(), bankCode: '104', agency: '0001', accountNumber: `${T.uniqueSuffix()}` }, tenant.userId, t);
-  const entry = await financialEntriesService.createFinancialEntry({ ...K.base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: acc.id, description: `conciliação ${T.uniqueSuffix()}` }, tenant.userId, t);
+  const entry = await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...K.base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: acc.id, description: `conciliação ${T.uniqueSuffix()}` }, tenant.userId, t);
   const tx = await bankTransactionsService.createBankTransaction({ ...K.base(), bankAccountId: acc.id, amount, transactionDate: new Date() }, tenant.userId, t);
   await reconciliationService.matchReconciliation({ ...K.base(), financialEntryId: entry.id, bankTransactionId: tx.id }, actor, t);
   return { acc, entry, tx };
@@ -159,7 +167,7 @@ test('m4d022_param_antifraude_conciliacao_manual_usuario_7d_muda_comportamento: 
 
 async function autoMatch(t, amount) {
   const acc = await bankAccountsService.createBankAccount({ ...K.base(), bankCode: '104', agency: '0001', accountNumber: `${T.uniqueSuffix()}` }, tenant.userId, t);
-  const entry = await financialEntriesService.createFinancialEntry({ ...K.base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: acc.id, description: `auto ${T.uniqueSuffix()}` }, tenant.userId, t);
+  const entry = await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...K.base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: acc.id, description: `auto ${T.uniqueSuffix()}` }, tenant.userId, t);
   const tx = await bankTransactionsService.createBankTransaction({ ...K.base(), bankAccountId: acc.id, amount, transactionDate: new Date() }, tenant.userId, t);
   await Reconciliation.create({ ...K.base(), financialEntryId: entry.id, bankTransactionId: tx.id, matchedAt: new Date(), matchMethod: 'AUTO_EXACT' }, { transaction: t });
 }

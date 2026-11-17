@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // GAP REAL CORRIGIDO (auditoria externa Nayara, 2026-10-07, Marco 7/Procurement): trocar o
 // bankAccountId de um lançamento PENDING via updateFinancialEntry não passava por nenhuma
 // checagem extra — um payable podia ser redirecionado para uma conta diferente, já fora do
@@ -47,6 +48,7 @@ test('FIN-REDIR-01: trocar bankAccountId de um lançamento PENDING já com conta
 
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         bankAccountId: accountA.id,
@@ -111,6 +113,7 @@ test('FIN-REDIR-02: definir bankAccountId pela primeira vez (ainda null) NÃO ex
 
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         costCenterId: costCenter.id,
@@ -138,6 +141,7 @@ test('FIN-REDIR-03: reenviar o MESMO bankAccountId (sem trocar de fato) não exi
 
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         bankAccountId: account.id,

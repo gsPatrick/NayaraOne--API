@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // M4-26 — testes ADVERSARIAIS do módulo Financeiro.
 //
 // Cada teste aqui é uma tentativa GENUÍNA de abuso/ataque contra o financeiro, não um teste de
@@ -44,6 +45,7 @@ async function createEntry(transaction, overrides = {}) {
   }
   return financialEntriesService.createFinancialEntry(
     {
+      dueAt: vencimentoDeTeste(),
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       entryType: 'DEBIT',

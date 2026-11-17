@@ -10,6 +10,9 @@ const { registrarAuditoria } = require('../../../../engines/audit/auditLog.servi
 const entries = require('../../infrastructure/repositories/financial-entry.repository');
 const { CLASSIFICATION_FINAL_NATURES } = require('../../domain/financial-entry');
 const { assertCompetenceOpen, assertPeriodOpenForEntry } = require('./competence-guard');
+const { assertCentersOfCompany } = require('./entry-reference-guards');
+const { assertExcessClassificationComplete } = require('./open-entry-guards');
+const { isDueYearPlausible, DUE_DATE_MIN_YEAR, DUE_DATE_MAX_YEAR } = require('../../domain/financial-entry');
 
 /**
  * listClassificationPendings — pendências de classificação abertas (M4-contrato §10):
@@ -35,6 +38,15 @@ async function listClassificationPendings(transaction, filters = {}) {
       parentEntry: parent ? { id: parent.id, description: parent.description, amount: parent.amount, dueAt: parent.dueAt } : null,
     };
   });
+}
+
+/** Mesma faixa plausível do vencimento da criação (FIX AUD-2026-09-14, domain/financial-entry.js). */
+function assertPlausibleDueDate(dueAt) {
+  const parsed = new Date(dueAt);
+  if (Number.isNaN(parsed.getTime())) throw AppError.badRequest('O vencimento informado não é uma data válida.', 'FINANCE_ENTRY_VALIDATION');
+  if (!isDueYearPlausible(parsed.getUTCFullYear())) {
+    throw AppError.badRequest(`O vencimento tem um ano fora do intervalo plausível (${DUE_DATE_MIN_YEAR} a ${DUE_DATE_MAX_YEAR}).`, 'FINANCE_ENTRY_VALIDATION');
+  }
 }
 
 /**
@@ -63,21 +75,27 @@ async function resolveClassificationPending(id, finalNature, actorUserId, transa
   // herdada — sem aprovação, sem comprovante, sem método de liquidação e sem conferir período.
   // Agora: o período da competência precisa estar aberto; RECEIVABLE/ADJUSTMENT apenas
   // classificam um dinheiro que JÁ entrou (fica SETTLED); PAYABLE vira uma OBRIGAÇÃO a pagar
-  // (PENDING, com centro de custo) que segue o fluxo normal de pagamento (aprovação + banco ou
-  // comprovante) — nunca uma saída de caixa automática.
-  await assertPeriodOpenForEntry(pending.companyId, [pending.competenceMonth, new Date()], transaction);
+  // (PENDING, com centro de custo e vencimento) que segue o fluxo normal de pagamento (aprovação
+  // + banco ou comprovante) — nunca uma saída de caixa automática.
+  // Segunda leva (16/11/2026, DI-BI2-6, M4 §4 e §19): receita exige o centro de resultado ("obrigatório para receita e análise de
+  // margem"); despesa exige o vencimento (sem ele a conta some de "contas 7/30/60"). Centros só da própria empresa (FIN-002).
+  const costCenterId = normalizedNature === 'PAYABLE' && options && options.costCenterId ? options.costCenterId : null;
+  const resultCenterId = normalizedNature === 'RECEIVABLE' && options && options.resultCenterId ? options.resultCenterId : null;
+  const dueAt = normalizedNature === 'PAYABLE' && options ? options.dueAt : undefined;
+  assertExcessClassificationComplete(normalizedNature, { costCenterId, resultCenterId, dueAt });
+  if (dueAt !== undefined) assertPlausibleDueDate(dueAt);
+  await assertCentersOfCompany({ costCenterId, resultCenterId }, pending.companyId, transaction);
+  await assertPeriodOpenForEntry(pending.companyId, [pending.competenceMonth, new Date(), dueAt || null], transaction);
   // C1: classificar muda os números da competência (o excedente passa a contar como receita,
   // despesa ou ajuste) — a competência precisa estar aberta (nem CLOSED nem em REVIEW).
   await assertCompetenceOpen(pending.companyId, pending.competenceMonth, transaction);
-  const costCenterId = options && options.costCenterId ? options.costCenterId : null;
-  if (normalizedNature === 'PAYABLE' && !costCenterId) {
-    throw AppError.badRequest('Classificar como despesa exige o centro de custo.', 'FINANCE_ENTRY_COST_CENTER_REQUIRED');
-  }
   const beforeJson = pending.toJSON();
   pending.nature = normalizedNature;
   if (normalizedNature === 'PAYABLE') {
     pending.costCenterId = costCenterId;
+    pending.dueAt = dueAt; // o excedente nasce sem vencimento: preenchido uma vez, ainda PENDING (migration 20261117010000)
   } else {
+    if (normalizedNature === 'RECEIVABLE') pending.resultCenterId = resultCenterId;
     pending.status = 'SETTLED';
     pending.settledAt = new Date();
   }

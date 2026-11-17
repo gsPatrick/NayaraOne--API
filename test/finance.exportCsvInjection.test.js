@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // R11 (reconferência ao vivo 20/10/2026) — prova a neutralização de fórmulas no CSV de
 // exportação financeira (CSV injection): descrições iniciadas por = + - @ TAB CR saem com
 // apóstrofo; separador ';' e aspas continuam corretos; valor negativo legítimo segue número.
@@ -57,7 +58,7 @@ test('exportFinancialEntries: descrições maliciosas saem prefixadas; colunas e
     const descriptions = [`=1+1 ${tag}`, `+x ${tag}`, `-x ${tag}`, `@x ${tag}`, `\t=x ${tag}`, `\r=x ${tag}`, `ok; "aspas" ${tag}`];
     for (const [i, description] of descriptions.entries()) {
       await financialEntriesService.createFinancialEntry(
-        { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 10 + i, description, costCenterId: cc.id, idempotencyKey: `r11-${tag}-${i}` },
+        { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 10 + i, description, costCenterId: cc.id, idempotencyKey: `r11-${tag}-${i}` },
         tenant.userId, t
       );
     }

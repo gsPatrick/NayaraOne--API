@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Testes que cobrem, ponto a ponto, os itens de evidência pedidos pela cliente na rodada de
 // homologação de 04/09/2026 sobre IPCA/IGPM (versão de regra), Clicksign/ZapSign (consulta de
 // status e cancelamento) e MFA (bloqueio por tentativas falhas, sinalização de novo
@@ -397,7 +398,7 @@ test('TEC-09 duas liquidações simultâneas do mesmo lançamento: só uma tem s
     const resultCenter = await createTestResultCenter(tenantCtx, t);
     resultCenterId = resultCenter.id;
     return financialEntriesService.createFinancialEntry(
-      { groupId: tenantCtx.groupId, companyId: tenantCtx.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: 'TEC-09 concorrência (teste automatizado)', resultCenterId },
+      { dueAt: vencimentoDeTeste(), groupId: tenantCtx.groupId, companyId: tenantCtx.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: 'TEC-09 concorrência (teste automatizado)', resultCenterId },
       tenantCtx.userId,
       t
     );
