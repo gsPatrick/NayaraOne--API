@@ -16,6 +16,7 @@ const projectStagesService = require('../src/features/construction/projectStages
 const projectTypesService = require('../src/features/construction/projectTypes.service');
 const templatesService = require('../src/features/construction/checklistTemplates.service');
 const qualityService = require('../src/features/construction/qualityChecklist.service');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 before(async () => {
@@ -44,8 +45,8 @@ test('M6-12/M6-86: obra do tipo recebe o checklist da etapa e da obra; outro tip
     const doTipo = await QualityChecklistItem.findAll({ where: { projectId: obra.id }, transaction: t });
     assert.deepEqual(doTipo.map((i) => i.item), ['Limpeza final da obra'], 'sem etapa ainda: só o item da obra');
 
-    const fund = await projectStagesService.createProjectStage(obra.id, W(tenant, { name: 'Fundação', stageCode: 'fund', responsibleUserId: tenant.userId }), tenant.userId, t);
-    await projectStagesService.createProjectStage(obra.id, W(tenant, { name: 'Pintura', stageCode: 'PINT' }), tenant.userId, t);
+    const fund = await projectStagesService.createProjectStage(obra.id, W(tenant, { endsAt: prazoEtapaPadrao(), name: 'Fundação', stageCode: 'fund', responsibleUserId: tenant.userId }), tenant.userId, t);
+    await projectStagesService.createProjectStage(obra.id, W(tenant, { endsAt: prazoEtapaPadrao(), name: 'Pintura', stageCode: 'PINT' }), tenant.userId, t);
     const itens = await QualityChecklistItem.findAll({ where: { projectId: obra.id }, order: [['item', 'ASC']], transaction: t });
     assert.deepEqual(itens.map((i) => i.item), ['Cura do concreto', 'Limpeza final da obra', 'Prumo e nível das sapatas']);
     assert.ok(itens.filter((i) => i.item !== 'Limpeza final da obra').every((i) => i.projectStageId === fund.id && i.checklistTemplateId));
@@ -61,7 +62,7 @@ test('M6-12/M6-86: falha de item do checklist abre não conformidade com a sever
     const s = H.uniqueSuffix();
     const tipo = await tipoComChecklist(t, `T${s}`.slice(0, 40));
     const obra = await projectsService.createProject(W(tenant, { name: `Obra ${s}`, projectTypeId: tipo.id }), tenant.userId, t);
-    await projectStagesService.createProjectStage(obra.id, W(tenant, { name: 'Fundação', stageCode: 'FUND' }), tenant.userId, t);
+    await projectStagesService.createProjectStage(obra.id, W(tenant, { endsAt: prazoEtapaPadrao(), name: 'Fundação', stageCode: 'FUND' }), tenant.userId, t);
     const prumo = await QualityChecklistItem.findOne({ where: { projectId: obra.id, item: 'Prumo e nível das sapatas' }, transaction: t });
     await qualityService.checkQualityItem(prumo.id, { status: 'NOT_OK', notes: 'fora de prumo', evidenceFileIds: await evidenceIds(tenant, t) }, tenant.userId, t);
     const nc = await Nonconformity.findOne({ where: { projectId: obra.id }, transaction: t });
@@ -76,7 +77,7 @@ test('M6-12: tipo de obra novo em obra existente gera o checklist; tipo de outra
     const s = H.uniqueSuffix();
     const tipo = await tipoComChecklist(t, `X${s}`.slice(0, 40));
     const obra = await projectsService.createProject(W(tenant, { name: `Obra ${s}` }), tenant.userId, t);
-    await projectStagesService.createProjectStage(obra.id, W(tenant, { name: 'Fundação', stageCode: 'FUND' }), tenant.userId, t);
+    await projectStagesService.createProjectStage(obra.id, W(tenant, { endsAt: prazoEtapaPadrao(), name: 'Fundação', stageCode: 'FUND' }), tenant.userId, t);
     assert.equal(await QualityChecklistItem.count({ where: { projectId: obra.id }, transaction: t }), 0);
     await projectsService.updateProject(obra.id, { projectTypeId: tipo.id }, tenant.userId, t);
     assert.equal(await QualityChecklistItem.count({ where: { projectId: obra.id }, transaction: t }), 3);
@@ -100,7 +101,7 @@ test('M6-19/M6-81: etapa guarda o responsável (membro ativo da empresa) e não 
     const estranho = await inOtherCompany(tenant, t, (other) => createMember(tenant, t, { companyId: other.id }));
     await assert.rejects(projectStagesService.updateProjectStage(etapa.id, { responsibleUserId: estranho.id }, tenant.userId, t), { code: 'CONSTRUCTION_REFERENCE_NOT_IN_COMPANY' });
     const inativo = await createMember(tenant, t, { status: 'INACTIVE' });
-    await assert.rejects(projectStagesService.createProjectStage(obra.id, W(tenant, { name: 'x', responsibleUserId: inativo.id }), tenant.userId, t), { code: 'CONSTRUCTION_REFERENCE_NOT_IN_COMPANY' });
+    await assert.rejects(projectStagesService.createProjectStage(obra.id, W(tenant, { endsAt: prazoEtapaPadrao(), name: 'x', responsibleUserId: inativo.id }), tenant.userId, t), { code: 'CONSTRUCTION_REFERENCE_NOT_IN_COMPANY' });
 
     const membro = await createMember(tenant, t);
     await projectStagesService.updateProjectStage(etapa.id, { responsibleUserId: membro.id }, tenant.userId, t);

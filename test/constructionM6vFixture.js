@@ -12,6 +12,7 @@ const budgetLinesService = require('../src/features/construction/budgetLines.ser
 const marginRulesService = require('../src/features/construction/marginRules.service');
 const { upsertApprovalThreshold } = require('../src/features/construction/lossRecords.service');
 const { evidenceIds } = require('./constructionEvidenceFixture');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 const W = (tenant, fields = {}) => ({ groupId: tenant.groupId, companyId: tenant.companyId, ...fields });
 
@@ -55,7 +56,7 @@ async function projectWithApprovedBudget(tenant, transaction, { baseline = 80000
   const approved = await budgetsService.approveBudget(budget.id, tenant.userId, transaction);
   const stage = await projectStagesService.createProjectStage(
     project.id,
-    W(tenant, { name: 'Fundação', stageCode: stageCode || `FUN-${s}`, sequence: 1, plannedPct: 100, plannedCost: baseline, responsibleUserId: responsibleUserId || tenant.userId }),
+    W(tenant, { endsAt: prazoEtapaPadrao(), name: 'Fundação', stageCode: stageCode || `FUN-${s}`, sequence: 1, plannedPct: 100, plannedCost: baseline, responsibleUserId: responsibleUserId || tenant.userId }),
     tenant.userId,
     transaction
   );

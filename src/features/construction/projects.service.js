@@ -26,6 +26,7 @@ const { publishProjectScheduleChanged, computeProjectWarrantyEndsAt } = require(
 const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
 const { assertProjectReferences } = require('./projectReferences');
 const { applyProjectChecklist } = require('./checklistTemplates.service');
+const { assertPlannedEndKept } = require('./scheduleRequired');
 
 // M6-18 (fechado 30/09/2026, rodada final) — máquina de estados EXATA da fonte (Anexo I, seção
 // "4. Estados da obra"): "PLANNED → BUDGETED → READY → ACTIVE → FINAL_INSPECTION → DELIVERED →
@@ -295,6 +296,8 @@ async function updateProject(id, payload, actorUserId, transaction) {
     project.budgetAmount = budgetAmount;
   }
   if (startsAt !== undefined) project.startsAt = startsAt;
+  // Item 4 da segunda leva (16/11/2026): depois de READY -> ACTIVE a previsão de término não some.
+  assertPlannedEndKept(project, endsAtPlanned);
   if (endsAtPlanned !== undefined) project.endsAtPlanned = endsAtPlanned;
   if (propertyId !== undefined) project.propertyId = propertyId;
   if (unitId !== undefined) project.unitId = unitId;

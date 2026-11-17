@@ -43,6 +43,7 @@ const stageMeasurementsService = require('../src/features/construction/stageMeas
 const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 let baseUrl;
@@ -172,7 +173,7 @@ async function createTestProjectAndStage() {
     await sequelize.query('SET LOCAL app.user_id = :userId', { replacements: { userId: tenant.userId }, transaction });
     return projectStagesService.createProjectStage(
       project.id,
-      { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Etapa HTTP QA' },
+      { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Etapa HTTP QA' },
       tenant.userId,
       transaction
     );

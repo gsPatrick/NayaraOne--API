@@ -13,6 +13,7 @@ const peopleService = require('../src/features/people/people.service');
 const filesService = require('../src/features/files/files.service');
 const { DailyReport } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 
@@ -37,7 +38,7 @@ async function createTestProject(transaction, suffix) {
 }
 
 async function createTestStage(projectId, transaction, name) {
-  return projectStagesService.createProjectStage(projectId, withTenant({ name }), tenant.userId, transaction);
+  return projectStagesService.createProjectStage(projectId, withTenant({ endsAt: prazoEtapaPadrao(), name }), tenant.userId, transaction);
 }
 
 // M6-56 — dependência cíclica entre etapas tem que ser bloqueada na criação, mesmo quando o

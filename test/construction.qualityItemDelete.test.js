@@ -16,6 +16,7 @@ const projectsService = require('../src/features/construction/projects.service')
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const qualityChecklistService = require('../src/features/construction/qualityChecklist.service');
 const { QualityChecklistItem } = require('../src/models');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 let otherCompanyId;
@@ -67,7 +68,7 @@ test('createQualityItem recusa projectStageId que pertence a outra obra', async 
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const projectA = await projectsService.createProject(withTenant({ name: `HOMO QA Obra A cross-stage ${uniqueSuffix()}` }), tenant.userId, transaction);
     const projectB = await projectsService.createProject(withTenant({ name: `HOMO QA Obra B cross-stage ${uniqueSuffix()}` }), tenant.userId, transaction);
-    const stageOfB = await projectStagesService.createProjectStage(projectB.id, withTenant({ name: 'Etapa de B' }), tenant.userId, transaction);
+    const stageOfB = await projectStagesService.createProjectStage(projectB.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Etapa de B' }), tenant.userId, transaction);
 
     await assert.rejects(
       () => qualityChecklistService.createQualityItem(projectA.id, withTenant({ item: 'Verificar prumo', projectStageId: stageOfB.id }), tenant.userId, transaction),

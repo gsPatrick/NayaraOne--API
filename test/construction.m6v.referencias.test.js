@@ -20,6 +20,7 @@ const financialEntriesService = require('../src/modules/finance/application/serv
 const itemsService = require('../src/features/inventory/items.service');
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 before(async () => {
@@ -126,7 +127,7 @@ test('varredura: etapa de outra obra, responsável/aceite fora da empresa e quem
   await H.withRollbackTenantTransaction(tenant, async (t) => {
     const obraA = await novaObra(t);
     const obraB = await novaObra(t);
-    const etapaB = await projectStagesService.createProjectStage(obraB.id, W(tenant, { name: 'B1' }), tenant.userId, t);
+    const etapaB = await projectStagesService.createProjectStage(obraB.id, W(tenant, { endsAt: prazoEtapaPadrao(), name: 'B1' }), tenant.userId, t);
     const foto = await evidenceIds(tenant, t);
     await assert.rejects(nonconformitiesService.createNonconformity(obraA.id, W(tenant, { projectStageId: etapaB.id, description: 'x', responsibleUserId: tenant.userId, beforeEvidenceFileIds: foto }), tenant.userId, t), REF);
     const estranho = await inOtherCompany(tenant, t, (other) => createMember(tenant, t, { companyId: other.id }));

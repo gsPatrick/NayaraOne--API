@@ -16,6 +16,7 @@ const { sequelize, getSeedTenant, uniqueSuffix, prepareManualSettlement } = requ
 const { evidenceIds } = require('../constructionEvidenceFixture');
 
 const svc = (nome) => require(path.join(__dirname, '..', '..', 'src', 'features', 'construction', `${nome}.service`));
+const { prazoEtapaPadrao } = require('./prazoEtapaPadrao');
 const ARQUIVO_PARAMETROS = path.join(__dirname, '..', '..', 'scripts', 'ci-obras', 'parametros.json');
 
 const podeRodar = Boolean(process.env.DISPOSABLE_DB || process.env.CI);
@@ -64,7 +65,7 @@ const W = (tenant, campos) => ({ groupId: tenant.groupId, companyId: tenant.comp
 async function obraComEtapa(tenant, t, rotulo, extras = {}) {
   const s = uniqueSuffix();
   const project = await svc('projects').createProject(W(tenant, { name: `O9 ${rotulo} ${s}`, budgetAmount: 100000, ...extras }), tenant.userId, t);
-  const stage = await svc('projectStages').createProjectStage(project.id, W(tenant, { name: `Etapa ${rotulo}`, stageCode: `O9-${s}`, sequence: 1, plannedPct: 100, plannedCost: 50000 }), tenant.userId, t);
+  const stage = await svc('projectStages').createProjectStage(project.id, W(tenant, { endsAt: prazoEtapaPadrao(), name: `Etapa ${rotulo}`, stageCode: `O9-${s}`, sequence: 1, plannedPct: 100, plannedCost: 50000 }), tenant.userId, t);
   return { project, stage };
 }
 

@@ -10,6 +10,7 @@ const stageDependenciesService = require('../src/features/construction/stageDepe
 const stageMeasurementsService = require('../src/features/construction/stageMeasurements.service');
 const projectHealthService = require('../src/features/construction/projectHealth.service');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 
@@ -34,7 +35,7 @@ async function setupProjectAndStage(transaction, suffix) {
   );
   const stage = await projectStagesService.createProjectStage(
     project.id,
-    { groupId: tenant.groupId, companyId: tenant.companyId, name: `Etapa ${suffix}`, sequence: 1, plannedPct: 50 },
+    { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: `Etapa ${suffix}`, sequence: 1, plannedPct: 50 },
     tenant.userId,
     transaction
   );
@@ -472,12 +473,12 @@ test('M6-NOVO-8: createProjectStage recusa sequence duplicado na mesma obra; sem
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await projectsService.createProject({ groupId: tenant.groupId, companyId: tenant.companyId, name: `Obra sequence ${suffix}` }, tenant.userId, transaction);
 
-    const stage1 = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' }, tenant.userId, transaction);
-    const stage2 = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Estrutura' }, tenant.userId, transaction);
+    const stage1 = await projectStagesService.createProjectStage(project.id, { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' }, tenant.userId, transaction);
+    const stage2 = await projectStagesService.createProjectStage(project.id, { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Estrutura' }, tenant.userId, transaction);
     assert.notEqual(stage1.sequence, stage2.sequence, 'sem informar sequence, cada etapa nova deve auto-incrementar, não colidir');
 
     await assert.rejects(
-      () => projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Alvenaria', sequence: stage1.sequence }, tenant.userId, transaction),
+      () => projectStagesService.createProjectStage(project.id, { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Alvenaria', sequence: stage1.sequence }, tenant.userId, transaction),
       (err) => {
         assert.ok(err instanceof AppError);
         assert.equal(err.code, 'PROJECT_STAGE_SEQUENCE_DUPLICATE');
@@ -494,8 +495,8 @@ test('M6-NOVO-9: aprovar medição de 100% NÃO completa a etapa automaticamente
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await projectsService.createProject({ groupId: tenant.groupId, companyId: tenant.companyId, name: `Obra predecessora ${suffix}` }, tenant.userId, transaction);
-    const stageA = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' }, tenant.userId, transaction);
-    const stageB = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Estrutura' }, tenant.userId, transaction);
+    const stageA = await projectStagesService.createProjectStage(project.id, { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' }, tenant.userId, transaction);
+    const stageB = await projectStagesService.createProjectStage(project.id, { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Estrutura' }, tenant.userId, transaction);
     await stageDependenciesService.createStageDependency(stageB.id, { groupId: tenant.groupId, companyId: tenant.companyId, dependsOnStageId: stageA.id }, tenant.userId, transaction);
     assert.equal(stageA.status, 'PENDING');
 
@@ -559,7 +560,7 @@ test('M6-TAB0701: iniciar etapa (PENDING -> IN_PROGRESS) exige stageCode/planned
     const { project } = await setupProjectAndStage(transaction, suffix);
     const stage = await projectStagesService.createProjectStage(
       project.id,
-      { groupId: tenant.groupId, companyId: tenant.companyId, name: `Etapa sem dados ${suffix}`, sequence: 2 },
+      { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: `Etapa sem dados ${suffix}`, sequence: 2 },
       tenant.userId,
       transaction
     );

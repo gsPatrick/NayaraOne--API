@@ -54,6 +54,7 @@ const {
   User,
 } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 let baseUrl;
@@ -114,7 +115,7 @@ async function warehouse(t) {
 }
 async function obra(t) {
   const project = await projectsService.createProject(withTenant({ name: `HOMO QA rev20 Obra ${uniqueSuffix()}` }), tenant.userId, t);
-  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Etapa' }), tenant.userId, t);
+  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Etapa' }), tenant.userId, t);
   const site = await itemsService.createLocation(withTenant({ name: `HOMO QA rev20 Canteiro ${uniqueSuffix()}`, locationType: 'PROJECT_SITE', projectId: project.id }), tenant.userId, t);
   return { project, stage, site };
 }

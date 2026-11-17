@@ -19,6 +19,7 @@ const materialRequestsService = require('../src/features/construction/materialRe
 const lossRecordsService = require('../src/features/construction/lossRecords.service');
 const projectHealthService = require('../src/features/construction/projectHealth.service');
 const movements = require('../src/features/inventory/movements.service');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 before(async () => {
@@ -32,7 +33,7 @@ const W = (f) => ({ groupId: tenant.groupId, companyId: tenant.companyId, ...f }
 async function canteiro(t, { unitCost = 10, stock = 100 } = {}) {
   const s = uniqueSuffix();
   const project = await projectsService.createProject(W({ name: `QA M6 Canteiro ${s}`, budgetAmount: 10000 }), tenant.userId, t);
-  const stage = await projectStagesService.createProjectStage(project.id, W({ name: 'Alvenaria', stageCode: `ALV-${s}`, sequence: 1, plannedPct: 100, plannedCost: 5000 }), tenant.userId, t);
+  const stage = await projectStagesService.createProjectStage(project.id, W({ endsAt: prazoEtapaPadrao(), name: 'Alvenaria', stageCode: `ALV-${s}`, sequence: 1, plannedPct: 100, plannedCost: 5000 }), tenant.userId, t);
   const local = await InventoryLocation.create({ ...W({}), name: `QA M6 Almox ${s}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
   const item = await InventoryItem.create(
     { ...W({}), sku: `QA-M6-CT-${s}`, name: `QA M6 Bloco ${s}`, unitOfMeasure: 'UN', itemType: 'CONSUMABLE', averageCost: unitCost, createdBy: tenant.userId, updatedBy: tenant.userId },

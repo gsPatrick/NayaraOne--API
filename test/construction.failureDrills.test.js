@@ -38,6 +38,7 @@ const budgetsService = require('../src/features/construction/budgets.service');
 const budgetLinesService = require('../src/features/construction/budgetLines.service');
 const marginRulesService = require('../src/features/construction/marginRules.service');
 const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 
@@ -94,7 +95,7 @@ async function setupProjectAndStage(transaction, suffix) {
   );
   const stage = await projectStagesService.createProjectStage(
     project.id,
-    { groupId: tenant.groupId, companyId: tenant.companyId, name: `Etapa ${suffix}`, sequence: 1, plannedPct: 50 },
+    { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: `Etapa ${suffix}`, sequence: 1, plannedPct: 50 },
     tenant.userId,
     transaction
   );

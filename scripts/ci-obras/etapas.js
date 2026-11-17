@@ -29,7 +29,7 @@ const ETAPAS = [
   {
     nome: 'dependency tests',
     banco: true,
-    comandos: [['node', '--test', '--test-concurrency=1', '--test-name-pattern', 'M6-56', 'test/construction.dailyReports.test.js'], NODE_TEST('test/construction.projectDelay.test.js')],
+    comandos: [['node', '--test', '--test-concurrency=1', '--test-name-pattern', 'M6-56', 'test/construction.dailyReports.test.js'], NODE_TEST('test/construction.projectDelay.test.js', 'test/construction.prazosObrigatorios.test.js')],
   },
   { nome: 'daily-log tests', banco: true, comandos: [NODE_TEST('test/construction.dailyReports.test.js', 'test/construction.missingDailyReport.test.js', 'test/construction.evidenceReuse.test.js', 'test/construction.m6v.diarioAusente.test.js')] },
   { nome: 'measurement idempotency', banco: true, comandos: [NODE_TEST('test/construction.measurements.test.js')] },
