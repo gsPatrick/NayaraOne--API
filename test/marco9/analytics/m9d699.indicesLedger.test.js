@@ -1,14 +1,14 @@
 'use strict';
 
 // M9-D699 (carga em escala cheia, 16/11/2026) — as consultas do detalhe dos indicadores financeiros usam os índices de leitura do BI em
-// finance.financial_entries (migration 20261116230000) em vez de varrer o ledger inteiro. Massa da carga numa empresa (20 mil lançamentos),
+// finance.financial_entries (migration 20261116235000) em vez de varrer o ledger inteiro. Massa da carga numa empresa (20 mil lançamentos),
 // com estatística do planejador; o plano das consultas montadas pelo mesmo `buildWhere` da origem tem de passar pelo índice.
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const { seedLoad, cleanupLoad, connect } = require('../../../scripts/analytics/seedLoad');
 const { buildWhere } = require('../../../src/features/analytics/metrics/sourceRefs.query');
 const { getSourceSpec } = require('../../../src/features/analytics/metrics/sourceRefs.spec');
-const { INDICES } = require('../../../src/modules/finance/infrastructure/db/migrations/20261116230000-finance-indices-leitura-do-bi');
+const { INDICES } = require('../../../src/modules/finance/infrastructure/db/migrations/20261116235000-finance-indices-leitura-do-bi');
 require('../../../src/features/analytics');
 const { sequelize } = require('../../testHelpers');
 
