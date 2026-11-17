@@ -91,6 +91,8 @@ test('m9d708 etapa 14 da esteira lê a tabela real: aceita passa, pendente repro
   const lab = exec('LAB');
   assert.equal(lab.status, 0, lab.stdout + lab.stderr);
   assert.match(lab.stdout, /fin\.third_party_cash/);
+  // LAB passa sem o aceite, mas registra a pendência adiada para o Marco 10 (decisão da cliente de 16/11/2026), sem dizer que houve aceite
+  assert.match(lab.stdout, /^REGISTRO: aceite dos owners: pendente para o Marco 10 \(decisão da cliente de 16\/11\/2026\);.*a liberação para PRODUÇÃO continua exigindo o aceite$/m);
   const file = await e708.evidenceFile(env, env.cX);
   await cli(runReconcile, [`--metric=fin.third_party_cash`, `--company=${env.cX.companyId}`]);
   await cli(runAccept, [`--metric=fin.third_party_cash`, `--company=${env.cX.companyId}`, `--user=${env.ownerUserId}`, `--decisao=ACEITAR`, `--evidencia=${file}`]);
