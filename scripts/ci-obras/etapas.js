@@ -38,7 +38,7 @@ const ETAPAS = [
   {
     nome: 'quality gate',
     banco: true,
-    comandos: [NODE_TEST('test/construction.nonconformities.test.js', 'test/construction.qualityItemDelete.test.js', 'test/construction.delivery.test.js', 'test/construction.evidenceFiles.test.js', 'test/construction.m6v.checklistEtapa.test.js')],
+    comandos: [NODE_TEST('test/construction.nonconformities.test.js', 'test/construction.ncCausaNoFechamento.test.js', 'test/construction.qualityItemDelete.test.js', 'test/construction.delivery.test.js', 'test/construction.evidenceFiles.test.js', 'test/construction.m6v.checklistEtapa.test.js')],
   },
   { nome: 'warranty SLA', banco: true, comandos: [NODE_TEST('test/construction.warranty.test.js', 'test/construction.slaRules.test.js', 'test/construction.closedCaseRequirements.test.js')] },
   {
