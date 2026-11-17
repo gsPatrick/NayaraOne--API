@@ -143,8 +143,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
     await assert.rejects(
       () =>
         financialEntriesService.createFinancialEntry(
-          // Fato de agora (depois da desativação): o vencimento de teste é hoje ao meio-dia, que pode ser antes da desativação feita agora.
-          { dueAt: vencimentoDeTeste(), factDate: new Date(), ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
+          { dueAt: vencimentoDeTeste(), ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
           tenant.userId,
           transaction
         ),

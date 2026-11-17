@@ -527,8 +527,8 @@ test('F3-PC1 cada alteração gera versão append-only; o lançamento usa a clas
     assert.equal(versions[1].effectiveUntil, null);
     assert.equal(versions[1].changeReason, 'Reclassificação');
 
-    // Fato de hoje = agora (o vencimento de teste é hoje ao meio-dia, que pode ser antes da reclassificação feita agora).
-    const today = await newReceivable(t, 10, { chartOfAccountId: account.id, factDate: new Date() });
+    // Fato de hoje (vencimento hoje ao meio-dia): vale a classificação em vigor no DIA, mesmo feita depois do meio-dia (M4 §4, dia de São Paulo).
+    const today = await newReceivable(t, 10, { chartOfAccountId: account.id });
     assert.equal(today.chartOfAccountVersionId, versions[1].id, 'fato de hoje usa a versão vigente hoje');
     const past = await newReceivable(t, 10, { chartOfAccountId: account.id, factDate: pastFact });
     assert.equal(past.chartOfAccountVersionId, versions[0].id, 'fato anterior à reclassificação usa a versão daquela data');
@@ -538,7 +538,7 @@ test('F3-PC1 cada alteração gera versão append-only; o lançamento usa a clas
     versions = await chartService.listAccountVersions(account.id, t);
     assert.equal(versions.length, 3);
     assert.equal(versions[2].isActive, false);
-    await expectCode(() => newReceivable(t, 10, { chartOfAccountId: account.id, factDate: new Date() }), 'FINANCE_CHART_ACCOUNT_INACTIVE');
+    await expectCode(() => newReceivable(t, 10, { chartOfAccountId: account.id }), 'FINANCE_CHART_ACCOUNT_INACTIVE');
     const late = await newReceivable(t, 10, { chartOfAccountId: account.id, factDate: pastFact });
     assert.equal(late.chartOfAccountVersionId, versions[0].id);
 
