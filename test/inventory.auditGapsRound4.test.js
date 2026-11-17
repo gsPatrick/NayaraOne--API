@@ -68,7 +68,7 @@ test('Gap 1 (EST-TS-08): recebimento com invoiceNumber sem fingerprint é aceito
     const item = await createItem(transaction);
     const invoiceNumber = `NF-${uniqueSuffix()}`;
     const first = await receiptsService.createReceipt(
-      withTenant({ destinationLocationId: location.id, invoiceNumber, items: [{ inventoryItemId: item.id, quantity: 5 }] }),
+      withTenant({ destinationLocationId: location.id, invoiceNumber, items: [{ inventoryItemId: item.id, quantity: 5, unitCost: 10 }] }),
       tenant.userId,
       transaction
     );
@@ -76,7 +76,7 @@ test('Gap 1 (EST-TS-08): recebimento com invoiceNumber sem fingerprint é aceito
     await assert.rejects(
       () =>
         receiptsService.createReceipt(
-          withTenant({ destinationLocationId: location.id, invoiceNumber: invoiceNumber.toLowerCase(), items: [{ inventoryItemId: item.id, quantity: 5 }] }),
+          withTenant({ destinationLocationId: location.id, invoiceNumber: invoiceNumber.toLowerCase(), items: [{ inventoryItemId: item.id, quantity: 5, unitCost: 10 }] }),
           tenant.userId,
           transaction
         ),
@@ -95,7 +95,7 @@ test('Gap 1 (EST-TS-08): recebimento com supplierPersonId mas sem invoiceFingerp
           withTenant({
             destinationLocationId: location.id,
             supplierPersonId: '00000000-0000-4000-8000-000000000001',
-            items: [{ inventoryItemId: item.id, quantity: 5 }],
+            items: [{ inventoryItemId: item.id, quantity: 5, unitCost: 10 }],
           }),
           tenant.userId,
           transaction
@@ -110,7 +110,7 @@ test('Gap 1 (EST-TS-08): recebimento manual sem NF (sem invoiceNumber/supplierPe
     const location = await createLocation(transaction);
     const item = await createItem(transaction);
     const receipt = await receiptsService.createReceipt(
-      withTenant({ destinationLocationId: location.id, items: [{ inventoryItemId: item.id, quantity: 3 }] }),
+      withTenant({ destinationLocationId: location.id, items: [{ inventoryItemId: item.id, quantity: 3, unitCost: 10 }] }),
       tenant.userId,
       transaction
     );
@@ -129,7 +129,7 @@ test('Gap 1 (EST-TS-08): recebimento com invoiceNumber E invoiceFingerprint cont
         destinationLocationId: location.id,
         invoiceNumber: `NF-${uniqueSuffix()}`,
         invoiceFingerprint: fingerprint,
-        items: [{ inventoryItemId: item.id, quantity: 7 }],
+        items: [{ inventoryItemId: item.id, quantity: 7, unitCost: 10 }],
       }),
       tenant.userId,
       transaction
@@ -145,7 +145,7 @@ test('Gap 1 (EST-TS-08): recebimento com invoiceNumber E invoiceFingerprint cont
             destinationLocationId: location.id,
             invoiceNumber: `NF-${uniqueSuffix()}`,
             invoiceFingerprint: fingerprint,
-            items: [{ inventoryItemId: item.id, quantity: 1 }],
+            items: [{ inventoryItemId: item.id, quantity: 1, unitCost: 10 }],
           }),
           tenant.userId,
           transaction

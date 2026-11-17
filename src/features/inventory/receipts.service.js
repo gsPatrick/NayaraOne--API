@@ -22,6 +22,17 @@ const { publishReceiptCompleted } = require('./inventoryEvents.service');
 // duplicado (mesmo invoiceFingerprint) não gera entrada duplicada.
 const STATUSES = ['DRAFT', 'REVIEWED', 'COMPLETED'];
 
+function lineUnitCostMissing(line) {
+  return line.unitCost == null || (typeof line.unitCost === 'string' && line.unitCost.trim() === '');
+}
+
+function unitCostRequiredError() {
+  return AppError.unprocessable(
+    'Cada item do recebimento precisa do custo unitário (maior ou igual a zero): a entrada confirmada atualiza saldo e custo.',
+    'INVENTORY_RECEIPT_UNIT_COST_REQUIRED'
+  );
+}
+
 async function createReceipt(payload, actorUserId, transaction) {
   const { groupId, companyId, destinationLocationId, supplierPersonId, invoiceNumber, invoiceFingerprint, invoiceFileId, notes, items } = payload;
 
@@ -39,7 +50,13 @@ async function createReceipt(payload, actorUserId, transaction) {
     // validado — um valor negativo corrompe o cálculo de averageCost ponderado abaixo, afetando
     // toda valoração futura do item (diferente do fluxo PO-driven, que já valida unitPrice>=0 na
     // origem — este endpoint de recebimento direto de inventário não passa por lá).
-    if (line.unitCost != null && (!Number.isFinite(Number(line.unitCost)) || Number(line.unitCost) < 0)) {
+    // Resposta de 16/11/2026, item 10 (Lote 6): M7:82, "Entrada confirmada atualiza saldo e
+    // custo". Linha sem custo entrava no saldo sem nunca formar o custo médio do item (o único
+    // lugar que grava averageCost é a confirmação abaixo, EST-011). Toda linha exige custo
+    // unitário >= 0 aqui, na criação, porque as linhas não são editáveis depois (não há rota de
+    // edição); a confirmação repete a trava para recebimentos antigos que nasceram sem custo.
+    if (lineUnitCostMissing(line)) throw unitCostRequiredError();
+    if (!Number.isFinite(Number(line.unitCost)) || Number(line.unitCost) < 0) {
       throw AppError.badRequest('"unitCost" do item deve ser um número maior ou igual a zero.', 'INVENTORY_RECEIPT_VALIDATION');
     }
   }
@@ -123,7 +140,7 @@ async function createReceipt(payload, actorUserId, transaction) {
         receiptId: receipt.id,
         inventoryItemId: line.inventoryItemId,
         quantity: line.quantity,
-        unitCost: line.unitCost != null ? line.unitCost : null,
+        unitCost: line.unitCost,
       },
       { transaction }
     );
@@ -133,7 +150,7 @@ async function createReceipt(payload, actorUserId, transaction) {
     { groupId, companyId, actorUserId, action: 'INVENTORY_RECEIPT_CREATED', entityType: 'InventoryReceipt', entityId: receipt.id,
       afterJson: {
         ...receipt.toJSON(),
-        items: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity, unitCost: l.unitCost != null ? l.unitCost : null })),
+        items: items.map((l) => ({ inventoryItemId: l.inventoryItemId, quantity: l.quantity, unitCost: l.unitCost })),
       },
       reason: 'Recebimento criado (DRAFT).' },
     transaction
@@ -192,6 +209,9 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction,
     throw AppError.badRequest(`Só é possível confirmar um recebimento em REVIEWED (atual: ${receipt.status}).`, 'INVENTORY_RECEIPT_INVALID_TRANSITION');
   }
   const items = await InventoryReceiptItem.findAll({ where: { receiptId: receipt.id, groupId, companyId }, transaction });
+  // M7:82: recebimento criado antes da trava da criação, com linha sem custo, não confirma
+  // (daria entrada no saldo sem custo médio). Checado antes de qualquer gravação.
+  if (items.some(lineUnitCostMissing)) throw unitCostRequiredError();
 
   // EST-TS-08 (segunda barreira): mesmo se dois agentes tentarem confirmar o mesmo invoiceFingerprint
   // concorrentemente, o lock de linha acima + o status check (REVIEWED->COMPLETED, não reentrante)
@@ -200,22 +220,20 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction,
     // EST-011: custo médio ponderado, única política de custo do módulo — nenhum outro ponto
     // do código escreve em InventoryItem.averageCost. Soma ANTES de aplicar o IN desta linha,
     // senão o próprio recebimento já contaminaria o denominador da média.
-    if (line.unitCost != null) {
-      const item = await InventoryItem.findOne({ where: { id: line.inventoryItemId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
-      const balancesBefore = await InventoryStockBalance.findAll({ where: { inventoryItemId: line.inventoryItemId, groupId, companyId }, transaction });
-      const totalQtyBefore = balancesBefore.reduce((sum, b) => sum + Number(b.quantityOnHand), 0);
-      const oldAverage = item.averageCost != null ? Number(item.averageCost) : Number(line.unitCost);
-      const receivedQty = Number(line.quantity);
-      // Revisão Marco 7 (19/10/2026), A10: com saldo negativo (item que permite estoque
-      // negativo) o denominador ficava 0 (divisão por zero → erro no banco) ou a média saía
-      // distorcida (ex.: saldo −3 a 20 + 6 a 40 = 60, acima de qualquer custo real). Saldo ≤ 0
-      // não tem valor a ponderar: a quantidade anterior entra como 0 e o custo médio passa a ser
-      // o custo desta entrada — nunca uma média com denominador ≤ 0.
-      const weightedQtyBefore = Math.max(0, totalQtyBefore);
-      item.averageCost = (weightedQtyBefore * oldAverage + receivedQty * Number(line.unitCost)) / (weightedQtyBefore + receivedQty);
-      item.updatedBy = actor.userId || null;
-      await item.save({ transaction });
-    }
+    const item = await InventoryItem.findOne({ where: { id: line.inventoryItemId, groupId, companyId }, transaction, lock: transaction.LOCK.UPDATE });
+    const balancesBefore = await InventoryStockBalance.findAll({ where: { inventoryItemId: line.inventoryItemId, groupId, companyId }, transaction });
+    const totalQtyBefore = balancesBefore.reduce((sum, b) => sum + Number(b.quantityOnHand), 0);
+    const oldAverage = item.averageCost != null ? Number(item.averageCost) : Number(line.unitCost);
+    const receivedQty = Number(line.quantity);
+    // Revisão Marco 7 (19/10/2026), A10: com saldo negativo (item que permite estoque
+    // negativo) o denominador ficava 0 (divisão por zero → erro no banco) ou a média saía
+    // distorcida (ex.: saldo −3 a 20 + 6 a 40 = 60, acima de qualquer custo real). Saldo ≤ 0
+    // não tem valor a ponderar: a quantidade anterior entra como 0 e o custo médio passa a ser
+    // o custo desta entrada — nunca uma média com denominador ≤ 0.
+    const weightedQtyBefore = Math.max(0, totalQtyBefore);
+    item.averageCost = (weightedQtyBefore * oldAverage + receivedQty * Number(line.unitCost)) / (weightedQtyBefore + receivedQty);
+    item.updatedBy = actor.userId || null;
+    await item.save({ transaction });
 
     await recordMovement(
       {
@@ -229,7 +247,7 @@ async function confirmReceipt(receiptId, actor, groupId, companyId, transaction,
         sourceId: receipt.id,
         idempotencyKey: `receipt:${receipt.id}:item:${line.id}`,
         // A1/EST-011: entrada guarda o custo da nota (custo histórico do movimento).
-        unitCost: line.unitCost != null ? line.unitCost : undefined,
+        unitCost: line.unitCost,
         reason: options.movementReason
           || (receipt.invoiceNumber
             ? `Recebimento da nota fiscal nº ${receipt.invoiceNumber}.`
