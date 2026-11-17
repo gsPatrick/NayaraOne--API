@@ -18,6 +18,7 @@ const { resolveDimension, readBreakdown, keyOf } = require('./query.dimension');
 const { presentMetric } = require('./query.present');
 const { loadDomainMap, assertDomainAccess, recordAccess } = require('../security');
 const { cached } = require('../dashboards/cache');
+const { metricCacheSpec } = require('./query.cache');
 
 const notFound = () => AppError.notFound('Indicador não encontrado.', 'ANALYTICS_METRIC_NOT_FOUND');
 
@@ -60,11 +61,8 @@ async function readMetricResponse(ctx, code, query, { ip = null, route = null } 
   const dimension = await resolveDimension({ definition, query, asOfDate }, transaction);
   const dimensionKey = dimension && dimension.dimensionValue !== undefined ? keyOf(dimension) : '';
   // Cache por permissão e escopo (livro BI §19; o mesmo do painel, M9-D698 3.3): as conferências acima e o log abaixo valem em TODA leitura, com ou
-  // sem cache. A chave leva indicador, versão, empresa, período, data-base, dimensão, comparação e o conjunto de permissões; o refresh da empresa descarta.
-  const spec = {
-    kind: 'metric', dashboardCode: definition.metric_code, version: definition.current_version_id || definition.id,
-    period: [period.startDate, period.endDate, asOfDate, dimension ? dimension.dimension : '', dimensionKey, compareKind || ''].join(':'),
-  };
+  // sem cache. Chave em query.cache.js (período inteiro, dimensão, comparação, parâmetros da empresa); snapshot novo ou refresh da empresa descarta.
+  const spec = await metricCacheSpec({ definition, companyId, period, asOfDate, dimension, dimensionKey, compareKind }, transaction);
   const data = await cached({ ...ctx, companyId }, spec, async () => {
     const raw = await readMetricAsOf(ctx, { metricCode: definition.metric_code, scopeType: 'COMPANY', scopeId: companyId, asOfDate, dimensionKey }, transaction);
     const variation = compareKind ? await buildVariation({ ctx, definition, companyId, kind: compareKind, period, asOfDate, unit: raw.unit }, transaction) : null;
