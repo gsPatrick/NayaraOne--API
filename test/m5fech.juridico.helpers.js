@@ -4,6 +4,7 @@
 const crypto = require('node:crypto');
 const { uniqueSuffix } = require('./testHelpers');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { File, User, UserMembership, OutboxEvent } = require('../src/models');
 const { origemNaTransacao } = require('./helpers/prazoOrigem');
@@ -22,6 +23,7 @@ async function newUser(tenant, transaction) {
 async function newCase(tenant, transaction, overrides = {}) {
   return legalCasesService.createLegalCase(
     {
+      ...PROCESSO_PADRAO,
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       caseType: 'LITIGATION',

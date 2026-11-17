@@ -21,6 +21,7 @@ const path = require('node:path');
 
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('./testHelpers');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const collectionCaseService = require('../src/features/billing/collectionCase.service');
@@ -49,7 +50,7 @@ after(async () => {
 test('legal hold: ativar exige motivo; ativo bloqueia mudança de status/fase mas não de campos informativos', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: 'Caso de teste' },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: 'Caso de teste' },
       tenant.userId,
       transaction
     );
@@ -115,7 +116,7 @@ test('dossiê: pacote de evidências a partir de anexos reais do contrato grava 
       transaction
     );
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', contractId: contract.id },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', contractId: contract.id },
       tenant.userId,
       transaction
     );
@@ -169,7 +170,7 @@ test('dossiê: pacote de evidências a partir de anexos reais do contrato grava 
 test('dossiê: outra empresa não enxerga o processo jurídico, o pacote de evidências nem seu log de acesso (RLS)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'CONSULTATIVE' },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'CONSULTATIVE' },
       tenant.userId,
       transaction
     );

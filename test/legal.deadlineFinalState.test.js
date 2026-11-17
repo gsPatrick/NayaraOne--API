@@ -12,6 +12,7 @@ const { getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const { sequelize, FUTURE, PAST, newUser, concludedCriticalWithoutCaseResponsible: setup, snapshot } = require('./legal.deadlineFinalState.helpers');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const AppError = require('../src/utils/AppError');
 const { LegalCase } = require('../src/models');
@@ -128,7 +129,7 @@ test('PENDING com dueAt vencido e responsavel removido na mesma requisicao -> 40
   await withRollbackTenantTransaction(tenant, async (t) => {
     const a = await newUser(tenant, t);
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Venc ${uniqueSuffix()}`, responsibleUserId: tenant.userId },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Venc ${uniqueSuffix()}`, responsibleUserId: tenant.userId },
       tenant.userId,
       t
     );
@@ -153,7 +154,7 @@ test('Reabrir prazo vencido (DONE -> PENDING) retirando o responsavel -> 400', a
   await withRollbackTenantTransaction(tenant, async (t) => {
     const a = await newUser(tenant, t);
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Venc2 ${uniqueSuffix()}`, responsibleUserId: tenant.userId },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Venc2 ${uniqueSuffix()}`, responsibleUserId: tenant.userId },
       tenant.userId,
       t
     );
@@ -170,7 +171,7 @@ test('Mudar criticality para CRITICAL em PENDING sem responsavel efetivo -> 422;
   await withRollbackTenantTransaction(tenant, async (t) => {
     const b = await newUser(tenant, t);
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Crit ${uniqueSuffix()}`, responsibleUserId: tenant.userId, escalationUserId: tenant.userId },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Crit ${uniqueSuffix()}`, responsibleUserId: tenant.userId, escalationUserId: tenant.userId },
       tenant.userId,
       t
     );
@@ -192,7 +193,7 @@ test('Mudar criticality para CRITICAL em PENDING sem responsavel efetivo -> 422;
 test('Criacao: CRITICAL sem responsavel efetivo -> 422; vencido sem responsavel -> 400', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Cria ${uniqueSuffix()}`, escalationUserId: tenant.userId },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Cria ${uniqueSuffix()}`, escalationUserId: tenant.userId },
       tenant.userId,
       t
     );

@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction } = require('../../testHelpers');
 const { OutboxEvent } = require('../../../src/models');
 const casesService = require('../../../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('../../helpers/processoPadrao');
 const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
 const requirementsService = require('../../../src/modules/legal/contracts/application/requirement.service');
 
@@ -18,7 +19,7 @@ const eventsOf = (transaction, type, aggregateId) => OutboxEvent.findAll({ where
 
 test('m9d619 atualizar o processo publica legal.case.updated e grava o valor confirmado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
-    const legalCase = await casesService.createLegalCase({ groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', estimatedAmount: 1000 }, tenant.userId, transaction);
+    const legalCase = await casesService.createLegalCase({ ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', riskLevel: 'LOW', estimatedAmount: 1000 }, tenant.userId, transaction);
     assert.equal((await eventsOf(transaction, 'legal.case.updated', legalCase.id)).length, 0, 'criar publica só legal.case.created');
     const updated = await casesService.updateLegalCase(legalCase.id, { riskLevel: 'high', confirmedAmount: '250.5' }, tenant.userId, transaction);
     assert.equal(updated.confirmedAmount, '250.50');

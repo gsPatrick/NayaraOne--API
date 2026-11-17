@@ -22,6 +22,7 @@ const contractClausesService = require('../src/modules/legal/contracts/applicati
 const contractTemplatesService = require('../src/modules/legal/contracts/application/template.service');
 const contractAmendmentsService = require('../src/modules/legal/contracts/application/contractAmendments.service');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
@@ -378,6 +379,7 @@ test('M5-26: processo aceita partes formais e mudança de fase auditada (antes/d
     const suffix = uniqueSuffix();
     const legalCase = await legalCasesService.createLegalCase(
       {
+        ...PROCESSO_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         caseType: 'LITIGATION',
@@ -458,6 +460,7 @@ test('M5-27: prazo OVERDUE há mais de 24h sem ação escala para o escalationUs
     const suffix = uniqueSuffix();
     const legalCase = await legalCasesService.createLegalCase(
       {
+        ...PROCESSO_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         caseType: 'LITIGATION',
@@ -521,7 +524,7 @@ test('M5-27: prazo OVERDUE há mais de 24h sem ação escala para o escalationUs
 async function createEvidencePackageForTest(transaction) {
   const suffix = uniqueSuffix();
   const legalCase = await legalCasesService.createLegalCase(
-    { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Dossiê ${suffix}` },
+    { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Dossiê ${suffix}` },
     tenant.userId,
     transaction
   );
@@ -651,7 +654,7 @@ test('AUD-016: createEvidencePackageFromContractAttachments inclui documento da 
 
     // 4) Processo jurídico vinculado ao contrato.
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, caseType: 'LITIGATION', summary: `Dossiê custódia ${uniqueSuffix()}` },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, contractId: contract.id, caseType: 'LITIGATION', summary: `Dossiê custódia ${uniqueSuffix()}` },
       tenant.userId,
       transaction
     );
@@ -674,7 +677,7 @@ test('AUD-016: createEvidencePackageFromContractAttachments inclui documento da 
 test('AUD-016: processo sem contrato vinculado é rejeitado com erro claro (nada para montar)', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Sem contrato ${uniqueSuffix()}` },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Sem contrato ${uniqueSuffix()}` },
       tenant.userId,
       transaction
     );
@@ -790,6 +793,7 @@ test('Eventos mínimos: legal.deadline.created é publicado ao criar um prazo ju
     const suffix = uniqueSuffix();
     const legalCase = await legalCasesService.createLegalCase(
       {
+        ...PROCESSO_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         caseType: 'LITIGATION',

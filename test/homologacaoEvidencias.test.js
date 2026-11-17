@@ -735,6 +735,7 @@ test('ADV-18 parcelas geradas por generateInstallments sempre somam exatamente o
 // demanda), notificar o responsável e não reavisar do mesmo prazo/severidade repetidamente. ---
 test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e não reavisa duas vezes pela mesma severidade', async () => {
   const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+  const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
   const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
   const { processLegalDeadlineAlertsForCompany } = require('../src/engines/jobs/legalDeadlineAlertJob');
   const { LegalCase, LegalDeadline, Notification, OutboxEvent } = require('../src/models');
@@ -744,7 +745,7 @@ test('legalDeadlineAlertJob alerta prazo OVERDUE, notifica o responsável, e nã
   try {
     legalCase = await withCommittedTenantTransaction(tenant, (t) =>
       legalCasesService.createLegalCase(
-        { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', responsibleUserId: tenant.userId },
+        { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', responsibleUserId: tenant.userId },
         tenant.userId,
         t
       )

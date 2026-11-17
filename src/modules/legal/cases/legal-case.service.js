@@ -9,6 +9,7 @@ const { assertCaseKeepsCriticalAccountability } = require('./legalDeadlineAccoun
 const { reassignCaseDeadlineTasks } = require('./legalDeadlineTask');
 const { validateCaseInput } = require('./legalCaseInput');
 const { requireUuid } = require('../shared/legalInput');
+const { assertRiskAndValueOnCreate, assertRiskAndValueKept } = require('./legalCaseRequired');
 
 const CASE_TYPES = ['LITIGATION', 'CONSULTATIVE', 'COLLECTION'];
 
@@ -81,6 +82,9 @@ async function createLegalCase(payload, actorUserId, transaction) {
   // Pentest M5: responsável/escalonamento só com vínculo ativo NESTA empresa; contrato/imóvel da mesma empresa; tipos.
   const refs = await validateCaseInput(payload, { groupId, companyId }, transaction);
   assertValidPhase(phase, payload.allowUnknownPhase);
+  // M5:244: risco e valor estimado são obrigatórios na abertura (valor 0 aceito, DI-BI2-1).
+  assertRiskAndValueOnCreate(payload);
+  const details = readCaseDetails(payload);
 
   const legalCase = await LegalCase.create(
     {
@@ -95,7 +99,7 @@ async function createLegalCase(payload, actorUserId, transaction) {
       status: 'OPEN',
       phase: phase || null,
       summary: refs.summary || null,
-      ...readCaseDetails(payload),
+      ...details,
       createdBy: actorUserId || null,
       updatedBy: actorUserId || null,
     },
@@ -239,6 +243,7 @@ async function updateLegalCase(id, payload, actorUserId, transaction) {
   if (responsibleUserId !== undefined) legalCase.responsibleUserId = responsibleUserId;
   if (escalationUserId !== undefined) legalCase.escalationUserId = escalationUserId;
   if (phase !== undefined) legalCase.phase = phase;
+  assertRiskAndValueKept(payload); // M5:244: risco e valor estimado não são apagados na edição
   const details = readCaseDetails(payload);
   // §14: depois de vinculado ao Financeiro, o valor confirmado não muda por aqui (o lançamento já existe).
   if (details.confirmedAmount !== undefined && String(details.confirmedAmount) !== String(legalCase.confirmedAmount)) {

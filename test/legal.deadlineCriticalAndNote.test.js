@@ -13,6 +13,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const AppError = require('../src/utils/AppError');
 const { LegalDeadline } = require('../src/models');
@@ -30,7 +31,7 @@ const FUTURE = () => new Date(Date.now() + 20 * 86400000);
 
 function createCase(transaction, extra = {}) {
   return legalCasesService.createLegalCase(
-    { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Critico ${uniqueSuffix()}`, ...extra },
+    { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Critico ${uniqueSuffix()}`, ...extra },
     tenant.userId,
     transaction
   );

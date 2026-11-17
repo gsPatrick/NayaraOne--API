@@ -5,6 +5,7 @@ const env = require('./bcpEnv');
 const { person } = require('./m9d832Base');
 const { createFinancialEntry } = require('../../../src/modules/finance/application/services/financial-entry.service');
 const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('../../helpers/processoPadrao');
 const financingCasesService = require('../../../src/features/correspondent/cases/financingCases.service');
 const { FinancingCase } = require('../../../src/models');
 
@@ -21,7 +22,7 @@ function createReceivable(tenant, base, amount) {
 
 function createLegalCase(tenant) {
   return env.inTx(tenant, async (tx) => (await legalCasesService.createLegalCase(
-    { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', phase: 'INITIAL_PETITION', summary: 'Processo BCP QA' }, tenant.userId, tx
+    { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', phase: 'INITIAL_PETITION', summary: 'Processo BCP QA' }, tenant.userId, tx
   )).id);
 }
 

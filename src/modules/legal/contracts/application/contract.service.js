@@ -31,8 +31,8 @@ const { assertUuidFields } = require('../../shared/legalIds');
 // Correção da verificação do Marco 5 (DI-M5CT-2): contrato NOVO só com os 12 códigos do Caderno §3; os legados SALE/LEASE
 // entram só pela conversão explícita e auditada e SERVICE é recusado (contracts/domain/contractTypes.js). CONTRACT_TYPES
 // continua listando todo código que pode estar GRAVADO (linhas antigas seguem legíveis).
-const { STORED_CONTRACT_TYPES: CONTRACT_TYPES, resolveNewContractType } = require('../domain/contractTypes');
-const LINKED_CONTRACT_TYPES = ['ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY'];
+const { STORED_CONTRACT_TYPES: CONTRACT_TYPES, LINKED_CONTRACT_TYPES, resolveNewContractType } = require('../domain/contractTypes');
+const { assertContractValueForApproval } = require('../domain/contractValueGate');
 
 // Subtipos de LOCAÇÃO/VENDA usam exatamente as mesmas regras de negócio (gate de partes,
 // billing, garantias, vistorias) do tipo genérico correspondente — só muda o código salvo e o
@@ -470,6 +470,7 @@ async function transitionContractStatus(contract, targetStatus, actorUserId, tra
     if (fromStatus === 'DRAFT') await assertRequirementsGate(contract, transaction);
   } else if (targetStatus === 'APPROVED' && fromStatus === 'LEGAL_REVIEW') {
     await assertDocumentRequirementsGate(contract, 'APPROVED', transaction);
+    assertContractValueForApproval(contract); // DI-BI2-5: contrato principal só é aprovado com valor > 0
     approvedVersion = await approveLatestVersion(contract, actorUserId, transaction);
   } else if (targetStatus === 'SIGNING') {
     await assertDocumentRequirementsGate(contract, 'SIGNING', transaction);

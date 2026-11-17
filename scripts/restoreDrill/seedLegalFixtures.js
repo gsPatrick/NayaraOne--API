@@ -303,6 +303,8 @@ async function seedTenantA(tenant, approverId) {
         responsibleUserId: tenant.userId,
         escalationUserId: approverId,
         caseType: 'LITIGATION',
+        riskLevel: 'MEDIUM',
+        estimatedAmount: '0.00',
         summary: 'DRILL processo ficticio para dossie',
       },
       tenant.userId,
