@@ -20,6 +20,7 @@
 const { sequelize } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { registrarAuditoria } = require('../../engines/audit/auditLog.service');
+const { emitRefreshed } = require('./read-models/readModel.refreshed');
 
 const UNITS = ['BRL', 'PERCENT', 'COUNT', 'DAYS', 'HOURS', 'MINUTES', 'SECONDS', 'SCORE', 'NUMBER', 'PP', 'BRL_PER_UNIT'];
 const DOMAINS = [
@@ -298,6 +299,8 @@ async function insertSnapshot(input, revisionNo, recalculated, transaction) {
       transaction,
     }
   );
+  // Número novo da empresa: o cache de painel e de indicador (dashboards/cache.js) descarta o que era dela depois do commit.
+  emitRefreshed(transaction, { readModel: 'metric_snapshots', companyId: input.companyId || null, groupId: input.groupId });
   return row;
 }
 

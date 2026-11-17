@@ -565,8 +565,11 @@ jobs:
           if-no-files-found: warn
           retention-days: 90
 
-  # Etapas 12 a 14 (DEV, LAB e reconciliação com aceite dos owners): só na promoção, depois do deploy no DEV (que é decisão do Patrick: o pipeline só
-  # prepara). Sem DEV_API_BASE_URL e DEV_SMOKE_TOKEN a etapa 12 reprova e a promoção fica bloqueada; ambiente PRODUCAO exige aceite de todas as métricas.
+  # Etapas 12 a 14 (DEV, LAB e reconciliação com aceite dos owners): só na promoção, depois do deploy (que é decisão do Patrick: o pipeline só
+  # prepara). Ambientes (decisão do Patrick de 16/11/2026, sem servidor novo): LAB = homologação publicada; DEV = a esteira com banco descartável.
+  # A etapa 12 lê o LAB com o usuário de smoke somente leitura (DEV_API_BASE_URL + DEV_SMOKE_EMAIL/DEV_SMOKE_PASSWORD, ou DEV_SMOKE_TOKEN); sem eles
+  # reprova e a promoção fica bloqueada. Em LAB a etapa 14 registra o aceite dos owners pendente para o Marco 10 (decisão da cliente de 16/11/2026);
+  # ambiente PRODUCAO continua exigindo aceite de todas as métricas.
   bi-promocao:
     needs: [bi-pipeline, deploy-dev]
     if: github.event_name == 'push' && github.ref == 'refs/heads/marco-6-e-7-homologado-nayara'
@@ -575,7 +578,10 @@ jobs:
     env:
       NODE_ENV: test
       CI_TENANT_USERS_PASSWORD: ci-tenant-users-password-not-for-production
+      ANALYTICS_AMBIENTE_ROTULO: 'LAB = homologação publicada; DEV = esteira do GitHub com banco descartável'
       DEV_API_BASE_URL: ${{ secrets.DEV_API_BASE_URL }}
+      DEV_SMOKE_EMAIL: ${{ secrets.DEV_SMOKE_EMAIL }}
+      DEV_SMOKE_PASSWORD: ${{ secrets.DEV_SMOKE_PASSWORD }}
       DEV_SMOKE_TOKEN: ${{ secrets.DEV_SMOKE_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -584,7 +590,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Esteira do BI, etapas 12 a 14
+      - name: Esteira do BI, etapas 12 a 14 (LAB = homologação publicada)
         run: node scripts/analytics/ci/run.js --fase promocao --ambiente LAB --saida docs/evidencias/ci/bi-promocao
       - name: Publicar o resultado de cada etapa
         if: always()

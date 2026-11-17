@@ -3,12 +3,15 @@
 /**
  * M9-D705 — executor da esteira do BI. Roda as etapas da fase pedida na ordem; a primeira que reprova bloqueia as seguintes (BLOQUEADA, com o
  * motivo apontando a etapa). Cada etapa arquiva um log e o resumo.json traz etapa, status, motivo, horários e o log. O executor de comandos é
- * injetado (o teste usa um falso; o `run.js` usa o processo de verdade).
+ * injetado (o teste usa um falso; o `run.js` usa o processo de verdade). Linha de saída `REGISTRO: <texto>` vai para `registros` da etapa no
+ * resumo (ex.: etapa 14 em LAB, aceite dos owners pendente para o Marco 10); `alvo` da etapa diz onde ela roda (LAB = homologação publicada).
  */
 const { ETAPAS } = require('./etapas');
 const { gravarLog, gravarResumo, redigir } = require('./arquivo');
 
 const FASES = { pr: ['pr'], promocao: ['promocao'], tudo: ['pr', 'promocao'] };
+
+const registrosDe = (saida) => redigir(saida).split('\n').map((l) => l.trim()).filter((l) => l.startsWith('REGISTRO: ')).map((l) => l.slice(10));
 
 function motivoDe(saida) {
   const linhas = redigir(saida).split('\n').map((l) => l.trim()).filter(Boolean);
@@ -21,7 +24,7 @@ async function runPipeline({ fase = 'pr', executar, saida, etapas = ETAPAS, agor
   const resultado = [];
   let bloqueio = null;
   for (const etapa of etapas) {
-    const base = { n: etapa.n, chave: etapa.chave, livro: etapa.livro, fase: etapa.fase };
+    const base = { n: etapa.n, chave: etapa.chave, livro: etapa.livro, fase: etapa.fase, ...(etapa.alvo ? { alvo: etapa.alvo } : {}) };
     if (!FASES[fase].includes(etapa.fase)) { resultado.push({ ...base, status: 'FORA_DA_FASE', motivo: `a etapa ${etapa.n} roda na fase ${etapa.fase}` }); continue; }
     const inicio = agora().toISOString();
     if (bloqueio) {
@@ -38,8 +41,10 @@ async function runPipeline({ fase = 'pr', executar, saida, etapas = ETAPAS, agor
     }
     const log = gravarLog(saida, etapa, texto);
     const fim = agora().toISOString();
-    if (reprovada) { bloqueio = etapa; resultado.push({ ...base, status: 'REPROVADA', motivo: reprovada, inicio, fim, log }); }
-    else resultado.push({ ...base, status: 'APROVADA', motivo: null, inicio, fim, log });
+    const registros = registrosDe(texto);
+    const extra = registros.length ? { registros } : {};
+    if (reprovada) { bloqueio = etapa; resultado.push({ ...base, status: 'REPROVADA', motivo: reprovada, inicio, fim, log, ...extra }); }
+    else resultado.push({ ...base, status: 'APROVADA', motivo: null, inicio, fim, log, ...extra });
   }
   const ok = !bloqueio;
   gravarResumo(saida, { fase, ok, reprovadaNaEtapa: bloqueio ? bloqueio.n : null, etapas: resultado });

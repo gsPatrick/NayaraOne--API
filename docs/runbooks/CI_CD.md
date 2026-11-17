@@ -44,3 +44,22 @@ por falta de alvo. Se a hospedagem não tiver deploy hook, troque o passo `curl`
 
 O environment `production` só é criado/protegido no GitHub; sem a etapa 2, o job
 `deploy-production` roda sem pausa (ainda sem secret, então não faz nada).
+
+## Promoção do BI (etapas 12 a 14 da esteira, job `bi-promocao`)
+
+Ambientes (decisão do Patrick de 16/11/2026, sem servidor novo): **LAB = a homologação publicada**; **DEV = a esteira do GitHub com
+banco descartável**. O job só roda no disparo manual de `.github/workflows/analytics-esteira.yml` (`executar_promocao` e
+`deploy_dev_feito` marcados) e espera a aprovação do environment `bi-promocao`.
+
+Segredos do repositório (ou do environment `bi-promocao`) que a etapa 12 lê:
+- `DEV_API_BASE_URL`: a URL da API da homologação publicada, com `/api/v1` (o nome do segredo foi mantido).
+- `DEV_SMOKE_EMAIL` e `DEV_SMOKE_PASSWORD`: o usuário de teste somente leitura do smoke; o login é feito a cada execução (um token fixo
+  expira) e a sessão é encerrada no fim. `DEV_SMOKE_TOKEN` continua aceito como alternativa. Senha e token nunca são impressos.
+- O usuário precisa de `analytics:read` mais a permissão própria de cada painel do catálogo (`scripts/analytics/ci/smokeDev.js`,
+  `permissoesDoSmoke`): `analytics:read:tech`, `construction:read`, `correspondent:read`, `crm:feedback:read`, `crm:opportunities:read`,
+  `finance:read`, `inventory:read`, `legal:read` e `marketing:attribution:read`. Falta de permissão reprova dizendo qual e de qual painel.
+  Login que pede MFA (erro `MFA_*`, desafio sem token ou `mfaSetupRequired`) reprova: o usuário do smoke não pode depender de segundo fator.
+
+A etapa 13 (carga em escala cheia e rebuild) roda no banco descartável da esteira. A etapa 14, em LAB, registra "aceite dos owners:
+pendente para o Marco 10 (decisão da cliente de 16/11/2026)" sem reprovar; com `--ambiente PRODUCAO` continua exigindo o aceite de
+toda métrica publicada (e reprova se não houver nenhuma).

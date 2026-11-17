@@ -190,6 +190,7 @@ test('m9d702 compareTo devolve variação contra o período anterior e o mesmo p
 });
 
 test('m9d702 rota é transação read-only', async () => {
+  require('../../../src/features/analytics/dashboards').clearCache(); // a leitura repetida vem do cache (BI §19) e não toca o banco: aqui interessa a que lê
   const { sequelize } = require('../../testHelpers');
   const original = sequelize.query.bind(sequelize);
   const seen = [];

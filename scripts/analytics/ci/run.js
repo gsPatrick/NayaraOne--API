@@ -65,7 +65,10 @@ async function main() {
     return executarComando(comando, env);
   };
   const r = await runPipeline({ fase, executar, saida });
-  for (const e of r.etapas) console.log(`etapa ${String(e.n).padStart(2, '0')} ${e.livro}: ${e.status}${e.motivo && e.status !== 'FORA_DA_FASE' ? ` - ${e.motivo}` : ''}`);
+  for (const e of r.etapas) {
+    console.log(`etapa ${String(e.n).padStart(2, '0')} ${e.livro}: ${e.status}${e.motivo && e.status !== 'FORA_DA_FASE' ? ` - ${e.motivo}` : ''}${e.alvo && e.status !== 'FORA_DA_FASE' ? ` [alvo: ${e.alvo}]` : ''}`);
+    for (const registro of e.registros || []) console.log(`  registro: ${registro}`);
+  }
   console.log(r.ok ? 'Pipeline do BI aprovado.' : 'Pipeline do BI REPROVADO: a promoção está bloqueada (ver resumo.json).');
   process.exitCode = r.ok ? 0 : 1;
 }

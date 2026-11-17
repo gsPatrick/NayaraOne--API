@@ -7,6 +7,7 @@ const MSG = {
   READ_ONLY: 'Os painéis são somente leitura.',
   WRITE_BLOCKED: 'Bloqueada pelo banco (transação somente leitura); registrado como incidente de segurança.',
   QUERY_TIMEOUT: 'A consulta demorou mais que o permitido. Tente novamente.',
+  READ_BUSY: 'Muitas consultas de painel ao mesmo tempo. Tente novamente em instantes.',
 };
 
 /** 405 ANALYTICS_READ_ONLY: método de escrita em rota de leitura. */
@@ -24,4 +25,9 @@ function queryTimeoutError() {
   return new AppError(MSG.QUERY_TIMEOUT, 504, 'ANALYTICS_QUERY_TIMEOUT');
 }
 
-module.exports = { MSG, readOnlyMethodError, writeBlockedError, queryTimeoutError };
+/** 503 ANALYTICS_READ_BUSY: a leitura do BI esperou a vez (analytics.consulta.max_simultaneas) mais que o tempo máximo de consulta. */
+function readBusyError() {
+  return new AppError(MSG.READ_BUSY, 503, 'ANALYTICS_READ_BUSY');
+}
+
+module.exports = { MSG, readOnlyMethodError, writeBlockedError, queryTimeoutError, readBusyError };

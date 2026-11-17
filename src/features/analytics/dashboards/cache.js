@@ -37,11 +37,14 @@ function createMemoryStore() {
 let store = createMemoryStore();
 const stats = { hits: 0, misses: 0, errors: 0 };
 
-/** spec = { dashboardCode, period, version }. */
+/**
+ * spec = { dashboardCode, period, version, kind }. `kind` separa o recurso: 'dashboard' (padrão, a composição do painel) ou 'metric' (o valor de um
+ * indicador em GET /analytics/metrics/:code, com `dashboardCode` = código do indicador). Mesma regra de chave, TTL e descarte para os dois.
+ */
 function buildDashboardCacheKey(ctx, spec) {
   const rowScope = ctx.rowScope || { mode: 'ALL', userIds: [] };
   const scope = rowScope.mode === 'SELF' ? `self:${[...rowScope.userIds].sort().join(',')}` : 'all';
-  return ['analytics', 'dashboard', spec.dashboardCode, ctx.companyId, ctx.groupId, spec.period, `v${spec.version}`, permissionDigest(ctx), scope].join('|');
+  return ['analytics', spec.kind || 'dashboard', spec.dashboardCode, ctx.companyId, ctx.groupId, spec.period, `v${spec.version}`, permissionDigest(ctx), scope].join('|');
 }
 
 function safe(label, fn) {

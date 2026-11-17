@@ -24,9 +24,12 @@ const entries = {
 
 const bankTransactions = {
   table: 'finance.bank_transactions', count: 'bankTransactions',
-  sql: `INSERT INTO finance.bank_transactions (id, group_id, company_id, bank_account_id, amount, transaction_date, created_at, updated_at)
+  // Cada linha tem o seu histórico ("Extrato de carga <n>"), como num extrato real: o fingerprint (conta, data, valor, sentido, histórico) é único por
+  // conta desde a migration 10411 (UNIQUE completo). Sem o histórico, na escala cheia duas linhas da mesma conta e dia empatavam no valor e a massa
+  // não entrava (a etapa 13 reprovava antes de medir).
+  sql: `INSERT INTO finance.bank_transactions (id, group_id, company_id, bank_account_id, amount, transaction_date, description, created_at, updated_at)
     SELECT ${ID('bank')}, :gid, :cid, CAST(md5(CAST(:seed AS text) || ':account:' || CAST(:cid AS text) || ':' || (g % 3)) AS uuid),
-           CASE WHEN g % 2 = 0 THEN 1 ELSE -1 END * (1 + ${HASH('bamt')} % 2000000) / 100.0, ${AT('(g % 60)')}, ${AT('1')}, ${AT('1')}
+           CASE WHEN g % 2 = 0 THEN 1 ELSE -1 END * (1 + ${HASH('bamt')} % 2000000) / 100.0, ${AT('(g % 60)')}, 'Extrato de carga ' || g, ${AT('1')}, ${AT('1')}
       FROM generate_series(1, :n) g`,
 };
 

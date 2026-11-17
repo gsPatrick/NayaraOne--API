@@ -81,6 +81,40 @@ test('m9d705 etapa 14 reprova métrica sem aceite quando ambiente é produção'
   assert.throws(() => avaliarAceite({ ambiente: 'QUALQUER', metricas, aceites }), /ambiente/);
 });
 
+test('m9d705 etapa 14: a promoção a LAB passa sem aceite e registra a pendência do Marco 10; produção continua bloqueada sem aceite', async () => {
+  const metricas = [{ code: 'fin.free_cash', version: 2 }, { code: 'fin.payables_7d', version: 1 }];
+  const lab = avaliarAceite({ ambiente: 'LAB', metricas, aceites: [] });
+  assert.equal(lab.ok, true, 'o aceite adiado pela cliente não reprova a promoção a LAB');
+  assert.equal(lab.aceiteCompleto, false, 'e não finge que houve aceite');
+  assert.equal(lab.registro, 'aceite dos owners: pendente para o Marco 10 (decisão da cliente de 16/11/2026); 0 de 2 métrica(s) publicada(s) com aceite; a liberação para PRODUÇÃO continua exigindo o aceite');
+  assert.match(avaliarAceite({ ambiente: 'LAB', metricas: [], aceites: [] }).registro, /^aceite dos owners: pendente para o Marco 10 \(decisão da cliente de 16\/11\/2026\)/, 'sem métrica publicada também é pendência');
+  const todas = metricas.map((m) => ({ ...m, status: 'ACCEPTED' }));
+  const completo = avaliarAceite({ ambiente: 'LAB', metricas, aceites: todas });
+  assert.equal(completo.aceiteCompleto, true);
+  assert.equal(completo.registro, 'aceite dos owners: 2 de 2 métrica(s) publicada(s) com aceite da versão atual');
+  const prod = avaliarAceite({ ambiente: 'PRODUCAO', metricas, aceites: [] });
+  assert.equal(prod.ok, false, 'a liberação para produção continua exigindo o aceite');
+  assert.equal(prod.registro, null);
+  assert.equal(prod.problemas.length, 2);
+  const vazio = avaliarAceite({ ambiente: 'PRODUCAO', metricas: [], aceites: [] });
+  assert.equal(vazio.ok, false, 'sem métrica publicada não há o que liberar para produção');
+  assert.match(vazio.problemas[0], /nenhuma métrica publicada/);
+  assert.equal(avaliarAceite({ ambiente: 'PRODUCAO', metricas, aceites: todas }).ok, true);
+
+  // a esteira leva o registro da etapa 14 ao resumo, com o alvo de cada etapa da promoção
+  const { runPipeline } = require('../../../scripts/analytics/ci/pipeline');
+  const saida = fs.mkdtempSync(path.join(os.tmpdir(), 'm9d705r-'));
+  const executar = async (c) => ({ code: 0, output: c.etapa === 14 ? `ambiente LAB: 2 métrica(s)\nREGISTRO: ${lab.registro}\n` : 'ok\n' });
+  const r = await runPipeline({ fase: 'promocao', executar, saida });
+  assert.equal(r.ok, true);
+  const resumo = JSON.parse(fs.readFileSync(path.join(saida, 'resumo.json'), 'utf8'));
+  const e14 = resumo.etapas.find((e) => e.n === 14);
+  assert.equal(e14.status, 'APROVADA');
+  assert.deepEqual(e14.registros, [lab.registro]);
+  assert.match(resumo.etapas.find((e) => e.n === 12).alvo, /^LAB = homologação publicada/);
+  assert.match(resumo.etapas.find((e) => e.n === 13).alvo, /banco descartável/);
+});
+
 test('m9d705 etapa 2 reprova erro de sintaxe no Front de BI e passa no Front real', () => {
   const ruim = tree({ 'app/painel/analytics/Card.js': 'export default function C() { return <b>{x</b>; }\n' });
   const r = verificarSintaxe({ frontRoot: ruim });

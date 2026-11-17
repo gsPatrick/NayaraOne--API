@@ -17,6 +17,8 @@ const { assertCompareKind, buildVariation } = require('./query.compare');
 const { resolveDimension, readBreakdown, keyOf } = require('./query.dimension');
 const { presentMetric } = require('./query.present');
 const { loadDomainMap, assertDomainAccess, recordAccess } = require('../security');
+const { cached } = require('../dashboards/cache');
+const { metricCacheSpec } = require('./query.cache');
 
 const notFound = () => AppError.notFound('Indicador não encontrado.', 'ANALYTICS_METRIC_NOT_FOUND');
 
@@ -58,12 +60,18 @@ async function readMetricResponse(ctx, code, query, { ip = null, route = null } 
   const compareKind = assertCompareKind(query.compareTo);
   const dimension = await resolveDimension({ definition, query, asOfDate }, transaction);
   const dimensionKey = dimension && dimension.dimensionValue !== undefined ? keyOf(dimension) : '';
-  const raw = await readMetricAsOf(ctx, { metricCode: definition.metric_code, scopeType: 'COMPANY', scopeId: companyId, asOfDate, dimensionKey }, transaction);
-  const variation = compareKind ? await buildVariation({ ctx, definition, companyId, kind: compareKind, period, asOfDate, unit: raw.unit }, transaction) : null;
-  const domainMap = await loadDomainMap(ctx, transaction);
-  const data = presentMetric({ ctx, definition, raw, period, asOfDate, domainMap, variation });
-  if (dimension) data.dimension = { code: dimension.dimension, value: dimension.dimensionValue === undefined ? null : dimension.dimensionValue };
-  if (dimension && dimension.dimensionValue === undefined) data.breakdown = await readBreakdown({ ctx, definition, companyId, dimension: dimension.dimension, asOfDate }, transaction);
+  // Cache por permissão e escopo (livro BI §19; o mesmo do painel, M9-D698 3.3): as conferências acima e o log abaixo valem em TODA leitura, com ou
+  // sem cache. Chave em query.cache.js (período inteiro, dimensão, comparação, parâmetros da empresa); snapshot novo ou refresh da empresa descarta.
+  const spec = await metricCacheSpec({ definition, companyId, period, asOfDate, dimension, dimensionKey, compareKind }, transaction);
+  const data = await cached({ ...ctx, companyId }, spec, async () => {
+    const raw = await readMetricAsOf(ctx, { metricCode: definition.metric_code, scopeType: 'COMPANY', scopeId: companyId, asOfDate, dimensionKey }, transaction);
+    const variation = compareKind ? await buildVariation({ ctx, definition, companyId, kind: compareKind, period, asOfDate, unit: raw.unit }, transaction) : null;
+    const domainMap = await loadDomainMap(ctx, transaction);
+    const out = presentMetric({ ctx, definition, raw, period, asOfDate, domainMap, variation });
+    if (dimension) out.dimension = { code: dimension.dimension, value: dimension.dimensionValue === undefined ? null : dimension.dimensionValue };
+    if (dimension && dimension.dimensionValue === undefined) out.breakdown = await readBreakdown({ ctx, definition, companyId, dimension: dimension.dimension, asOfDate }, transaction);
+    return out;
+  }, { transaction });
   if (definition.criticality === 'CRITICAL') { // M9-D702 6: log de acesso das métricas CRITICAL (o painel tem o seu, M9-D687)
     await recordAccess({ ...ctx, companyId }, {
       action: 'METRIC_READ', resourceType: 'METRIC', resourceCode: definition.metric_code, route, ip, filters: { period: periodView(period, asOfDate), dimension: dimension || undefined }, rowsReturned: 1,
