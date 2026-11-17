@@ -4,6 +4,7 @@
 // - M6:16 "Etapas possuem ... prazo": a etapa nasce com prazo (endsAt) e o prazo não pode ser retirado na edição.
 //   Custo, código e responsável continuam exigidos só no início da etapa (rodada 46).
 // - M6:11 / M9:793: a previsão de término da obra, exigida em READY -> ACTIVE, não pode ser apagada depois disso.
+// - DI-BI2-9: o mesmo vale para os outros campos do gate READY -> ACTIVE (orçamento, início e responsável da obra).
 // Antes desta leva, todos os casos "sem prazo" abaixo passavam (201/200) e deixavam o indicador de atrasos incompleto.
 
 const { test, before, after } = require('node:test');
@@ -17,6 +18,7 @@ const marginRulesService = require('../src/features/construction/marginRules.ser
 const scheduleRequired = require('../src/features/construction/scheduleRequired');
 const { ProjectStage } = require('../src/models');
 const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
+const { createMember } = require('./constructionM6vFixture');
 
 let tenant;
 before(async () => {
@@ -58,6 +60,21 @@ test('regra pura: a previsão de término só fica travada depois de READY -> AC
     assert.doesNotThrow(() => scheduleRequired.assertPlannedEndKept({ status }, undefined), 'campo ausente não mexe');
     assert.doesNotThrow(() => scheduleRequired.assertPlannedEndKept({ status }, '2027-12-01'), 'trocar a data continua livre');
   }
+  // DI-BI2-9: todos os campos do gate READY -> ACTIVE, cada um com o seu código.
+  const codigos = { budgetAmount: 'PROJECT_BUDGET_AMOUNT_REQUIRED', startsAt: 'PROJECT_START_DATE_REQUIRED', endsAtPlanned: 'PROJECT_PLANNED_END_REQUIRED', responsibleUserId: 'PROJECT_RESPONSIBLE_REQUIRED' };
+  assert.deepEqual(Object.fromEntries(scheduleRequired.EXECUTION_REQUIRED_FIELDS.map((f) => [f.field, f.code])), codigos);
+  for (const [field, code] of Object.entries(codigos)) {
+    for (const status of travados) {
+      for (const vazio of [null, '', '  ']) {
+        assert.throws(() => scheduleRequired.assertExecutionFieldsKept({ status }, { [field]: vazio }), recusa(code), `${status}/${field}`);
+      }
+      assert.doesNotThrow(() => scheduleRequired.assertExecutionFieldsKept({ status }, { name: 'x' }), 'campo ausente não mexe');
+    }
+    for (const status of ['PLANNED', 'BUDGETED', 'READY', 'CANCELLED']) {
+      assert.doesNotThrow(() => scheduleRequired.assertExecutionFieldsKept({ status }, { [field]: null }), `${status}/${field}`);
+    }
+  }
+  assert.doesNotThrow(() => scheduleRequired.assertExecutionFieldsKept({ status: 'ACTIVE' }, { budgetAmount: 0 }), 'orçamento 0 não é vazio');
   for (const vazio of VAZIOS) assert.throws(() => scheduleRequired.assertStageEndOnCreate(vazio), recusa('PROJECT_STAGE_END_DATE_REQUIRED'));
   assert.doesNotThrow(() => scheduleRequired.assertStageEndKept(undefined));
   for (const vazio of [null, '', '  ']) assert.throws(() => scheduleRequired.assertStageEndKept(vazio), recusa('PROJECT_STAGE_END_DATE_REQUIRED'));
@@ -130,5 +147,45 @@ test('Item 4-A: obra em execução (ACTIVE e PAUSED) não apaga a previsão de t
     await assert.rejects(projectsService.updateProject(obra.id, { endsAtPlanned: null }, tenant.userId, t), recusa('PROJECT_PLANNED_END_REQUIRED'));
     const gravada = await projectsService.getProject(obra.id, t);
     assert.equal(new Date(gravada.endsAtPlanned).toISOString(), '2027-12-01T15:00:00.000Z');
+  });
+});
+
+test('DI-BI2-9: obra PLANNED pode apagar orçamento, início e responsável (preenchidos aos poucos)', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const obra = await obraPlanejada(t, { startsAt: '2026-10-01', budgetAmount: 1000 });
+    const editada = await projectsService.updateProject(obra.id, { budgetAmount: null, startsAt: null, responsibleUserId: null }, tenant.userId, t);
+    assert.equal(editada.status, 'PLANNED');
+    assert.equal(editada.budgetAmount, null);
+    assert.equal(editada.startsAt, null);
+    assert.equal(editada.responsibleUserId, null);
+  });
+});
+
+test('DI-BI2-9: obra em execução não apaga orçamento, início nem responsável (422 por campo), mas troca', async () => {
+  await withRollbackTenantTransaction(tenant, async (t) => {
+    const obra = await obraEmExecucao(t);
+    const antes = { budgetAmount: obra.budgetAmount, startsAt: new Date(obra.startsAt).toISOString(), responsibleUserId: obra.responsibleUserId };
+    const casos = [
+      ['budgetAmount', 'PROJECT_BUDGET_AMOUNT_REQUIRED'],
+      ['startsAt', 'PROJECT_START_DATE_REQUIRED'],
+      ['responsibleUserId', 'PROJECT_RESPONSIBLE_REQUIRED'],
+    ];
+    for (const [field, code] of casos) {
+      for (const vazio of [null, '']) {
+        await assert.rejects(projectsService.updateProject(obra.id, { [field]: vazio }, tenant.userId, t), recusa(code), `${field}=${JSON.stringify(vazio)}`);
+      }
+    }
+    const gravada = await projectsService.getProject(obra.id, t);
+    assert.deepEqual(
+      { budgetAmount: gravada.budgetAmount, startsAt: new Date(gravada.startsAt).toISOString(), responsibleUserId: gravada.responsibleUserId },
+      antes,
+      'nada foi apagado'
+    );
+    const membro = await createMember(tenant, t);
+    const trocada = await projectsService.updateProject(obra.id, { startsAt: '2026-10-05T15:00:00.000Z', responsibleUserId: membro.id }, tenant.userId, t);
+    assert.equal(new Date(trocada.startsAt).toISOString(), '2026-10-05T15:00:00.000Z');
+    assert.equal(trocada.responsibleUserId, membro.id);
+    await projectsService.transitionProject(obra.id, 'PAUSED', tenant.userId, t);
+    await assert.rejects(projectsService.updateProject(obra.id, { responsibleUserId: null }, tenant.userId, t), recusa('PROJECT_RESPONSIBLE_REQUIRED'));
   });
 });
