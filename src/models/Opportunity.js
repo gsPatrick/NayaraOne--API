@@ -94,6 +94,13 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'next_action_due_at',
       },
+      // Origem do lead (M9:610, M9:784; DI-BI2-4): gravada na criação e nunca mais alterada (o hook abaixo devolve o valor
+      // gravado se alguém tentar trocá-lo pelo modelo; updateOpportunity nem lê o campo). A coluna vem da migration 759.
+      leadSource: {
+        type: DataTypes.STRING(40),
+        allowNull: true,
+        field: 'lead_source',
+      },
       // CAD-09 (Marco 3 §9): retrato do financiamento vinculado, escrito só pelo consumidor do evento do Correspondente
       // (crm/financingStatus.consumer.js). Só referência, status e data — nenhum dado bancário no CRM.
       financingCaseId: {
@@ -143,6 +150,12 @@ module.exports = (sequelize) => {
       deletedAt: 'deleted_at',
       version: 'lockVersion',
       underscored: true,
+      hooks: {
+        beforeUpdate(instance) {
+          const gravada = instance.previous('leadSource');
+          if (gravada && instance.changed('leadSource')) instance.set('leadSource', gravada);
+        },
+      },
     }
   );
 

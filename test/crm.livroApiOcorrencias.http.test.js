@@ -87,6 +87,17 @@ test('LIVRO §13: POST /crm/opportunities cria com próxima ação e origem do l
   const op = await oportunidade(personId);
   assert.equal(op.personId, personId);
   assert.ok(op.nextAction);
+  // a origem do lead volta nas leituras e a edição não a troca nem apaga (DI-BI2-4)
+  assert.equal(op.leadSource, ORIGEM_LEAD_PADRAO.leadSource, 'a criação devolve a origem');
+  const patch = await http('PATCH', `/opportunities/${op.id}`, { leadSource: 'PHONE', temperature: 'HOT' });
+  assert.equal(patch.status, 200, JSON.stringify(patch.body));
+  assert.equal(patch.body.data.leadSource, ORIGEM_LEAD_PADRAO.leadSource);
+  const apagar = await http('PATCH', `/opportunities/${op.id}`, { leadSource: null });
+  assert.equal(apagar.status, 200, JSON.stringify(apagar.body));
+  const lida = await http('GET', `/opportunities/${op.id}`);
+  assert.deepEqual([lida.status, lida.body.data.leadSource, lida.body.data.temperature], [200, ORIGEM_LEAD_PADRAO.leadSource, 'HOT']);
+  const lista = await http('GET', `/opportunities?personId=${personId}`);
+  assert.equal(lista.body.data[0].leadSource, ORIGEM_LEAD_PADRAO.leadSource, 'a lista também devolve a origem');
 });
 
 test('LIVRO §10/§12: POST /crm/opportunities/:id/interactions grava canal SITE com occurredAt e não duplica pelo externalMessageId', async () => {

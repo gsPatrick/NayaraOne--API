@@ -82,6 +82,7 @@ async function createOpportunity(payload, actorUserId, transaction) {
       expectedValue: expectedValue !== undefined ? expectedValue : null,
       nextAction: nextAction || null,
       nextActionDueAt: nextActionDueAt || null,
+      leadSource,
       wonReason: outcome && outcome.wonReason ? outcome.wonReason : null,
       lostReason: outcome && outcome.lostReason ? outcome.lostReason : null,
       withdrawnReason: outcome && outcome.withdrawnReason ? outcome.withdrawnReason : null,

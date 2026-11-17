@@ -72,6 +72,13 @@ test('origem do lead: a edição não apaga nem troca a origem gravada', async (
     assert.equal(await sourceOf(t, opp.id), 'SITE', 'leadSource nulo na edição é ignorado');
     await opportunityService.updateOpportunity(opp.id, { leadSource: 'PHONE', stage: 'QUALIFIED' }, tenant.userId, t);
     assert.equal(await sourceOf(t, opp.id), 'SITE', 'a origem é a da chegada do lead');
+    // o modelo expõe a origem (GET) e não deixa trocá-la nem por quem salva a instância diretamente
+    assert.equal(opp.leadSource, 'SITE', 'a criação devolve a origem');
+    const lida = await opportunityService.getOpportunity(opp.id, t);
+    assert.equal(lida.toJSON().leadSource, 'SITE', 'a leitura devolve a origem');
+    lida.leadSource = 'OTHER';
+    await lida.save({ transaction: t });
+    assert.equal(await sourceOf(t, opp.id), 'SITE', 'a origem gravada não muda pelo modelo');
   });
 });
 
