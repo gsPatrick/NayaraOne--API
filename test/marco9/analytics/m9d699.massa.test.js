@@ -45,6 +45,22 @@ test('m9d699 o histórico cobre 24 meses e a massa traz lançamentos pagos, pend
   await cleanupLoad(admin, run.companies);
 });
 
+test('m9d699 a massa da escala cheia (a da etapa 13) entra inteira: o extrato não repete fingerprint na mesma conta', async () => {
+  // Antes, sem histórico na linha, duas transações da mesma conta, dia, valor e sentido empatavam no fingerprint e o UNIQUE completo da
+  // migration 10411 recusava a massa (SequelizeUniqueConstraintError): a etapa 13 reprovava antes de medir. Semente e tamanhos do pipeline.
+  const full = sizesFor({ scale: 'full' });
+  const run = await seedLoad(admin, { scale: 'full', seed: '42', anchor: '2026-10-28', entries: 1, opportunities: 1, properties: 1, projects: 1, stages: 1, measurements: 1, dailyReports: 1 });
+  try {
+    const ids = run.companies.map((c) => c.companyId);
+    assert.equal(ids.length, full.companies);
+    const [[r]] = await admin.query(`SELECT count(*)::int AS linhas, count(DISTINCT (bank_account_id, fingerprint))::int AS distintos, count(*) FILTER (WHERE description IS NULL)::int AS sem_historico
+      FROM finance.bank_transactions WHERE company_id IN (:ids)`, { replacements: { ids } });
+    assert.deepEqual(r, { linhas: full.bankTransactions * full.companies, distintos: full.bankTransactions * full.companies, sem_historico: 0 });
+  } finally {
+    await cleanupLoad(admin, run.companies);
+  }
+});
+
 test('m9d699 a massa só entra em banco descartável em 127.0.0.1', () => {
   assert.throws(() => connect('postgres://u:p@db.exemplo.invalid:5432/x'), /127\.0\.0\.1/);
   assert.throws(() => sizesFor({ scale: 'gigante' }), /Escala desconhecida/);
