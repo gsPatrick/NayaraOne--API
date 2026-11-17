@@ -169,7 +169,7 @@ async function resolveCommissionRule(groupId, companyId, transaction, facts = {}
   const evaluation = await evaluateRule(RULE_CODE, { commissionRuleActive: true, groupId, companyId, ...facts }, { groupId, companyId }, { transaction });
   if (evaluation.decision !== 'APPLY') {
     throw AppError.unprocessable(
-      `Não há regra de comissão publicada para esta empresa (${RULE_CODE}) — publique o percentual de cada componente antes de registrar comissões.`,
+      'Não há regra de comissão publicada para esta empresa — publique o percentual de cada componente antes de registrar comissões.',
       'FINANCE_COMMISSION_RULE_NOT_CONFIGURED',
       { reason: evaluation.reason }
     );

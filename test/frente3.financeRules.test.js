@@ -311,8 +311,15 @@ test('F3-CM1 percentual/base/versão nunca vêm do pedido; sem regra publicada f
 
     // Empresa nova do grupo, sem regra publicada: não existe percentual padrão inventado.
     const fresh = await Company.create({ groupId: tenant.groupId, name: `F3 Sem Regra ${uniqueSuffix()}`, status: 'ACTIVE' }, { transaction: t });
+    // A mensagem vai para a tela: sem a chave técnica (antes "... (REG-FIN-001) ..."). O motivo do motor é o de "nada publicado", que a tela
+    // da regra (Front, regra-comissao/currentRule.js) trata como "nenhuma regra publicada ainda" para liberar a primeira publicação.
     await inCompany(t, fresh.id, () =>
-      expectCode(() => commissionsService.getActiveCommissionRule(tenant.groupId, fresh.id, t), 'FINANCE_COMMISSION_RULE_NOT_CONFIGURED')
+      assert.rejects(() => commissionsService.getActiveCommissionRule(tenant.groupId, fresh.id, t), (err) => {
+        assert.equal(err.code, 'FINANCE_COMMISSION_RULE_NOT_CONFIGURED', err.message);
+        assert.doesNotMatch(err.message, /REG-FIN|RULE_/);
+        assert.ok(['RULE_NOT_FOUND', 'RULE_NO_ACTIVE_VERSION', 'RULE_NO_MATCHING_SCOPE'].includes(err.details && err.details.reason), JSON.stringify(err.details));
+        return true;
+      })
     );
   });
 });
