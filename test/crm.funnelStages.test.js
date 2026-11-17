@@ -10,6 +10,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const peopleService = require('../src/features/people/people.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');
 const { ACTIVE_STAGES, STAGES } = require('../src/features/crm/opportunityStages');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 const FUTURE = () => new Date(Date.now() + 86400000).toISOString();
@@ -22,7 +23,7 @@ async function lead(t) {
 }
 function create(t, personId, extra = {}) {
   return opportunitiesService.createOpportunity(
-    { groupId: tenant.groupId, companyId: tenant.companyId, personId, nextAction: 'Ligar', nextActionDueAt: FUTURE(), ...extra },
+    { ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId, nextAction: 'Ligar', nextActionDueAt: FUTURE(), ...extra },
     tenant.userId,
     t
   );
@@ -64,7 +65,7 @@ test('funil do livro: WON e LOST gravados com o código do livro, com o motivo e
     await assert.rejects(opportunitiesService.updateOpportunity(b.id, { stage: 'lost' }, tenant.userId, t), (err) => err.code === 'OPPORTUNITY_OUTCOME_REASON_REQUIRED');
     const perdida = await opportunitiesService.updateOpportunity(b.id, { stage: 'lost', lostReason: 'COMPETITOR' }, tenant.userId, t);
     assert.equal(perdida.stage, 'LOST');
-    const c = await opportunitiesService.createOpportunity({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'LOST', lostReason: 'LOCATION' }, tenant.userId, t);
+    const c = await opportunitiesService.createOpportunity({ ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'LOST', lostReason: 'LOCATION' }, tenant.userId, t);
     assert.equal(c.stage, 'LOST');
   });
 });

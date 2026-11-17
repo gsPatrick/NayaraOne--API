@@ -3,6 +3,7 @@
 const { Opportunity, Person, Property } = require('../../models');
 const AppError = require('../../utils/AppError');
 const { CLOSED_STAGES, assertNextActionWhenActive } = require('./opportunityNextAction.validator');
+const { assertLeadSource } = require('./opportunityLeadSource.validator');
 const { normalizeStage, canonicalStage, DEFAULT_STAGE, isWithdrawalRequest } = require('./opportunityStages');
 const { resolveOutcomeReason } = require('./opportunityOutcomeReason.validator');
 const { resolveOwnerUserId, assertResponsibleUser } = require('./crmUsers');
@@ -57,6 +58,8 @@ async function createOpportunity(payload, actorUserId, transaction) {
   }
 
   assertNextActionWhenActive({ stage: normalizedStage, nextAction, nextActionDueAt });
+  // M9:610 / M9:784 (DI-BI2-4): a origem do lead é obrigatória e conferida antes de gravar; quem chega por um canal já vem com ela.
+  const leadSource = assertLeadSource(payload.leadSource);
   const tenant = { groupId, companyId };
   // M3-12: se já nasce num estágio de desfecho (WON/LOST), o motivo estruturado é obrigatório e precisa estar na lista da empresa.
   const outcome = await resolveOutcomeReason(
@@ -108,16 +111,14 @@ async function createOpportunity(payload, actorUserId, transaction) {
     transaction
   );
 
-  // M9-D431: origem do lead com rastreio (formulário, WhatsApp, ligação). Referência de campanha/link inválida não impede a criação:
-  // o lead nasce sem atribuição (attribution_valid = false).
-  if (payload.leadSource) {
-    const { service: tracking } = require('../../features/marketing/tracking'); // require tardio: evita ciclo de carga entre o CRM e o Marketing
-    await tracking.recordLeadSource(
-      { tenant: { groupId, companyId }, actor: actorUserId, opportunityId: opportunity.id, leadSource: payload.leadSource,
-        campaignId: payload.campaignId, trackingLinkId: payload.trackingLinkId, clickAt: payload.clickAt },
-      transaction
-    );
-  }
+  // M9-D431: origem do lead com rastreio (formulário, WhatsApp, ligação, parceiro). Sempre presente (conferida acima). Referência de
+  // campanha/link inválida não impede a criação: o lead nasce sem atribuição (attribution_valid = false).
+  const { service: tracking } = require('../../features/marketing/tracking'); // require tardio: evita ciclo de carga entre o CRM e o Marketing
+  await tracking.recordLeadSource(
+    { tenant: { groupId, companyId }, actor: actorUserId, opportunityId: opportunity.id, leadSource,
+      campaignId: payload.campaignId, trackingLinkId: payload.trackingLinkId, clickAt: payload.clickAt },
+    transaction
+  );
 
   return opportunity;
 }

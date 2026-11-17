@@ -19,6 +19,7 @@ require('../app');
 const { getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { Person, Property, PropertyOffer, Opportunity, Message, PropertyRadar } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let baseUrl;
@@ -133,6 +134,7 @@ test('Marco 3 ponta a ponta via HTTP real: pessoa -> merge -> imóvel -> 2 ofert
 
   // 5. Criar oportunidade vinculada à pessoa/imóvel.
   const opportunity = await http('POST', '/opportunities', {
+    ...ORIGEM_LEAD_PADRAO,
     personId: p1.body.data.id,
     propertyId: property.body.data.id,
     nextAction: 'Ligar para o cliente',
@@ -182,6 +184,7 @@ test('Marco 3 HTTP real: LOST sem motivo é bloqueado pela rota real (CRM-TS-008
   createdPersonIds.push(person.body.data.id);
 
   const opportunity = await http('POST', '/opportunities', {
+    ...ORIGEM_LEAD_PADRAO,
     personId: person.body.data.id,
     nextAction: 'Follow-up',
     nextActionDueAt: new Date(Date.now() + 86400000).toISOString(),

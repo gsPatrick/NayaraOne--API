@@ -12,6 +12,7 @@ const { buildToolServices } = require('../../../src/features/ai/toolServices');
 const peopleService = require('../../../src/features/people/people.service');
 const opportunityService = require('../../../src/features/crm/opportunity.service');
 const { defValida, LIMITES } = require('../_helpers/aiToolDefs');
+const { ORIGEM_LEAD_PADRAO } = require('../../helpers/origemLeadPadrao');
 
 after(async () => { await sequelize.close(); });
 
@@ -48,6 +49,7 @@ test('m9d016_leitura_usa_application_service', async () => {
   await withRollbackTenantTransaction(tenant, async (tx) => {
     const pessoa = await peopleService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Lead ${uniqueSuffix()}` }, tenant.userId, tx);
     const opp = await opportunityService.createOpportunity({
+      ...ORIGEM_LEAD_PADRAO,
       groupId: tenant.groupId, companyId: tenant.companyId, personId: pessoa.id, ownerUserId: tenant.userId,
       nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000).toISOString(),
     }, tenant.userId, tx);

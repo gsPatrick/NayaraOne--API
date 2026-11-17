@@ -10,6 +10,7 @@ const { sequelize, User, Role, RolePermission, UserMembership, Permission } = re
 const peopleService = require('../../src/features/people/person.service');
 const opportunityService = require('../../src/features/crm/opportunity.service');
 const propertiesService = require('../../src/features/properties/properties.service');
+const { ORIGEM_LEAD_PADRAO } = require('./origemLeadPadrao');
 
 const FUTURE = () => new Date(Date.now() + 2 * 86400000);
 
@@ -57,7 +58,7 @@ async function createPerson(tenant, transaction, name = 'Cliente') {
 async function createOpportunity(tenant, transaction, extra = {}, actorUserId = tenant.userId) {
   const person = extra.personId ? { id: extra.personId } : await createPerson(tenant, transaction);
   return opportunityService.createOpportunity(
-    { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, nextAction: 'Ligar para o cliente', nextActionDueAt: FUTURE(), ...extra },
+    { ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, nextAction: 'Ligar para o cliente', nextActionDueAt: FUTURE(), ...extra },
     actorUserId,
     transaction
   );

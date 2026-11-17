@@ -31,6 +31,7 @@ const opportunityTasksService = require('../src/features/crm/opportunityTasks.se
 const { getOpportunityTimeline } = require('../src/features/crm/opportunityTimeline.service');
 const radarService = require('../src/features/radar/radar.service');
 const { Opportunity, Proposal, Company, User, Message } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -71,6 +72,7 @@ async function createLead(transaction, label) {
 async function createActiveOpportunity(transaction, personId, extra = {}) {
   return opportunitiesService.createOpportunity(
     {
+      ...ORIGEM_LEAD_PADRAO,
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,
@@ -327,13 +329,15 @@ test('ADV-C08 duas propostas CONCORRENTES na mesma oportunidade viram versões D
           replacements: { id: criado.opportunityId },
           transaction: t,
         });
-        await sequelize.query('DELETE FROM "crm"."opportunities" WHERE id = :id', {
+        // Origem do lead obrigatória (DI-BI2-4): a oportunidade tem o evento LEAD_CREATED da atribuição, que o runtime não apaga
+        // (marketing.attribution_events sem DELETE); oportunidade e pessoa saem por exclusão lógica (banco descartável).
+        await sequelize.query('UPDATE "crm"."opportunities" SET deleted_at = now() WHERE id = :id', {
           replacements: { id: criado.opportunityId },
           transaction: t,
         });
       }
       if (criado.personId) {
-        await sequelize.query('DELETE FROM "people"."persons" WHERE id = :id', {
+        await sequelize.query('UPDATE "people"."persons" SET deleted_at = now() WHERE id = :id', {
           replacements: { id: criado.personId },
           transaction: t,
         });

@@ -18,6 +18,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const peopleService = require('../src/features/people/people.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const opportunityService = require('../src/features/crm/opportunity.service');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let otherCompanyId;
@@ -111,6 +112,7 @@ test('CRMX-015/CRM-TS-012: crm.opportunities — corretor de outra empresa não 
     );
     const opportunity = await opportunityService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,

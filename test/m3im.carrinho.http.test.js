@@ -16,6 +16,7 @@ require('../app');
 const { getSeedTenant, withTenantTransaction, uniqueSuffix, sequelize } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { OutboxEvent } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let baseUrl;
@@ -48,7 +49,7 @@ async function http(method, p, body, auth = true) {
 async function cenario() {
   const s = uniqueSuffix();
   const pessoa = await http('POST', '/people', { personType: 'PF', legalName: `Cliente carrinho ${s}`, allowDuplicate: true });
-  const op = await http('POST', '/opportunities', { personId: pessoa.body.data.id, stage: 'NEW', nextAction: 'Enviar opções', nextActionDueAt: FUTURE() });
+  const op = await http('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId: pessoa.body.data.id, stage: 'NEW', nextAction: 'Enviar opções', nextActionDueAt: FUTURE() });
   assert.equal(op.status, 201, JSON.stringify(op.body));
   const imoveis = [];
   for (let i = 0; i < 3; i += 1) {

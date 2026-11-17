@@ -89,15 +89,26 @@ test('create_opportunity_com_lead_source_grava_origem_e_evento', async () => {
     const good = await createOpportunity({ ...base, personId, leadSource: 'form', campaignId: camp.id, trackingLinkId: lk.id }, tenant.userId, t);
     const [row] = await fx.q(t, 'SELECT lead_source, campaign_id, tracking_link_id, attribution_valid FROM crm.opportunities WHERE id = :id', { id: good.id });
     assert.deepEqual([row.lead_source, row.campaign_id, row.tracking_link_id, row.attribution_valid], ['FORM', camp.id, lk.id, true]);
-    const [event] = await fx.events(t, "event_type = 'LEAD_CREATED'");
+    // só os eventos das pessoas deste teste: com a origem obrigatória, toda oportunidade gravada por outros testes no mesmo banco também tem LEAD_CREATED
+    const leadEvents = (people) => fx.events(t, "event_type = 'LEAD_CREATED' AND person_id IN (:people)", { people });
+    const [event] = await leadEvents([personId]);
     assert.equal(event.opportunity_id, good.id);
     assert.equal(event.campaign_id, camp.id);
     // referência inválida: lead nasce normal, sem atribuição
-    const bad = await createOpportunity({ ...base, personId: await fx.makePerson(t, tenant), leadSource: 'FORM', campaignId: fx.uid(), trackingLinkId: fx.uid() }, tenant.userId, t);
+    const badPerson = await fx.makePerson(t, tenant);
+    const bad = await createOpportunity({ ...base, personId: badPerson, leadSource: 'FORM', campaignId: fx.uid(), trackingLinkId: fx.uid() }, tenant.userId, t);
     const [badRow] = await fx.q(t, 'SELECT lead_source, campaign_id, tracking_link_id, attribution_valid FROM crm.opportunities WHERE id = :id', { id: bad.id });
     assert.deepEqual([badRow.lead_source, badRow.campaign_id, badRow.tracking_link_id, badRow.attribution_valid], ['FORM', null, null, false]);
-    // sem leadSource: nada é gravado
-    await createOpportunity({ ...base, personId: await fx.makePerson(t, tenant) }, tenant.userId, t);
-    assert.equal((await fx.events(t, "event_type = 'LEAD_CREATED'")).length, 2);
+    // sem leadSource (DI-BI2-4, M9:610/M9:784): a oportunidade é recusada com 422 antes de gravar (antes nascia sem origem e ficava fora de "Leads por origem")
+    const semOrigem = await fx.makePerson(t, tenant);
+    for (const vazio of [undefined, null, '', '   ']) {
+      await assert.rejects(createOpportunity({ ...base, personId: semOrigem, leadSource: vazio }, tenant.userId, t),
+        (e) => e.statusCode === 422 && e.code === 'OPPORTUNITY_LEAD_SOURCE_REQUIRED', `origem ${JSON.stringify(vazio)}`);
+    }
+    // origem fora do catálogo: o mesmo erro do rastreio, também antes de gravar
+    await assert.rejects(createOpportunity({ ...base, personId: semOrigem, leadSource: 'FEIRA' }, tenant.userId, t), (e) => e.statusCode === 400 && e.code === 'MKT_VALIDATION');
+    const [{ n }] = await fx.q(t, 'SELECT count(*)::int AS n FROM crm.opportunities WHERE person_id = :p', { p: semOrigem });
+    assert.equal(n, 0, 'nenhuma oportunidade sem origem foi gravada');
+    assert.equal((await leadEvents([personId, badPerson, semOrigem])).length, 2);
   });
 });

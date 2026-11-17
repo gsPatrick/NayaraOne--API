@@ -35,7 +35,7 @@ async function fasePessoas({ tenantA, tenantB }, volume, rodada, semente) {
 }
 
 async function faseOportunidades(tenant, pessoas, volume) {
-  const base = { groupId: tenant.groupId, companyId: tenant.companyId, stage: 'NEW' };
+  const base = { groupId: tenant.groupId, companyId: tenant.companyId, stage: 'NEW', leadSource: 'FORM' }; // origem do lead obrigatória (DI-BI2-4)
   const amanha = () => new Date(Date.now() + 86400000);
   const pessoa = (i) => pessoas[i % pessoas.length];
   const com = Array.from({ length: volume.oportunidades }, (_, i) => () => comoTenant(tenant, (t) => opportunitiesService.createOpportunity(

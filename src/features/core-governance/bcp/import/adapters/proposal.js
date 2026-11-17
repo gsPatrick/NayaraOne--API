@@ -21,6 +21,7 @@ async function ensureOpportunity({ tenant, actorUserId, operation, person, prope
   const opportunity = await createOpportunity({
     groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, ownerUserId: actorUserId, stage: 'NEW',
     nextAction: nextAction || `Acompanhar a proposta de locação do formulário ${operation.manualReference}`, nextActionDueAt: new Date(Date.now() + hours * 3600 * 1000),
+    leadSource: 'FORM', // a proposta veio do formulário em papel da contingência (DI-BI2-4)
   }, actorUserId, transaction);
   return { opportunity, created: true };
 }

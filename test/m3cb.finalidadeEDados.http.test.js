@@ -6,6 +6,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./helpers/m3cbCarteiraEnv');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let env;
 const OPT_IN_KEY = 'marketing.consent.exige_opt_in_para';
@@ -96,7 +97,7 @@ test('M3-18 acesso a dados pessoais pelo CRM: as rotas do CRM não devolvem CPF 
   const p = await env.call('POST', '/people', as('gestor'), { personType: 'PF', legalName: H.unique('Cliente com CPF'), taxIdNormalized: doc, contacts: [{ contactType: 'PHONE', value: telefone, isPrimary: true }] });
   assert.equal(p.status, 201, JSON.stringify(p.body));
   const personId = p.body.data.id;
-  const o = await env.call('POST', '/opportunities', as('gestor'), { personId, stage: 'NEW', ownerUserId: env.ids.maker, nextAction: 'Ligar', nextActionDueAt: H.FUTURE() });
+  const o = await env.call('POST', '/opportunities', as('gestor'), { ...ORIGEM_LEAD_PADRAO, personId, stage: 'NEW', ownerUserId: env.ids.maker, nextAction: 'Ligar', nextActionDueAt: H.FUTURE() });
   assert.equal(o.status, 201, JSON.stringify(o.body));
   const opportunityId = o.body.data.id;
   await env.call('POST', '/messages', as('gestor'), { personId, opportunityId, direction: 'INBOUND', authorType: 'CLIENT', channel: 'WHATSAPP', body: 'Oi' });

@@ -29,6 +29,7 @@ const { getOpportunityTimeline } = require('../src/features/crm/opportunityTimel
 const radarService = require('../src/features/radar/radar.service');
 const { runRadarMatchingJob } = require('../src/engines/jobs/radarMatchingJob');
 const { Task, AuditLog, Company, OutboxEvent, Notification, PropertyRadar } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -68,6 +69,7 @@ async function createLead(transaction, label) {
 async function createActiveOpportunity(transaction, personId, extra = {}) {
   return opportunitiesService.createOpportunity(
     {
+      ...ORIGEM_LEAD_PADRAO,
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,

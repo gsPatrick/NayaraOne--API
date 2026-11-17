@@ -114,8 +114,9 @@ test('messaging_inbound_vira_interacao', async () => {
   await env.rodar(tenant);
   const [pessoa] = await env.sql(tenant, "SELECT p.id, p.legal_name FROM people.persons p JOIN people.person_contacts c ON c.person_id = p.id WHERE c.value_normalized = :v AND p.company_id = :c", { v: novo, c: tenant.companyId });
   assert.equal(pessoa.legal_name, 'Beltrano');
-  const [op] = await env.sql(tenant, 'SELECT stage, next_action FROM crm.opportunities WHERE person_id = :p', { p: pessoa.id });
+  const [op] = await env.sql(tenant, 'SELECT stage, next_action, lead_source FROM crm.opportunities WHERE person_id = :p', { p: pessoa.id });
   assert.equal(op.stage, 'NEW');
+  assert.equal(op.lead_source, 'WHATSAPP', 'o canal é a origem do lead (DI-BI2-4)');
   const inb = await env.mensagensDa(tenant, pessoa.id);
   assert.equal(inb.length, 1);
   assert.equal(inb[0].direction, 'INBOUND');

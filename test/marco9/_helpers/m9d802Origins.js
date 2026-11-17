@@ -7,6 +7,7 @@ const peopleService = require('../../../src/features/people/people.service');
 const opportunitiesService = require('../../../src/features/crm/opportunities.service');
 const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
 const assetsService = require('../../../src/features/inventory/assets.service');
+const { ORIGEM_LEAD_PADRAO } = require('../../helpers/origemLeadPadrao');
 
 const sfx = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;
 const future = (days) => new Date(Date.now() + days * 86400000);
@@ -17,7 +18,7 @@ async function person(t, tx) {
 
 async function opportunity(t, tx) {
   const owner = await person(t, tx);
-  return opportunitiesService.createOpportunity({ groupId: t.groupId, companyId: t.companyId, personId: owner.id, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: future(3) }, t.userId, tx);
+  return opportunitiesService.createOpportunity({ ...ORIGEM_LEAD_PADRAO, groupId: t.groupId, companyId: t.companyId, personId: owner.id, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: future(3) }, t.userId, tx);
 }
 
 async function property(t, tx) {

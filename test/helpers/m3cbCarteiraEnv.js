@@ -6,6 +6,7 @@
 const assert = require('node:assert/strict');
 const { DISPOSABLE, SKIP, admin, grant, startHttpEnv } = require('../marco9/_helpers/aiHttpEnv');
 const { emailFor } = require('../../scripts/seed-ci-two-tenants');
+const { ORIGEM_LEAD_PADRAO } = require('./origemLeadPadrao');
 
 const CORRETOR = [
   'people:read', 'people:create', 'crm:opportunities:read', 'crm:opportunities:read:own', 'crm:opportunities:update', 'crm:opportunities:create',
@@ -75,7 +76,7 @@ const unique = (label) => `${label} ${Date.now()}-${(seq += 1)}`;
 async function oportunidadeDe(env, ownerUserId, label = 'Cliente') {
   const p = await env.call('POST', '/people', env.tokens['A:gestor'], { personType: 'PF', legalName: unique(label), allowDuplicate: true });
   assert.equal(p.status, 201, JSON.stringify(p.body));
-  const o = await env.call('POST', '/opportunities', env.tokens['A:gestor'], { personId: p.body.data.id, stage: 'NEW', ownerUserId, nextAction: 'Ligar para o cliente', nextActionDueAt: FUTURE() });
+  const o = await env.call('POST', '/opportunities', env.tokens['A:gestor'], { ...ORIGEM_LEAD_PADRAO, personId: p.body.data.id, stage: 'NEW', ownerUserId, nextAction: 'Ligar para o cliente', nextActionDueAt: FUTURE() });
   assert.equal(o.status, 201, JSON.stringify(o.body));
   return { personId: p.body.data.id, opportunityId: o.body.data.id };
 }

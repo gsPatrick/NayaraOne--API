@@ -42,7 +42,7 @@ async function resolveSender(ctx, { from, name }, transaction) {
   }, null, transaction);
   const oportunidade = await createOpportunity({
     groupId: ctx.groupId, companyId: ctx.companyId, personId: pessoa.id, stage: 'NEW', nextAction: 'Responder contato recebido por WhatsApp',
-    nextActionDueAt: new Date(Date.now() + params.leadDeadlineHours * 3600000),
+    nextActionDueAt: new Date(Date.now() + params.leadDeadlineHours * 3600000), leadSource: 'WHATSAPP', // o canal é a origem (DI-BI2-4)
   }, null, transaction);
   return { personId: pessoa.id, opportunityId: oportunidade.id, provisional: true };
 }

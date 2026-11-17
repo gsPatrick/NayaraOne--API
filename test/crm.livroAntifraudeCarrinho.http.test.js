@@ -17,6 +17,7 @@ const { getSeedTenant, withTenantTransaction, uniqueSuffix, sequelize } = requir
 const { createMember } = require('./helpers/m3caCrm');
 const { signAccessToken } = require('../src/utils/jwt');
 const { AuditLog, OutboxEvent, PropertyMedia } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let baseUrl;
@@ -56,7 +57,7 @@ async function pessoa(label) {
   return p.body.data.id;
 }
 async function oportunidade(personId, extra = {}) {
-  const o = await http('POST', '/opportunities', { personId, stage: 'NEW', nextAction: 'Retornar contato', nextActionDueAt: FUTURE(), ...extra });
+  const o = await http('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'NEW', nextAction: 'Retornar contato', nextActionDueAt: FUTURE(), ...extra });
   assert.equal(o.status, 201, JSON.stringify(o.body));
   return o.body.data;
 }

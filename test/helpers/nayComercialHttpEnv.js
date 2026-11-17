@@ -13,6 +13,7 @@ const opportunityService = require('../../src/features/crm/opportunity.service')
 const propertiesService = require('../../src/features/properties/properties.service');
 const offersService = require('../../src/features/properties/propertyOffers.service');
 const messagesService = require('../../src/features/crm/messages.service');
+const { ORIGEM_LEAD_PADRAO } = require('./origemLeadPadrao');
 
 const CODE = 'NAY_COMERCIAL';
 const TOOLS = ['crm.getOpportunity', 'crm.getCustomerSummary', 'radar.listMatchesForOpportunity'];
@@ -52,6 +53,7 @@ async function oportunidade(tenant, ownerUserId, { dias = 0, nome } = {}) {
   const { pessoa, opp } = await withTenantTransaction(tenant, async (tx) => {
     const p = await peopleService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: nome || `QA-M3CB Cliente ${uniqueSuffix()}` }, tenant.userId, tx);
     const o = await opportunityService.createOpportunity({
+      ...ORIGEM_LEAD_PADRAO,
       groupId: tenant.groupId, companyId: tenant.companyId, personId: p.id, nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000).toISOString(),
     }, tenant.userId, tx);
     return { pessoa: p, opp: o };

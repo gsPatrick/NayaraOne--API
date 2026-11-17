@@ -8,6 +8,7 @@ const peopleService = require('../src/features/people/people.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');
 const { OutboxEvent } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -32,7 +33,7 @@ test('opportunity ativa sem nextAction/nextActionDueAt falha com 422', async () 
     await assert.rejects(
       () =>
         opportunitiesService.createOpportunity(
-          { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'NEW' },
+          { ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'NEW' },
           tenant.userId,
           transaction
         ),
@@ -58,6 +59,7 @@ test('opportunity ativa com nextAction/nextActionDueAt é criada e publica domai
 
     const opportunity = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,
@@ -91,7 +93,7 @@ test('opportunity fechada (WON/LOST) não exige nextAction', async () => {
     );
 
     const opportunity = await opportunitiesService.createOpportunity(
-      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'LOST', lostReason: 'FINANCING_DENIED' },
+      { ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'LOST', lostReason: 'FINANCING_DENIED' },
       tenant.userId,
       transaction
     );
@@ -112,6 +114,7 @@ test('atualizar stage de opportunity publica novo domain event de stage_changed'
 
     const opportunity = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,

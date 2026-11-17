@@ -36,6 +36,7 @@ const legalDeadlinesService = require('../src/modules/legal/cases/deadline.servi
 const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
 const { ClicksignSignatureAdapter, ZapSignSignatureAdapter } = require('../src/modules/legal/signatures/providers');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 const {
   File,
   FileLink,
@@ -469,6 +470,7 @@ test('M5-33: jornada E2E de locação — proposta aceita, contrato ativo, visto
     // 2) Oportunidade -> proposta enviada -> proposta ACEITA (origem real do contrato).
     const opportunity = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: lessee.id,

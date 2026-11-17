@@ -8,6 +8,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const H = require('./helpers/m3cbCarteiraEnv');
 const T = require('./helpers/m3CrmTsEnv');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let env; let dev;
 const as = (who) => env.tokens[`A:${who}`];
@@ -71,7 +72,7 @@ test('CRM-TS-006 Internal leak — Portal consulta ocorrência interna — Nunca
   const leitor = await dev.as(['properties:read']);
   for (const rota of [`/properties/${casa.id}`, '/properties']) assert.doesNotMatch(JSON.stringify((await leitor('GET', rota)).body), new RegExp(segredo), rota);
   const { personId } = await T.pessoaDev(dev);
-  const op = (await dev.call('POST', '/opportunities', { personId, stage: 'NEW', nextAction: 'Enviar opções', nextActionDueAt: H.FUTURE() })).body.data;
+  const op = (await dev.call('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'NEW', nextAction: 'Enviar opções', nextActionDueAt: H.FUTURE() })).body.data;
   const cart = (await dev.call('POST', `/opportunities/${op.id}/carts`, { propertyIds: [casa.id] })).body.data;
   const link = await dev.call('POST', `/carts/${cart.id || cart.cart.id}/share-link`);
   const publico = await T.publico(dev, `/crm/carts/public/${link.body.data.token}`);
@@ -81,7 +82,7 @@ test('CRM-TS-006 Internal leak — Portal consulta ocorrência interna — Nunca
 
 test('CRM-TS-007 Lead no next action — Open sem tarefa — Bloqueado', { skip: H.SKIP }, async () => {
   const { personId } = await T.pessoaDev(dev);
-  const r = await dev.call('POST', '/opportunities', { personId, stage: 'NEW' });
+  const r = await dev.call('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'NEW' });
   assert.equal(r.status, 422, JSON.stringify(r.body));
   assert.equal(r.body.error.code, 'OPPORTUNITY_NEXT_ACTION_REQUIRED');
   assert.equal(await T.count('SELECT count(*)::int AS n FROM crm.opportunities WHERE person_id = $1', [personId]), 0);
@@ -89,7 +90,7 @@ test('CRM-TS-007 Lead no next action — Open sem tarefa — Bloqueado', { skip:
 
 test('CRM-TS-008 Lost no reason — Marcar LOST — Bloqueado', { skip: H.SKIP }, async () => {
   const { personId } = await T.pessoaDev(dev);
-  const op = (await dev.call('POST', '/opportunities', { personId, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: H.FUTURE() })).body.data;
+  const op = (await dev.call('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: H.FUTURE() })).body.data;
   const r = await dev.call('POST', `/crm/opportunities/${op.id}/lost`, {});
   assert.ok([400, 422].includes(r.status), JSON.stringify(r.body));
   assert.match(r.body.error.code, /REASON/);

@@ -14,6 +14,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const peopleService = require('../src/features/people/people.service');
 const opportunityService = require('../src/features/crm/opportunity.service');
 const { createMember } = require('./helpers/m3caCrm');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 after(async () => {
   await sequelize.close();
@@ -32,6 +33,7 @@ async function createOpportunityFor(tenant, ownerUserId, transaction) {
   );
   return opportunityService.createOpportunity(
     {
+      ...ORIGEM_LEAD_PADRAO,
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId: person.id,

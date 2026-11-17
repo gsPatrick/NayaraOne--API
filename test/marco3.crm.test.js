@@ -33,6 +33,7 @@ const { explainMatch } = require('../src/features/radar/radarMatching.service');
 const { escalateOverdueFeedbackCases } = require('../src/engines/jobs/feedbackCaseAlertJob');
 const { AuditLog, Notification, Proposal, FeedbackCase } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -57,6 +58,7 @@ async function createLead(transaction, label) {
 async function createActiveOpportunity(transaction, personId, extra = {}) {
   return opportunitiesService.createOpportunity(
     {
+      ...ORIGEM_LEAD_PADRAO,
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       personId,

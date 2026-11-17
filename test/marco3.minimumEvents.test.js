@@ -19,6 +19,7 @@ const opportunitiesService = require('../src/features/crm/opportunities.service'
 const messagesService = require('../src/features/crm/messages.service');
 const visitsService = require('../src/features/crm/visits.service');
 const { OutboxEvent } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -80,6 +81,7 @@ test('Eventos mínimos: crm.opportunity.created é publicado (distinto do stage_
     );
     const opportunity = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,
@@ -106,6 +108,7 @@ test('Eventos mínimos: crm.opportunity.won e crm.opportunity.lost são publicad
     );
     const oppWon = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: personWon.id,
@@ -127,6 +130,7 @@ test('Eventos mínimos: crm.opportunity.won e crm.opportunity.lost são publicad
     );
     const oppLost = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: personLost.id,
@@ -194,7 +198,7 @@ test('Eventos mínimos: crm.visit.completed é publicado ao concluir (DONE) uma 
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         propertyId: property.id,
-        opportunityId: (await opportunitiesService.createOpportunity({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, nextAction: 'Visitar', nextActionDueAt: new Date(Date.now() + 86400000) }, tenant.userId, transaction)).id,
+        opportunityId: (await opportunitiesService.createOpportunity({ ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, nextAction: 'Visitar', nextActionDueAt: new Date(Date.now() + 86400000) }, tenant.userId, transaction)).id,
         personId: person.id,
         scheduledAt: new Date(Date.now() + 3600000),
         status: 'SCHEDULED',
@@ -239,7 +243,7 @@ test('Eventos mínimos: registrar visita já concluída (status DONE na criaçã
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         propertyId: property.id,
-        opportunityId: (await opportunitiesService.createOpportunity({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, nextAction: 'Visitar', nextActionDueAt: new Date(Date.now() + 86400000) }, tenant.userId, transaction)).id,
+        opportunityId: (await opportunitiesService.createOpportunity({ ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, propertyId: property.id, nextAction: 'Visitar', nextActionDueAt: new Date(Date.now() + 86400000) }, tenant.userId, transaction)).id,
         personId: person.id,
         scheduledAt: new Date(Date.now() - 3600000),
         status: 'DONE',

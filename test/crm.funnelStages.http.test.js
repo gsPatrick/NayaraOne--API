@@ -11,6 +11,7 @@ process.env.PORT = process.env.M3_FUNNEL_HTTP_PORT || '21618';
 require('../app');
 const { getSeedTenant, uniqueSuffix, sequelize } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let baseUrl;
 let token;
@@ -48,22 +49,22 @@ test('ROTA funil do livro: estágio do livro aceito, WON normalizado com motivo,
   assert.equal(p.status, 201, JSON.stringify(p.body));
   const personId = p.body.data.id;
 
-  const semEstagio = await http('POST', '/opportunities', { personId, nextAction: 'Ligar', nextActionDueAt: FUTURE() });
+  const semEstagio = await http('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, nextAction: 'Ligar', nextActionDueAt: FUTURE() });
   assert.equal(semEstagio.status, 201, JSON.stringify(semEstagio.body));
   assert.equal(semEstagio.body.data.stage, 'NEW');
 
-  const visita = await http('POST', '/opportunities', { personId, stage: 'VISIT_SCHEDULED', nextAction: 'Confirmar visita', nextActionDueAt: FUTURE() });
+  const visita = await http('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'VISIT_SCHEDULED', nextAction: 'Confirmar visita', nextActionDueAt: FUTURE() });
   assert.equal(visita.status, 201, JSON.stringify(visita.body));
   assert.equal(visita.body.data.stage, 'VISIT_SCHEDULED');
 
   // Código do quadro antigo do Front (DI-M3-FUNIL-1): aceito na entrada e gravado no código do livro, para nada quebrar na troca de versão.
-  const antigo = await http('POST', '/opportunities', { personId, stage: 'NOVO', nextAction: 'Ligar', nextActionDueAt: FUTURE() });
+  const antigo = await http('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'NOVO', nextAction: 'Ligar', nextActionDueAt: FUTURE() });
   assert.equal(antigo.status, 201, JSON.stringify(antigo.body));
   assert.equal(antigo.body.data.stage, 'NEW');
   const contato = await http('PATCH', `/opportunities/${antigo.body.data.id}`, { stage: 'CONTATO' });
   assert.equal(contato.body.data.stage, 'QUALIFIED');
 
-  const inventado = await http('POST', '/opportunities', { personId, stage: 'FASE_INVENTADA', nextAction: 'Ligar', nextActionDueAt: FUTURE() });
+  const inventado = await http('POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'FASE_INVENTADA', nextAction: 'Ligar', nextActionDueAt: FUTURE() });
   assert.equal(inventado.status, 400);
   assert.equal(inventado.body.error.code, 'OPPORTUNITY_STAGE_INVALID');
   assert.match(inventado.body.error.message, /VISIT_SCHEDULED/);

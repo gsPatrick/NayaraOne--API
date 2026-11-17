@@ -13,6 +13,7 @@ const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix } = requir
 const personService = require('../src/features/people/person.service');
 const opportunitiesService = require('../src/features/crm/opportunity.service');
 const migration = require('../migrations/20260101009975-m3-funil-converte-etapas-antigas');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let admin;
@@ -31,7 +32,7 @@ test('DI-M3-FUNIL-1: etapas antigas viram a etapa do livro, terminal ganha data 
     const person = await personService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `Legado funil ${uniqueSuffix()}` }, tenant.userId, t);
     const out = [];
     for (let i = 0; i < 4; i += 1) {
-      const o = await opportunitiesService.createOpportunity({ groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'NEW', nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000).toISOString() }, tenant.userId, t);
+      const o = await opportunitiesService.createOpportunity({ ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'NEW', nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000).toISOString() }, tenant.userId, t);
       out.push(o.id);
     }
     return out;
