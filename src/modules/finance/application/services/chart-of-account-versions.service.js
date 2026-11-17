@@ -87,7 +87,7 @@ async function resolveAccountVersionForEntry(chartOfAccountId, companyId, factDa
   if (Number.isNaN(at.getTime())) {
     throw AppError.badRequest('Data do fato inválida.', 'FINANCE_ENTRY_VALIDATION');
   }
-  const { Op } = require('sequelize'); // eslint-disable-line global-require
+  const { Op } = require('sequelize');  
   let version = await ChartOfAccountVersion.findOne({
     where: { chartOfAccountId, effectiveFrom: { [Op.lt]: startOfBusinessDay(at, 1) } }, // em vigor no fim do dia do fato (São Paulo)
     order: [['versionNumber', 'DESC']],

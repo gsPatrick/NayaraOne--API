@@ -167,3 +167,11 @@ indicador. Migrations, ambas com `CREATE INDEX CONCURRENTLY` (não bloqueiam as 
    remove o índice inválido e cria outra vez.
 2. Conferir: `SELECT indisvalid FROM pg_index WHERE indexrelid IN ('analytics.data_quality_checks_latest_idx'::regclass, 'analytics.metric_definitions_metric_code_idx'::regclass)` -> `t` nas duas linhas.
 3. Sem o índice o painel continua correto, só lento (a consulta nova cai para leitura sequencial).
+
+## Segunda leva (17/11/2026): três migrations
+
+Aplicar com o usuário dono das tabelas, como nas anteriores: `DATABASE_URL="$MIGRATIONS_DATABASE_URL" node scripts/migrate.js up` e conferir `... status | grep -c down` -> 0.
+
+- `20261116230000-analytics-papeis-owner-dos-indicadores.js` (migrations/): cria em cada empresa os 10 papéis de responsável dos indicadores (financeiro, comercial, locacao, obras, estoque, juridico, correspondente, marketing, atendimento, ti) com analytics:read e analytics:accept, e corrige os textos antigos de owner gravados (DI-BI2-10). Idempotente.
+- `20261116235000-finance-indices-leitura-do-bi.js` (src/modules/finance/infrastructure/db/migrations/): índices (company_id, nature, status, due_at) e (company_id, nature, status, settled_at) em finance.financial_entries para o detalhamento do BI (DI-BI2-20).
+- `20261117010000-finance-vencimento-preenchido-uma-vez-em-aberto.js` (src/modules/finance/infrastructure/db/migrations/): o trigger append-only dos lançamentos passa a aceitar que um lançamento PENDING sem vencimento receba a data uma única vez (DI-BI2-6a). Nenhum dado é alterado.
