@@ -38,9 +38,20 @@ Todas as rotas exigem `Authorization: Bearer <accessToken>`.
   "temperature": "WARM",
   "expectedValue": 450000.00,
   "nextAction": "Ligar para confirmar visita",
-  "nextActionDueAt": "2026-08-25T13:00:00.000Z"
+  "nextActionDueAt": "2026-08-25T13:00:00.000Z",
+  "leadSource": "FORM"
 }
 ```
+
+### Regra dura: origem do lead obrigatória na criação (M9:610, M9:784; DI-BI2-4)
+
+`leadSource` é obrigatório no `create` (`opportunityLeadSource.validator.js`), conferido antes de gravar:
+sem ele (ausente, nulo ou só espaços) a resposta é `422 OPPORTUNITY_LEAD_SOURCE_REQUIRED`; fora do catálogo
+(`LEAD_SOURCES` em `marketing/tracking/tracking.catalog.js`: FORM, WHATSAPP, PHONE, EMAIL, SITE, PORTAL, SOCIAL,
+REFERRAL, PARTNER, OTHER) é `400 MKT_VALIDATION`. Os canais preenchem sozinhos: a primeira mensagem de um número
+desconhecido no WhatsApp grava `WHATSAPP`, o lead da API de parceiro (`POST /api-external/leads`) grava `PARTNER`
+e a importação BCP grava `FORM` na visita e na proposta (no lead, a origem escrita no papel). O `update` não lê
+`leadSource`: a origem gravada não muda nem some.
 
 ### Regra dura: `next_action` obrigatório em opportunity ATIVA
 
@@ -190,6 +201,7 @@ campos recusados em `details.fields`. Nenhuma forma de entrada chega ao banco ou
 
 - `400 OPPORTUNITY_VALIDATION` — `personId` ausente ou `temperature` inválida.
 - `422 OPPORTUNITY_NEXT_ACTION_REQUIRED` — opportunity ativa sem `nextAction`/`nextActionDueAt`.
+- `422 OPPORTUNITY_LEAD_SOURCE_REQUIRED` — criação sem `leadSource`; `400 MKT_VALIDATION` — `leadSource` fora do catálogo.
 - `400 VISIT_VALIDATION` — campos obrigatórios ausentes ou `status` inválido.
 - `400 MESSAGE_VALIDATION` — pedido fora do esquema da rota de mensagem (DI-M9R-11): campo desconhecido, tipo errado, fora da lista fechada ou do formato.
 - `422 VISIT_SCHEDULED_IN_THE_PAST` — visita prospectiva agendada para o passado.

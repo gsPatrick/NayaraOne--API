@@ -59,6 +59,8 @@ async function cleanContractClients() {
   await env.adminQuery('DELETE FROM governance.api_consumer_usage');
   await env.adminQuery('DELETE FROM governance.api_consumers WHERE app_key IS NULL');
   const lead = "SELECT id FROM people.persons WHERE legal_name = 'QA-M9 Lead do contrato'";
+  // o lead da API de parceiro nasce com origem PARTNER (DI-BI2-4) e, portanto, com o evento LEAD_CREATED da atribuição, que referencia a oportunidade e a pessoa
+  await env.adminQuery(`DELETE FROM marketing.attribution_events WHERE person_id IN (${lead})`);
   await env.adminQuery(`DELETE FROM crm.opportunities WHERE person_id IN (${lead})`);
   await env.adminQuery(`DELETE FROM people.person_contacts WHERE person_id IN (${lead})`);
   await env.adminQuery("DELETE FROM people.persons WHERE legal_name = 'QA-M9 Lead do contrato'");

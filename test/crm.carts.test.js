@@ -26,6 +26,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let cartsTableExists = false;
@@ -81,7 +82,7 @@ test('carts.service: cria carrinho versionado, gera link público sanitizado e r
       transaction
     );
     const opportunity = await opportunitiesService.createOpportunity(
-      { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'MATCHING', nextAction: 'Enviar carrinho', nextActionDueAt: new Date(Date.now() + 86400000) },
+      { ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, stage: 'MATCHING', nextAction: 'Enviar carrinho', nextActionDueAt: new Date(Date.now() + 86400000) },
       tenant.userId,
       transaction
     );

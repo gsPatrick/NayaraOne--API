@@ -114,10 +114,12 @@ test('m9d844 lead externo entra no funil com prazo configurável e recusa duplic
   const client = await env.clientWithToken(http, 'gestorA', A, { scopes: ['leads:write'] });
   const email = `qa-m9-${Date.now()}@exemplo.com`;
   const before = Date.now();
-  const created = await external(client.accessToken, 'POST', '/leads', { name: 'QA-M9 Interessada', email, phone: '(41) 99999-0000', message: 'QA-M9 quer visitar' });
+  // telefone novo a cada execução: o (41) 99999-0000 fixo colidia com o WhatsApp que crm.nayComercial.apoio.http grava na mesma empresa (409 de duplicidade na bateria)
+  const phone = `(41) 9${String(Math.floor(Math.random() * 1e8)).padStart(8, '0')}`;
+  const created = await external(client.accessToken, 'POST', '/leads', { name: 'QA-M9 Interessada', email, phone, message: 'QA-M9 quer visitar' });
   assert.equal(created.status, 201, JSON.stringify(created.body));
   const opp = (await env.adminQuery('SELECT * FROM crm.opportunities WHERE id = $1', [created.body.data.opportunityId])).rows[0];
-  assert.deepEqual([opp.stage, opp.company_id], ['NEW', A.companyId]);
+  assert.deepEqual([opp.stage, opp.company_id, opp.lead_source], ['NEW', A.companyId, 'PARTNER'], 'a API de parceiro é a origem do lead (DI-BI2-4)');
   const hours = (new Date(opp.next_action_due_at).getTime() - before) / 3600000;
   assert.ok(hours > 23.9 && hours < 24.1, `prazo padrão de 24 h: ${hours}`);
   const contacts = (await env.adminQuery('SELECT contact_type FROM people.person_contacts WHERE person_id = $1 ORDER BY contact_type', [opp.person_id])).rows.map((r) => r.contact_type);

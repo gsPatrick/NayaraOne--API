@@ -14,6 +14,7 @@ const opportunitiesService = require('../src/features/crm/opportunities.service'
 const peopleService = require('../src/features/people/person.service');
 const { prepararTenants, mkFlow, mkAutoVersion, uid, q } = require('./helpers/marketingExecucao');
 const { withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenantA;
 before(async () => { ({ tenantA } = await prepararTenants()); });
@@ -70,6 +71,7 @@ test('action_key_e_unica_no_crm', async () => {
     const suffix = uniqueSuffix();
     const person = await peopleService.createPerson({ groupId: tenantA.groupId, companyId: tenantA.companyId, personType: 'PF', legalName: `Lead D415 ${suffix}` }, tenantA.userId, tx);
     const opp = await opportunitiesService.createOpportunity({
+      ...ORIGEM_LEAD_PADRAO,
       groupId: tenantA.groupId, companyId: tenantA.companyId, personId: person.id, stage: 'QUALIFIED', nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000),
     }, tenantA.userId, tx);
     const tkey = idem.actionKey(uid(), 1, 'CREATE_TASK');

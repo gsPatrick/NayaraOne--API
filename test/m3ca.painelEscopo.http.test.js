@@ -13,6 +13,7 @@ require('../app');
 const { getSeedTenant, withTenantTransaction, sequelize } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { createMember, createPerson, createTestProperty } = require('./helpers/m3caCrm');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let baseUrl;
@@ -45,7 +46,7 @@ test('M3-17: corretor de escopo próprio vê no painel só os números da cartei
   const gestor = tokenFor(tenant.userId, ['crm:opportunities:read:all']);
   const ontem = new Date(Date.now() - 86400000).toISOString();
   const cria = async (owner, extra = {}) => {
-    const r = await http(gestor, 'POST', '/opportunities', { personId, propertyId, ownerUserId: owner, nextAction: 'Retornar', nextActionDueAt: ontem, ...extra });
+    const r = await http(gestor, 'POST', '/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, propertyId, ownerUserId: owner, nextAction: 'Retornar', nextActionDueAt: ontem, ...extra });
     assert.equal(r.status, 201, JSON.stringify(r.body));
     return r.body.data;
   };

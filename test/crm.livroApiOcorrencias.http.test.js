@@ -20,6 +20,7 @@ require('../app');
 const { getSeedTenant, withTenantTransaction, uniqueSuffix, sequelize } = require('./testHelpers');
 const { signAccessToken } = require('../src/utils/jwt');
 const { FeedbackCase, OutboxEvent, AuditLog, Notification } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let baseUrl;
@@ -64,21 +65,39 @@ async function pessoa(label) {
 }
 
 async function oportunidade(personId) {
-  const o = await http('POST', '/crm/opportunities', { personId, stage: 'NEW', nextAction: 'Ligar para qualificar', nextActionDueAt: FUTURE() });
+  const o = await http('POST', '/crm/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'NEW', nextAction: 'Ligar para qualificar', nextActionDueAt: FUTURE() });
   assert.equal(o.status, 201, JSON.stringify(o.body));
   return o.body.data;
 }
 
 const outbox = (eventType, aggregateId) => withTenantTransaction(tenant, (t) => OutboxEvent.findAll({ where: { eventType, aggregateId }, transaction: t }));
 
-test('LIVRO §13: POST /crm/opportunities cria com próxima ação e recusa sem ela', async () => {
+test('LIVRO §13: POST /crm/opportunities cria com próxima ação e origem do lead e recusa sem elas', async () => {
   const personId = await pessoa('Lead livro');
-  const sem = await http('POST', '/crm/opportunities', { personId, stage: 'NEW' });
+  const sem = await http('POST', '/crm/opportunities', { ...ORIGEM_LEAD_PADRAO, personId, stage: 'NEW' });
   assert.equal(sem.status, 422);
   assert.equal(sem.body.error.code, 'OPPORTUNITY_NEXT_ACTION_REQUIRED');
+  // M9:610/M9:784 (DI-BI2-4): sem a origem do lead a oportunidade não nasce; a origem inventada também não
+  const semOrigem = await http('POST', '/crm/opportunities', { personId, stage: 'NEW', nextAction: 'Ligar para qualificar', nextActionDueAt: FUTURE() });
+  assert.deepEqual([semOrigem.status, semOrigem.body.error.code], [422, 'OPPORTUNITY_LEAD_SOURCE_REQUIRED'], JSON.stringify(semOrigem.body));
+  const inventada = await http('POST', '/opportunities', { personId, stage: 'NEW', nextAction: 'Ligar para qualificar', nextActionDueAt: FUTURE(), leadSource: 'FEIRA' });
+  assert.deepEqual([inventada.status, inventada.body.error.code], [400, 'MKT_VALIDATION'], JSON.stringify(inventada.body));
+  const nenhuma = await http('GET', `/opportunities?personId=${personId}`);
+  assert.equal(nenhuma.body.data.length, 0, 'nada foi gravado');
   const op = await oportunidade(personId);
   assert.equal(op.personId, personId);
   assert.ok(op.nextAction);
+  // a origem do lead volta nas leituras e a edição não a troca nem apaga (DI-BI2-4)
+  assert.equal(op.leadSource, ORIGEM_LEAD_PADRAO.leadSource, 'a criação devolve a origem');
+  const patch = await http('PATCH', `/opportunities/${op.id}`, { leadSource: 'PHONE', temperature: 'HOT' });
+  assert.equal(patch.status, 200, JSON.stringify(patch.body));
+  assert.equal(patch.body.data.leadSource, ORIGEM_LEAD_PADRAO.leadSource);
+  const apagar = await http('PATCH', `/opportunities/${op.id}`, { leadSource: null });
+  assert.equal(apagar.status, 200, JSON.stringify(apagar.body));
+  const lida = await http('GET', `/opportunities/${op.id}`);
+  assert.deepEqual([lida.status, lida.body.data.leadSource, lida.body.data.temperature], [200, ORIGEM_LEAD_PADRAO.leadSource, 'HOT']);
+  const lista = await http('GET', `/opportunities?personId=${personId}`);
+  assert.equal(lista.body.data[0].leadSource, ORIGEM_LEAD_PADRAO.leadSource, 'a lista também devolve a origem');
 });
 
 test('LIVRO §10/§12: POST /crm/opportunities/:id/interactions grava canal SITE com occurredAt e não duplica pelo externalMessageId', async () => {

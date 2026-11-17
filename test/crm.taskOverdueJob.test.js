@@ -13,6 +13,7 @@ const { Task, OutboxEvent, AuditLog, Notification } = require('../src/models');
 const opportunitiesService = require('../src/features/crm/opportunity.service');
 const peopleService = require('../src/features/people/person.service');
 const { escalateOverdueCrmTasks } = require('../src/engines/jobs/crmTaskOverdueJob');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -36,6 +37,7 @@ test('crmTaskOverdueJob escalona tarefa de CRM vencida: publica crm.task.overdue
 
     const opportunity = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,

@@ -17,6 +17,7 @@ const { sequelize, getSeedTenant, uniqueSuffix } = require('./testHelpers');
 const personService = require('../src/features/people/person.service');
 const opportunityService = require('../src/features/crm/opportunity.service');
 const { OutboxEvent, Opportunity } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -57,7 +58,7 @@ test('crm.opportunity.lost: duas chamadas CONCORRENTES fechando a mesma oportuni
           transaction
         );
         const opportunity = await opportunityService.createOpportunity(
-          { groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000) },
+          { ...ORIGEM_LEAD_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, personId: person.id, nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000) },
           tenant.userId,
           transaction
         );
@@ -103,9 +104,11 @@ test('crm.opportunity.lost: duas chamadas CONCORRENTES fechando a mesma oportuni
           replacements: { id: created.opportunityId },
           transaction: t,
         });
-        await sequelize.query('DELETE FROM "crm"."opportunities" WHERE id = :id', { replacements: { id: created.opportunityId }, transaction: t });
+        // Origem do lead obrigatória (DI-BI2-4): o evento LEAD_CREATED da atribuição fica (o runtime não apaga marketing.attribution_events);
+        // oportunidade e pessoa saem por exclusão lógica (banco descartável).
+        await sequelize.query('UPDATE "crm"."opportunities" SET deleted_at = now() WHERE id = :id', { replacements: { id: created.opportunityId }, transaction: t });
         if (created.personId) {
-          await sequelize.query('DELETE FROM "people"."persons" WHERE id = :id', { replacements: { id: created.personId }, transaction: t });
+          await sequelize.query('UPDATE "people"."persons" SET deleted_at = now() WHERE id = :id', { replacements: { id: created.personId }, transaction: t });
         }
       });
     }

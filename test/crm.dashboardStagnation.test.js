@@ -16,6 +16,7 @@ const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } 
 const peopleService = require('../src/features/people/people.service');
 const opportunitiesService = require('../src/features/crm/opportunities.service');
 const dashboardService = require('../src/features/crm/dashboard.service');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -41,6 +42,7 @@ test('Painel CRM: oportunidade aberta com nextAction VENCIDO aparece em staleOpp
     // o cenário real (ninguém cria uma opportunity já nascendo vencida).
     const opportunity = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,
@@ -80,6 +82,7 @@ test('Painel CRM: oportunidade com nextAction no futuro NÃO aparece em staleOpp
     );
     await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,
@@ -106,6 +109,7 @@ test('Painel CRM: oportunidade FECHADA (WON/LOST) nunca entra em staleOpportunit
     );
     const opportunity = await opportunitiesService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,

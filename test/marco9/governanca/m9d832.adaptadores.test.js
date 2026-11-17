@@ -33,6 +33,13 @@ before(async () => {
 });
 after(async () => { if (env.DISPOSABLE) { await env.cleanImports(); await env.sequelize.close(); } });
 
+/** Origem do lead da oportunidade que a importação cria: a do papel no lead ("WhatsApp"), formulário (FORM) na visita e na proposta (DI-BI2-4). */
+const LEAD_SOURCE_OF = {
+  REGISTER_LEAD: ['SELECT lead_source FROM crm.opportunities WHERE id = $1', 'WHATSAPP'],
+  REGISTER_VISIT: ['SELECT o.lead_source FROM crm.visits v JOIN crm.opportunities o ON o.id = v.opportunity_id WHERE v.id = $1', 'FORM'],
+  REGISTER_PROPOSAL: ['SELECT o.lead_source FROM crm.proposals p JOIN crm.opportunities o ON o.id = p.opportunity_id WHERE p.id = $1', 'FORM'],
+};
+
 test('m9d832 cada uma das 11 ações tem adaptador e campos comparados e grava pelo serviço normal', { skip: skip() }, async () => {
   assert.equal(SPEC.length, 11);
   for (const spec of SPEC) {
@@ -49,6 +56,10 @@ test('m9d832 cada uma das 11 ações tem adaptador e campos comparados e grava p
     assert.equal(row.command_ref, item.commandRef);
     const effectId = item.commandRef.split(':')[1];
     assert.equal((await env.adminQuery(`SELECT count(*)::int AS n FROM ${table} WHERE id = $1`, [effectId])).rows[0].n, 1, `${spec.action}: efeito em ${table}`);
+    if (LEAD_SOURCE_OF[spec.action]) {
+      const [sql, source] = LEAD_SOURCE_OF[spec.action];
+      assert.equal((await env.adminQuery(sql, [effectId])).rows[0].lead_source, source, `${spec.action}: origem do lead da oportunidade (DI-BI2-4)`);
+    }
     const stored = await env.opRow(op.id);
     assert.equal(stored.import_command_ref, item.commandRef);
     assert.ok(['RECONCILED', 'IMPORTED'].includes(stored.status), `${spec.action}: ${stored.status}`);

@@ -19,6 +19,7 @@ const propertiesService = require('../src/features/properties/properties.service
 const opportunityService = require('../src/features/crm/opportunity.service');
 const visitsService = require('../src/features/crm/visits.service');
 const { Visit } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 
@@ -40,6 +41,7 @@ test('CRMX-005: apagar uma oportunidade é soft delete — a linha continua exis
     );
     const opportunity = await opportunityService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,
@@ -79,6 +81,7 @@ test('CRMX-005: apagar uma visita é soft delete — histórico de atendimento p
     );
     const opportunity = await opportunityService.createOpportunity(
       {
+        ...ORIGEM_LEAD_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         personId: person.id,

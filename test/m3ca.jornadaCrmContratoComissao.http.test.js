@@ -16,6 +16,7 @@ const { getSeedTenant, withTenantTransaction, uniqueSuffix, sequelize } = requir
 const { signAccessToken } = require('../src/utils/jwt');
 const { createUser, client } = require('./helpers/m4FinanceHttp');
 const { createMember } = require('./helpers/m3caCrm');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 let tenant;
 let http;
@@ -61,6 +62,7 @@ test('M3-25: lead -> Radar -> visita -> proposta aceita -> WON -> contrato de ve
   const imovel = ok(await http('POST', '/properties', comercial, { title: `Casa Jornada ${sfx}`, internalCode: `JOR-${sfx}`, propertyType: 'RESIDENTIAL', city: cidade, areaTotalM2: 180 }), 201, 'imóvel').id;
   ok(await http('POST', `/properties/${imovel}/offers`, comercial, { offerType: 'SALE', askingPrice: 650000 }), 201, 'oferta de venda');
   const oportunidade = ok(await http('POST', '/crm/opportunities', comercial, {
+    ...ORIGEM_LEAD_PADRAO,
     personId: comprador, ownerUserId: corretor, stage: 'QUALIFIED', nextAction: 'Rodar o radar e apresentar opções', nextActionDueAt: new Date(Date.now() + 86400000).toISOString(),
   }), 201, 'oportunidade');
   assert.equal(oportunidade.ownerUserId, corretor);

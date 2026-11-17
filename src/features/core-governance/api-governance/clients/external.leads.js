@@ -49,7 +49,7 @@ async function createLead(client, body = {}) {
     const opportunity = await createOpportunity({
       groupId: client.groupId, companyId: client.companyId, personId: person.id, propertyId: lead.propertyId, stage: 'NEW',
       nextAction: lead.message ? `Contatar lead de parceiro: ${lead.message.slice(0, 200)}` : 'Contatar lead recebido por parceiro',
-      nextActionDueAt: new Date(Date.now() + hours * 3600000),
+      nextActionDueAt: new Date(Date.now() + hours * 3600000), leadSource: 'PARTNER', // a API de parceiro é a origem (DI-BI2-4); o corpo da requisição não muda
     }, null, transaction);
     return { opportunityId: opportunity.id, stage: opportunity.stage, nextActionDueAt: opportunity.nextActionDueAt };
   });

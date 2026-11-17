@@ -20,6 +20,7 @@ const http = require('node:http');
 const bcrypt = require('bcryptjs');
 const env = require('./marco9/_helpers/m9d230Env');
 const { User, UserMembership, Role, Permission, RolePermission } = require('../src/models');
+const { ORIGEM_LEAD_PADRAO } = require('./helpers/origemLeadPadrao');
 
 const SUFIXO = `${Date.now()}${Math.floor(Math.random() * 1000)}`;
 const EMAIL = `ci-entrada-global-${SUFIXO}@ci.nayaraone.test`;
@@ -116,7 +117,7 @@ rodar('2. tipo errado no corpo das rotas citadas: 400 com o nome do campo (antes
   const data = await pedir('POST', '/opportunities', { corpo: json({ personId: pessoa, nextAction: 'Ligar', nextActionDueAt: 'amanhã cedo' }) });
   assert.deepEqual([data.status, codigo(data), campos(data)], [400, 'OPPORTUNITY_VALIDATION', ['nextActionDueAt']]);
   // o caminho certo continua funcionando
-  const ok = await pedir('POST', '/opportunities', { corpo: json({ personId: pessoa, nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 864e5).toISOString() }) });
+  const ok = await pedir('POST', '/opportunities', { corpo: json({ ...ORIGEM_LEAD_PADRAO, personId: pessoa, nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 864e5).toISOString() }) });
   assert.equal(ok.status, 201, json(ok.json));
 });
 

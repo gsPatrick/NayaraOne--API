@@ -7,6 +7,7 @@ const { sequelize, withTenantTransaction, uniqueSuffix } = require('../../testHe
 const peopleService = require('../../../src/features/people/people.service');
 const opportunityService = require('../../../src/features/crm/opportunity.service');
 const { buildUserContext } = require('../../../src/features/ai/orchestrator/executionContext');
+const { ORIGEM_LEAD_PADRAO } = require('../../helpers/origemLeadPadrao');
 
 async function criarOportunidade(tenant, transaction) {
   const pessoa = await peopleService.createPerson({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `QA-M9 Lead ${uniqueSuffix()}` }, tenant.userId, transaction);
@@ -16,6 +17,7 @@ async function criarOportunidade(tenant, transaction) {
     { replacements: { c: tenant.companyId, u: tenant.userId }, transaction });
   const ownerUserId = vinculo.n > 0 ? undefined : await require('../../helpers/m3caCrm').createMember(tenant, transaction, { label: 'corretor-ia' });
   const opp = await opportunityService.createOpportunity({
+    ...ORIGEM_LEAD_PADRAO,
     groupId: tenant.groupId, companyId: tenant.companyId, personId: pessoa.id, ownerUserId,
     nextAction: 'Ligar', nextActionDueAt: new Date(Date.now() + 86400000).toISOString(),
   }, tenant.userId, transaction);

@@ -5,7 +5,8 @@ const ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZ'; // sem 0/O, 1/I/L (ambíguos
 const SHORT_CODE_LENGTH = 8;
 const MAX_URL_LENGTH = 2048;
 const EVENT_TYPES = Object.freeze(['CLICK', 'LEAD_CREATED', 'VISIT', 'PROPOSAL', 'SALE']);
-const LEAD_SOURCES = Object.freeze(['FORM', 'WHATSAPP', 'PHONE', 'EMAIL', 'SITE', 'PORTAL', 'SOCIAL', 'REFERRAL', 'OTHER']);
+/** Origens do lead (M9:610). PARTNER (DI-BI2-4): o lead que chega pela API de parceiro (POST /api-external/leads). */
+const LEAD_SOURCES = Object.freeze(['FORM', 'WHATSAPP', 'PHONE', 'EMAIL', 'SITE', 'PORTAL', 'SOCIAL', 'REFERRAL', 'PARTNER', 'OTHER']);
 const LINK_CHANNELS = Object.freeze(['WHATSAPP', 'EMAIL', 'SITE', 'INSTAGRAM', 'FACEBOOK', 'LINKEDIN', 'YOUTUBE', 'TIKTOK', 'PORTAL']);
 const MODELS = Object.freeze(['first', 'last']);
 const UTM_FIELDS = Object.freeze(['utmSource', 'utmMedium', 'utmCampaign', 'utmContent', 'utmTerm']);
