@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // M4PG — Caderno M4 §9 "Favorecido e dados bancários usados em payment_intent ficam congelados no snapshot. Qualquer troca de
 // banco/agência/conta/chave PIX/beneficiário invalida toda aprovação anterior"; §17 "Favorecido alterado -> Invalida approvals + alerta";
 // FIN-TS-003; Guia §3 (beneficiarySnapshot no retrato que gera o snapshotHash), §5 (assertSnapshotStillValid), §16.3 e §18.4.
@@ -33,7 +34,7 @@ async function agedAccount(t, s) {
 
 async function payable(t, amount, bankAccountId) {
   const cc = await createTestCostCenter(tenant, t);
-  return fe.createFinancialEntry({ groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount, description: `m4pg favorecido ${uniqueSuffix()}`, costCenterId: cc.id, bankAccountId }, tenant.userId, t);
+  return fe.createFinancialEntry({ dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount, description: `m4pg favorecido ${uniqueSuffix()}`, costCenterId: cc.id, bankAccountId }, tenant.userId, t);
 }
 
 const newUser = (t, label) => User.create({ name: `M4PG ${label}`, email: `m4pg-${label}-${uniqueSuffix()}@nayaraone.dev`, passwordHash: 'x', status: 'ACTIVE' }, { transaction: t });

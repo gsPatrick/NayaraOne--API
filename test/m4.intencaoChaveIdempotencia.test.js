@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Caderno M4 §8.4 "Cria payment_intent + snapshot/hash + idempotency_key" e Guia §3
 // (PaymentIntent.idempotencyKey). Defeito achado na captura ao vivo do fechamento do Marco 4
 // (10/11/2026): a chave da intenção só era gravada no envio ao banco; intenções criadas,
@@ -45,7 +46,7 @@ const inTenant = (fn) => T.withTenantTransaction(tenant, fn);
 async function payableWithPix() {
   return inTenant(async (t) => {
     const ba = await BankAccount.create({ groupId: tenant.groupId, companyId: tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `PI-${T.uniqueSuffix()}`, pixKey: `pi-${T.uniqueSuffix()}@exemplo.dev`, status: 'ACTIVE' }, { transaction: t });
-    return financialEntriesService.createFinancialEntry({ groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 321.5, costCenterId, bankAccountId: ba.id, description: `§8.4 ${T.uniqueSuffix()}` }, users.maker.id, t);
+    return financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 321.5, costCenterId, bankAccountId: ba.id, description: `§8.4 ${T.uniqueSuffix()}` }, users.maker.id, t);
   });
 }
 

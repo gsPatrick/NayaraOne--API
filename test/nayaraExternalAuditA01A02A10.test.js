@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Achados A01, A02 e A10 — auditoria técnica independente da Nayara (PDF "Conferência
 // complementar Marcos 4 e 5", 15/10/2026, reprodução via fixtures em memória). Reproduzidos
 // aqui contra o Postgres real (não fixture em memória), via withRollbackTenantTransaction —
@@ -60,6 +61,7 @@ async function createPayableEntry(transaction, suffix, overrides = {}) {
   const account = await createActiveBankAccount(transaction, suffix);
   const entry = await financialEntriesService.createFinancialEntry(
     {
+      dueAt: vencimentoDeTeste(),
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       entryType: 'DEBIT',
@@ -111,6 +113,7 @@ test('A01 (controle negativo): RECEIVABLE parcial continua sem exigir aprovaçã
     const account = await createActiveBankAccount(transaction, suffix);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         entryType: 'CREDIT',

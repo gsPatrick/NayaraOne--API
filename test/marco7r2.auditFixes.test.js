@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 /**
  * Auditoria Marco 7 "r2" (Claude Browser, 17/10/2026) — 3 achados reais corrigidos, cada um
  * provado aqui contra Postgres real (RLS via SET LOCAL, mesmo caminho do runtime):
@@ -104,6 +105,7 @@ test('R2-2: baixa de parcela de prêmio rejeita RECEBIMENTO (RECEIVABLE) de valo
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const rentReceipt = await createFinancialEntry(
       withTenant({
+        dueAt: vencimentoDeTeste(),
         entryType: 'CREDIT',
         nature: 'RECEIVABLE',
         amount: Number(firstInstallment.amount),

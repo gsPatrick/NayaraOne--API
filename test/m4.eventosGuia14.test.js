@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Guia do Marcelo do Marco 4, §14 "Eventos mínimos" (fechamento da matriz, 10/11/2026). Os eventos
 // de pagamento, recebimento, conciliação, repasse, fechamento e anomalia já têm prova nominal em
 // test/m45.cadernoM4Gaps.test.js (M45-M4-01/02) e test/nayaraConferencia1810.finance.test.js (F02-6).
@@ -28,7 +29,7 @@ test('M4-G§14.1 finance.entry.created: criar um lançamento publica o evento co
     const centro = await createTestResultCenter(tenant, t);
     const chave = `m4-g14-entry-${uniqueSuffix()}`;
     const entry = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 0.3, description: `Evento G§14.1 ${chave}`, resultCenterId: centro.id, idempotencyKey: chave },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 0.3, description: `Evento G§14.1 ${chave}`, resultCenterId: centro.id, idempotencyKey: chave },
       tenant.userId,
       t
     );
@@ -44,7 +45,7 @@ test('M4-G§14.1 finance.entry.created: criar um lançamento publica o evento co
 
     // Replay da criação com a mesma chave do cliente: não nasce lançamento nem evento novo.
     await assert.rejects(() => sequelize.transaction({ transaction: t }, () => financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 0.3, description: `Evento G§14.1 ${chave}`, resultCenterId: centro.id, idempotencyKey: chave },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 0.3, description: `Evento G§14.1 ${chave}`, resultCenterId: centro.id, idempotencyKey: chave },
       tenant.userId,
       t
     )));

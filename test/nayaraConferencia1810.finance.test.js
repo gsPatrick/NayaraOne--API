@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Conferência da IA da Nayara, 18/10/2026 (Maturacao/CONFERENCIA_MARCOS4_5_18-10_CHECKLIST.md),
 // pendências do Financeiro:
 //   F02 — pré-condições do fechamento (Caderno §16 / Guia §12) + snapshot imutável.
@@ -531,12 +532,12 @@ test('F03-7: recebimento sem conta segue direto; pagamento sem conta exige aprov
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const costCenter = await createTestCostCenter(tenant, transaction);
     const receivable = await financialEntriesService.createFinancialEntry(
-      withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 50, description: 'CONF1810 F03-7 receber', resultCenterId: resultCenter.id }),
+      withTenant({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 50, description: 'CONF1810 F03-7 receber', resultCenterId: resultCenter.id }),
       tenant.userId,
       transaction
     );
     const payableNoBank = await financialEntriesService.createFinancialEntry(
-      withTenant({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 70, description: 'CONF1810 F03-7 contábil', costCenterId: costCenter.id }),
+      withTenant({ dueAt: vencimentoDeTeste(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 70, description: 'CONF1810 F03-7 contábil', costCenterId: costCenter.id }),
       tenant.userId,
       transaction
     );
@@ -763,7 +764,7 @@ test('F04-3: origem que não é caução recebida (não recebida, ou sem contrat
     );
 
     const ownRevenue = await financialEntriesService.createFinancialEntry(
-      withTenant({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 300, description: 'CONF1810 receita própria', resultCenterId: resultCenter.id }),
+      withTenant({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 300, description: 'CONF1810 receita própria', resultCenterId: resultCenter.id }),
       tenant.userId,
       transaction
     );

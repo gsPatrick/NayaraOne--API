@@ -1,5 +1,7 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
+
 // Verificação independente do Marco 6 — referências por chave estrangeira de Obras sempre da MESMA empresa (FK no
 // PostgreSQL ignora RLS). M6-08 (prestador e documentação do RDO), M6-95 (unidade da obra), M6-104 (obra do contrato de
 // empreitada) e a varredura dos serviços de Obras: cada referência de outra empresa é recusada com 422
@@ -115,7 +117,7 @@ test('varredura: NC, linha de orçamento, lançamento financeiro e local de esto
     await assert.rejects(budgetLinesService.createBudgetLine(obraAlheia.id, W(tenant, { category: 'X', plannedAmount: 10 }), tenant.userId, t), { code: 'PROJECT_NOT_FOUND' });
     const cc = await H.createTestCostCenter(tenant, t);
     await assert.rejects(
-      financialEntriesService.createFinancialEntry(W(tenant, { entryType: 'DEBIT', nature: 'PAYABLE', amount: 10, costCenterId: cc.id, constructionProjectId: obraAlheia.id }), tenant.userId, t),
+      financialEntriesService.createFinancialEntry(W(tenant, { entryType: 'DEBIT', nature: 'PAYABLE', amount: 10, costCenterId: cc.id, constructionProjectId: obraAlheia.id, dueAt: vencimentoDeTeste() }), tenant.userId, t),
       REF
     );
     await assert.rejects(itemsService.createLocation(W(tenant, { name: `Canteiro ${H.uniqueSuffix()}`, locationType: 'PROJECT_SITE', projectId: obraAlheia.id }), tenant.userId, t), REF);

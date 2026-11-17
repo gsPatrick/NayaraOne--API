@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('../../helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // M9-D432 — apoio dos testes do custo de campanha: campanha em andamento, lançamentos do Financeiro (pelo serviço do Financeiro,
 // que é quem grava a referência e o centro de custo) e fotografia do ledger para provar que o Marketing só lê.
 const { QueryTypes } = require('sequelize');
@@ -31,6 +32,7 @@ async function costCenter(t, tenant, code) {
 async function expense(t, tenant, { amount, ref = null, cc = null, settle = true } = {}) {
   const center = cc || (await costCenter(t, tenant));
   const entry = await financial.createFinancialEntry({
+    dueAt: vencimentoDeTeste(),
     groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId: center.id,
     originRef: ref, description: `QA-M9 despesa ${uniqueSuffix()}`,
   }, tenant.userId, t);

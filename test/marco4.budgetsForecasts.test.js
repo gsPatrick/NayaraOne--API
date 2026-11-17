@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // GAP REAL CORRIGIDO (varredura completa Marco 4 contra o Caderno Técnico, 11/10/2026):
 // "finance.budgets_forecasts" (Caderno §5) nunca existia. Cobre criação com validação de
 // centro obrigatório por natureza, listagem por mês, e comparação orçado x realizado.
@@ -68,7 +69,7 @@ test('createBudgetForecast + listBudgetForecasts + compareForecastToRealized: or
 
     // Realizado: só 700 de despesa efetivamente liquidada nesse mês (abaixo do orçado de 1000).
     const custo = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 700, costCenterId: costCenter.id, competenceMonth: month, description: `realizado despesa ${suffix}` },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 700, costCenterId: costCenter.id, competenceMonth: month, description: `realizado despesa ${suffix}` },
       tenant.userId,
       transaction
     );

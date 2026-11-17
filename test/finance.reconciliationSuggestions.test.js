@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // GAP REAL (verificação cética adicional, Marco 4, 12/10/2026): suggestReconciliationMatches
 // (as 5 classes do Caderno §11 — EXATO/FORTE/PROVÁVEL/AMBÍGUO/SEM CORRESPONDÊNCIA) já existia
 // inteiro no service, mas sem rota HTTP e sem teste dedicado — a tela de conciliação bypassava
@@ -55,6 +56,7 @@ async function createEntry(transaction, overrides = {}) {
   const costCenter = await createTestCostCenter(tenant, transaction);
   return financialEntriesService.createFinancialEntry(
     {
+      dueAt: vencimentoDeTeste(),
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       entryType: 'DEBIT',
@@ -163,7 +165,7 @@ test('GET /finance/bank-transactions/:id/reconciliation-suggestions responde com
   assert.equal(ccRes.status, 201, JSON.stringify(ccRes.body));
 
   const entryRes = await http('POST', '/finance/entries', {
-    entryType: 'DEBIT', nature: 'PAYABLE', amount: 456.78,
+    entryType: 'DEBIT', nature: 'PAYABLE', amount: 456.78, dueAt: vencimentoDeTeste(),
     description: `HOMO QA HTTP recon ${suffix}`, bankAccountId: accountId, costCenterId: ccRes.body.data.id,
   });
   assert.equal(entryRes.status, 201, JSON.stringify(entryRes.body));

@@ -2,6 +2,7 @@
 
 const { ChartOfAccount, ChartOfAccountVersion } = require('../../../../models');
 const AppError = require('../../../../utils/AppError');
+const { startOfBusinessDay } = require('../../../../utils/businessDate');
 
 // --- §4 Plano de contas versionado (Frente 3) ------------------------------------------------
 //
@@ -55,10 +56,16 @@ async function recordAccountVersion(account, changeReason, actorUserId, transact
 }
 
 /**
- * resolveAccountVersionForEntry — versão da conta vigente em `factDate`. A conta precisa ser da
- * empresa e estar ATIVA naquela data. Fato anterior à primeira versão usa a primeira versão
+ * resolveAccountVersionForEntry — versão da conta vigente no DIA do fato (`factDate`). A conta precisa ser da
+ * empresa e estar ATIVA naquele dia. Fato anterior à primeira versão usa a primeira versão
  * (a conta nunca teve outra classificação). Conta sem nenhuma versão (criada fora do serviço)
  * recebe a v1 aqui mesmo, a partir do estado atual.
+ *
+ * Caderno M4 §4 (MARCO_4_CADERNO_COMPLETO.md:89): "Relatórios históricos usam a classificação vigente no fato". O fato do
+ * lançamento é uma DATA (vencimento gravado ao meio-dia de São Paulo, utils/businessDate.js), então a vigência é conferida pelo
+ * dia de negócio em São Paulo: vale a última versão que entrou em vigor até o fim daquele dia. Antes a comparação era pelo
+ * instante exato: um lançamento que vence hoje (meio-dia) numa conta criada, reclassificada ou desativada mais tarde no mesmo
+ * dia caía na primeira versão (ativa), ignorando a classificação e a desativação do próprio dia.
  */
 async function resolveAccountVersionForEntry(chartOfAccountId, companyId, factDate, transaction) {
   if (!chartOfAccountId) return null;
@@ -82,11 +89,7 @@ async function resolveAccountVersionForEntry(chartOfAccountId, companyId, factDa
   }
   const { Op } = require('sequelize'); // eslint-disable-line global-require
   let version = await ChartOfAccountVersion.findOne({
-    where: {
-      chartOfAccountId,
-      effectiveFrom: { [Op.lte]: at },
-      [Op.or]: [{ effectiveUntil: null }, { effectiveUntil: { [Op.gt]: at } }],
-    },
+    where: { chartOfAccountId, effectiveFrom: { [Op.lt]: startOfBusinessDay(at, 1) } }, // em vigor no fim do dia do fato (São Paulo)
     order: [['versionNumber', 'DESC']],
     transaction,
   });

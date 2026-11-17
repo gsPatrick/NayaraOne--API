@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Marco 4 — Guia §11 "Comissão proporcional": rules.evaluate('REG-FIN-001', ctx, { finance: { receivedAmount }, contract }) (DEC-005: REG-FIN-001 é
 // a comissão; REG-FIN-002 é o limite de aprovação do Guia §4). Guia §18 "Não usar float para dinheiro" / FIN-008: a comissão é base x percentual em
 // decimal exato, arredondada UMA vez ao centavo pelo modo da versão da regra (DI-M4CC-1, padrão HALF_UP). Antes: Math.round(float), 50% de 0,29 dava
@@ -63,7 +64,7 @@ test('M4-G§18.1 parcelas e ajuste em centavos inteiros: a soma das parcelas é 
 async function receivable(t, amount) {
   const rc = await createTestResultCenter(tenant, t);
   return financialEntriesService.createFinancialEntry(
-    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId: rc.id, description: `Fato gerador REG-FIN-001 ${uniqueSuffix()}` },
+    { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId: rc.id, description: `Fato gerador REG-FIN-001 ${uniqueSuffix()}` },
     tenant.userId,
     t
   );

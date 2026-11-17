@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // M4PG — Guia M4 §4 preparePayment (assertPayable, assertAmountWithinOpenBalance, rules.evaluate('REG-FIN-002') + approvals.createFromRule),
 // §1.6 e Caderno §2 FIN-005 ("Limites vêm do Motor de Regras"), §8.1-8.3 e §8.5-8.6, §3 (estados), §5 (EXECUTING +
 // finance.payment.execution_requested e replay pela chave), §8.12 (divergência abre anomaly_case) e FIN-TS-002.
@@ -33,7 +34,7 @@ async function agedAccount(t) {
 
 async function payable(t, amount, extra = {}) {
   const cc = await createTestCostCenter(tenant, t);
-  return fe.createFinancialEntry({ ...T(), entryType: 'DEBIT', nature: 'PAYABLE', amount, description: `m4pg pagamento ${uniqueSuffix()}`, costCenterId: cc.id, ...extra }, tenant.userId, t);
+  return fe.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...T(), entryType: 'DEBIT', nature: 'PAYABLE', amount, description: `m4pg pagamento ${uniqueSuffix()}`, costCenterId: cc.id, ...extra }, tenant.userId, t);
 }
 
 async function submitAndConfirm(t, intentId, amount) {
@@ -46,7 +47,7 @@ test('M4-G§4 assertPayable (V2-P3): intenção de PAGAMENTO sobre lançamento A
   await withRollbackTenantTransaction(tenant, async (t) => {
     const acc = await agedAccount(t);
     const rc = await createTestResultCenter(tenant, t);
-    const receivable = await fe.createFinancialEntry({ ...T(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, description: 'm4pg recebível', resultCenterId: rc.id, bankAccountId: acc.id }, tenant.userId, t);
+    const receivable = await fe.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...T(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, description: 'm4pg recebível', resultCenterId: rc.id, bankAccountId: acc.id }, tenant.userId, t);
     await assert.rejects(() => payments.createPaymentIntent({ financialEntryId: receivable.id }, tenant.userId, t), (e) => e.code === 'FINANCE_PAYMENT_INTENT_NOT_PAYABLE');
     assert.equal(await PaymentIntent.count({ where: { financialEntryId: receivable.id }, transaction: t }), 0);
   });

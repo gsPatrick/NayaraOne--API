@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Guia M4 §10 "Importação bancária idempotente: fingerprint ... UNIQUE(bank_account_id, fingerprint)"
 // e isolamento entre empresas (FIN-001/FIN-TS-020). Defeito achado na captura ao vivo do
 // fechamento do Marco 4 (10/11/2026): external_transaction_id era UNIQUE GLOBAL — a empresa B,
@@ -103,7 +104,7 @@ test('M4-G§10 toda linha grava o fingerprint do Guia (sha256 de conta, id exter
 
 test('M4-G§10 (mesmo defeito em financial_entries.idempotency_key): a empresa B cria lançamento com a mesma chave de cliente já usada pela empresa A (201); na mesma empresa a chave repetida segue 409 FINANCE_DUPLICATE_PAYMENT', async () => {
   const key = `chave-cliente-${T.uniqueSuffix()}`;
-  const body = (cc) => ({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, resultCenterId: cc, description: 'G§10 chave por empresa', idempotencyKey: key });
+  const body = (cc) => ({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, resultCenterId: cc, dueAt: vencimentoDeTeste(), description: 'G§10 chave por empresa', idempotencyKey: key });
   const rc = {};
   for (const who of ['A', 'B']) rc[who] = await T.withTenantTransaction(ctx[who].tenant, async (t) => (await T.createTestResultCenter(ctx[who].tenant, t)).id);
   const a = await http('POST', '/finance/entries', ctx.A.token, body(rc.A));
@@ -129,7 +130,7 @@ test('M4-G§10 (mesmo defeito em owner_repasses.idempotency_key): as empresas A 
       const owner = await Person.create({ groupId: tenant.groupId, companyId: tenant.companyId, personType: 'PF', legalName: `G§10 Proprietário ${sfx}`, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
       const property = await propertiesService.createProperty({ groupId: tenant.groupId, companyId: tenant.companyId, title: `G§10 Imóvel ${sfx}`, internalCode: `G10-${sfx}`, propertyType: 'RESIDENTIAL' }, tenant.userId, t);
       const rc = await T.createTestResultCenter(tenant, t);
-      const rec = await financialEntriesService.createFinancialEntry({ groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 100, resultCenterId: rc.id, description: `G§10 aluguel ${sfx}` }, tenant.userId, t);
+      const rec = await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 100, resultCenterId: rc.id, description: `G§10 aluguel ${sfx}` }, tenant.userId, t);
       await receiptService.settleFinancialEntry(rec.id, tenant.userId, t);
       return ownerRepassesService.createOwnerRepasse({ groupId: tenant.groupId, companyId: tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, sourceEntryIds: [rec.id], grossAmount: 100, deductionsAmount: 0, referenceMonth: '2026-11', idempotencyKey: key }, tenant.userId, t);
     });

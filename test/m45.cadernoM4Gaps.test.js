@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // M45 (19/10/2026) — cruzamento do Caderno do Marco 4 linha a linha (Maturacao/MARCO_4_CADERNO_
 // COMPLETO.md). Cada teste cobre uma linha do caderno que não tinha prova direta na suíte:
 //   - Guia §14 "Eventos mínimos" com os nomes literais (payment.prepared/approved/completed/
@@ -100,7 +101,7 @@ test('M45-M4-01 eventos mínimos do Guia §14 com o nome literal: payment.prepar
     // Pagamento: intenção -> aprovação por outra pessoa -> execução (baixa manual com comprovante).
     const cc = await createTestCostCenter(tenant, t);
     const payable = await financialEntriesService.createFinancialEntry(
-      T({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 12.34, description: `M45-M4-01 pagar ${uniqueSuffix()}`, costCenterId: cc.id }), tenant.userId, t
+      T({ dueAt: vencimentoDeTeste(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 12.34, description: `M45-M4-01 pagar ${uniqueSuffix()}`, costCenterId: cc.id }), tenant.userId, t
     );
     const manualSettlement = await createManualSettlementEvidence(tenant, tenant.userId, t);
     await settlementEvidence.attachSettlementEvidence(payable.id, manualSettlement, tenant.userId, t);
@@ -121,7 +122,7 @@ test('M45-M4-01 eventos mínimos do Guia §14 com o nome literal: payment.prepar
     const bank = await newBankAccount(t);
     const rc = await createTestResultCenter(tenant, t);
     const receivable = await financialEntriesService.createFinancialEntry(
-      T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 45.6, description: `M45-M4-01 receber ${uniqueSuffix()}`, resultCenterId: rc.id, bankAccountId: bank.id }), tenant.userId, t
+      T({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 45.6, description: `M45-M4-01 receber ${uniqueSuffix()}`, resultCenterId: rc.id, bankAccountId: bank.id }), tenant.userId, t
     );
     await receiptService.settleFinancialEntry(receivable.id, tenant.userId, t);
     assert.ok((await eventTypesFor(receivable.id, t)).includes('finance.receipt.completed'));
@@ -142,7 +143,7 @@ async function repasseSetup(t) {
   const property = await Property.create(T({ title: `Imóvel M45M4 ${suffix}`, internalCode: `M45M4-${suffix}`, propertyType: 'HOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }), { transaction: t });
   const rc = await createTestResultCenter(tenant, t);
   const received = await financialEntriesService.createFinancialEntry(
-    T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, resultCenterId: rc.id, description: `M45-M4 aluguel ${suffix}` }), tenant.userId, t
+    T({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, resultCenterId: rc.id, description: `M45-M4 aluguel ${suffix}` }), tenant.userId, t
   );
   await receiptService.settleFinancialEntry(received.id, tenant.userId, t);
   const bank = await newBankAccount(t);
@@ -192,7 +193,7 @@ test('M45-M4-03 plano de contas: conta SINTÉTICA (com subconta ativa) não rece
     const analytic = await chartOfAccountsService.createAccount(T({ code: `9.1-${s}`, name: 'Aluguel M45 (analítica)', accountType: 'REVENUE', parentAccountId: synthetic.id }), tenant.userId, t);
     const rc = await createTestResultCenter(tenant, t);
     const entry = (chartOfAccountId) => financialEntriesService.createFinancialEntry(
-      T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, resultCenterId: rc.id, chartOfAccountId, description: `M45-M4-03 ${uniqueSuffix()}` }), tenant.userId, t
+      T({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, resultCenterId: rc.id, chartOfAccountId, description: `M45-M4-03 ${uniqueSuffix()}` }), tenant.userId, t
     );
     await expectCode(() => entry(synthetic.id), 'FINANCE_CHART_ACCOUNT_SYNTHETIC');
     const ok = await entry(analytic.id);
@@ -203,11 +204,11 @@ test('M45-M4-03 plano de contas: conta SINTÉTICA (com subconta ativa) não rece
 test('M45-M4-04 dimensões obrigatórias: despesa sem centro de custo e receita sem centro de resultado são recusadas na criação', async () => {
   await withRollbackTenantTransaction(tenant, async (t) => {
     await expectCode(
-      () => financialEntriesService.createFinancialEntry(T({ entryType: 'DEBIT', nature: 'PAYABLE', amount: 10, description: 'M45-M4-04 sem centro de custo' }), tenant.userId, t),
+      () => financialEntriesService.createFinancialEntry(T({ dueAt: vencimentoDeTeste(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 10, description: 'M45-M4-04 sem centro de custo' }), tenant.userId, t),
       'FINANCE_ENTRY_COST_CENTER_REQUIRED'
     );
     await expectCode(
-      () => financialEntriesService.createFinancialEntry(T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, description: 'M45-M4-04 sem centro de resultado' }), tenant.userId, t),
+      () => financialEntriesService.createFinancialEntry(T({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, description: 'M45-M4-04 sem centro de resultado' }), tenant.userId, t),
       'FINANCE_ENTRY_RESULT_CENTER_REQUIRED'
     );
   });
@@ -219,7 +220,7 @@ test('M45-M4-05 exportação financeira: acima do limite é recusada inteira (nu
     const month = `19${String(10 + Math.floor(Math.random() * 80)).padStart(2, '0')}-0${1 + Math.floor(Math.random() * 9)}`;
     for (const amount of [10, 20]) {
       await financialEntriesService.createFinancialEntry(
-        T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId: rc.id, competenceMonth: month, description: `M45-M4-05 ${uniqueSuffix()}` }), tenant.userId, t
+        T({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId: rc.id, competenceMonth: month, description: `M45-M4-05 ${uniqueSuffix()}` }), tenant.userId, t
       );
     }
     const ctx = { groupId: tenant.groupId, companyId: tenant.companyId, userId: tenant.userId };
@@ -260,7 +261,7 @@ test('M45-M4-07 §5 tabelas do caderno: ledger, entry_installments, security_dep
     const rc = await createTestResultCenter(tenant, t);
     const bank = await newBankAccount(t);
     const entry = await financialEntriesService.createFinancialEntry(
-      T({ entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 77.7, resultCenterId: rc.id, bankAccountId: bank.id, description: `M45-M4-07 ${uniqueSuffix()}` }), tenant.userId, t
+      T({ dueAt: vencimentoDeTeste(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 77.7, resultCenterId: rc.id, bankAccountId: bank.id, description: `M45-M4-07 ${uniqueSuffix()}` }), tenant.userId, t
     );
     const [[before]] = await sequelize.query('SELECT count(*)::int AS n FROM finance.ledger WHERE id = :id', { replacements: { id: entry.id }, transaction: t });
     assert.equal(before.n, 0, 'previsto não é ledger');

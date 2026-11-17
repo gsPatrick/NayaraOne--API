@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // DEC-007 (Maturacao/demandas/decisoes.csv) — números do antifraude do Marco 4 §17, que o livro lista sem valores: duplicidade 90 dias; conta nova 48 h e
 // R$ 5.000,00; múltiplo 3,0 revisa e 10,0 bloqueia; fornecedor novo 30 dias e R$ 20.000,00; conciliação manual 5 em 7 dias ou 30% no mês; estorno frequente
 // 3 por usuário e 5 por empresa em 30 dias (DI-DEC007-2). Cada número é parâmetro da tela de Configurações, que vale sempre dentro da faixa do catálogo;
@@ -63,7 +64,7 @@ async function account(t, { ageDays = 0 } = {}) {
   return acc;
 }
 const settled = (t, bankAccountId, amounts) => Promise.all(amounts.map((amount) => FinancialEntry.create({ ...base(), bankAccountId, costCenterId, entryType: 'DEBIT', nature: 'PAYABLE', amount, description: `histórico ${T.uniqueSuffix()}`, status: 'SETTLED', settledAt: new Date(), competenceMonth: new Date().toISOString().slice(0, 7) }, { transaction: t })));
-const payable = (t, amount, extra = {}) => financialEntriesService.createFinancialEntry({ ...base(), entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId, description: `DEC-007 ${amount} ${T.uniqueSuffix()}`, ...extra }, tenant.userId, t);
+const payable = (t, amount, extra = {}) => financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId, description: `DEC-007 ${amount} ${T.uniqueSuffix()}`, ...extra }, tenant.userId, t);
 const casesOf = async (t, entryId) => (await AnomalyCase.findAll({ where: { relatedEntityType: 'FinancialEntry', relatedEntityId: entryId }, order: [['caseType', 'ASC']], transaction: t })).map((c) => `${c.caseType}:${c.riskLevel}`);
 const rejectsWith = (promise, code) => assert.rejects(promise, (err) => { assert.equal(err.code, code, `${err.code} ${err.message}`); return true; });
 
@@ -229,7 +230,7 @@ test('dec007_estorno_frequente_usuario_3_empresa_5_em_30_dias: a 3ª pela mesma 
 
 async function manualMatch(t, actor, amount) {
   const acc = await account(t);
-  const entry = await financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: acc.id, description: `conciliação ${T.uniqueSuffix()}` }, tenant.userId, t);
+  const entry = await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: acc.id, description: `conciliação ${T.uniqueSuffix()}` }, tenant.userId, t);
   const tx = await bankTransactionsService.createBankTransaction({ ...base(), bankAccountId: acc.id, amount, transactionDate: new Date() }, tenant.userId, t);
   return { acc, entry, tx, rec: await reconciliationService.matchReconciliation({ ...base(), financialEntryId: entry.id, bankTransactionId: tx.id }, actor, t) };
 }
@@ -255,7 +256,7 @@ test('dec007_conciliacao_manual_5_por_usuario_em_7_dias_ou_mais_de_30_por_cento_
     await set(t, KEYS.manualReconciliationMonthPct, 60);
     // uma conciliação automática do motor no mês
     const acc = await account(t);
-    const entry = await financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 40, resultCenterId, bankAccountId: acc.id, description: `auto ${T.uniqueSuffix()}` }, tenant.userId, t);
+    const entry = await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 40, resultCenterId, bankAccountId: acc.id, description: `auto ${T.uniqueSuffix()}` }, tenant.userId, t);
     const tx = await bankTransactionsService.createBankTransaction({ ...base(), bankAccountId: acc.id, amount: 40, transactionDate: new Date() }, tenant.userId, t);
     await Reconciliation.create({ ...base(), financialEntryId: entry.id, bankTransactionId: tx.id, matchedAt: new Date(), matchMethod: 'AUTO_EXACT' }, { transaction: t });
     await manualMatch(t, users[0], 41); // 1 de 2 = 50%

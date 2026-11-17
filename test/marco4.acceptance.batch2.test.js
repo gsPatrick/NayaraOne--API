@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Testes de aceite do Marco 4 — segundo lote (M4-08, M4-12, M4-23, M4-24).
 
 const { test, before, after } = require('node:test');
@@ -43,7 +44,7 @@ test('M4-08 decideApprovalStep recusa aprovação com expectedLockVersion desatu
     const suffix = uniqueSuffix();
     const costCenterM408 = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 500, costCenterId: costCenterM408.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 500, costCenterId: costCenterM408.id },
       tenant.userId,
       transaction
     );
@@ -115,7 +116,7 @@ test('M4-23 createFinancialEntry com a mesma idempotencyKey não duplica o lanç
 
     const resultCenterM423 = await createTestResultCenter(tenant, transaction);
     const first = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey, resultCenterId: resultCenterM423.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey, resultCenterId: resultCenterM423.id },
       tenant.userId,
       transaction
     );
@@ -124,7 +125,7 @@ test('M4-23 createFinancialEntry com a mesma idempotencyKey não duplica o lanç
     await assert.rejects(
       () =>
         financialEntriesService.createFinancialEntry(
-          { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey, resultCenterId: resultCenterM423.id },
+          { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 700, idempotencyKey, resultCenterId: resultCenterM423.id },
           tenant.userId,
           transaction
         ),
@@ -145,7 +146,7 @@ test('M4-24 duas tentativas concorrentes do MESMO aprovador decidindo a mesma so
     entry = await withCommittedTenantTransaction(tenant, async (t) => {
       const costCenterM424 = await createTestCostCenter(tenant, t);
       return financialEntriesService.createFinancialEntry(
-        { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 9000, costCenterId: costCenterM424.id },
+        { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: 9000, costCenterId: costCenterM424.id },
         tenant.userId,
         t
       );

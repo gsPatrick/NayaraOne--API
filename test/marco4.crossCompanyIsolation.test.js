@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // FIN-TS-020 (RLS financeiro multiempresa) — auditoria externa (Abacus AI, 11/10/2026):
 // "Apenas uma empresa; não comprovado." O catálogo genérico de RLS
 // (test/rls.catalog.allTables.test.js) já confirma RLS+FORCE RLS+policy em 100% das tabelas
@@ -41,6 +42,7 @@ test('FIN-TS-020: financial_entries é isolado por EMPRESA — outra empresa do 
     const costCenter = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId, companyId: tenant.companyId, nature: 'PAYABLE', entryType: 'DEBIT',
         amount: 321, description: 'QA FIN-TS-020 isolamento', costCenterId: costCenter.id,
         idempotencyKey: `fin-ts-020-${uniqueSuffix()}`,
@@ -102,6 +104,7 @@ test('FIN-TS-020: payment_intents é isolado por EMPRESA — outra empresa do me
     const costCenter = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId, companyId: tenant.companyId, nature: 'PAYABLE', entryType: 'DEBIT',
         amount: 654, description: 'QA FIN-TS-020 intent', costCenterId: costCenter.id,
         idempotencyKey: `fin-ts-020-entry-${uniqueSuffix()}`,
@@ -155,6 +158,7 @@ test('FIN-TS-004: lançamento não pode usar bankAccount de outra empresa (mesmo
     await assert.rejects(
       () => financialEntriesService.createFinancialEntry(
         {
+          dueAt: vencimentoDeTeste(),
           groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
           amount: 100, description: 'FIN-TS-004', costCenterId: cc.id,
           bankAccountId: foreignBank.id, idempotencyKey: `fints004-create-${suffix}`,
@@ -173,6 +177,7 @@ test('FIN-TS-004: lançamento não pode usar bankAccount de outra empresa (mesmo
     );
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE',
         amount: 100, description: 'FIN-TS-004 base', costCenterId: cc.id,
         bankAccountId: ownBank.id, idempotencyKey: `fints004-base-${suffix}`,

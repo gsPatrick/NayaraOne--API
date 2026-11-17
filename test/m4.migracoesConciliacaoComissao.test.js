@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Ida e volta das migrations de dados desta correção, no banco descartável (superusuário de DATABASE_ADMIN_URL, como test/m4d140):
 //  - 20260101010410 (DEC-005): regra de comissão gravada como REG-FIN-002 passa a REG-FIN-001 sem mudar ids, versões nem o vínculo das comissões;
 //    REG-FIN-002 de outro formato (limite de aprovação) fica; empresa que já tem REG-FIN-001 faz a migração parar (sem mescla às cegas).
@@ -42,7 +43,7 @@ test('migration 20260101010410 (DEC-005): ida move a comissão para REG-FIN-001 
     await commissionsService.publishCommissionRuleVersion({ ...iso, componentPercentages: { BROKER: 4 } }, iso.userId, t);
     const v2 = await commissionsService.publishCommissionRuleVersion({ ...iso, componentPercentages: { BROKER: 5 } }, iso.userId, t);
     const rc = await createTestResultCenter(iso, t);
-    const src = await financialEntries.createFinancialEntry({ ...iso, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, resultCenterId: rc.id, description: 'DEC-005' }, iso.userId, t);
+    const src = await financialEntries.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...iso, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, resultCenterId: rc.id, description: 'DEC-005' }, iso.userId, t);
     const { commission } = await commissionsService.createCommission({ ...iso, beneficiaryUserId: iso.userId, sourceEntryId: src.id, component: 'BROKER', idempotencyKey: `dec005-${uniqueSuffix()}` }, iso.userId, t);
     return { versionId: v2.id, commissionId: commission.id };
   });

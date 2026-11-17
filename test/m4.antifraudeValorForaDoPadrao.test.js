@@ -1,5 +1,7 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
+
 // Caderno M4 §17 (FIN-013): "Valor fora do padrão -> Anomaly score + revisão" (§17.5) e
 // "Fornecedor novo de alto valor -> Due diligence/aprovação" (§17.6). Defeito achado na captura
 // ao vivo do fechamento do Marco 4 (10/11/2026): flagAnomalousPayment nunca era chamado pelo
@@ -56,7 +58,7 @@ async function settledHistory(bankAccountId, amounts) {
   });
 }
 
-const payable = (amount, extra = {}) => http('POST', '/finance/entries', tk.maker, { entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId, description: `§17 ${amount} ${T.uniqueSuffix()}`, ...extra });
+const payable = (amount, extra = {}) => http('POST', '/finance/entries', tk.maker, { entryType: 'DEBIT', nature: 'PAYABLE', amount, costCenterId, dueAt: vencimentoDeTeste(), description: `§17 ${amount} ${T.uniqueSuffix()}`, ...extra });
 const casesOf = async (entryId) => (await http('GET', '/finance/anomaly-cases', tk.maker)).body.data.filter((c) => c.relatedEntityId === entryId);
 
 // Roda primeiro: a empresa isolada ainda não tem pagamento liquidado na categoria, então o valor fora do padrão não pontua (DI-DEC007-3) e a preparação

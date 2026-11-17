@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Auditoria externa Nayara, 15/10/2026, "Conferência complementar Marcos 4 e 5", Seção 4 —
 // Matriz de cobertura do restante do caderno, Marco 4 — Financeiro. Este arquivo fecha com
 // prova E2E real (Postgres, RLS ativo) os grupos:
@@ -71,7 +72,7 @@ test('Repasses §12: GAP CORRIGIDO — um segundo repasse NÃO pode reutilizar o
     );
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `Repasse-dup aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `Repasse-dup aluguel ${suffix}`, resultCenterId: resultCenter.id },
       tenant.userId,
       transaction
     );
@@ -123,7 +124,7 @@ test('Repasses §12: GAP CORRIGIDO — repasse parcial consome só a fração us
     );
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `Repasse-parcial aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `Repasse-parcial aluguel ${suffix}`, resultCenterId: resultCenter.id },
       tenant.userId,
       transaction
     );
@@ -190,7 +191,7 @@ test('Repasses §12: um repasse CANCELLED devolve o saldo do recebimento para um
     );
     const resultCenter = await createTestResultCenter(tenant, transaction);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `Repasse-cancel aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1000, description: `Repasse-cancel aluguel ${suffix}`, resultCenterId: resultCenter.id },
       tenant.userId,
       transaction
     );

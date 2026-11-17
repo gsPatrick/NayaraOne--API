@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Marco 4 — Guia §9 ">= regra AUTO_STRONG: auto conforme policy; faixa intermediária: sugestão; múltiplos candidatos fortes: AMBIGUOUS, nunca auto"
 // (limiares e janela como parâmetros da empresa, DEC-006; antes eram constantes 0,90/0,45/5 dias/0,05 no código) e Caderno §11 "Exato: auto
 // confirmado se FONTE CONFIÁVEL" / FIN-009 "confirmação conforme risco" (antes: linha digitada à mão com id externo igual era conciliada sozinha).
@@ -40,7 +41,7 @@ async function account(t) {
 async function entry(t, overrides) {
   const cc = await createTestCostCenter(tenant, t);
   return financialEntriesService.createFinancialEntry(
-    { ...ctx(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 500, description: `AUTO_STRONG ${uniqueSuffix()}`, costCenterId: cc.id, ...overrides }, tenant.userId, t
+    { dueAt: vencimentoDeTeste(), ...ctx(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 500, description: `AUTO_STRONG ${uniqueSuffix()}`, costCenterId: cc.id, ...overrides }, tenant.userId, t
   );
 }
 function bankTx(t, acc, overrides, origin) {
@@ -170,7 +171,7 @@ test('M4-§11.1 via HTTP: linha criada por POST /finance/bank-transactions é MA
   const key = `m4cc-http-${uniqueSuffix()}`;
   const cc = await http('POST', '/finance/cost-centers', token, { name: `CC ${uniqueSuffix()}`, code: `C${uniqueSuffix().slice(-8)}` });
   assert.equal(cc.status, 201, JSON.stringify(cc.body));
-  const e = await http('POST', '/finance/entries', token, { entryType: 'DEBIT', nature: 'PAYABLE', amount: 650.37, description: 'HTTP manual', bankAccountId: acc.body.data.id, idempotencyKey: key, costCenterId: cc.body.data && cc.body.data.id });
+  const e = await http('POST', '/finance/entries', token, { entryType: 'DEBIT', nature: 'PAYABLE', amount: 650.37, dueAt: vencimentoDeTeste(), description: 'HTTP manual', bankAccountId: acc.body.data.id, idempotencyKey: key, costCenterId: cc.body.data && cc.body.data.id });
   assert.equal(e.status, 201, JSON.stringify(e.body));
   const line = await http('POST', '/finance/bank-transactions', token, { bankAccountId: acc.body.data.id, amount: -650.37, transactionDate: new Date().toISOString(), externalTransactionId: key, source: 'WEBHOOK', sourceTrusted: true });
   assert.equal(line.status, 201, JSON.stringify(line.body));

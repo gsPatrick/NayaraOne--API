@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Apoio aos testes do antifraude da DEC-007 (rodada 2): conta de destino, histórico liquidado, pagamento pelo serviço real, casos abertos e o catálogo de
 // parâmetros (parametros.csv) transcrito, para o teste não depender do código que ele confere. Não é teste.
 const T = require('../testHelpers');
@@ -59,7 +60,7 @@ function kit(getTenant) {
     return rows;
   }
 
-  const payable = (t, amount, extra = {}) => financialEntriesService.createFinancialEntry({ ...base(), entryType: 'DEBIT', nature: 'PAYABLE', amount, description: `DEC-007 ${amount} ${T.uniqueSuffix()}`, ...extra }, tenantUser(), t);
+  const payable = (t, amount, extra = {}) => financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'DEBIT', nature: 'PAYABLE', amount, description: `DEC-007 ${amount} ${T.uniqueSuffix()}`, ...extra }, tenantUser(), t);
   const casesOf = async (t, entryId) => (await AnomalyCase.findAll({ where: { relatedEntityType: 'FinancialEntry', relatedEntityId: entryId }, order: [['caseType', 'ASC']], transaction: t })).map((c) => `${c.caseType}:${c.riskLevel}`);
   const store = (t, key, value) => TenantSetting.create({ ...base(), key, value }, { transaction: t });
   const unstore = (t, key) => TenantSetting.destroy({ where: { companyId: getTenant().companyId, key }, force: true, transaction: t });

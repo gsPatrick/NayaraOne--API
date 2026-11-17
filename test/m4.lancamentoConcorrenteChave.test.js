@@ -1,5 +1,7 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
+
 // Caderno M4 §20 FIN-TS-001 "Double click pagamento — 2 requests iguais — 1 pagamento/ledger" e
 // FIN-004. Defeito achado na captura ao vivo do fechamento do Marco 4 (10/11/2026): quando duas
 // criações de lançamento com a mesma idempotencyKey passavam juntas pela checagem do serviço, a
@@ -38,7 +40,7 @@ after(async () => {
 
 test('M4-FIN-TS-001 seis criações SIMULTÂNEAS com a mesma idempotencyKey: exatamente 1 lançamento (201) e as outras 409 FINANCE_DUPLICATE_PAYMENT com a mensagem de negócio, nunca UNIQUE_CONSTRAINT_VIOLATION', async () => {
   const key = `duplo-clique-${T.uniqueSuffix()}`;
-  const body = { entryType: 'DEBIT', nature: 'PAYABLE', amount: 199.9, costCenterId, description: 'FIN-TS-001 duplo clique', idempotencyKey: key };
+  const body = { entryType: 'DEBIT', nature: 'PAYABLE', amount: 199.9, costCenterId, dueAt: vencimentoDeTeste(), description: 'FIN-TS-001 duplo clique', idempotencyKey: key };
   const results = await Promise.all(Array.from({ length: 6 }, () => http('POST', '/finance/entries', token, body)));
   const created = results.filter((r) => r.status === 201);
   const refused = results.filter((r) => r.status !== 201);

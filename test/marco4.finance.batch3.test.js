@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Testes de aceite do Marco 4 — Financeiro, terceiro lote:
 // M4-01 (plano de contas), M4-07 (payment intent com snapshot+hash), M4-16 (segregação de
 // dinheiro de terceiro), M4-18 (transferência entre empresas), M4-19/M4-20 (fechamento de
@@ -113,7 +114,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
 
     // Lançamento vinculado à conta analítica.
     const linked = await financialEntriesService.createFinancialEntry(
-      { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1200, description: `M4-01 vinculado ${suffix}`, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
+      { dueAt: vencimentoDeTeste(), ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 1200, description: `M4-01 vinculado ${suffix}`, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
       tenant.userId,
       transaction
     );
@@ -121,7 +122,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
 
     // Lançamento SEM plano de contas continua funcionando (coluna nullable — não quebra o legado).
     const unlinked = await financialEntriesService.createFinancialEntry(
-      { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 800, description: `M4-01 sem conta ${suffix}`, resultCenterId: resultCenterM401.id },
+      { dueAt: vencimentoDeTeste(), ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 800, description: `M4-01 sem conta ${suffix}`, resultCenterId: resultCenterM401.id },
       tenant.userId,
       transaction
     );
@@ -142,7 +143,7 @@ test('M4-01 cria hierarquia de contas, vincula lançamento e filtra a listagem p
     await assert.rejects(
       () =>
         financialEntriesService.createFinancialEntry(
-          { ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
+          { dueAt: vencimentoDeTeste(), ...base, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 10, chartOfAccountId: leaf.id, resultCenterId: resultCenterM401.id },
           tenant.userId,
           transaction
         ),
@@ -167,6 +168,7 @@ test('M4-07 approvePaymentIntent recusa quando o lançamento mudou depois do sna
     const costCenterM407a = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         entryType: 'DEBIT',
@@ -220,6 +222,7 @@ test('M4-07 fluxo feliz: create -> approve (sem alteração) -> execute liquida 
     const costCenterM407b = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         entryType: 'DEBIT',
@@ -319,7 +322,7 @@ test('M4-16 dinheiro de terceiro exige referência e nunca entra na soma de rece
     assert.equal(caucao.thirdPartyReference, `Caução contrato ${suffix}`);
 
     const receitaPropria = await financialEntriesService.createFinancialEntry(
-      { ...base, amount: 450, description: `M4-16 taxa adm ${suffix}` },
+      { dueAt: vencimentoDeTeste(), ...base, amount: 450, description: `M4-16 taxa adm ${suffix}` },
       tenant.userId,
       transaction
     );
@@ -727,6 +730,7 @@ test('M4-25 replay do mesmo evento em transações distintas não duplica Financ
     description: `HOMO QA M4-25 replay ${suffix}`,
     idempotencyKey,
     costCenterId: costCenterM425.id,
+    dueAt: vencimentoDeTeste(),
   };
 
   // 1ª passagem — transação COMMITADA (simula o processamento original, antes do incidente).
@@ -798,6 +802,7 @@ test('M4-25 replay de liquidação não paga duas vezes o mesmo lançamento', as
     const costCenterM425b = await createTestCostCenter(tenant, transaction);
     const entry = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         entryType: 'DEBIT',

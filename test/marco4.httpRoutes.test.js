@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // GAP REAL CORRIGIDO (varredura completa Marco 4 contra o Caderno Técnico, 11/10/2026): toda a
 // cobertura de testes do Marco 4 até aqui chamava os services diretamente — nenhum arquivo
 // batia com requisição HTTP real contra o Express app (auth JWT real + middleware de tenant
@@ -114,6 +115,7 @@ test('Marco 4 ponta a ponta via HTTP real: plano de contas -> centros -> lançam
     entryType: 'DEBIT',
     nature: 'PAYABLE',
     amount: 250.5,
+    dueAt: vencimentoDeTeste(),
     description: `Despesa HTTP ${suffix}`,
     costCenterId: costCenter.body.data.id,
   });
@@ -307,6 +309,7 @@ test('GAP fechado via HTTP: autoReconcileSuggestion concilia sozinho um match EX
     entryType: 'CREDIT',
     nature: 'RECEIVABLE',
     amount: 777.0,
+    dueAt: vencimentoDeTeste(),
     description: `Recebimento conciliação HTTP ${suffix}`,
     bankAccountId: bankAccount.id,
     resultCenterId: resultCenter.id,
@@ -362,7 +365,7 @@ test('GAP fechado via HTTP: composição do repasse de proprietário é consult�
     );
     const resultCenter = await createTestResultCenter(tenant, t);
     const recebimento = await financialEntriesService.createFinancialEntry(
-      { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: `M4-comp aluguel ${suffix}`, resultCenterId: resultCenter.id },
+      { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: 500, description: `M4-comp aluguel ${suffix}`, resultCenterId: resultCenter.id },
       tenant.userId,
       t
     );

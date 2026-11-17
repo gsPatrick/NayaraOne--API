@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Caderno do Marco 4, §3 "Estrutura empresarial financeira" (fechamento da matriz, 10/11/2026):
 //   Locação               | Sicredi                | Aluguéis, repasses, garantias, despesas locatícias.
 //   Construção            | Banco do Brasil        | Obras, fornecedores, materiais, pós-obra, recebimentos de venda/obra.
@@ -83,6 +84,7 @@ test('M4-§3/§15 despesa de obra da Construção na conta Sicredi da Locação 
     const centro = await createTestCostCenter(ctx, t);
     const despesa = (bankAccountId, chave) => financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId, companyId: op.construcao.id, nature: 'PAYABLE', entryType: 'DEBIT', amount: 8000,
         description: `Material de obra ${op.sfx}`, costCenterId: centro.id, bankAccountId, idempotencyKey: `m4-s3-${chave}-${op.sfx}`,
       },
@@ -110,6 +112,7 @@ test('M4-§3 Locação recebe aluguel na própria conta Sicredi, com centro de r
     const centro = await createTestResultCenter(tenant, t);
     const aluguel = await financialEntriesService.createFinancialEntry(
       {
+        dueAt: vencimentoDeTeste(),
         groupId: tenant.groupId, companyId: op.locacao.id, nature: 'RECEIVABLE', entryType: 'CREDIT', amount: 2500,
         description: `Aluguel ${op.sfx}`, resultCenterId: centro.id, bankAccountId: op.sicredi.id, idempotencyKey: `m4-s3-aluguel-${op.sfx}`,
       },

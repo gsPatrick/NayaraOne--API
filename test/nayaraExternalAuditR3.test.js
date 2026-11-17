@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 /**
  * nayaraExternalAuditR3.test.js — 3ª rodada de achados da auditoria técnica independente da
  * Nayara (18/10/2026, reproduzidos por ela em testes isolados sobre o commit 787eaf3).
@@ -149,6 +150,7 @@ async function createPayableEntry(transaction, suffix) {
   await account.save({ transaction });
   return financialEntriesService.createFinancialEntry(
     {
+      dueAt: vencimentoDeTeste(),
       groupId: tenant.groupId,
       companyId: tenant.companyId,
       entryType: 'DEBIT',

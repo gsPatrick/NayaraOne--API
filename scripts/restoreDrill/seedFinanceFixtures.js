@@ -157,7 +157,7 @@ async function seedRepasse(tenant, t, ids, checkerId) {
   const owner = await Person.create(W(tenant, { personType: 'PF', legalName: 'DRILL Proprietário', createdBy: tenant.userId, updatedBy: tenant.userId }), { transaction: t });
   const property = await Property.create(W(tenant, { title: 'DRILL Imóvel do repasse', internalCode: `DRILL-REP-${STAMP}`, propertyType: 'HOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }), { transaction: t });
   const rent = await financialEntries.createFinancialEntry(
-    W(tenant, { entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '3000.00', resultCenterId: ids.resultCenterId, description: 'DRILL aluguel recebido (origem do repasse)' }),
+    W(tenant, { dueAt: new Date(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '3000.00', resultCenterId: ids.resultCenterId, description: 'DRILL aluguel recebido (origem do repasse)' }),
     tenant.userId, t
   );
   await receiptService.settleFinancialEntry(rent.id, tenant.userId, t);
@@ -174,7 +174,7 @@ async function seedRepasse(tenant, t, ids, checkerId) {
 async function seedCommission(tenant, t, ids, approverId) {
   const version = await commissions.publishCommissionRuleVersion(W(tenant, { componentPercentages: { BROKER: 10 } }), tenant.userId, t);
   const source = await financialEntries.createFinancialEntry(
-    W(tenant, { entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '1000.00', resultCenterId: ids.resultCenterId, description: 'DRILL venda (fato gerador da comissão)' }),
+    W(tenant, { dueAt: new Date(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '1000.00', resultCenterId: ids.resultCenterId, description: 'DRILL venda (fato gerador da comissão)' }),
     tenant.userId, t
   );
   const { commission, installments } = await commissions.createCommission(
@@ -183,7 +183,7 @@ async function seedCommission(tenant, t, ids, approverId) {
   );
   await receiptService.settleFinancialEntryPartial(source.id, '500.00', tenant.userId, t, { idempotencyKey: `drill-commission-src-${STAMP}` });
   const payable = await financialEntries.createFinancialEntry(
-    W(tenant, { entryType: 'DEBIT', nature: 'PAYABLE', amount: '50.00', costCenterId: ids.costCenterId, description: 'DRILL pagamento da 1ª parcela da comissão' }),
+    W(tenant, { dueAt: new Date(), entryType: 'DEBIT', nature: 'PAYABLE', amount: '50.00', costCenterId: ids.costCenterId, description: 'DRILL pagamento da 1ª parcela da comissão' }),
     tenant.userId, t
   );
   await settlePayableFormally(tenant, t, payable.id, approverId, ids);
@@ -234,7 +234,7 @@ async function seedTenantB(tenantA) {
   const tenantB = { groupId: group.id, companyId: company.id, userId: tenantA.userId };
   const entryId = await inTenant(tenantB, async (t) => {
     const rc = await ResultCenter.create(W(tenantB, { code: `RC-DRILL-B-${STAMP}`, name: 'DRILL B centro de resultado' }), { transaction: t });
-    const e = await financialEntries.createFinancialEntry(W(tenantB, { entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '999.99', resultCenterId: rc.id, description: 'DRILL lançamento do tenant B' }), tenantB.userId, t);
+    const e = await financialEntries.createFinancialEntry(W(tenantB, { dueAt: new Date(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '999.99', resultCenterId: rc.id, description: 'DRILL lançamento do tenant B' }), tenantB.userId, t);
     return e.id;
   });
   return { ...tenantB, entryId };

@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Guia do Marcelo — Centro Financeiro §15 "APIs mínimas": o livro manda os caminhos literais.
 // Defeito achado no fechamento do Marco 4 (10/11/2026): só existiam rotas equivalentes com outros
 // nomes. Este arquivo prova, por HTTP real contra o app Express, cada uma das 8 rotas: o caminho
@@ -57,7 +58,7 @@ const base = () => ({ groupId: tenant.groupId, companyId: tenant.companyId });
 
 async function payableWithEvidence(label) {
   return inTenant(async (t) => {
-    const entry = await financialEntriesService.createFinancialEntry({ ...base(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 123.45, costCenterId, description: `Guia §15 ${label} ${T.uniqueSuffix()}` }, users.maker.id, t);
+    const entry = await financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'DEBIT', nature: 'PAYABLE', amount: 123.45, costCenterId, description: `Guia §15 ${label} ${T.uniqueSuffix()}` }, users.maker.id, t);
     const manual = await T.createManualSettlementEvidence(tenant, users.maker.id, t);
     await settlementEvidence.attachSettlementEvidence(entry.id, manual, users.maker.id, t);
     return { entry, manual };
@@ -65,7 +66,7 @@ async function payableWithEvidence(label) {
 }
 
 async function receivableOnAccount(amount, extra = {}) {
-  return inTenant((t) => financialEntriesService.createFinancialEntry({ ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: account.id, description: `Guia §15 recebível ${T.uniqueSuffix()}`, ...extra }, users.maker.id, t));
+  return inTenant((t) => financialEntriesService.createFinancialEntry({ dueAt: vencimentoDeTeste(), ...base(), entryType: 'CREDIT', nature: 'RECEIVABLE', amount, resultCenterId, bankAccountId: account.id, description: `Guia §15 recebível ${T.uniqueSuffix()}`, ...extra }, users.maker.id, t));
 }
 
 async function bankTx(amount, extra = {}) {

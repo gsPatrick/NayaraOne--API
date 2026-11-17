@@ -1,5 +1,6 @@
 'use strict';
 
+const { vencimentoDeTeste } = require('./helpers/vencimentoPadrao'); // DI-BI2-6: vencimento obrigatório no lançamento próprio
 // Caderno M4 §19 (relatório semanal de saúde), §13 ("relatório mostra saldo de terceiros separado do caixa livre") e §18.1
 // (NAY explica fluxo de caixa). O caso real da homologação: o recebível de R$ 0,30, conferido ANTES, com BAIXA PARCIAL de
 // 0,10, QUITADO (0,10 + 0,20) e ESTORNADO — o relatório, a NAY e o read model do BI (rm_finance_health) contam o mesmo
@@ -35,7 +36,7 @@ async function scenario(label) {
   const tx = (fn) => withTenantTransaction(tenant, fn);
   const rc = await tx(async (t) => (await createTestResultCenter(tenant, t)).id);
   const entry = (payload) => tx((t) => entriesSvc.createFinancialEntry(
-    { groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', resultCenterId: rc, description: `M4LR ${label} ${uniqueSuffix()}`, ...payload }, tenant.userId, t));
+    { dueAt: vencimentoDeTeste(), groupId: tenant.groupId, companyId: tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', resultCenterId: rc, description: `M4LR ${label} ${uniqueSuffix()}`, ...payload }, tenant.userId, t));
   const partial = (id, amount) => tx((t) => receipt.settleFinancialEntryPartial(id, amount, tenant.userId, t, { idempotencyKey: `m4lr-${uniqueSuffix()}` }));
   const report = () => tx((t) => health.getWeeklyHealthReport(t, { companyId: tenant.companyId, groupId: tenant.groupId }));
   return { tenant, tx, rc, entry, partial, report };
@@ -128,12 +129,12 @@ test('§19.6, §19.8, §19.9 e §19.3 (sonda P13): inadimplência só dos receb�
   // Comissão de 100 com a parcela paga: sai do provisionado.
   await s.tx(async (t) => {
     await commissions.publishCommissionRuleVersion({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, componentPercentages: { BROKER: 10 } }, s.tenant.userId, t);
-    const src = await entriesSvc.createFinancialEntry({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '1000.00', resultCenterId: s.rc, description: 'fato gerador M4LR' }, s.tenant.userId, t);
+    const src = await entriesSvc.createFinancialEntry({ dueAt: vencimentoDeTeste(), groupId: s.tenant.groupId, companyId: s.tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '1000.00', resultCenterId: s.rc, description: 'fato gerador M4LR' }, s.tenant.userId, t);
     await receipt.settleFinancialEntry(src.id, s.tenant.userId, t, { idempotencyKey: `m4lr-src-${uniqueSuffix()}` });
     const { installments } = await commissions.createCommission({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, beneficiaryUserId: s.tenant.userId, sourceEntryId: src.id, component: 'BROKER', installmentsCount: 1, idempotencyKey: `m4lr-com-${uniqueSuffix()}` }, s.tenant.userId, t);
     const before = (await health.getWeeklyHealthReport(t, { companyId: s.tenant.companyId })).provisionedCommissions;
     assert.deepEqual(before, { count: 1, total: 100 });
-    const pay = await entriesSvc.createFinancialEntry({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: '100.00', costCenterId: cc.id, description: 'pagamento comissão M4LR' }, s.tenant.userId, t);
+    const pay = await entriesSvc.createFinancialEntry({ dueAt: vencimentoDeTeste(), groupId: s.tenant.groupId, companyId: s.tenant.companyId, entryType: 'DEBIT', nature: 'PAYABLE', amount: '100.00', costCenterId: cc.id, description: 'pagamento comissão M4LR' }, s.tenant.userId, t);
     await settleFinancialEntryWithApproval(s.tenant, pay.id, s.tenant.userId, t);
     await require('../src/modules/finance/application/services/commission-installments.service').markInstallmentPaid(installments[0].id, pay.id, s.tenant.userId, t);
   });
@@ -144,7 +145,7 @@ test('§19.6, §19.8, §19.9 e §19.3 (sonda P13): inadimplência só dos receb�
     const sfx = uniqueSuffix();
     const owner = await Person.create({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, personType: 'PF', legalName: `Proprietário M4LR ${sfx}`, createdBy: s.tenant.userId, updatedBy: s.tenant.userId }, { transaction: t });
     const property = await Property.create({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, title: `Imóvel M4LR ${sfx}`, internalCode: `M4LR-${sfx}`, propertyType: 'HOUSE', createdBy: s.tenant.userId, updatedBy: s.tenant.userId }, { transaction: t });
-    const received = await entriesSvc.createFinancialEntry({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '800.00', resultCenterId: s.rc, description: `aluguel M4LR ${sfx}` }, s.tenant.userId, t);
+    const received = await entriesSvc.createFinancialEntry({ dueAt: vencimentoDeTeste(), groupId: s.tenant.groupId, companyId: s.tenant.companyId, entryType: 'CREDIT', nature: 'RECEIVABLE', amount: '800.00', resultCenterId: s.rc, description: `aluguel M4LR ${sfx}` }, s.tenant.userId, t);
     await receipt.settleFinancialEntry(received.id, s.tenant.userId, t, { idempotencyKey: `m4lr-rep-${sfx}` });
     const account = await BankAccount.create({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, bankCode: '001', agency: '0001', accountNumber: `M4LR-R-${sfx}`, status: 'ACTIVE' }, { transaction: t });
     const repasse = await ownerRepasses.createOwnerRepasse({ groupId: s.tenant.groupId, companyId: s.tenant.companyId, propertyId: property.id, ownerPersonId: owner.id, bankAccountId: account.id, sourceEntryIds: [received.id], grossAmount: 700, deductionsAmount: 0, referenceMonth: inDays(0).slice(0, 7) }, s.tenant.userId, t);
