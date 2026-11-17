@@ -3,9 +3,10 @@
 const { sequelize } = require('../../../config/database');
 const AppError = require('../../../utils/AppError');
 const logger = require('../../../utils/logger');
-const { writeBlockedError, queryTimeoutError } = require('./readOnly.errors');
+const { writeBlockedError, queryTimeoutError, readBusyError } = require('./readOnly.errors');
 const { getSetting } = require('../../../features/settings/settings.service');
-const { QUERY_TIMEOUT_SETTING_KEY, READ_ONLY_SETTING_DEFAULTS } = require('./readOnly.settings');
+const { QUERY_TIMEOUT_SETTING_KEY, MAX_CONCURRENT_SETTING_KEY, READ_ONLY_SETTING_DEFAULTS } = require('./readOnly.settings');
+const { gate } = require('./readOnly.concurrency');
 const { shouldUseReaderRole, assumeReaderRole } = require('./readOnly.readerRole');
 const { markReadOnly } = require('./requestMemo');
 
@@ -25,7 +26,30 @@ async function applyReadOnly(transaction, tenant) {
   const timeoutMs = await getSetting(QUERY_TIMEOUT_SETTING_KEY, tenant, transaction, READ_ONLY_SETTING_DEFAULTS[QUERY_TIMEOUT_SETTING_KEY]);
   const ms = Number.isInteger(timeoutMs) && timeoutMs >= 100 ? timeoutMs : READ_ONLY_SETTING_DEFAULTS[QUERY_TIMEOUT_SETTING_KEY];
   await sequelize.query("SELECT set_config('statement_timeout', :ms, true)", { replacements: { ms: String(ms) }, transaction });
+  if (gate.precisaReler()) { // limite de leituras simultâneas do BI: relido no contexto da empresa, vale do GET seguinte em diante
+    const max = await getSetting(MAX_CONCURRENT_SETTING_KEY, tenant, transaction, READ_ONLY_SETTING_DEFAULTS[MAX_CONCURRENT_SETTING_KEY]);
+    gate.configurar({ limite: Number.isInteger(max) && max >= 1 && max <= 200 ? max : READ_ONLY_SETTING_DEFAULTS[MAX_CONCURRENT_SETTING_KEY], esperaMaxMs: ms });
+  }
   if (await shouldUseReaderRole(tenant, transaction)) await assumeReaderRole(transaction);
+}
+
+/** Vez na porta de leituras simultâneas do BI (readOnly.concurrency.js); a requisição que já tem a vez não pede outra. */
+async function comVez(req, fn) {
+  if (req.analyticsReadSlot) return fn();
+  let sair;
+  try {
+    sair = await gate.entrar();
+  } catch (err) {
+    if (err && err.code === 'ANALYTICS_READ_BUSY') throw readBusyError();
+    throw err;
+  }
+  req.analyticsReadSlot = true;
+  try {
+    return await fn();
+  } finally {
+    req.analyticsReadSlot = false;
+    sair();
+  }
 }
 
 /** Consulta cancelada pelo statement_timeout do GET: 504 ANALYTICS_QUERY_TIMEOUT, sem texto do driver. */
@@ -52,6 +76,7 @@ function translateWriteBlocked(err, req) {
  * M9-D612 (3.1) — todo GET/HEAD de /analytics roda em transação READ ONLY: substitui `req.withTenantTransaction` por uma versão
  * que aplica a garantia antes de qualquer consulta do handler. Falha fechada se o contexto de tenant não foi montado.
  * Escritas permitidas (ack e exportação, ANALYTICS_WRITE_ROUTES) não passam por aqui: gravam só em analytics, sob RLS.
+ * Cada transação de leitura espera a vez na porta de leituras simultâneas do BI (proteção do fluxo operacional, readOnly.concurrency.js).
  */
 function analyticsReadOnlyTransaction(req, res, next) {
   if (!READ_METHODS.has(req.method)) return next();
@@ -60,7 +85,7 @@ function analyticsReadOnlyTransaction(req, res, next) {
     return next(AppError.unauthorized('Contexto de tenant ausente. Operação bloqueada (fail closed).', 'TENANT_CONTEXT_MISSING'));
   }
   const tenant = { groupId: req.auth.groupId, companyId: req.auth.companyId };
-  req.withTenantTransaction = async (fn) => {
+  req.withTenantTransaction = (fn) => comVez(req, async () => {
     try {
       return await base(async (transaction) => {
         await applyReadOnly(transaction, tenant);
@@ -69,9 +94,9 @@ function analyticsReadOnlyTransaction(req, res, next) {
     } catch (err) {
       throw translateQueryTimeout(translateWriteBlocked(err, req));
     }
-  };
+  });
   return next();
 }
 analyticsReadOnlyTransaction.isAnalyticsReadOnlyGuard = true;
 
-module.exports = { analyticsReadOnlyTransaction };
+module.exports = { analyticsReadOnlyTransaction, comVez };
