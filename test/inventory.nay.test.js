@@ -18,6 +18,7 @@ const filesService = require('../src/features/files/files.service');
 const nay = require('../src/features/inventory/inventoryNay.service');
 const { AiRecommendation, AiRun, PurchaseRequestItem, InventoryMovement, InventoryLossCase, Project, Person, User } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 // NAY Estoque — EST-013 ("NAY pode sugerir compra, risco de falta ou anomalia, mas não efetiva
 // compra/baixa sozinha"), Guia §12 ("sugestão não cria pedido de compra sem workflow
@@ -73,7 +74,7 @@ async function createActiveProjectWithSite(transaction) {
     tenant.userId,
     transaction
   );
-  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Etapa' }), tenant.userId, transaction);
+  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Etapa' }), tenant.userId, transaction);
   return { project, site, stage };
 }
 async function suggestionsForItem(itemId, transaction) {

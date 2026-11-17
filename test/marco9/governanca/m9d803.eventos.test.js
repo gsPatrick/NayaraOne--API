@@ -62,11 +62,15 @@ test('m9d803 project.stage.updated é publicado uma vez por mudança', { skip: s
   });
 });
 
-test('m9d803 etapa sem prazo e mudança de responsável da obra reemitem a etapa', { skip: skip() }, async () => {
+test('m9d803 etapa sem prazo é recusada e mudança de responsável da obra reemite a etapa', { skip: skip() }, async () => {
   await run(async (tx) => {
     const project = await newProject(tx, { endsAtPlanned: '2026-12-15T03:00:00Z' });
-    const noDate = await stagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Sem data' }, tenant.userId, tx);
-    assert.equal((await env.events(noDate.id, 'project.stage.updated', tx))[0].payloadJson.endsAt, null);
+    // Segunda leva de 16/11/2026 (DI-BI2-3, M6:16 "Etapas possuem ... prazo"): etapa sem prazo não nasce mais,
+    // então nenhum item do Calendário fica sem data.
+    await assert.rejects(
+      stagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Sem data' }, tenant.userId, tx),
+      (err) => err.statusCode === 422 && err.code === 'PROJECT_STAGE_END_DATE_REQUIRED'
+    );
     const stage = await stagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Com data', endsAt: '2026-11-12T20:00:00Z' }, tenant.userId, tx);
     const created = (await env.events(project.id, 'project.created', tx))[0];
     assert.equal(created.payloadJson.responsibleUserId, tenant.userId);

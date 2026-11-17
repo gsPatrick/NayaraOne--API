@@ -36,6 +36,7 @@ const filesService = require('../src/features/files/files.service');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 let approver;
@@ -147,7 +148,7 @@ test('Gap 1 (EST-006): loanTool registra responsável, destino e data prevista, 
 
 async function createProjectWithStage(transaction) {
   const project = await projectsService.createProject(withTenant({ name: `Obra GAP M7 ${uniqueSuffix()}` }), tenant.userId, transaction);
-  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Fundação' }), tenant.userId, transaction);
   return { project, stage };
 }
 

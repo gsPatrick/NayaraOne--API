@@ -14,6 +14,7 @@ const changeOrdersService = require('../src/features/construction/changeOrders.s
 const marginRulesService = require('../src/features/construction/marginRules.service');
 const lossRecordsService = require('../src/features/construction/lossRecords.service');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 
@@ -234,7 +235,7 @@ test('M6-42: consumedInventoryCost soma o custo real de saídas de estoque vincu
     const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000 });
     // Revisão Marco 7 (19/10/2026), A7: saída de material para a obra exige a etapa.
     const projectStagesService = require('../src/features/construction/projectStages.service');
-    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Estrutura' }), tenant.userId, transaction);
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Estrutura' }), tenant.userId, transaction);
 
     const location = await InventoryLocation.create(
       withTenant({ name: `HOMO QA Deposito ${Date.now()}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }),
@@ -360,7 +361,7 @@ test('M6-NOVO-14: projectedMargin consegue ficar POSITIVA, ZERO e NEGATIVA confo
     // Margem esperada: 1000 - 800 = 200 (POSITIVA) — a obra está rendendo mais barato que o
     // orçado, e agora isso aparece como economia projetada, não mais como "zero" disfarçado.
     const { project } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000, minMarginPct: 0 });
-    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Fundação' }), tenant.userId, transaction);
     await projectStagesService.updateProjectStage(stage.id, { measuredPct: 50 }, tenant.userId, transaction);
     await measureAndSettle(stage, project.id, 50, 400, '2026-10-01');
 
@@ -383,7 +384,7 @@ test('M6-NOVO-14: projectedMargin consegue ficar POSITIVA, ZERO e NEGATIVA confo
     // Cenário NEGATIVO: outra obra, progresso de 50% mas já gastou MAIS do que a taxa linear do
     // orçamento sustentaria (600 de 1000 para só 50% do trabalho) — EAC = 600/0.5 = 1200 > B.
     const { project: projectOver } = await createProjectWithApprovedBudget(transaction, { plannedAmount: 1000, minMarginPct: 0 });
-    const stageOver = await projectStagesService.createProjectStage(projectOver.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    const stageOver = await projectStagesService.createProjectStage(projectOver.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Fundação' }), tenant.userId, transaction);
     await projectStagesService.updateProjectStage(stageOver.id, { measuredPct: 50 }, tenant.userId, transaction);
     await measureAndSettle(stageOver, projectOver.id, 50, 600, '2026-10-01');
 
@@ -420,7 +421,7 @@ test('M6-NOVO-15: economyAmount/commissionAmount são calculados a partir da mar
 
     // Mesmo cenário POSITIVO do teste anterior: orçamento 1000, 50% concluído com 400 gasto —
     // EAC=800, economia real projetada = 1000-800 = 200.
-    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Fundação' }), tenant.userId, transaction);
     await projectStagesService.updateProjectStage(stage.id, { measuredPct: 50 }, tenant.userId, transaction);
     const measurement = await stageMeasurementsService.createStageMeasurement(
       stage.id,

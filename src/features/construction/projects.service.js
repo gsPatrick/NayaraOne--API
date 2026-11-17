@@ -26,6 +26,7 @@ const { publishProjectScheduleChanged, computeProjectWarrantyEndsAt } = require(
 const { assertCostCenterBelongsToCompany } = require('./costCenterValidation');
 const { assertProjectReferences } = require('./projectReferences');
 const { applyProjectChecklist } = require('./checklistTemplates.service');
+const { assertExecutionFieldsKept } = require('./scheduleRequired');
 
 // M6-18 (fechado 30/09/2026, rodada final) — máquina de estados EXATA da fonte (Anexo I, seção
 // "4. Estados da obra"): "PLANNED → BUDGETED → READY → ACTIVE → FINAL_INSPECTION → DELIVERED →
@@ -257,6 +258,9 @@ async function updateProject(id, payload, actorUserId, transaction) {
   const beforeJson = project.toJSON();
   const scheduleBefore = { endsAtPlanned: project.endsAtPlanned, responsibleUserId: project.responsibleUserId };
   const { name, responsibleUserId, budgetAmount, startsAt, endsAtPlanned, propertyId, unitId, actualEndDate, costCenterId, projectTypeId } = payload;
+  // Segunda leva de 16/11/2026 (item 4-A e DI-BI2-9): depois de READY -> ACTIVE nenhum campo do gate
+  // (orçamento, início, previsão de término, responsável) some; antes de qualquer outra checagem.
+  assertExecutionFieldsKept(project, payload);
   await assertProjectReferences(payload, project.companyId, transaction);
   const typeChanged = projectTypeId !== undefined && (projectTypeId || null) !== project.projectTypeId;
   if (projectTypeId !== undefined) project.projectTypeId = projectTypeId || null;

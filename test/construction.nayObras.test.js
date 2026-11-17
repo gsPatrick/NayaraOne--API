@@ -12,6 +12,7 @@ const dailyReportsService = require('../src/features/construction/dailyReports.s
 const peopleService = require('../src/features/people/people.service');
 const nayObrasService = require('../src/features/construction/nayObras.service');
 const { StageMeasurement } = require('../src/models');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 // Auditoria externa (Nayara) — Marco 6, "NAY Obras" (`nayObras.service.js`). A arquitetura
 // "NAY sugere, nunca decide" é deliberada (`decisionsMade: []` hardcoded) — estes testes
@@ -118,7 +119,7 @@ test('GAP 3 — risco de medição pendente de aprovação há muito tempo apare
     const project = await createTestProject(transaction, suffix);
     const stage = await projectStagesService.createProjectStage(
       project.id,
-      withTenant({ name: `Etapa NAY QA ${suffix}`, sequence: 1 }),
+      withTenant({ endsAt: prazoEtapaPadrao(), name: `Etapa NAY QA ${suffix}`, sequence: 1 }),
       tenant.userId,
       transaction
     );
@@ -156,7 +157,7 @@ test('GAP 3 — risco de medição PAYABLE sem pagamento processado há muito te
     const project = await createTestProject(transaction, suffix);
     const stage = await projectStagesService.createProjectStage(
       project.id,
-      withTenant({ name: `Etapa NAY QA PAYABLE ${suffix}`, sequence: 1 }),
+      withTenant({ endsAt: prazoEtapaPadrao(), name: `Etapa NAY QA PAYABLE ${suffix}`, sequence: 1 }),
       tenant.userId,
       transaction
     );

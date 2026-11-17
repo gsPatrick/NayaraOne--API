@@ -9,6 +9,7 @@ const { publishProjectStageUpdated } = require('./constructionCalendarEvents.ser
 const { assertPredecessorsDone } = require('./stageDependencies.service');
 const { assertActiveMember } = require('./companyRefs');
 const { applyProjectChecklist } = require('./checklistTemplates.service');
+const { assertStageEndOnCreate, assertStageEndKept } = require('./scheduleRequired');
 
 const STATUSES = ['PENDING', 'IN_PROGRESS', 'DONE'];
 const STATUS_LABELS_PT = { PENDING: 'Pendente', IN_PROGRESS: 'Em andamento', DONE: 'Concluída' };
@@ -68,6 +69,8 @@ async function createProjectStage(projectId, payload, actorUserId, transaction) 
   if (!groupId || !companyId || !name) {
     throw AppError.badRequest('Os campos "groupId", "companyId" e "name" são obrigatórios.', 'PROJECT_STAGE_VALIDATION');
   }
+  // M6:16 "Etapas possuem ... prazo" (DI-BI2-3): o prazo nasce com a etapa (scheduleRequired.js).
+  assertStageEndOnCreate(endsAt);
   assertValidDateRange(startsAt, endsAt);
   const numericPlannedPct = assertValidPlannedPct(plannedPct);
   const numericPlannedCost = assertValidPlannedCost(plannedCost);
@@ -218,6 +221,8 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
     stage.status = normalizedStatus;
   }
   if (startsAt !== undefined) stage.startsAt = startsAt;
+  // M6:16 (DI-BI2-3): o prazo da etapa pode ser trocado, nunca retirado.
+  assertStageEndKept(endsAt);
   if (endsAt !== undefined) stage.endsAt = endsAt;
   assertValidDateRange(
     startsAt !== undefined ? startsAt : stage.startsAt,
@@ -229,6 +234,9 @@ async function updateProjectStage(id, payload, actorUserId, transaction) {
   // mesmo gate já aplicado em Project (READY -> ACTIVE): exige os campos no momento em que a
   // etapa de fato começa a ser executada, sem forçá-los na criação (onde ainda podem estar
   // sendo planejados).
+  // Segunda leva de 16/11/2026 (DI-BI2-3): a regra vale para código, custo, início e
+  // responsável; o prazo (endsAt) já é exigido desde a criação (scheduleRequired.js) e a
+  // checagem dele aqui só cobre etapa antiga, criada antes da regra.
   if (previousStatus !== 'IN_PROGRESS' && stage.status === 'IN_PROGRESS') {
     const missing = [];
     if (!stage.stageCode) missing.push('código da etapa (stageCode)');

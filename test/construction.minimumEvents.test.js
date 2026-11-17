@@ -27,6 +27,7 @@ const maintenanceCasesService = require('../src/features/construction/maintenanc
 const propertiesService = require('../src/features/properties/properties.service');
 const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
 const { detectDelayedProjects } = require('../src/engines/jobs/projectDelayDetectionJob');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 const MINIMOS = [
   'project.created', 'project.budget.approved', 'project.started', 'project.stage.completed', 'project.daily_log.created',
@@ -57,7 +58,7 @@ test('M6-69..M6-80: a jornada da obra grava na Outbox os 15 eventos mínimos do 
     await budgetLinesService.createBudgetLine(project.id, W({ budgetId: budget.id, category: 'Material', plannedAmount: 20000 }), tenant.userId, t);
     await budgetsService.approveBudget(budget.id, tenant.userId, t);
 
-    const stage = await projectStagesService.createProjectStage(project.id, W({ name: 'Fundação', stageCode: `F-${s}`, sequence: 1, plannedPct: 100, plannedCost: 20000 }), tenant.userId, t);
+    const stage = await projectStagesService.createProjectStage(project.id, W({ endsAt: prazoEtapaPadrao(), name: 'Fundação', stageCode: `F-${s}`, sequence: 1, plannedPct: 100, plannedCost: 20000 }), tenant.userId, t);
     const local = await InventoryLocation.create({ ...W({}), name: `QA M6 Local ${s}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
     const item = await InventoryItem.create(
       { ...W({}), sku: `QA-M6-EV-${s}`, name: `QA M6 Cimento ${s}`, unitOfMeasure: 'UN', itemType: 'CONSUMABLE', averageCost: 10, createdBy: tenant.userId, updatedBy: tenant.userId },

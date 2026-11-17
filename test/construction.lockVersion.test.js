@@ -14,6 +14,7 @@ const projectsService = require('../src/features/construction/projects.service')
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const budgetsService = require('../src/features/construction/budgets.service');
 const errorHandler = require('../src/middlewares/errorHandler');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 before(async () => {
@@ -64,7 +65,7 @@ test('M6-67: obra — segunda gravação com lock_version velho é recusada (Seq
 test('M6-67: etapa e orçamento — mesma proteção de lock_version', async () => {
   const { stage, budget } = await withTenantTransaction(tenant, async (t) => {
     const p = await projectsService.createProject(W({ name: `QA M6 Lock ${uniqueSuffix()}` }), tenant.userId, t);
-    const st = await projectStagesService.createProjectStage(p.id, W({ name: 'Alvenaria', sequence: 1, plannedPct: 100 }), tenant.userId, t);
+    const st = await projectStagesService.createProjectStage(p.id, W({ endsAt: prazoEtapaPadrao(), name: 'Alvenaria', sequence: 1, plannedPct: 100 }), tenant.userId, t);
     const b = await budgetsService.createBudget(p.id, W({}), tenant.userId, t);
     return { stage: st, budget: b };
   });

@@ -13,6 +13,7 @@ const maintenanceCasesService = require('../src/features/construction/maintenanc
 const { getConstructionDashboard } = require('../src/features/construction/dashboard.service');
 const { Property, BudgetLine, MaintenanceCase, WarrantyAction } = require('../src/models');
 const { columnsExist } = require('../src/features/construction/warrantyActionTeamMaterialColumns');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 // GAP CORRIGIDO (auditoria pós-Marco 6, item 1): o contrato exige dois painéis de BI dedicados
 // — "Obras" e "Pós-obra" — com dado agregado de TODAS as obras da empresa, não só o
@@ -141,7 +142,7 @@ test('dashboard: projectedMarginTotal/projectedTotalCostTotal consideram consume
     );
     // Revisão Marco 7 (19/10/2026), A7: saída de material para a obra exige a etapa.
     const projectStagesService = require('../src/features/construction/projectStages.service');
-    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Estrutura' }), tenant.userId, transaction);
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Estrutura' }), tenant.userId, transaction);
     await inventoryMovementsService.recordMovement(
       withTenant({ inventoryItemId: item.id, projectId: project.id, stageId: stage.id, movementType: 'OUT', quantity: 45, sourceLocationId: location.id, sourceType: 'MANUAL', responsiblePersonId: retirante.id }),
       { userId: tenant.userId, canApprove: true },
@@ -195,7 +196,7 @@ test('dashboard: projectedMarginTotal consegue ficar POSITIVA quando a obra agre
     const dashboardBefore = await getConstructionDashboard({ groupId: tenant.groupId, companyId: tenant.companyId }, transaction);
 
     // Mesmo cenário do teste de drill-down: 50% concluído, 400 gasto — EAC=800, economia=200.
-    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Fundação' }), tenant.userId, transaction);
     await projectStagesService.updateProjectStage(stage.id, { measuredPct: 50 }, tenant.userId, transaction);
     const measurement = await stageMeasurementsService.createStageMeasurement(
       stage.id,

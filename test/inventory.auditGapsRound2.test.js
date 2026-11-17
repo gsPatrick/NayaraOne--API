@@ -20,6 +20,7 @@ const filesService = require('../src/features/files/files.service');
 const projectsService = require('../src/features/construction/projects.service');
 const projectStagesService = require('../src/features/construction/projectStages.service');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 let approver;
@@ -82,7 +83,7 @@ async function createEvidence(transaction) {
 test('Gap 1 (EST-004): canteiro com obra vinculada preenche projectId sozinho; canteiro legado sem obra ainda recusa', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await projectsService.createProject(withTenant({ name: `Obra GAP R2 ${uniqueSuffix()}` }), tenant.userId, transaction);
-    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Etapa' }), tenant.userId, transaction);
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Etapa' }), tenant.userId, transaction);
     const warehouse = await createLocation(transaction);
     const site = await createLocation(transaction, 'PROJECT_SITE', { projectId: project.id });
     const item = await createItem(transaction);
@@ -113,7 +114,7 @@ test('Gap 1 (EST-004): canteiro com obra vinculada preenche projectId sozinho; c
 test('Gap 1 (EST-004): requisição aceita projectLocationId de PROJECT_SITE quando projectId é informado', async () => {
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const project = await projectsService.createProject(withTenant({ name: `Obra GAP R2 ${uniqueSuffix()}` }), tenant.userId, transaction);
-    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Etapa' }), tenant.userId, transaction);
+    const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Etapa' }), tenant.userId, transaction);
     const warehouse = await createLocation(transaction);
     const site = await createLocation(transaction, 'PROJECT_SITE', { projectId: project.id });
     const item = await createItem(transaction);

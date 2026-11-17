@@ -29,6 +29,7 @@ const projectHealthService = require('../src/features/construction/projectHealth
 const postObraHealthService = require('../src/features/construction/postObraHealth.service');
 const propertiesService = require('../src/features/properties/properties.service');
 const { FinancialEntry } = require('../src/models');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 
@@ -120,7 +121,7 @@ test('M6-98: jornada E2E completa — orçamento→material→diário→mediçã
     // Etapa (revisão Marco 7, A7: a baixa de estoque para a obra exige a etapa)
     const stage = await projectStagesService.createProjectStage(
       project.id,
-      withTenant({ name: 'Fundação', stageCode: 'FUND-01', sequence: 1, plannedPct: 100, plannedCost: 20000, responsibleUserId: tenant.userId }),
+      withTenant({ endsAt: prazoEtapaPadrao(), name: 'Fundação', stageCode: 'FUND-01', sequence: 1, plannedPct: 100, plannedCost: 20000, responsibleUserId: tenant.userId }),
       tenant.userId,
       transaction
     );

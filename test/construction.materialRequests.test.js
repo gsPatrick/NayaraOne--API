@@ -10,6 +10,7 @@ const materialRequestsService = require('../src/features/construction/materialRe
 const AppError = require('../src/utils/AppError');
 const { OutboxEvent, InventoryItem, InventoryLocation, InventoryMovement, AuditLog } = require('../src/models');
 const inventoryMovementsService = require('../src/features/inventory/movements.service');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 // M6-28 — requisição de material mínima do Marco 6 (integração completa com Estoque é do
 // Marco 7, ver src/features/construction/README.md).
@@ -69,7 +70,7 @@ async function createTestProject(transaction) {
   );
   // Revisão Marco 7 (19/10/2026), A7: a baixa de estoque para a obra exige a etapa — cada obra de
   // teste ganha uma etapa, informada no recebimento (testStageId).
-  const stage = await projectStagesService.createProjectStage(project.id, { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Etapa de teste' }, tenant.userId, transaction);
+  const stage = await projectStagesService.createProjectStage(project.id, { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Etapa de teste' }, tenant.userId, transaction);
   project.testStageId = stage.id;
   return project;
 }
@@ -173,7 +174,7 @@ test('material-request: vínculo com stageId de outra obra é rejeitado', async 
     const otherProject = await createTestProject(transaction);
     const stageOfOtherProject = await projectStagesService.createProjectStage(
       otherProject.id,
-      { groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' },
+      { endsAt: prazoEtapaPadrao(), groupId: tenant.groupId, companyId: tenant.companyId, name: 'Fundação' },
       tenant.userId,
       transaction
     );

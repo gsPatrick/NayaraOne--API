@@ -51,7 +51,7 @@ async function main() {
 
   await T(async (t) => {
     const { InventoryItem, InventoryLocation } = ctx.models;
-    const stage = await svc('projectStages').createProjectStage(f.projectId, W({ name: 'Estrutura', stageCode: `EST-${s}`, sequence: 1, plannedPct: 100, plannedCost: 30000 }), tenant.userId, t);
+    const stage = await svc('projectStages').createProjectStage(f.projectId, W({ name: 'Estrutura', stageCode: `EST-${s}`, sequence: 1, plannedPct: 100, plannedCost: 30000, endsAt: '2027-06-30' }), tenant.userId, t);
     const local = await InventoryLocation.create({ ...W({}), name: `Drill Almox Obras ${s}`, locationType: 'WAREHOUSE', createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
     const item = await InventoryItem.create({ ...W({}), sku: `DRILL-OBR-${s}`, name: `Drill Cimento Obras ${s}`, unitOfMeasure: 'UN', itemType: 'CONSUMABLE', averageCost: 32, createdBy: tenant.userId, updatedBy: tenant.userId }, { transaction: t });
     await ctx.movementsService.recordMovement(W({ inventoryItemId: item.id, movementType: 'IN', quantity: 200, unitCost: 32, destinationLocationId: local.id }), { userId: tenant.userId, canApprove: true }, t);

@@ -109,6 +109,8 @@ async function run() {
           sequence: 1,
           plannedPct: 100,
           plannedCost: 300000,
+          // M6:16 "Etapas possuem ... prazo" (DI-BI2-3): a API recusa etapa sem prazo. Data fixa, a fixture é idempotente.
+          endsAt: '2027-12-31T15:00:00.000Z',
         },
         null,
         transaction

@@ -24,6 +24,7 @@ const dashboardService = require('../src/features/construction/dashboard.service
 const settingsService = require('../src/features/settings/settings.service');
 const { KEY } = require('../src/features/construction/costBasis');
 const { evidenceIds } = require('./constructionEvidenceFixture');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 before(async () => {
@@ -44,7 +45,7 @@ async function obraComMedicoesAPagar(t, { alvenaria = 20400 } = {}) {
   await budgetLinesService.createBudgetLine(project.id, W({ budgetId: budget.id, category: 'Fundação', plannedAmount: 45000 }), tenant.userId, t);
   await budgetLinesService.createBudgetLine(project.id, W({ budgetId: budget.id, category: 'Alvenaria', plannedAmount: 35000 }), tenant.userId, t);
   await budgetsService.approveBudget(budget.id, tenant.userId, t);
-  const stage = (name, seq) => projectStagesService.createProjectStage(project.id, W({ name, stageCode: `${name.slice(0, 3).toUpperCase()}-${s}`, sequence: seq, plannedPct: 100, plannedCost: 40000 }), tenant.userId, t);
+  const stage = (name, seq) => projectStagesService.createProjectStage(project.id, W({ endsAt: prazoEtapaPadrao(), name, stageCode: `${name.slice(0, 3).toUpperCase()}-${s}`, sequence: seq, plannedPct: 100, plannedCost: 40000 }), tenant.userId, t);
   const st1 = await stage('Fundação', 1);
   const st2 = await stage('Alvenaria', 2);
   const medir = async (st, pct, items) => {

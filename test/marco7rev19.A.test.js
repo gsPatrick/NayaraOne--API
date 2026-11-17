@@ -35,6 +35,7 @@ const {
   ApprovalThreshold,
 } = require('../src/models');
 const AppError = require('../src/utils/AppError');
+const { prazoEtapaPadrao } = require('./helpers/prazoEtapaPadrao');
 
 let tenant;
 
@@ -95,7 +96,7 @@ async function warehouse(transaction) {
 
 async function projectWithSite(transaction) {
   const project = await projectsService.createProject(withTenant({ name: `HOMO QA rev19 Obra ${uniqueSuffix()}` }), tenant.userId, transaction);
-  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ name: 'Fundação' }), tenant.userId, transaction);
+  const stage = await projectStagesService.createProjectStage(project.id, withTenant({ endsAt: prazoEtapaPadrao(), name: 'Fundação' }), tenant.userId, transaction);
   const site = await itemsService.createLocation(
     withTenant({ name: `HOMO QA rev19 Canteiro ${uniqueSuffix()}`, locationType: 'PROJECT_SITE', projectId: project.id }),
     tenant.userId,
