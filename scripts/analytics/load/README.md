@@ -12,3 +12,10 @@ npm run load-test:analytics -- --scale full --duration-sec 20 --rounds 2 --json 
 ```
 
 Só roda em banco descartável em 127.0.0.1 (`scripts/withDisposableDb.js`); recusa qualquer outro destino. Sem dado real, sem segredo no relatório.
+
+Carga em escala cheia da etapa 13 (16/11/2026): reprovava por três causas, corrigidas no código. (1) A massa não entrava desde o UNIQUE completo do
+fingerprint do extrato (linhas iguais na mesma conta e dia): cada transação ganhou histórico próprio. (2) O detalhe dos indicadores financeiros varria
+o ledger inteiro cinco vezes por abertura: índices de leitura do BI em `finance.financial_entries` (migration 20261116230000) e uma varredura para
+contagem e total. (3) Sem limite, cada GET de BI ocupava uma sessão do banco do fluxo operacional: a porta de leituras simultâneas
+(`src/features/analytics/readOnly/readOnly.concurrency.js`, parâmetro `analytics.consulta.max_simultaneas`, padrão 3) segura as demais na fila do
+processo. A massa roda ANALYZE depois de gravar. Relatório: `Maturacao/fechamento-m3-m6/evidencias/marco-9-bi/carga-lab/`.
