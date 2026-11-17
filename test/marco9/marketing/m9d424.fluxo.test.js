@@ -7,6 +7,7 @@ const { sequelize } = require('../../../src/models');
 const { withRollbackTenantTransaction } = require('../../testHelpers');
 const { upsertSetting } = require('../../../src/features/settings/settings.service');
 const rv = require('../_helpers/mktReviews');
+const { TEST_DOMAINS } = require('../_helpers/mktUrlPolicy');
 
 let tenant;
 let offVault;
@@ -110,12 +111,32 @@ test('url_de_avaliacao_vazia_deixa_pedido_failed_sem_envio: MKT_REVIEW_URL_NOT_C
   });
 });
 
-test('url_de_avaliacao_invalida_e_recusada_na_configuracao: 422 MKT_URL_NOT_ALLOWED para http, encurtador e endereço local', async () => {
+// Sem internet: a verificação de destino (DNS e redirecionamento, M9-D433) continua LIGADA, mas as portas de rede (integrations.urlProbe) recebem o
+// resolvedor e a sonda simulados, como em m9d433.url.test.js: o nome resolve para um endereço público (o checkPublicHost de verdade confere) e a sonda
+// responde sem redirecionamento ou com o redirecionamento pedido. Antes o teste seguia o g.page real, que hoje redireciona para www.google.com.
+const urlProbe = require('../../../src/features/integrations').urlProbe;
+async function semRede(fn, { redirect = null } = {}) {
+  const real = { checkPublicHost: urlProbe.checkPublicHost, probeRedirect: urlProbe.probeRedirect };
+  const sondas = [];
+  urlProbe.checkPublicHost = (host, o = {}) => real.checkPublicHost(host, { ...o, resolver: async () => [{ address: '93.184.216.34', family: 4 }] });
+  urlProbe.probeRedirect = async (url) => { sondas.push(url); return { redirect, statusCode: redirect ? 301 : 200 }; };
+  try { await fn(); } finally { Object.assign(urlProbe, real); }
+  return sondas;
+}
+
+test('url_de_avaliacao_invalida_e_recusada_na_configuracao: 422 MKT_URL_NOT_ALLOWED para http, encurtador, endereço local e redirecionamento para fora', async () => {
   await inTx(async (t) => {
-    for (const bad of ['http://g.page/r/x/review', 'https://bit.ly/abc', 'https://127.0.0.1/review', 'https://localhost/review']) {
-      await assert.rejects(upsertSetting('marketing.review.url_avaliacao', bad, tenant, tenant.userId, t), (e) => e.statusCode === 422 && e.code === 'MKT_URL_NOT_ALLOWED', bad);
-    }
-    await upsertSetting('marketing.review.url_avaliacao', rv.REVIEW_URL, tenant, tenant.userId, t);
+    // Mesma allowlist dos outros testes do Marketing (g.page é endereço fictício de cenário), mas com a verificação de destino LIGADA.
+    await upsertSetting('marketing.url.dominios_permitidos', TEST_DOMAINS, tenant, tenant.userId, t);
+    await upsertSetting('marketing.url.verificar_destino', true, tenant, tenant.userId, t);
+    const recusa = (url) => assert.rejects(upsertSetting('marketing.review.url_avaliacao', url, tenant, tenant.userId, t), (e) => e.statusCode === 422 && e.code === 'MKT_URL_NOT_ALLOWED', url);
+    const estaticas = await semRede(async () => {
+      for (const bad of ['http://g.page/r/x/review', 'https://bit.ly/abc', 'https://127.0.0.1/review', 'https://localhost/review']) await recusa(bad);
+    });
+    assert.deepEqual(estaticas, [], 'as recusas estáticas acontecem antes de qualquer consulta de rede');
+    const boa = await semRede(() => upsertSetting('marketing.review.url_avaliacao', rv.REVIEW_URL, tenant, tenant.userId, t));
+    assert.deepEqual(boa, [rv.REVIEW_URL], 'a URL boa passa pela verificação de destino (uma sonda) e é aceita');
+    await semRede(() => recusa(rv.REVIEW_URL), { redirect: 'https://www.google.com/' });
   });
 });
 
