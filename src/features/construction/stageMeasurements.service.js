@@ -409,6 +409,7 @@ async function createPayableForMeasurement(measurement, actorUserId, transaction
   const project = await Project.findByPk(stage.projectId, { transaction });
   const event = await publishMeasurementApproved(measurement, transaction, {
     projectId: stage.projectId,
+    projectName: project ? project.name : null,
     stageName: stage.name,
     costCenterId: measurement.costCenterId || (project ? project.costCenterId : null) || null,
   });

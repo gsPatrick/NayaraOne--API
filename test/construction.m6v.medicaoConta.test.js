@@ -83,6 +83,11 @@ test('M6-21: a conta a pagar nasce do consumidor do Financeiro para measurement.
     assert.equal(Number(conta.amount), 12345.67);
     assert.equal(conta.constructionProjectId, project.id);
     assert.equal(conta.nature, 'PAYABLE');
+    // Descrição legível (antes: "... (medição <uuid>)", código técnico na tela de Aprovações); o vínculo é a chave e o evento.
+    assert.doesNotMatch(conta.description, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i, 'nenhum id cru na descrição');
+    assert.ok(conta.description.includes(`obra "${project.name}"`) && conta.description.includes(`etapa "${stage.name}"`), conta.description);
+    assert.match(conta.description, /50% medido, aprovada em \d{2}\/\d{2}\/\d{4}$/);
+    assert.equal(conta.idempotencyKey, `measurement.payable:${m.id}`);
 
     // O despachante entrega o MESMO evento a todos os consumidores: o do Financeiro não cria outra conta.
     await runEventConsumers(evento, t);

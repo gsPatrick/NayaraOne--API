@@ -6,6 +6,7 @@ const entries = require('../../infrastructure/repositories/financial-entry.repos
 const financialEntryService = require('./financial-entry.service'); // pela referência do módulo: o drill de falha substitui a função
 const { getOrCreateDefaultCostCenter } = require('./cost-centers.service');
 const { KEYS: DUE_KEYS, generatedDueAt } = require('./generated-entry-due-settings');
+const { measurementPayableDescription } = require('./measurement-payable.description');
 
 /**
  * Consumidor do Financeiro para `measurement.approved` (Caderno Obras §7: "APPROVED gera measurement.approved; consumidor
@@ -17,7 +18,8 @@ const { KEYS: DUE_KEYS, generatedDueAt } = require('./generated-entry-due-settin
  * obrigação; a conta de medição criada antes deste consumidor (chave measurement.payable:<medição>) também é
  * reconhecida. Centro de custo: o da medição/obra que veio no evento; sem ele, o padrão de medições de obra
  * (createFinancialEntry exige centro de custo para despesa). Vencimento: dia da aprovação (instante do evento no outbox) + o prazo do parâmetro
- * financeiro.vencimento.medicao_aprovada_dias (padrão 30; generated-entry-due-settings.js). Devolve a conta (nova ou já existente).
+ * financeiro.vencimento.medicao_aprovada_dias (padrão 30; generated-entry-due-settings.js). Descrição legível (obra, etapa, % medido e dia
+ * da aprovação; measurement-payable.description.js), sem o id da medição: o vínculo é idempotencyKey + sourceEventId. Devolve a conta (nova ou já existente).
  */
 const EVENT_TYPE = 'measurement.approved';
 const CONSUMER_NAME = 'finance.contas-a-pagar.medicao-aprovada';
@@ -40,7 +42,8 @@ async function onMeasurementApproved(event, transaction) {
     costCenterId = fallback.id;
   }
   const tenant = { groupId: event.groupId, companyId: event.companyId };
-  const dueAt = await generatedDueAt(DUE_KEYS.measurement, tenant, payload.approvedAt || event.occurredAt || event.createdAt || event.created_at, transaction);
+  const approvedAt = payload.approvedAt || event.occurredAt || event.createdAt || event.created_at;
+  const dueAt = await generatedDueAt(DUE_KEYS.measurement, tenant, approvedAt, transaction);
   return financialEntryService.createFinancialEntry(
     {
       groupId: event.groupId,
@@ -48,7 +51,7 @@ async function onMeasurementApproved(event, transaction) {
       entryType: 'DEBIT',
       nature: 'PAYABLE',
       amount: payload.totalAmount,
-      description: `Medição aprovada — etapa "${payload.stageName || payload.projectStageId}" (medição ${payload.id})`,
+      description: measurementPayableDescription(payload, approvedAt),
       idempotencyKey: `measurement.payable:${payload.id}`,
       sourceEventId: event.id,
       constructionProjectId: payload.projectId,
