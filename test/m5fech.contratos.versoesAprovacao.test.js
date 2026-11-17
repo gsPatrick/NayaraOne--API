@@ -3,7 +3,7 @@
 // Matriz de fechamento do Marco 5 (Contratos), segunda onda — aprovação POR VERSÃO (Guia §6, Caderno §19), versão
 // imutável e arquivo armazenado com os bytes do hash (Guia §4), JUR-001 (contrato aprovado/assinado não é
 // sobrescrito). HTTP real com os perfis do seed de dois tenants; RLS real.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

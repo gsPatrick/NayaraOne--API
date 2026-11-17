@@ -3,7 +3,7 @@
 // Verificação independente do Marco 5, linha 14 (JUR-013 "Contrato pertence à empresa correta e não mistura documentos/
 // financeiro"): o lançamento financeiro só se vincula a contrato da própria empresa. A FK finance.financial_entries.contract_id
 // -> legal.contracts não passa pela RLS: antes, B gravava lançamento apontando o contrato de A. HTTP real, dois tenants do seed.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

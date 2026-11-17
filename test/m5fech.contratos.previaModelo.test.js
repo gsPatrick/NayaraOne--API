@@ -3,7 +3,7 @@
 // Matriz do Marco 5 (§6 "Modelo publicado não é editado; nova versão é criada"): a PRÉVIA do modelo mostra a mesma
 // versão que GERA contrato (a publicada), mesmo com um rascunho em edição; o rascunho só aparece se pedido
 // (versao=rascunho) ou se o modelo nunca foi publicado. Achado do E2E do Front (prévia ≠ documento gerado). HTTP real.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -3,7 +3,7 @@
 // Matriz de fechamento do Marco 5 (Contratos), terceira rodada — mensagens em português (sem código cru) e achados
 // do pentest automatizado: id que não é uuid no corpo (400, não 500), versão de outro contrato no PDF (404) e
 // permissão antes do guard de anexo (PERMISSION_DENIED). HTTP real, dois tenants do seed de CI.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

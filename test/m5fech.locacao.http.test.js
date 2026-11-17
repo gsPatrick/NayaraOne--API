@@ -5,7 +5,7 @@
  * closeout.blocked e a auditoria (a transação da requisição é desfeita, o registro do bloqueio não), e a
  * rota do Guia §14 POST /legal/contracts/:id/key-delivery usa os mesmos gates sem deixar entrega órfã.
  */
-process.env.PORT = process.env.PORT || '5536';
+process.env.PORT = process.env.PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 

@@ -3,7 +3,7 @@
 // M5-A0323 (Guia §6 assertPermission(ctx, 'contracts.version.approve'); DEC-073 "Livro"): a aprovação da versão exige a
 // permissão com o nome do livro, sem mapa para legal:approve. HTTP real com os usuários do seed de dois tenants; os tokens
 // com permissões recortadas são assinados com a mesma chave do app (o middleware lê as permissões do token).
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

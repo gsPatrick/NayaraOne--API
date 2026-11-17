@@ -2,7 +2,7 @@
 
 // Matriz de fechamento do Marco 5 (Contratos), segunda onda — modelo versionado e biblioteca de cláusulas
 // (Caderno §4/§6, JUR-002), checklist pelo Motor de Regras (Caderno §7, Guia §20) e aditivos (Caderno §13).
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

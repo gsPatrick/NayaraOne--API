@@ -7,7 +7,7 @@
 //  - característica do IMÓVEL na condição muda o checklist;
 //  - a semente anterior sem alteração recebe a semente atual; política da empresa nunca é trocada.
 // HTTP real com os perfis do seed de dois tenants (RLS real); cada teste devolve a política padrão no fim.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -8,7 +8,7 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 
-process.env.PORT = process.env.M5FECH_JURIDICO_HTTP_PORT || '5538';
+process.env.PORT = process.env.M5FECH_JURIDICO_HTTP_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const app = require('../app'); // eslint-disable-line no-unused-vars
 const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix, createTestResultCenter } = require('./testHelpers');

@@ -3,7 +3,7 @@
 // Matriz de fechamento do Marco 5 (Contratos) — testes adversariais do Caderno §20 por HTTP real:
 // JUR-TS-002 (hash diferente), JUR-TS-007 (webhook duplicado), JUR-TS-013 (documento da empresa B)
 // e JUR-TS-014 (aditivo tentando sobrescrever o contrato). Dois tenants do seed de CI, RLS real.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

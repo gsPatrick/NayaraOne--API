@@ -2,7 +2,7 @@
 
 // Matriz de fechamento do Marco 5 (Contratos), segunda onda — máquina de estados igual ao Guia §3, gate de
 // requirements por etapa (Guia §5) e tipos vinculados do Caderno §3 (ADDENDUM, KEY_DELIVERY, USED_PROPERTY_DELIVERY).
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

@@ -2,7 +2,7 @@
 
 // Matriz de fechamento do Marco 5 (Contratos) — rotas literais do Guia §14 (APIs mínimas) e o envio da
 // versão vigente para assinatura. HTTP real, dois tenants do seed de CI, RLS real.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');

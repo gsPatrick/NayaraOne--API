@@ -2,7 +2,7 @@
 
 // Matriz de fechamento do Marco 5 (Contratos) — Caderno §7 "Checklist documental": o conteúdo de cada fluxo
 // do livro gerado pela rota real, e o gate (JUR-003/JUR-TS-003) por HTTP. Dois tenants do seed de CI.
-process.env.PORT = process.env.M5FECH_CT_PORT || '5534';
+process.env.PORT = process.env.M5FECH_CT_PORT || require('./marco9/_helpers/portaLivre').portaLivre();
 
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
