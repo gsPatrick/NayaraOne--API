@@ -6,6 +6,7 @@ const contractsService = require('../../../src/modules/legal/contracts/applicati
 const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
 const requirementsService = require('../../../src/modules/legal/contracts/application/requirement.service');
 const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('../../helpers/processoPadrao');
 const legalDeadlinesService = require('../../../src/modules/legal/cases/deadline.service');
 const { ContractRequirement } = require('../../../src/models');
 const { uniqueSuffix } = require('../../testHelpers');
@@ -26,7 +27,7 @@ async function cenarioJuridico(tenant, tx, { semVersao = false } = {}) {
     v1 = await contractVersionsService.createContractVersion(contract.id, { content: V1, requireDocument: false }, tenant.userId, tx);
     v2 = await contractVersionsService.createContractVersion(contract.id, { content: V2, requireDocument: false }, tenant.userId, tx);
   }
-  const legalCase = await legalCasesService.createLegalCase({ ...base, contractId: contract.id, caseType: 'LITIGATION', caseNumber: `QAM9-${uniqueSuffix()}`, summary: 'Despejo por falta de pagamento' }, tenant.userId, tx);
+  const legalCase = await legalCasesService.createLegalCase({ ...PROCESSO_PADRAO, ...base, contractId: contract.id, caseType: 'LITIGATION', caseNumber: `QAM9-${uniqueSuffix()}`, summary: 'Despejo por falta de pagamento' }, tenant.userId, tx);
   const dueAt = new Date(Date.now() + 10 * DAY);
   const deadline = await legalDeadlinesService.createLegalDeadline(legalCase.id, { description: 'Contestação', dueAt, sourceDocument: 'Mandado de citação', sourceFileId: await origemNaTransacao(tenant, tx), responsibleUserId: tenant.userId }, tenant.userId, tx);
   const fresh = await contractsService.getContract(contract.id, tx);

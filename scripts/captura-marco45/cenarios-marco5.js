@@ -91,7 +91,7 @@ module.exports = async function marco5(R) {
   await H({ id: 'G29-4', grupos: [29], titulo: 'Envio exige MFA e revisão humana (recusado)', quem: 'A:gestor', metodo: 'POST', rota: (c) => `/legal/notices/${c.nt}/send`, corpo: {}, esperado: { status: 403 } });
 
   // ---------- G30 Processos e prazos ----------
-  await H({ id: 'G30-1', grupos: [30], titulo: 'Cria processo', quem: 'A:gestor', metodo: 'POST', rota: '/legal/cases', corpo: (c) => ({ caseType: 'LITIGATION', title: `Processo ${sfx}`, contractId: c.ct }), esperado: { status: 201 }, guardar: (b, c) => { c.cs = b.data.id; } });
+  await H({ id: 'G30-1', grupos: [30], titulo: 'Cria processo', quem: 'A:gestor', metodo: 'POST', rota: '/legal/cases', corpo: (c) => ({ riskLevel: 'MEDIUM', estimatedAmount: '0.00', caseType: 'LITIGATION', title: `Processo ${sfx}`, contractId: c.ct }), esperado: { status: 201 }, guardar: (b, c) => { c.cs = b.data.id; } });
   await H({ id: 'G30-2', grupos: [30], titulo: 'Prazo sem origem é recusado', quem: 'A:gestor', metodo: 'POST', rota: (c) => `/legal/cases/${c.cs}/deadlines`, corpo: { description: 'Prazo', dueAt: '2030-01-01' }, esperado: { status: 400, codigo: 'LEGAL_DEADLINE_SOURCE_REQUIRED' } });
   await H({ id: 'G30-3', grupos: [30], titulo: 'Prazo com origem rastreável', quem: 'A:gestor', metodo: 'POST', rota: (c) => `/legal/cases/${c.cs}/deadlines`, corpo: { description: 'Manifestação', dueAt: '2030-01-01', sourceDocument: 'Intimação fictícia' }, esperado: { status: 201 } });
   await H({ id: 'G30-4', grupos: [30], titulo: 'Lista de prazos', quem: 'A:leitura', metodo: 'GET', rota: '/legal/deadlines', esperado: { status: 200 } });

@@ -12,6 +12,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { LegalDeadline, LegalCase } = require('../src/models');
 const { createRaceLog } = require('./legal.raceSessionLog.helpers');
@@ -74,7 +75,7 @@ async function setupConcluded() {
   const out = {};
   await withTenantTransaction(tenant, async (tx) => {
     out.legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Corrida ${uniqueSuffix()}`, responsibleUserId: tenant.userId, escalationUserId: tenant.userId },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Corrida ${uniqueSuffix()}`, responsibleUserId: tenant.userId, escalationUserId: tenant.userId },
       tenant.userId,
       tx
     );

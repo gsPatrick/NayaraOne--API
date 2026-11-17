@@ -11,6 +11,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const AppError = require('../src/utils/AppError');
 const { LegalDeadline } = require('../src/models');
@@ -37,7 +38,7 @@ function expectCode(code, status) {
 
 async function newCase(transaction) {
   return legalCasesService.createLegalCase(
-    { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Invisivel ${uniqueSuffix()}`, responsibleUserId: tenant.userId },
+    { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `Invisivel ${uniqueSuffix()}`, responsibleUserId: tenant.userId },
     tenant.userId,
     transaction
   );

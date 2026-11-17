@@ -11,6 +11,7 @@ const { stopHttp } = require('../_helpers/m9d806Http');
 const env = require('../_helpers/m9d920Env');
 const evidenceService = require('../../../src/modules/legal/cases/evidence-package.service');
 const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('../../helpers/processoPadrao');
 const contractsService = require('../../../src/modules/legal/contracts/application/contract.service');
 const contractVersionsService = require('../../../src/modules/legal/contracts/application/contractVersions.service');
 const { withTenantTransaction } = require('../../testHelpers');
@@ -34,7 +35,7 @@ test('m9d809 AUD-016 anexo RESTRICTED do dossiê exige MFA e justificativa para 
   const { contractId, caseId, packageId } = await withTenantTransaction(A, async (tx) => {
     const contract = await contractsService.createContract({ groupId: A.groupId, companyId: A.companyId, contractType: 'LEASE', totalValue: 1000 }, A.userId, tx);
     await contractVersionsService.createContractVersion(contract.id, { content: 'QA-M9 corpo do contrato', documentFileId: file.id }, A.userId, tx);
-    const legalCase = await legalCasesService.createLegalCase({ groupId: A.groupId, companyId: A.companyId, contractId: contract.id, caseType: 'COLLECTION' }, A.userId, tx);
+    const legalCase = await legalCasesService.createLegalCase({ ...PROCESSO_PADRAO, groupId: A.groupId, companyId: A.companyId, contractId: contract.id, caseType: 'COLLECTION' }, A.userId, tx);
     const pack = await evidenceService.createEvidencePackageFromContractAttachments(legalCase.id, A.userId, tx);
     return { contractId: contract.id, caseId: legalCase.id, packageId: pack.id };
   });

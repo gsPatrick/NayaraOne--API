@@ -19,6 +19,7 @@ const signaturesService = require('../src/modules/legal/signatures/signature.ser
 const requirementsService = require('../src/modules/legal/contracts/application/requirement.service');
 const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const utilitiesService = require('../src/features/billing/utilities.service');
@@ -118,7 +119,7 @@ async function createProperty(transaction) {
 
 async function createCase(transaction, extra = {}) {
   return legalCasesService.createLegalCase(
-    { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `M45 processo ${uniqueSuffix()}`, responsibleUserId: tenant.userId, ...extra },
+    { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `M45 processo ${uniqueSuffix()}`, responsibleUserId: tenant.userId, ...extra },
     tenant.userId,
     transaction
   );

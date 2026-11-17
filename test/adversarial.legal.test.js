@@ -33,6 +33,7 @@ const guaranteesService = require('../src/modules/legal/leasing/guarantee.servic
 const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const {
@@ -523,7 +524,7 @@ test('ADV-L12: processo jurídico com fase inválida é rejeitado na criação E
     await assert.rejects(
       () =>
         legalCasesService.createLegalCase(
-          { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', phase: 'SENTENCA_FAVORAVEL', summary: `ADV-L12 ${suffix}` },
+          { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', phase: 'SENTENCA_FAVORAVEL', summary: `ADV-L12 ${suffix}` },
           tenant.userId,
           transaction
         ),
@@ -534,7 +535,7 @@ test('ADV-L12: processo jurídico com fase inválida é rejeitado na criação E
     );
 
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', phase: 'INITIAL_PETITION', summary: `ADV-L12 ok ${suffix}` },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', phase: 'INITIAL_PETITION', summary: `ADV-L12 ok ${suffix}` },
       tenant.userId,
       transaction
     );
@@ -556,7 +557,7 @@ test('ADV-L13: prazo jurídico de outro tenant não pode ser lido nem "empurrado
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `ADV-L13 ${suffix}`, responsibleUserId: tenant.userId },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `ADV-L13 ${suffix}`, responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );
@@ -606,7 +607,7 @@ test('ADV-L14: exportar/visualizar dossiê de um caso de outro tenant falha e N�
   const suffix = uniqueSuffix();
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `ADV-L14 ${suffix}` },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `ADV-L14 ${suffix}` },
       tenant.userId,
       transaction
     );
@@ -653,7 +654,7 @@ test('ADV-L15: export de dossiê reescrito de forma AUTOCONSISTENTE (manifesto +
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'COLLECTION', summary: `ADV-L15 ${suffix}` },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'COLLECTION', summary: `ADV-L15 ${suffix}` },
       tenant.userId,
       transaction
     );

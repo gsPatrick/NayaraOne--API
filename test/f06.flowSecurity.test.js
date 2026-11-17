@@ -47,6 +47,7 @@ const propertiesService = require('../src/features/properties/properties.service
 const contractsService = require('../src/modules/legal/contracts/application/contract.service');
 const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { BankAccount, User, FinancialEntry, EvidencePackageAccessLog, Group, Company } = require('../src/models');
 
@@ -115,7 +116,7 @@ async function seedCompanyFixtures(ctx) {
     await inspectionsService.generateInspectionReport(inspection.id, tenant.userId, t);
 
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: ctx.groupId, companyId: ctx.companyId, contractId: contract.id, caseType: 'LITIGATION', summary: `F06 dossie ${suffix}` },
+      { ...PROCESSO_PADRAO, groupId: ctx.groupId, companyId: ctx.companyId, contractId: contract.id, caseType: 'LITIGATION', summary: `F06 dossie ${suffix}` },
       tenant.userId,
       t
     );

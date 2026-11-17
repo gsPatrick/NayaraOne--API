@@ -6,6 +6,7 @@ const { Property, Person, InsurancePolicy, InsuranceRenewalTask } = require('../
 const peopleService = require('../../../src/features/people/people.service');
 const opportunitiesService = require('../../../src/features/crm/opportunities.service');
 const legalCasesService = require('../../../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('../../helpers/processoPadrao');
 const assetsService = require('../../../src/features/inventory/assets.service');
 
 const sfx = () => `${Date.now()}${Math.floor(Math.random() * 100000)}`;
@@ -25,7 +26,7 @@ async function property(t, tx) {
 }
 
 async function legalCase(t, tx) {
-  return legalCasesService.createLegalCase({ groupId: t.groupId, companyId: t.companyId, caseType: 'LITIGATION', summary: `QA-M9 ${sfx()}`, responsibleUserId: t.userId }, t.userId, tx);
+  return legalCasesService.createLegalCase({ ...PROCESSO_PADRAO, groupId: t.groupId, companyId: t.companyId, caseType: 'LITIGATION', summary: `QA-M9 ${sfx()}`, responsibleUserId: t.userId }, t.userId, tx);
 }
 
 async function asset(t, tx) {

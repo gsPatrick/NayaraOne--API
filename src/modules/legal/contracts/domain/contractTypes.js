@@ -21,6 +21,8 @@ const BOOK_CONTRACT_TYPES = Object.freeze([
 // "locação residencial" (os usos que o genérico cobria na tela anterior ao §3).
 const LEGACY_CONVERSION = Object.freeze({ SALE: 'SALE_CASH', LEASE: 'LEASE_RESIDENTIAL' });
 const LEGACY_WITHOUT_BOOK_CODE = Object.freeze(['SERVICE']);
+// Tipos VINCULADOS a um contrato principal (aditivo e termos de entrega): nascem com parentContractId.
+const LINKED_CONTRACT_TYPES = Object.freeze(['ADDENDUM', 'KEY_DELIVERY', 'USED_PROPERTY_DELIVERY']);
 // Códigos que ainda podem existir gravados (leitura, filtros, regras de negócio de linhas antigas).
 const STORED_CONTRACT_TYPES = Object.freeze([...BOOK_CONTRACT_TYPES, ...Object.keys(LEGACY_CONVERSION), ...LEGACY_WITHOUT_BOOK_CODE]);
 
@@ -39,4 +41,4 @@ function resolveNewContractType(informado) {
   throw AppError.badRequest(`"contractType" deve ser um de: ${BOOK_CONTRACT_TYPES.join(', ')}.`, 'LEGAL_CONTRACT_VALIDATION', { allowed: BOOK_CONTRACT_TYPES });
 }
 
-module.exports = { BOOK_CONTRACT_TYPES, LEGACY_CONVERSION, LEGACY_WITHOUT_BOOK_CODE, STORED_CONTRACT_TYPES, resolveNewContractType };
+module.exports = { BOOK_CONTRACT_TYPES, LEGACY_CONVERSION, LEGACY_WITHOUT_BOOK_CODE, LINKED_CONTRACT_TYPES, STORED_CONTRACT_TYPES, resolveNewContractType };

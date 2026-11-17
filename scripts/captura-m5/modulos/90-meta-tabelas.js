@@ -47,7 +47,7 @@ module.exports = async function metaTabelas(R) {
   const prep = ['M5-A0030-d468ae'];
   await R.http({ id: 'MT-PREP-1', req: prep, titulo: 'Preparação: contrato de locação para as leituras por contrato', quem: 'A:gestor', metodo: 'POST', rota: '/legal/contracts', corpo: { contractType: 'LEASE_RESIDENTIAL', totalValue: 1800 }, esperado: { status: 201 }, guardar: (b) => { mt.ct = b.data.id; } });
   await R.http({ id: 'MT-PREP-2', req: ['M5-A0035-4c42f0'], titulo: 'Preparação: cláusula da biblioteca', quem: 'A:maker', metodo: 'POST', rota: '/legal/clauses', corpo: { code: `MT-${sfx}`, title: 'Cláusula de inventário', bodyText: 'Texto fictício da cláusula de inventário.', category: 'GENERAL' }, esperado: { status: 201 }, guardar: (b) => { mt.clCode = b.data.code; } });
-  await R.http({ id: 'MT-PREP-3', req: ['M5-A0047-64780b'], titulo: 'Preparação: processo jurídico', quem: 'A:gestor', metodo: 'POST', rota: '/legal/cases', corpo: { caseType: 'LITIGATION', summary: `Processo de inventário ${sfx}` }, esperado: { status: 201 }, guardar: (b) => { mt.cs = b.data.id; } });
+  await R.http({ id: 'MT-PREP-3', req: ['M5-A0047-64780b'], titulo: 'Preparação: processo jurídico', quem: 'A:gestor', metodo: 'POST', rota: '/legal/cases', corpo: { riskLevel: 'MEDIUM', estimatedAmount: '0.00', caseType: 'LITIGATION', summary: `Processo de inventário ${sfx}` }, esperado: { status: 201 }, guardar: (b) => { mt.cs = b.data.id; } });
 
   let n = 0;
   for (const [req, nome, fisica, rota] of LIVRO) {

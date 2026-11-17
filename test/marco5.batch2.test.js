@@ -32,6 +32,7 @@ const guaranteesService = require('../src/modules/legal/leasing/guarantee.servic
 const inspectionsService = require('../src/modules/legal/inspections/inspection.service');
 const keyDeliveriesService = require('../src/modules/legal/leasing/key-delivery.service');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const evidencePackagesService = require('../src/modules/legal/cases/evidence-package.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
@@ -674,6 +675,7 @@ test('M5-34: jornada E2E jurídica — processo, prazo, alerta, escalonamento, d
     // 1) Processo com partes formais e fase inicial.
     const legalCase = await legalCasesService.createLegalCase(
       {
+        ...PROCESSO_PADRAO,
         groupId: tenant.groupId,
         companyId: tenant.companyId,
         caseType: 'LITIGATION',

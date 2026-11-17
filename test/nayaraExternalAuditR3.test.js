@@ -30,6 +30,7 @@ const {
 } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { processDeadlinesInTransaction } = require('../src/engines/jobs/legalDeadlineAlertJob');
 const financialEntriesService = require('../src/modules/finance/application/services/financial-entry.service');
@@ -75,7 +76,7 @@ test('R3-1: prazo OVERDUE com responsável próprio, processo SEM responsável �
 
     // Processo deliberadamente SEM responsibleUserId — o cenário exato da auditora.
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `R3-1 ${suffix}` },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `R3-1 ${suffix}` },
       tenant.userId,
       transaction
     );
@@ -113,7 +114,7 @@ test('R3-1 (controle): prazo sem responsável próprio continua notificando o re
   await withRollbackTenantTransaction(tenant, async (transaction) => {
     const suffix = uniqueSuffix();
     const legalCase = await legalCasesService.createLegalCase(
-      { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `R3-1b ${suffix}`, responsibleUserId: tenant.userId },
+      { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `R3-1b ${suffix}`, responsibleUserId: tenant.userId },
       tenant.userId,
       transaction
     );

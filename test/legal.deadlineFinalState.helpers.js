@@ -4,6 +4,7 @@
 const { sequelize, uniqueSuffix } = require('./testHelpers');
 const { origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const { LegalCase, LegalDeadline, AuditLog, User, UserMembership } = require('../src/models');
 
@@ -24,7 +25,7 @@ async function newUser(tenant, transaction) {
  */
 async function concludedCriticalWithoutCaseResponsible(tenant, transaction, { responsibleUserId, caseResponsible = false, escalation = true } = {}) {
   const legalCase = await legalCasesService.createLegalCase(
-    { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `FS ${uniqueSuffix()}`, responsibleUserId: tenant.userId, escalationUserId: tenant.userId },
+    { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `FS ${uniqueSuffix()}`, responsibleUserId: tenant.userId, escalationUserId: tenant.userId },
     tenant.userId,
     transaction
   );

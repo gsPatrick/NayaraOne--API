@@ -14,6 +14,7 @@ const assert = require('node:assert/strict');
 const { sequelize, getSeedTenant, withRollbackTenantTransaction, uniqueSuffix } = require('./testHelpers');
 const { prepararOrigem, origem } = require('./helpers/prazoOrigem');
 const legalCasesService = require('../src/modules/legal/cases/legal-case.service');
+const { PROCESSO_PADRAO } = require('./helpers/processoPadrao');
 const legalDeadlinesService = require('../src/modules/legal/cases/deadline.service');
 const AppError = require('../src/utils/AppError');
 const { File } = require('../src/models');
@@ -31,7 +32,7 @@ after(async () => {
 
 async function createCase(transaction, suffix) {
   return legalCasesService.createLegalCase(
-    { groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `A07/A08/A09 ${suffix}`, responsibleUserId: tenant.userId },
+    { ...PROCESSO_PADRAO, groupId: tenant.groupId, companyId: tenant.companyId, caseType: 'LITIGATION', summary: `A07/A08/A09 ${suffix}`, responsibleUserId: tenant.userId },
     tenant.userId,
     transaction
   );
