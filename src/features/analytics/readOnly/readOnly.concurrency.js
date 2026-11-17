@@ -19,7 +19,10 @@ const PADRAO_LIMITE = 3;
 const PADRAO_ESPERA_MS = 10000;
 const RELEITURA_MS = 30000;
 
-function createGate({ limite = PADRAO_LIMITE, esperaMaxMs = PADRAO_ESPERA_MS, agora = () => Date.now() } = {}) {
+// relógio monotônico do processo (só mede intervalo de releitura; não é data de KPI, que vem de metrics/clock.js)
+const monotonicoMs = () => Number(process.hrtime.bigint() / 1000000n);
+
+function createGate({ limite = PADRAO_LIMITE, esperaMaxMs = PADRAO_ESPERA_MS, agora = monotonicoMs } = {}) {
   let max = limite;
   let espera = esperaMaxMs;
   let ativos = 0;
