@@ -5,7 +5,13 @@
  * etapa e a seguinte não roda. `banco: true` marca o comando que escreve no banco: só roda em banco descartável (127.0.0.1), nunca na
  * homologação. As etapas 1 a 11 rodam em todo pull request (fase `pr`); 12 a 14, na promoção (fase `promocao`).
  * A suíte adversarial (M9-D704) roda dentro das etapas 5, 7, 9, 10 e 11 por padrão de nome, e juntas cobrem os 15 nomes.
+ * Ambientes (decisão do Patrick de 16/11/2026, sem servidor novo): LAB = a homologação publicada; DEV = a esteira do GitHub com banco descartável.
+ * `alvo` diz, nas etapas da promoção, onde cada uma roda de verdade; vai para o resumo.json.
  */
+const ALVOS = Object.freeze({
+  LAB: 'LAB = homologação publicada (GET real, somente leitura, com o usuário de smoke)',
+  DESCARTAVEL: 'banco descartável da esteira (DEV = esteira do GitHub); nunca o banco da homologação',
+});
 const ADV = 'test/marco9/analytics/m9d704.adversarial.test.js';
 const A = 'test/marco9/analytics';
 
@@ -32,12 +38,12 @@ const ETAPAS = [
   { n: 9, chave: 'alert-dedup', livro: 'alert dedup', fase: 'pr', comandos: [teste(`${A}/m9d691.*.test.js`, `${A}/m9d609.alerta.test.js`), adversarial(['03', '06', '10'])] },
   { n: 10, chave: 'export-security', livro: 'export security', fase: 'pr', comandos: [teste(`${A}/m9d701.*.test.js`, `${A}/m9d700.mascaramento.test.js`), adversarial(['08', '09'])] },
   { n: 11, chave: 'load-rebuild', livro: 'load/rebuild', fase: 'pr', comandos: [teste(`${A}/m9d699.*.test.js`, `${A}/m9d608.*.test.js`), adversarial(['12'])] },
-  { n: 12, chave: 'dev', livro: 'DEV', fase: 'promocao', comandos: [node('scripts/analytics/ci/smokeDev.js')] },
-  { n: 13, chave: 'lab', livro: 'LAB', fase: 'promocao', comandos: [
+  { n: 12, chave: 'dev', livro: 'DEV', fase: 'promocao', alvo: ALVOS.LAB, comandos: [node('scripts/analytics/ci/smokeDev.js')] },
+  { n: 13, chave: 'lab', livro: 'LAB', fase: 'promocao', alvo: ALVOS.DESCARTAVEL, comandos: [
     { cmd: 'node', args: ['scripts/analytics/loadTest.js', '--scale', 'full', '--rounds', '3'], banco: true }, teste(`${A}/m9d699.rebuild.test.js`, `${A}/m9d608.reproducao.test.js`)] },
-  { n: 14, chave: 'owner-reconciliation', livro: 'owner reconciliation', fase: 'promocao', comandos: [{ cmd: 'node', args: ['scripts/analytics/ci/gateAceite.js'], banco: true }] },
+  { n: 14, chave: 'owner-reconciliation', livro: 'owner reconciliation', fase: 'promocao', alvo: ALVOS.DESCARTAVEL, comandos: [{ cmd: 'node', args: ['scripts/analytics/ci/gateAceite.js'], banco: true }] },
 ];
 
 const NOMES_DO_LIVRO = ETAPAS.map((e) => e.livro);
 
-module.exports = { ETAPAS, NOMES_DO_LIVRO };
+module.exports = { ETAPAS, NOMES_DO_LIVRO, ALVOS };
