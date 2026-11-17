@@ -11,9 +11,10 @@
  *   analytics.comercial.ordem_estagios                     ordem dos estágios do funil nas telas e no detalhe (estágio fora da lista vai depois)
  * Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
+const { ownerText } = require('./owner.roles');
 const AppError = require('../../../utils/AppError');
 
-const DEFAULT_OWNER = 'Gerência Comercial (papel comercial-gestor)';
+const DEFAULT_OWNER = ownerText('comercial-gestor');
 const CRM_KPI_CODES = Object.freeze([
   'crm.leads_by_origin', 'crm.first_response_time', 'crm.opportunities_by_stage', 'crm.conversion_rate', 'crm.loss_reasons', 'crm.portfolio_without_next_action',
 ]);

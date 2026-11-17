@@ -63,7 +63,7 @@ test('m9d640 GET /analytics/metrics/rent.active_contracts devolve valor, unidade
   assert.equal(Number(d.value), (await oracle.activeFromSource(src, env.tenantA)).count);
   assert.equal(Number(d.value), 85);
   shape(d, 'rent.active_contracts', 'COUNT', 'legal.contracts');
-  assert.equal(d.owner, 'Gerência de Locação (papel locação-gestor)');
+  assert.equal(d.owner, 'Gerência de Locação (papel locacao-gestor)');
 });
 
 test('m9d640 GET /analytics/metrics/rent.vacancy devolve valor, unidade, status, versão, frescor e sourceRefs', async () => {

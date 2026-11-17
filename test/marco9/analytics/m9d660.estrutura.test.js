@@ -39,7 +39,7 @@ for (const [code, e] of Object.entries(EXPECT)) {
     const d = await definition(code);
     assert.deepEqual([d.version, d.unit, d.formula_id, d.source_read_model, d.domain, d.status, d.value_nature], [1, e.unit, code, e.model, 'LEGAL', 'PUBLISHED', e.nature]);
     assert.deepEqual(d.dimensions, e.dimensions);
-    assert.equal(d.owner_role, code === 'legal.values' ? 'Controladoria (papel controller)' : 'Jurídico (papel jurídico-gestor)', 'owner padrão da demanda ou o parâmetro da empresa');
+    assert.equal(d.owner_role, code === 'legal.values' ? 'Controladoria (papel controller)' : 'Jurídico (papel juridico-gestor)', 'owner padrão da demanda ou o parâmetro da empresa');
     assert.equal(d.refresh_policy.maxStalenessMinutes, e.refresh);
     assert.ok(d.quality_rule.referenceReport && d.quality_rule.requiredFields.length >= 1);
     assert.equal(d.criticality, e.critical ? 'CRITICAL' : 'NORMAL', 'criticidade da tabela M9-D712');

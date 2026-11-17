@@ -22,6 +22,7 @@ const { registerSnapshotProvider } = require('../snapshots.providers');
 const { onBatchFlushed } = require('../../read-models');
 const { P } = require('../../security/permissionCatalog');
 const { writeSnapshotInputs } = require('./finance.snapshots');
+const { hashInputsOf } = require('./calcInputs.stable');
 
 const workerCtx = (scope) => ({ groupId: scope.groupId, companyId: scope.companyId, actorUserId: null, permissions: [P.MANAGE] });
 const snapshotInputs = (base, result) => [
@@ -44,7 +45,10 @@ async function publishedVersion(code, companyId, transaction) {
   return rows[0];
 }
 
-/** group: { name, definitions, publishInput(def, scope, tx), build(scope, asOfDate, tx), watched: [read models], getReadModelVersion(name) }. */
+/**
+ * group: { name, definitions, publishInput(def, scope, tx), build(scope, asOfDate, tx), watched: [read models], getReadModelVersion(name),
+ * volatileInputs?: { código: [chaves da entrada que só dizem quando o cálculo foi feito] } (DI-BI2-9: ficam fora do hash, que guarda o efeito delas no resultado) }.
+ */
 function createKpiGroup(group) {
   async function ensurePublished(scope, transaction) {
     for (const def of group.definitions) {
@@ -72,7 +76,7 @@ function createKpiGroup(group) {
       const base = {
         metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,
         periodStart: item.periodStart || asOfDate, periodEnd: asOfDate, asOfDate, status: result.status, sourceSnapshotAt: item.snapshotAt, readModelVersion: group.readModelVersion(def.sourceReadModel),
-        sourceRefs, calcHash: calcHash({ metricCode: def.metricCode, version: published.version, inputs: item.inputs, params: item.params || {} }),
+        sourceRefs, calcHash: calcHash({ metricCode: def.metricCode, version: published.version, inputs: hashInputsOf(item.inputs, (group.volatileInputs || {})[def.metricCode], result), params: item.params || {} }),
       };
       out.push({ code: def.metricCode, result, inputs: snapshotInputs(base, result) });
     }

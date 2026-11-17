@@ -11,13 +11,14 @@
  *   analytics.owner.fin.<código>                owner de cada um dos quatro indicadores.
  * Arquivo sem dependência no topo (evita ciclo com settings.service; a leitura usa import tardio).
  */
+const { ownerText } = require('./owner.roles');
 const { parseBands } = require('./financeKpi.settings');
 
 const RESULT_CODES = Object.freeze(['fin.sector_margin', 'fin.commissions_provisioned', 'fin.commissions_paid', 'fin.owner_repasses_pending']);
 const SECTOR_KEY = 'analytics.qualidade.max_sem_setor_pct';
 const ALERT_KEY = 'analytics.repasse.dias_alerta';
 const BANDS_KEY = 'analytics.repasse.faixas_atraso_dias';
-const DEFAULT_OWNER = 'Diretoria Financeira (papel financeiro-gestor)';
+const DEFAULT_OWNER = ownerText('financeiro-gestor');
 
 const FINANCE_RESULT_DEFAULTS = Object.freeze({
   [SECTOR_KEY]: 1, [ALERT_KEY]: 5, [BANDS_KEY]: '5,15',

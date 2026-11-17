@@ -6,10 +6,11 @@
  * Os demais parâmetros são de outras demandas e valem aqui: tipos de contrato de locação, nota de cada tipo de registro e prazo do repasse (analytics.locacao.*, M9-D617) e a amostra
  * mínima da satisfação (analytics.qualidade.min_amostra, a mesma do funil comercial, do Correspondente e do Atendimento). Arquivo sem dependência de settings.service no topo (evita ciclo).
  */
+const { ownerText } = require('./owner.roles');
 const { readLocacaoParams } = require('./locacao.settings');
 const { readSupportKpiParams } = require('./atendimentoKpi.settings');
 
-const OWNER = 'Gerência de Locação (papel locação-gestor)';
+const OWNER = ownerText('locacao-gestor');
 const CODES = Object.freeze(['rent.tickets', 'rent.satisfaction', 'rent.repasses']);
 const ownerKey = (code) => `analytics.owner.${code}`;
 

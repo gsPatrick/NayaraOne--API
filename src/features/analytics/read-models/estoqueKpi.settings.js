@@ -6,7 +6,8 @@
  * Os tipos de item que entram no valor em estoque e nas rupturas são o parâmetro analytics.estoque.tipos_item (M9-D618).
  * Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
-const DEFAULT_OWNER = 'Almoxarifado (papel estoque-gestor)';
+const { ownerText } = require('./owner.roles');
+const DEFAULT_OWNER = ownerText('estoque-gestor');
 const INV_KPI_CODES = Object.freeze(['inv.stock_value', 'inv.below_minimum', 'inv.losses', 'inv.tools_overdue']);
 const OWNER_KEY = (code) => `analytics.owner.${code}`;
 

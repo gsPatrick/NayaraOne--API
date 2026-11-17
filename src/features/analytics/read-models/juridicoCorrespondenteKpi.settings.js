@@ -12,10 +12,11 @@
  *   analytics.correspondente.estagios_em_analise            estágios de um caso já enviado e ainda sem decisão (os "pendentes" do tempo de análise)
  * Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
+const { ownerText } = require('./owner.roles');
 const { codeList, CODE_LIST_RE } = require('./settings.codeList');
 
-const OWNER_LEGAL = 'Jurídico (papel jurídico-gestor)';
-const OWNER_COR = 'Correspondente Bancário (papel correspondente-gestor)';
+const OWNER_LEGAL = ownerText('juridico-gestor');
+const OWNER_COR = ownerText('correspondente-gestor');
 const LEGAL_CODES = Object.freeze(['legal.deadlines', 'legal.cases_by_risk', 'legal.values', 'legal.missing_documents']);
 const COR_CODES = Object.freeze(['cor.cases_by_stage', 'cor.approval_rate_by_provider', 'cor.analysis_time', 'cor.commission']);
 const ownerKey = (code) => `analytics.owner.${code}`;

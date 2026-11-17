@@ -24,11 +24,16 @@ function totalReconciliation(code, nature, column, metric) {
   });
 }
 
-const nullShare = (column) => async (ctx) => {
+/** Parte sem `column` entre os lançamentos próprios liquidados das naturezas `natures` (literais fixos do código, nunca do usuário). */
+const nullShare = (column, natures) => async (ctx) => {
   const [row] = await sql.rows(ctx, `SELECT count(*)::int AS total, count(*) FILTER (WHERE ${column} IS NULL)::int AS nulls FROM finance.financial_entries
-    WHERE company_id = :companyId AND status = 'SETTLED' AND nature IN ('RECEIVABLE', 'PAYABLE') AND ${OWN_LIVE}`);
+    WHERE company_id = :companyId AND status = 'SETTLED' AND nature IN (${natures.map((n) => `'${n}'`).join(', ')}) AND ${OWN_LIVE}`);
   return row;
 };
+// DI-BI2-7 (item 15a): o centro de resultado é obrigatório só na receita (M4:83); a despesa exige o centro de custo (M4:81) e, sem centro de resultado, entra
+// em "sem setor" no read model. A competência continua medida nas duas naturezas.
+const REVENUE = ['RECEIVABLE'];
+const BOTH = ['RECEIVABLE', 'PAYABLE'];
 
 registerChecks(MODEL, [
   t.freshness({ code: 'sector_margin_freshness', domain: 'FINANCE', metrics: ['fin.sector_margin'] }),
@@ -41,8 +46,8 @@ registerChecks(MODEL, [
       return { ok: n === 0, expected: { rule: 'receita e custo realizados >= 0' }, observed: { rowsNegative: n } };
     },
   }),
-  t.completeness({ code: 'sector_margin_center_completeness', field: 'result_center_id', metrics: ['fin.sector_margin'], measure: nullShare('result_center_id') }),
-  t.completeness({ code: 'sector_margin_competence_completeness', field: 'competence_month', metrics: ['fin.sector_margin'], measure: nullShare('competence_month') }),
+  t.completeness({ code: 'sector_margin_center_completeness', field: 'result_center_id', metrics: ['fin.sector_margin'], measure: nullShare('result_center_id', REVENUE) }),
+  t.completeness({ code: 'sector_margin_competence_completeness', field: 'competence_month', metrics: ['fin.sector_margin'], measure: nullShare('competence_month', BOTH) }),
   t.duplication({ code: 'sector_margin_key_duplication', metrics: ['fin.sector_margin'], measure: (ctx) => sql.duplicates(ctx, ['result_center_id', 'competence_month']) }),
   t.duplication({ code: 'sector_margin_applied_event_duplication', metrics: ['fin.sector_margin'], measure: sql.duplicateAppliedEvents }),
   t.rowCountRange({ code: 'sector_margin_row_count', metrics: ['fin.sector_margin'], sourceCount: (ctx) => sql.count(ctx, "SELECT count(*)::int AS n FROM finance.financial_entries WHERE company_id = :companyId AND status = 'SETTLED'") }),

@@ -18,4 +18,6 @@ async function readParams(scope, transaction) {
 module.exports = createKpiSet({
   name: 'tech', definitions: DEFINITIONS, readOwner: readTechOwner, readParams, loadRows: (scope, asOfDate, settings, tx) => loadTechRows(scope, asOfDate, settings, tx),
   inputs: INPUTS, params: PARAMS, filterOf: techFilterOf, periodStart: (asOfDate) => asOfDate, watched: TECH_READ_MODELS,
+  // DI-BI2-9: a idade da última medição das filas muda a cada passada; no hash entra o efeito dela (STALE ou não), senão cada recálculo gravava revisão nova.
+  volatileInputs: { 'tec.queues_dlq': ['measurementAgeMinutes'] },
 });

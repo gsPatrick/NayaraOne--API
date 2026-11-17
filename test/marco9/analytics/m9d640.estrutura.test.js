@@ -16,7 +16,7 @@ const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.ser
 const { rentalPortfolioFilterOf } = require('../../../src/features/analytics/metrics/kpis/locacao-carteira/filters');
 
 const API = path.join(__dirname, '..', '..', '..');
-const OWNER = 'Gerência de Locação (papel locação-gestor)';
+const OWNER = 'Gerência de Locação (papel locacao-gestor)';
 const EXPECT = {
   'rent.active_contracts': { model: 'rm_rental_contracts', unit: 'COUNT', critical: false, refresh: { mode: 'EVENT', maxStalenessMinutes: 15 }, dimensions: ['empresa', 'imóvel', 'proprietário', 'faixa de valor'] },
   'rent.vacancy': { model: 'rm_rental_vacancy', unit: 'PERCENT', critical: false, refresh: { mode: 'SCHEDULE', cron: '5 0 * * *', maxStalenessMinutes: 1440 }, dimensions: ['empresa', 'tipo', 'bairro', 'proprietário'] },

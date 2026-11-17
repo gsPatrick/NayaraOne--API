@@ -9,9 +9,10 @@
  * A amostra mínima (analytics.qualidade.min_amostra, padrão 5) é a do funil comercial e do Correspondente: o mesmo parâmetro.
  * Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
+const { ownerText } = require('./owner.roles');
 const { codeList, readCodeList } = require('./settings.codeList');
 
-const OWNER = 'Atendimento (papel atendimento-gestor)';
+const OWNER = ownerText('atendimento-gestor');
 const CODES = Object.freeze(['sup.reviews', 'sup.satisfaction', 'sup.complaints_by_reason', 'sup.sla_resolution']);
 const PRIORITIES = Object.freeze(['ALTA', 'MEDIA', 'BAIXA']);
 const ownerKey = (code) => `analytics.owner.${code}`;

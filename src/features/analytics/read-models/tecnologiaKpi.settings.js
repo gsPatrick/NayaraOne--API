@@ -10,9 +10,10 @@
  *   analytics.owner.tec.<código>                owner (papel responsável pela reconciliação) de cada KPI de Tecnologia
  * Os parâmetros dos read models (M9-D628) ficam em tecnologia.settings.js. Arquivo sem dependência de settings.service no topo (evita ciclo).
  */
+const { ownerText } = require('./owner.roles');
 const { codeList, readCodeList } = require('./settings.codeList');
 
-const OWNER = 'Tecnologia (papel ti-gestor)';
+const OWNER = ownerText('ti-gestor');
 const CODES = Object.freeze(['tec.availability', 'tec.queues_dlq', 'tec.integration_errors', 'tec.freshness', 'tec.auth_failures', 'tec.blocked_events']);
 const ownerKey = (code) => `analytics.owner.${code}`;
 const KEYS = Object.freeze({

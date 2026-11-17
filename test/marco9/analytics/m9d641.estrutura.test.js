@@ -14,7 +14,7 @@ const seed = require('../../../src/features/analytics/metrics/seed');
 const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
 
 const API = path.join(__dirname, '..', '..', '..');
-const OWNER = 'Gerência de Locação (papel locação-gestor)';
+const OWNER = 'Gerência de Locação (papel locacao-gestor)';
 const DAILY = { mode: 'SCHEDULE', maxStalenessMinutes: 1440 };
 const EXPECT = {
   'rent.guarantees_expiring': { model: 'rm_rental_guarantees', critical: true, dimensions: ['empresa', 'tipo de garantia', 'contrato'] },

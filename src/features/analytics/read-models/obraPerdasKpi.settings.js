@@ -11,7 +11,8 @@
  *                                                             DEGRADED, sem valor (padrão 100: o livro manda contar essas ocorrências em details.unclassified)
  * Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
-const DEFAULT_OWNER = 'Diretoria de Obras (papel obras-gestor)';
+const { ownerText } = require('./owner.roles');
+const DEFAULT_OWNER = ownerText('obras-gestor');
 const OBRA_COST_KPI_CODES = Object.freeze(['obra.waste', 'obra.postwork_cost', 'obra.recurrence']);
 const OWNER_KEY = (code) => `analytics.owner.${code}`;
 const KEYS = Object.freeze({

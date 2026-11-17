@@ -9,6 +9,7 @@ const { getActiveSlaDaysMap } = require('./slaRules.service');
 const { resolveSameContentFileIds } = require('./evidenceReuse.service');
 const { assertEvidenceFilesExist } = require('./evidenceFiles');
 const { assertRouteProjectInCompany, assertStageInProject, assertActiveMember } = require('./companyRefs');
+const { normalizeCauseCode } = require('./nonconformityCause');
 
 /**
  * detectEvidenceReuse — M6-59: verifica se algum arquivo de evidência (before/after) já foi
@@ -136,7 +137,7 @@ async function createNonconformity(projectId, payload, actorUserId, transaction)
       beforeEvidenceFileIds: resolvedBeforeEvidence,
       afterEvidenceFileIds: [],
       requiresAcceptance: Boolean(requiresAcceptance),
-      causeCode: causeCode ? String(causeCode).trim().slice(0, 64).toUpperCase() : null, // M9-D618: dimensões do BI
+      causeCode: normalizeCauseCode(causeCode), // M9-D618: dimensões do BI
       teamLabel: teamLabel ? String(teamLabel).trim().slice(0, 120) : null,
       evidenceReuseFlagged: reuse.flagged,
       evidenceReuseReferenceId: reuse.referenceId,
@@ -198,6 +199,8 @@ async function closeNonconformity(id, payload, actorUserId, transaction) {
   }
 
   const { afterEvidenceFileIds, acceptedByUserId } = payload || {};
+  // DI-BI2-8: a causa pode ser informada (ou corrigida) no fechamento, quando já é conhecida; é opcional e, vazia, não apaga a causa da abertura.
+  const closingCause = normalizeCauseCode((payload || {}).causeCode);
   const resolvedAfterEvidence = Array.isArray(afterEvidenceFileIds) ? afterEvidenceFileIds : nonconformity.afterEvidenceFileIds;
 
   if (!Array.isArray(resolvedAfterEvidence) || resolvedAfterEvidence.length === 0) {
@@ -250,6 +253,7 @@ async function closeNonconformity(id, payload, actorUserId, transaction) {
   const beforeJson = nonconformity.toJSON();
   nonconformity.afterEvidenceFileIds = resolvedAfterEvidence;
   if (resolvedAcceptedBy) nonconformity.acceptedByUserId = resolvedAcceptedBy;
+  if (closingCause) nonconformity.causeCode = closingCause;
   nonconformity.status = 'CLOSED';
   nonconformity.closedAt = new Date();
   nonconformity.updatedBy = actorUserId || null;

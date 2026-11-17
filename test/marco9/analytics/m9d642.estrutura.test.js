@@ -14,7 +14,7 @@ const seed = require('../../../src/features/analytics/metrics/seed');
 const { SETTINGS_SCHEMA } = require('../../../src/features/settings/settings.service');
 
 const API = path.join(__dirname, '..', '..', '..');
-const OWNER = 'Gerência de Locação (papel locação-gestor)';
+const OWNER = 'Gerência de Locação (papel locacao-gestor)';
 const EXPECT = {
   'rent.tickets': { model: 'rm_rental_tickets', unit: 'COUNT', dimensions: ['empresa', 'tipo', 'contrato', 'imóvel'], refresh: ['EVENT', undefined] },
   'rent.satisfaction': { model: 'rm_rental_satisfaction', unit: 'SCORE', dimensions: ['empresa', 'papel', 'contrato'], refresh: ['EVENT', undefined] },

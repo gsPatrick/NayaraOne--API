@@ -9,13 +9,14 @@
  *   analytics.owner.fin.anomalies_open                 owner do KPI de anomalias abertas.
  * Arquivo sem dependência no topo (evita ciclo com settings.service; a leitura usa import tardio).
  */
+const { ownerText } = require('./owner.roles');
 const STATEMENT_AGE_KEY = 'analytics.qualidade.max_idade_extrato_dias';
 const BANDS_KEY = 'analytics.conciliacao.faixas_idade_dias';
 const OWNER_KEYS = Object.freeze({
   'fin.reconciliations_pending': 'analytics.owner.fin.reconciliations_pending',
   'fin.anomalies_open': 'analytics.owner.fin.anomalies_open',
 });
-const DEFAULT_OWNER = 'Diretoria Financeira (papel financeiro-gestor)';
+const DEFAULT_OWNER = ownerText('financeiro-gestor');
 
 const FINANCE_KPI_DEFAULTS = Object.freeze({
   [STATEMENT_AGE_KEY]: 3,

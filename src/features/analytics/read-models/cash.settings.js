@@ -10,6 +10,7 @@
  *   analytics.owner.fin.third_party_cash         owner do KPI de dinheiro de terceiros.
  * Arquivo sem dependência no topo (evita ciclo com settings.service; a leitura usa import tardio).
  */
+const { ownerText } = require('./owner.roles');
 const USE_OPENING_KEY = 'analytics.caixa.usar_saldo_abertura';
 const CAUCAO_KEY = 'analytics.terceiros.termos_caucao';
 const REPASSE_KEY = 'analytics.terceiros.termos_repasse';
@@ -18,7 +19,7 @@ const OWNER_KEYS = Object.freeze({
   'fin.free_cash': 'analytics.owner.fin.free_cash',
   'fin.third_party_cash': 'analytics.owner.fin.third_party_cash',
 });
-const DEFAULT_OWNER = 'Diretoria Financeira (papel financeiro-gestor)';
+const DEFAULT_OWNER = ownerText('financeiro-gestor');
 const DEFAULT_STATUS_MAP = 'a pagar/receber = PENDING; liquidado = SETTLED; REVERSED e CANCELLED excluídos; estorno e original ignorados em par';
 const LEDGER_STATUSES = Object.freeze(['PENDING', 'PARTIALLY_SETTLED', 'SETTLED', 'REVERSED', 'CANCELLED']);
 const REALIZED_ALLOWED = Object.freeze(['PARTIALLY_SETTLED', 'SETTLED']);

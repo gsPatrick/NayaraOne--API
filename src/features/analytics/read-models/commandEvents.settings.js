@@ -9,12 +9,13 @@
  *   analytics.owner.<código>            owner (papel responsável pela reconciliação) de legal.contracts_signed, crm.opportunities_won e fin.payments_settled_relevant.
  * Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
+const { ownerText } = require('./owner.roles');
 const HOURS_KEY = 'analytics.centro.janela_horas';
 const THRESHOLD_KEY = 'analytics.centro.valor_relevante';
 const OWNERS = Object.freeze({
-  'legal.contracts_signed': 'Jurídico (papel juridico-gestor)',
-  'crm.opportunities_won': 'Gerência Comercial (papel comercial-gestor)',
-  'fin.payments_settled_relevant': 'Diretoria Financeira (papel financeiro-gestor)',
+  'legal.contracts_signed': ownerText('juridico-gestor'),
+  'crm.opportunities_won': ownerText('comercial-gestor'),
+  'fin.payments_settled_relevant': ownerText('financeiro-gestor'),
 });
 const CODES = Object.freeze(Object.keys(OWNERS));
 const ownerKey = (code) => `analytics.owner.${code}`;

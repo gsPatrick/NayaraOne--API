@@ -8,9 +8,10 @@
  *   analytics.owner.fin.breathing_need           owner da necessidade para respirar.
  * A janela da taxa continua sendo analytics.inadimplencia.janela_dias (M9-D615, padrão 90). Arquivo sem dependência no topo (evita ciclo com settings.service).
  */
+const { ownerText } = require('./owner.roles');
 const CODES = Object.freeze(['fin.overdue_receivables', 'fin.delinquency_rate', 'fin.breathing_need']);
 const BANDS_KEY = 'analytics.inadimplencia.faixas_atraso_dias';
-const DEFAULT_OWNER = 'Diretoria Financeira (papel financeiro-gestor)';
+const DEFAULT_OWNER = ownerText('financeiro-gestor');
 const ownerKey = (code) => `analytics.owner.${code}`;
 
 const FINANCE_DELINQUENCY_DEFAULTS = Object.freeze({ [BANDS_KEY]: '30,60,90', ...Object.fromEntries(CODES.map((code) => [ownerKey(code), DEFAULT_OWNER])) });

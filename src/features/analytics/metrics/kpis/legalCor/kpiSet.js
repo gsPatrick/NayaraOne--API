@@ -22,6 +22,7 @@ const { onBatchFlushed, getReadModel } = require('../../../read-models');
 const { P } = require('../../../security/permissionCatalog');
 const { writeSnapshotInputs } = require('../finance.snapshots');
 const { upgradeDeclaredVersion } = require('./kpiUpgrade');
+const { hashInputsOf } = require('../calcInputs.stable');
 
 const workerCtx = (scope) => ({ groupId: scope.groupId, companyId: scope.companyId, actorUserId: null, permissions: [P.MANAGE] });
 
@@ -49,7 +50,7 @@ const snapshotInputs = (base, result) => [
 /**
  * set = { name, definitions, readOwner(code, scope, tx), readParams(scope, tx), loadRows(scope, asOfDate, tx) -> { snapshotAt: { código: Date|null }, ... },
  * inputs: { código: (rows, ctx) }, params: { código: (settings) }, filterOf(code, asOfDate, settings, { snapshotAt }) -> filtro de origem, periodStart(asOfDate),
- * watched: [nomes dos read models], sourceSpecs: módulo que registra as origens }
+ * watched: [nomes dos read models], sourceSpecs: módulo que registra as origens, volatileInputs?: { código: [chaves da entrada que só dizem quando o cálculo foi feito] } (DI-BI2-9) }
  */
 function createKpiSet(set) {
   const { definitions } = set;
@@ -90,7 +91,7 @@ function createKpiSet(set) {
       const base = {
         metricId: published.metricId, metricVersionId: published.metricVersionId, groupId: scope.groupId, companyId: scope.companyId, scopeType: 'COMPANY', scopeId: scope.companyId,
         periodStart: set.periodStart(asOfDate), periodEnd: asOfDate, asOfDate, status: result.status, sourceSnapshotAt: snapshotAt, readModelVersion: getReadModel(def.sourceReadModel).version,
-        sourceRefs, calcHash: calcHash({ metricCode: def.metricCode, version: published.version, inputs, params }),
+        sourceRefs, calcHash: calcHash({ metricCode: def.metricCode, version: published.version, inputs: hashInputsOf(inputs, (set.volatileInputs || {})[def.metricCode], result), params }),
       };
       out.push({ code: def.metricCode, result, inputs: snapshotInputs(base, result) });
     }

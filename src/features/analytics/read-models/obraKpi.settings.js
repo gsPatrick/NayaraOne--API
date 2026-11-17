@@ -8,8 +8,9 @@
  * pós-obra e recorrência (M9-D652, obraPerdasKpi.settings.js): a chave é sempre analytics.owner.<código>. As fórmulas e os estados dos indicadores são do
  * livro e não são parâmetro. Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
+const { ownerText } = require('./owner.roles');
 const OBRA_KPI_CODES = Object.freeze(['obra.progress_vs_schedule', 'obra.baseline_actual_forecast', 'obra.projected_margin']);
-const DEFAULT_OWNER = 'Diretoria de Obras (papel obras-gestor)';
+const DEFAULT_OWNER = ownerText('obras-gestor');
 
 const ownerKey = (code) => `analytics.owner.${code}`;
 const OBRA_KPI_DEFAULTS = Object.freeze(Object.fromEntries(OBRA_KPI_CODES.map((code) => [ownerKey(code), DEFAULT_OWNER])));

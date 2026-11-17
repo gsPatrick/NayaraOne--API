@@ -11,4 +11,6 @@ require('../../sourceSpecs.decisionQueue');
 module.exports = createKpiGroup({
   name: 'decisao', definitions: KPI_DEFINITIONS, publishInput, build: buildDecisionQueueItems, watched: Object.values(MODELS),
   readModelVersion: (name) => getReadModel(name).version,
+  // DI-BI2-9: o instante da leitura (agora, na data-base de hoje) muda a cada passada; no hash entra o efeito dele (itens em aberto e envelhecidos), não o relógio.
+  volatileInputs: Object.fromEntries(KPI_DEFINITIONS.map((d) => [d.metricCode, ['asOfInstant']])),
 });

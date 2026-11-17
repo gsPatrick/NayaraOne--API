@@ -8,7 +8,8 @@
  * A janela da taxa e as faixas de atraso da inadimplência são as do Financeiro (analytics.inadimplencia.janela_dias e analytics.inadimplencia.faixas_atraso_dias, M9-D615 e M9-D622);
  * os tipos de contrato de locação continuam sendo os de analytics.locacao.tipos_contrato (M9-D617). Arquivo sem dependência de settings.service no topo (evita ciclo).
  */
-const OWNER = 'Gerência de Locação (papel locação-gestor)';
+const { ownerText } = require('./owner.roles');
+const OWNER = ownerText('locacao-gestor');
 const CODES = Object.freeze(['rent.active_contracts', 'rent.vacancy', 'rent.delinquency']);
 const ownerKey = (code) => `analytics.owner.${code}`;
 const RENT_BANDS_KEY = 'analytics.locacao.faixas_valor_aluguel';

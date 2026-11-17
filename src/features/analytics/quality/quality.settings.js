@@ -12,12 +12,14 @@
  *  analytics.qualidade.max_nulos_bloqueio_pct    acima disso a completude é BLOCK (abaixo, WARN)
  *  analytics.qualidade.tolerancia_conciliacao    diferença aceita entre read model e fonte (R$ 0,01)
  *  analytics.qualidade.severidades               severidade (WARN ou BLOCK) de cada tipo de falha
+ *  analytics.qualidade.completude_bloqueia.<cod> DI-BI2-2: a completude daquela verificação bloqueia (ligado) ou só avisa (quality.checkSeverity.js)
  *  analytics.qualidade.max_chaves_conciliacao    quantas chaves (as mais recentes) a conciliação de cada read model recalcula da fonte (padrão 200)
  *  analytics.freshness.max_minutos.<DOMINIO>     idade máxima da fonte por domínio (FRESH até aqui; STALE acima)
  *  analytics.freshness.fator_expirado            EXPIRED acima de fator x o limite (livro/M9-D609: 4)
  *  analytics.freshness.tolerancia_futuro_minutos folga para o relógio da fonte adiantado; carimbo mais à frente que isso é dado inválido (M9-D609, padrão 5)
  */
 const AppError = require('../../../utils/AppError');
+const { COMPLETENESS_BLOCK_SCHEMA, COMPLETENESS_BLOCK_SETTING_DEFAULTS, readCompletenessBlocks } = require('./quality.checkSeverity');
 
 const FRESHNESS_DOMAINS = Object.freeze({ FINANCE: 60, CRM: 60, PROPERTIES: 240, RENTAL: 240, CONSTRUCTION: 240, INVENTORY: 240, LEGAL: 240, CORRESPONDENT: 120, MARKETING: 120, SUPPORT: 60, TECH_AI: 15 });
 // Campo -> % de nulos tolerado. 0 para o campo que entra direto numa fórmula (livro, §18); 1 para os demais.
@@ -57,6 +59,7 @@ const DEFAULTS = Object.freeze({
   [K.rangePct]: 50, [K.window]: 14, [K.minRefreshes]: 1, [K.blockNullPct]: 5, [K.tolerance]: 'R$ 0,01', [K.severities]: DEFAULT_SEVERITIES_TEXT, [K.factor]: 4, [K.futureTolerance]: 5, [K.maxKeys]: 200,
   ...Object.fromEntries(Object.entries(NULL_FIELDS).map(([f, v]) => [nullKey(f), v])),
   ...Object.fromEntries(Object.entries(FRESHNESS_DOMAINS).map(([d, v]) => [freshnessKey(d), v])),
+  ...COMPLETENESS_BLOCK_SETTING_DEFAULTS,
 });
 
 const TOLERANCE_RE = /^\s*(?:R\$\s*)?(\d{1,12})(?:[.,](\d{1,2}))?\s*$/;
@@ -97,6 +100,7 @@ const QUALITY_SETTINGS_SCHEMA = {
   [K.maxKeys]: { type: 'integer', min: 1, max: 10000 },
   ...Object.fromEntries(Object.keys(NULL_FIELDS).map((f) => [nullKey(f), { type: 'number', min: 0, max: 100 }])),
   ...Object.fromEntries(Object.keys(FRESHNESS_DOMAINS).map((d) => [freshnessKey(d), { type: 'integer', min: 1, max: 525600 }])),
+  ...COMPLETENESS_BLOCK_SCHEMA,
 };
 
 const num = (v, fallback, { min = 0, integer = false } = {}) => (typeof v === 'number' && Number.isFinite(v) && v >= min && (!integer || Number.isInteger(v)) ? v : fallback);
@@ -119,6 +123,7 @@ async function readQualityParams(scope, transaction) {
     futureToleranceMinutes: num(get(K.futureTolerance), DEFAULTS[K.futureTolerance], { min: 0, integer: true }),
     freshnessLimits: Object.fromEntries(Object.keys(FRESHNESS_DOMAINS).map((d) => [d, num(get(freshnessKey(d)), DEFAULTS[freshnessKey(d)], { min: 1, integer: true })])),
     nullPct: Object.fromEntries(Object.keys(NULL_FIELDS).map((f) => [f, num(get(nullKey(f)), DEFAULTS[nullKey(f)])])),
+    completenessBlocks: readCompletenessBlocks(get),
   };
 }
 

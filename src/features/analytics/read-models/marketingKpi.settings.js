@@ -10,7 +10,8 @@
  *   analytics.qualidade.mkt_entrega_max_horas        horas sem status de entrega acima das quais "Entregabilidade" sai DEGRADED (padrão 24)
  * Arquivo sem dependência de settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
-const OWNER_MKT = 'Marketing (papel marketing-gestor)';
+const { ownerText } = require('./owner.roles');
+const OWNER_MKT = ownerText('marketing-gestor');
 const MKT_CODES = Object.freeze([
   'mkt.campaigns', 'mkt.cost', 'mkt.leads', 'mkt.attribution', 'mkt.deliverability', 'mkt.opt_out', 'mkt.frequency', 'mkt.automations_blocked_failed',
 ]);

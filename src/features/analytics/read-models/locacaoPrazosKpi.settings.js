@@ -7,9 +7,10 @@
  *                                                 não rebaixa a qualidade de "Garantias vencendo"
  * Os tipos de contrato de locação continuam sendo os de analytics.locacao.tipos_contrato (M9-D617). Arquivo sem dependência de settings.service no topo (evita ciclo).
  */
+const { ownerText } = require('./owner.roles');
 const { codeList, readCodeList } = require('./settings.codeList');
 
-const OWNER = 'Gerência de Locação (papel locação-gestor)';
+const OWNER = ownerText('locacao-gestor');
 const CODES = Object.freeze(['rent.guarantees_expiring', 'rent.obligations_pending', 'rent.inspections_keys']);
 const ownerKey = (code) => `analytics.owner.${code}`;
 const KEYS = Object.freeze({ noExpiryTypes: 'analytics.locacao.garantias_sem_vencimento' });

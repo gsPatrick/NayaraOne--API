@@ -6,7 +6,8 @@
  * Cada demanda declara os seus parâmetros no próprio arquivo (imoveisKpi.settings.js, corretoresKpi.settings.js). Arquivo sem dependência de
  * settings.service no topo (evita ciclo); a leitura usa import tardio.
  */
-const DEFAULT_OWNER = 'Gerência Comercial (papel comercial-gestor)';
+const { ownerText } = require('./owner.roles');
+const DEFAULT_OWNER = ownerText('comercial-gestor');
 const OWNER_KEY = (code) => `analytics.owner.${code}`;
 
 /** Padrões e esquema (texto livre) do owner de cada código. */
