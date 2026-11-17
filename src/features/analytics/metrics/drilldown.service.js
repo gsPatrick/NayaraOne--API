@@ -85,7 +85,7 @@ async function openDrilldown(ctx, input, transaction) {
   const request = { ...input, metricCode: sourceCode, filter: parseFilter(input.filter) };
   let detail;
   try {
-    detail = await openSourceDetail(ctx, sourceCode, request, transaction, { limit: 1, domain: definition.domain });
+    detail = await openSourceDetail(ctx, sourceCode, request, transaction, { domain: definition.domain, rows: false }); // contagem: no agregado abaixo
   } catch (err) {
     if (err.code === 'ANALYTICS_DRILLDOWN_FORBIDDEN') await forbiddenWithAggregate(ctx, { ...request, logCode: input.metricCode }, err, transaction);
     throw err;
@@ -94,6 +94,7 @@ async function openDrilldown(ctx, input, transaction) {
   const filter = await verifyFilter(companyId, spec.table, request);
   const { unit } = await metricContext(sourceCode, { unit: (await metricContext(input.metricCode, {}, transaction)).unit }, transaction);
   const mode = modeOf(spec, unit);
+  const aggregate = await aggregateOf(spec, filter, transaction); // uma varredura para contagem e total; a contagem também dá o número de páginas
   const { rows } = await pageRows(spec, filter, { mode, page, pageSize }, transaction);
   const secure = await prepareSecureRows(ctx, {
     permission: P.DRILLDOWN, domain: definition.domain, action: 'DRILLDOWN', resourceType: 'METRIC', resourceCode: input.metricCode, route: input.route,
@@ -101,7 +102,7 @@ async function openDrilldown(ctx, input, transaction) {
   });
   return {
     metricCode: input.metricCode, component: sourceCode === input.metricCode ? null : sourceCode, companyId, description: detail.description, reconcileMode: mode,
-    aggregate: await aggregateOf(spec, filter, transaction), page, pageSize, totalPages: Math.max(1, Math.ceil(detail.count / pageSize)),
+    aggregate, page, pageSize, totalPages: Math.max(1, Math.ceil(aggregate.count / pageSize)),
     rows: secure.rows, maskedCount: secure.maskedCount,
   };
 }

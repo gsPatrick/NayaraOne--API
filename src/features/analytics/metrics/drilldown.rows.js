@@ -6,7 +6,7 @@
  * do campo monetário com o sinal da origem (modo SUM), 1 (modo COUNT) ou nula (modo RECOMPUTE: as linhas alimentam a fórmula do KPI).
  */
 const { sequelize } = require('../../../models');
-const { buildWhere, countRows, sumValue, addendBreakdown } = require('./sourceRefs.query');
+const { buildWhere, countAndSum } = require('./sourceRefs.query');
 const { detailOf } = require('./drilldown.details');
 const money = require('./formulas/money');
 
@@ -43,12 +43,13 @@ async function pageRows(spec, filter, { mode, page, pageSize }, transaction) {
 /**
  * Agregado permitido (sem linhas): contagem e, nas origens monetárias, o total no sinal da origem; nas demais, total nulo. Origem com parcelas fora da
  * tabela (`addends`, M9-D620: saldo de abertura e transferências do caixa livre) traz também `adjustments` [{ label, total }]: linhas + ajustes = total.
+ * Uma varredura só para contagem e soma (`countAndSum`), e as parcelas lidas uma vez: antes a contagem, a soma e as parcelas eram consultas separadas
+ * sobre as mesmas linhas (e as parcelas, duas vezes).
  */
 async function aggregateOf(spec, filter, transaction) {
-  const count = await countRows(spec, filter, transaction);
-  const total = spec.valueColumn ? money.money(await sumValue(spec, filter, transaction)) : null;
-  const adjustments = spec.addends && spec.valueColumn ? (await addendBreakdown(spec, filter, transaction)).map((a) => ({ label: a.label, total: money.money(a.total) })) : [];
-  return adjustments.length ? { count, total, adjustments } : { count, total };
+  const { count, total, adjustments } = await countAndSum(spec, filter, transaction);
+  const adj = spec.addends && spec.valueColumn ? adjustments.map((a) => ({ label: a.label, total: money.money(a.total) })) : [];
+  return adj.length ? { count, total: money.money(total), adjustments: adj } : { count, total: total === null ? null : money.money(total) };
 }
 
 module.exports = { pageRows, aggregateOf };

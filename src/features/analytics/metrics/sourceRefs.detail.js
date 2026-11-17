@@ -11,12 +11,17 @@ const { countRows, sampleIds } = require('./sourceRefs.query');
 const { metricContext, detailAllowed } = require('./sourceRefs.build');
 const { drilldownForbidden, sourceSpecMissing } = require('./sourceRefs.errors');
 
-async function openSourceDetail(ctx, metricCode, ref, transaction, { limit = 100, domain } = {}) {
+/**
+ * `rows: false` (detalhe paginado da M9-D690, que conta e lista as linhas por conta própria): só confere filtro e permissão e devolve a descrição,
+ * sem contar nem amostrar a origem (antes eram duas varreduras a mais por abertura do detalhe, achado da carga em escala cheia, M9-D699).
+ */
+async function openSourceDetail(ctx, metricCode, ref, transaction, { limit = 100, domain, rows = true } = {}) {
   const spec = getSourceSpec(metricCode);
   if (!spec || spec.components) throw sourceSpecMissing(metricCode);
   const filter = await verifyFilter(ctx.companyId, spec.table, ref);
   const context = await metricContext(metricCode, { domain }, transaction);
   if (!(await detailAllowed(ctx, context.domain, transaction))) throw drilldownForbidden();
+  if (!rows) return { type: spec.type, table: spec.table, count: null, ids: [], description: spec.describe(filter) };
   return { type: spec.type, table: spec.table, count: await countRows(spec, filter, transaction), ids: await sampleIds(spec, filter, Math.min(limit, 1000), transaction), description: spec.describe(filter) };
 }
 

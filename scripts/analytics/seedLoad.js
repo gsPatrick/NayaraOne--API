@@ -71,6 +71,9 @@ async function seedLoad(admin, options = {}) {
       }
     }
   });
+  // Estatísticas do planejador para a massa recém-gravada (um banco real tem as do autovacuum): sem elas o plano das consultas mede o banco
+  // sem estatística, não o BI.
+  for (const t of TABLES) await admin.query(`ANALYZE ${t.table}`);
   const { digest } = await digestOf(admin, companies.map((c) => c.companyId));
   return { companies, sizes, anchor, rows, digest };
 }

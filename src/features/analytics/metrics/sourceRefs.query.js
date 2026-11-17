@@ -87,6 +87,22 @@ async function sumValue(spec, filter, transaction) {
   return extra.length ? money.toString(money.sum([row.total, ...extra.map((e) => e.total)])) : row.total;
 }
 
+/**
+ * Contagem e soma numa varredura só (o detalhe do indicador pede as duas para o mesmo filtro): { count, total }, total em texto decimal com as
+ * parcelas de fora da tabela (`addends`) ou null quando a origem não tem campo monetário. Antes eram duas consultas sobre as mesmas linhas.
+ */
+async function countAndSum(spec, filter, transaction) {
+  const { where, replacements } = buildWhere(spec, filter);
+  const sign = spec.valueSign;
+  const value = spec.valueColumn ? (sign ? `CASE WHEN t."${sign.column}" IN (:negatives) THEN -t."${spec.valueColumn}" ELSE t."${spec.valueColumn}" END` : `t."${spec.valueColumn}"`) : null;
+  const [[row]] = await sequelize.query(`SELECT count(*)::int AS n${value ? `, COALESCE(SUM(${value}), 0)::text AS total` : ''} ${from(spec)} WHERE ${where}`, {
+    replacements: { ...replacements, ...(value && sign ? { negatives: sign.negative } : {}) }, transaction,
+  });
+  if (!value) return { count: row.n, total: null, adjustments: [] };
+  const adjustments = await addendBreakdown(spec, filter, transaction);
+  return { count: row.n, total: adjustments.length ? money.toString(money.sum([row.total, ...adjustments.map((e) => e.total)])) : row.total, adjustments };
+}
+
 /** Linhas completas (colunas de `rowColumns`) para refazer a fórmula; ordenadas pelo id para o resultado ser repetível. */
 async function fetchRows(spec, filter, transaction) {
   const exprs = Object.entries(spec.rowExpressions || {}).map(([name, sql]) => ({ name, ...(typeof sql === 'function' ? sql(filter) : { sql, replacements: {} }) })); // rowExpressions: SQL FIXO da origem (M9-D622, M9-D640)
@@ -97,4 +113,4 @@ async function fetchRows(spec, filter, transaction) {
   return rows;
 }
 
-module.exports = { buildWhere, countRows, sampleIds, sumValue, fetchRows, addendBreakdown };
+module.exports = { buildWhere, countRows, sampleIds, sumValue, countAndSum, fetchRows, addendBreakdown };
