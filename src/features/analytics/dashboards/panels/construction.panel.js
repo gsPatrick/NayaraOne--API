@@ -33,6 +33,7 @@ const CONSTRUCTION_PANEL = Object.freeze({
     card('obra.measurements', 'Medições', {
       group: 'obra', order: 'VALUE_DESC', labelKind: 'PROJECT',
       facts: [{ key: 'aprovado_brl', label: 'Aprovadas' }, { key: 'pendente_brl', label: 'Pendentes' }, { key: 'pendente_mais_antiga_dias', label: 'Pendente há mais tempo' }],
+      horizonText: 'Total parcial: soma das medições (enviada/revisada/aprovada/a pagar) das obras já materializadas. O detalhamento abre a empresa inteira no mesmo recorte de status; o recálculo que iguala os dois roda no Marco 10.',
     }),
     card('obra.nonconformities', 'Não conformidades abertas', {
       groups: [{ group: 'causa', label: 'Causa' }, { group: 'equipe', label: 'Equipe' }], order: 'VALUE_DESC',
