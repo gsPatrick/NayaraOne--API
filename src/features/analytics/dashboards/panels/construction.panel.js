@@ -29,6 +29,7 @@ const CONSTRUCTION_PANEL = Object.freeze({
     card('obra.projected_margin', 'Margem projetada', {
       group: 'obra', order: 'VALUE_DESC', labelKind: 'PROJECT',
       facts: [{ key: 'margem_pct', label: 'Margem' }, { key: 'receita_brl', label: 'Receita' }, { key: 'custo_projetado_brl', label: 'Custo projetado' }],
+      horizonText: 'Total parcial: a soma do detalhamento considera só as obras com margem calculada (forecast lançado); as obras sem forecast aparecem na lista sem valor e entram como zero. O cartão fica "Dado incompleto" enquanto houver obra sem forecast ou sem receita contratada; o recálculo que fecha o total da empresa com receita real roda no Marco 10.',
     }, 'PROJECTED'),
     card('obra.measurements', 'Medições', {
       group: 'obra', order: 'VALUE_DESC', labelKind: 'PROJECT',

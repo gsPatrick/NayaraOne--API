@@ -47,9 +47,13 @@ async function pageRows(spec, filter, { mode, page, pageSize }, transaction) {
  * sobre as mesmas linhas (e as parcelas, duas vezes).
  */
 async function aggregateOf(spec, filter, transaction) {
-  const { count, total, adjustments } = await countAndSum(spec, filter, transaction);
+  const partialWhenNull = Boolean(spec.partialWhenNull && spec.valueColumn);
+  const { count, total, computed, adjustments } = await countAndSum(spec, filter, transaction, { withComputed: partialWhenNull });
   const adj = spec.addends && spec.valueColumn ? adjustments.map((a) => ({ label: a.label, total: money.money(a.total) })) : [];
-  return adj.length ? { count, total: money.money(total), adjustments: adj } : { count, total: total === null ? null : money.money(total) };
+  const base = adj.length ? { count, total: money.money(total), adjustments: adj } : { count, total: total === null ? null : money.money(total) };
+  // Total parcial (M9-D650): origem onde linhas sem valor aparecem no detalhe mas não entram na soma; o Front rotula "Total parcial" e informa quantas têm valor.
+  if (partialWhenNull) { base.computed = computed; base.partial = computed < count; }
+  return base;
 }
 
 module.exports = { pageRows, aggregateOf };

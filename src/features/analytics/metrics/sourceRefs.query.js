@@ -91,16 +91,19 @@ async function sumValue(spec, filter, transaction) {
  * Contagem e soma numa varredura só (o detalhe do indicador pede as duas para o mesmo filtro): { count, total }, total em texto decimal com as
  * parcelas de fora da tabela (`addends`) ou null quando a origem não tem campo monetário. Antes eram duas consultas sobre as mesmas linhas.
  */
-async function countAndSum(spec, filter, transaction) {
+async function countAndSum(spec, filter, transaction, options = {}) {
   const { where, replacements } = buildWhere(spec, filter);
   const sign = spec.valueSign;
   const value = spec.valueColumn ? (sign ? `CASE WHEN t."${sign.column}" IN (:negatives) THEN -t."${spec.valueColumn}" ELSE t."${spec.valueColumn}" END` : `t."${spec.valueColumn}"`) : null;
-  const [[row]] = await sequelize.query(`SELECT count(*)::int AS n${value ? `, COALESCE(SUM(${value}), 0)::text AS total` : ''} ${from(spec)} WHERE ${where}`, {
+  // `computed`: linhas com valor não nulo (M9-D650 total parcial) — só quando a origem pede, para não mudar a consulta dos demais KPIs.
+  const withComputed = Boolean(options.withComputed && spec.valueColumn);
+  const computedExpr = withComputed ? `, count(t."${spec.valueColumn}")::int AS computed` : '';
+  const [[row]] = await sequelize.query(`SELECT count(*)::int AS n${value ? `, COALESCE(SUM(${value}), 0)::text AS total` : ''}${computedExpr} ${from(spec)} WHERE ${where}`, {
     replacements: { ...replacements, ...(value && sign ? { negatives: sign.negative } : {}) }, transaction,
   });
-  if (!value) return { count: row.n, total: null, adjustments: [] };
+  if (!value) return { count: row.n, total: null, adjustments: [], computed: withComputed ? row.computed : undefined };
   const adjustments = await addendBreakdown(spec, filter, transaction);
-  return { count: row.n, total: adjustments.length ? money.toString(money.sum([row.total, ...adjustments.map((e) => e.total)])) : row.total, adjustments };
+  return { count: row.n, total: adjustments.length ? money.toString(money.sum([row.total, ...adjustments.map((e) => e.total)])) : row.total, adjustments, computed: withComputed ? row.computed : undefined };
 }
 
 /** Linhas completas (colunas de `rowColumns`) para refazer a fórmula; ordenadas pelo id para o resultado ser repetível. */

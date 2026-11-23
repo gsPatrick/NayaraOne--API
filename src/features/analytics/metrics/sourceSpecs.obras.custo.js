@@ -17,7 +17,7 @@ const SPECS = [
     describe: () => 'Etapas das obras (não excluídas) com o percentual planejado e o medido que compõem o avanço, ponderados pelo custo planejado da etapa',
   },
   { ...COST, metricCode: 'obra.baseline_actual_forecast', valueColumn: 'forecast_cost', describe: () => 'Projeção do custo final de cada obra (forecast = real + custo a fazer pelo desvio já observado), uma linha por obra' },
-  { ...COST, metricCode: 'obra.projected_margin', valueColumn: 'projected_margin', describe: () => 'Margem projetada de cada obra (receita contratada menos o forecast do custo), uma linha por obra' },
+  { ...COST, metricCode: 'obra.projected_margin', valueColumn: 'projected_margin', partialWhenNull: true, describe: () => 'Margem projetada de cada obra (receita contratada menos o forecast do custo), uma linha por obra' },
 ];
 
 for (const spec of SPECS) if (!getSourceSpec(spec.metricCode)) registerSourceSpec(spec);
