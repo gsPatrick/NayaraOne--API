@@ -221,6 +221,14 @@ if (require.main === module || process.env.API_PROCESS_GUARDS === 'on') {
 }
 require('./src/features/integrations/secrets').gateListenOnSecretStore(listen, { log: logger });
 
+// Interruptor-mestre dos jobs de fundo. Com BACKGROUND_JOBS_DISABLED=true o processo NÃO inicia nenhum job agendado. Serve para a homologação:
+// os ~40 jobs de manutenção sobem juntos no boot, para 12 empresas x 3 grupos, e esgotam o pool (ConnectionAcquireTimeout em cascata) derrubando a
+// API; o BI (dashboard/drilldown) lê dados já materializados e não depende desses jobs para a conferência. Em produção fica ligado (default). Cada
+// job continua tendo também seu próprio *_DISABLED para desligar caso a caso.
+if (process.env.BACKGROUND_JOBS_DISABLED === 'true') {
+  logger.warn('BACKGROUND_JOBS_DISABLED=true — nenhum job de fundo foi iniciado neste processo.');
+} else {
+
 // Job periódico de matching do Radar — não roda em ambiente de teste (evita efeitos
 // colaterais/timers pendurados em test runners que importam este arquivo).
 if (process.env.NODE_ENV !== 'test' && process.env.RADAR_MATCHING_JOB_DISABLED !== 'true') {
@@ -530,5 +538,7 @@ if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_SYNC_JOB_DISABLED
 if (process.env.NODE_ENV !== 'test' && process.env.INTEGRATION_RETENTION_JOB_DISABLED !== 'true') {
   startIntegrationRetentionJob();
 }
+
+} // fim do else do interruptor-mestre BACKGROUND_JOBS_DISABLED
 
 module.exports = app;
