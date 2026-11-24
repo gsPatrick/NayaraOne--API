@@ -34,7 +34,7 @@ const commonOptions = {
     freezeTableName: true,
   },
   pool: {
-    max: Number(DB_POOL_MAX) || 10,
+    max: Number(DB_POOL_MAX) || 20,
     min: Number(DB_POOL_MIN) || 0,
     acquire: Number(DB_POOL_ACQUIRE_MS) || 30000,
     idle: Number(DB_POOL_IDLE_MS) || 10000,

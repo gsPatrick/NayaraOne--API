@@ -45,10 +45,12 @@ USER nodeapi
 EXPOSE 3000
 
 # Rodada 8 da verificação do Marco 9 (DI-M9R-23): saúde do PROCESSO. scripts/healthcheck.js pede GET /api/health/pool (conexão do pool + SELECT 1,
-# prazo HEALTH_POOL_TIMEOUT_MS); 503 ou sem resposta conta como falha. Depois de 3 falhas seguidas o contêiner fica "unhealthy" e o Easypanel
+# prazo HEALTH_POOL_TIMEOUT_MS); 503 ou sem resposta conta como falha. Depois de 5 falhas seguidas o contêiner fica "unhealthy" e o Easypanel
 # (Docker Swarm) o substitui: é o que reinicia um processo vivo mas preso (pool esgotado, laço de eventos travado). O processo que sofre uma
 # exceção sem tratamento já sai sozinho com código 1 (src/utils/processGuards.js) e é reiniciado pela política de reinício do contêiner.
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 CMD ["node", "scripts/healthcheck.js"]
+# start-period 240s + 5 tentativas: a rajada de jobs agendados do boot (12 empresas x 3 grupos) ocupa o pool por alguns minutos; sem essa folga o
+# healthcheck matava o contêiner no meio do boot e o reboot repetia a rajada (crash-loop). O banco fica saudável; a saturação é só de inicialização.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=240s --retries=5 CMD ["node", "scripts/healthcheck.js"]
 
 # Migrations não rodam automaticamente no boot (evita corrida entre réplicas) —
 # rode `npm run migrate` como um passo separado de deploy antes de subir o container,
